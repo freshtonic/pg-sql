@@ -118,6 +118,22 @@ actual_pg_oracle_count="$(git ls-tree -r "$EXPECTED_SOURCE_CHECKPOINT" -- pg-ora
 [[ "$actual_pg_oracle_count" -eq 7 ]] ||
   fail "source checkpoint has $actual_pg_oracle_count pg-oracle entries, expected 7"
 
+expected_index_paths="$temporary_object_directory/expected-index-paths"
+current_index_paths="$temporary_object_directory/current-index-paths"
+awk -F $'\t' '$1 == "pg-sql" || $1 == "pg-oracle" { print $4 }' "$manifest" |
+  sort > "$expected_index_paths"
+git ls-files -- .gitattributes CLAUDE.md Cargo.toml README.md \
+  benches fixtures pg-oracle src tests vendor |
+  sort > "$current_index_paths"
+if ! cmp --silent "$expected_index_paths" "$current_index_paths"; then
+  unexpected_path="$(comm -13 "$expected_index_paths" "$current_index_paths" | sed -n '1p')"
+  missing_path="$(comm -23 "$expected_index_paths" "$current_index_paths" | sed -n '1p')"
+  if [[ -n "$unexpected_path" ]]; then
+    fail "$unexpected_path is an extra index entry inside an immutable import area"
+  fi
+  fail "$missing_path is missing from the immutable import index"
+fi
+
 untracked_input="$(git ls-files --others --exclude-standard -- \
   benches fixtures pg-oracle src tests vendor | sed -n '1p')"
 [[ -z "$untracked_input" ]] ||
