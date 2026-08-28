@@ -28,7 +28,7 @@
     "fixtures": 247,
     "benchmark_workloads": 16,
     "unsupported_cases": 21,
-    "workspace_member_tests": 39
+    "workspace_member_tests": 44
   },
   "grammar": [
     {
@@ -182793,6 +182793,30 @@
         "member": "migration-tool",
         "tests": [
           {
+            "id": "cli_publishes_reviewed_configuration_and_admissions_without_touching_source",
+            "location": {
+              "path": "migration-tool/tests/accepted_declarations_cli.rs",
+              "line": 10,
+              "column": 4,
+              "byte_start": 193,
+              "byte_end": 268
+            },
+            "contract": "post-bootstrap workspace-member test",
+            "content_sha256": null
+          },
+          {
+            "id": "cli_rejects_an_unreviewed_hook_before_publishing_any_destination",
+            "location": {
+              "path": "migration-tool/tests/accepted_declarations_cli.rs",
+              "line": 97,
+              "column": 4,
+              "byte_start": 3686,
+              "byte_end": 3750
+            },
+            "contract": "post-bootstrap workspace-member test",
+            "content_sha256": null
+          },
+          {
             "id": "discovery_freezes_the_legacy_macro_membership_and_explains_exclusions",
             "location": {
               "path": "migration-tool/tests/baseline.rs",
@@ -182913,13 +182937,25 @@
             "content_sha256": null
           },
           {
-            "id": "grammar_edits_are_validated_source_spans_and_are_byte_deterministic",
+            "id": "every_reviewed_output_is_a_second_pass_fixed_point",
             "location": {
               "path": "migration-tool/tests/grammar_rewrite.rs",
               "line": 140,
               "column": 4,
               "byte_start": 4643,
-              "byte_end": 4710
+              "byte_end": 4693
+            },
+            "contract": "post-bootstrap workspace-member test",
+            "content_sha256": null
+          },
+          {
+            "id": "grammar_edits_are_validated_source_spans_and_are_byte_deterministic",
+            "location": {
+              "path": "migration-tool/tests/grammar_rewrite.rs",
+              "line": 153,
+              "column": 4,
+              "byte_start": 5088,
+              "byte_end": 5155
             },
             "contract": "post-bootstrap workspace-member test",
             "content_sha256": null
@@ -182928,10 +182964,10 @@
             "id": "comments_and_declaration_order_survive_the_span_rewrite",
             "location": {
               "path": "migration-tool/tests/grammar_rewrite.rs",
-              "line": 171,
+              "line": 184,
               "column": 4,
-              "byte_start": 5673,
-              "byte_end": 5728
+              "byte_start": 6118,
+              "byte_end": 6173
             },
             "contract": "post-bootstrap workspace-member test",
             "content_sha256": null
@@ -182940,10 +182976,10 @@
             "id": "container_rewrites_preserve_every_intervening_comment_byte_in_order",
             "location": {
               "path": "migration-tool/tests/grammar_rewrite.rs",
-              "line": 188,
+              "line": 201,
               "column": 4,
-              "byte_start": 6469,
-              "byte_end": 6536
+              "byte_start": 6914,
+              "byte_end": 6981
             },
             "contract": "post-bootstrap workspace-member test",
             "content_sha256": null
@@ -182952,10 +182988,10 @@
             "id": "unsupported_constructs_fail_with_manifested_structured_codes",
             "location": {
               "path": "migration-tool/tests/grammar_rewrite.rs",
-              "line": 215,
+              "line": 228,
               "column": 4,
-              "byte_start": 7400,
-              "byte_end": 7460
+              "byte_start": 7845,
+              "byte_end": 7905
             },
             "contract": "post-bootstrap workspace-member test",
             "content_sha256": null
@@ -182964,10 +183000,34 @@
             "id": "analogous_noncanonical_type_paths_and_arguments_fail_closed",
             "location": {
               "path": "migration-tool/tests/grammar_rewrite.rs",
-              "line": 230,
+              "line": 243,
               "column": 4,
-              "byte_start": 7966,
-              "byte_end": 8025
+              "byte_start": 8411,
+              "byte_end": 8470
+            },
+            "contract": "post-bootstrap workspace-member test",
+            "content_sha256": null
+          },
+          {
+            "id": "obsolete_items_are_removed_only_when_their_full_reviewed_shape_matches",
+            "location": {
+              "path": "migration-tool/tests/grammar_rewrite.rs",
+              "line": 288,
+              "column": 4,
+              "byte_start": 9940,
+              "byte_end": 10010
+            },
+            "contract": "post-bootstrap workspace-member test",
+            "content_sha256": null
+          },
+          {
+            "id": "obsolete_escape_hatches_are_rejected_independent_of_token_spacing",
+            "location": {
+              "path": "migration-tool/tests/grammar_rewrite.rs",
+              "line": 313,
+              "column": 4,
+              "byte_start": 10771,
+              "byte_end": 10836
             },
             "contract": "post-bootstrap workspace-member test",
             "content_sha256": null
@@ -182976,10 +183036,10 @@
             "id": "rewrite_needles_inside_comments_and_literals_are_not_edits",
             "location": {
               "path": "migration-tool/tests/grammar_rewrite.rs",
-              "line": 275,
+              "line": 368,
               "column": 4,
-              "byte_start": 9495,
-              "byte_end": 9553
+              "byte_start": 12500,
+              "byte_end": 12558
             },
             "contract": "post-bootstrap workspace-member test",
             "content_sha256": null
@@ -182988,10 +183048,10 @@
             "id": "unsupported_needles_inside_comments_and_literals_are_not_errors",
             "location": {
               "path": "migration-tool/tests/grammar_rewrite.rs",
-              "line": 305,
+              "line": 398,
               "column": 4,
-              "byte_start": 10517,
-              "byte_end": 10580
+              "byte_start": 13522,
+              "byte_end": 13585
             },
             "contract": "post-bootstrap workspace-member test",
             "content_sha256": null
@@ -183338,10 +183398,10 @@
           "line": 1,
           "column": 1,
           "byte_start": 0,
-          "byte_end": 1148
+          "byte_end": 1597
         },
         "contract": "expected behavior and legacy/current limitation for gap examples",
-        "content_sha256": "18c3aa04692e5fb557cb8a2e1dc10ee222e6612a0f1d5f8f8a287230baff5055"
+        "content_sha256": "08f7f4a3e7f8b447f7475131c65913af5ea25bd0663a63902ec88de0feb9e18d"
       },
       "examples": [
         {

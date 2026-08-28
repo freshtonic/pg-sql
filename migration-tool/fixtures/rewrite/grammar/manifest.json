@@ -49,8 +49,40 @@
       "input": "tokens.input.rs",
       "expected": "tokens.expected.rs",
       "shapes": [
+        "grammar_keyword_matching_ascii_insensitive",
+        "grammar_max_lookahead_five",
+        "admission_all_word_kinds",
+        "admission_col_id",
+        "admission_type_function_name",
+        "admission_non_reserved_word",
+        "admission_col_label",
+        "admission_window_ref_name",
+        "admission_psql_variable_name",
+        "admission_unquoted_ident",
+        "admission_bare_alias_name",
+        "admission_bare_col_label",
+        "matcher_dollar_string",
+        "matcher_numeric",
+        "matcher_integer",
+        "matcher_dollar_num",
+        "matcher_custom_op",
+        "matcher_psql_directive_line",
+        "ignore_nested_block_comment",
+        "binding_col_id_savepoint",
+        "binding_type_function_name_param",
+        "binding_non_reserved_word_role_spec",
+        "binding_col_label_def_elem",
+        "binding_bare_col_label_delete_alias",
+        "binding_unquoted_ident_variant",
+        "binding_bare_alias_name_variant",
+        "binding_psql_variable_name_structural",
+        "binding_dollar_string_do_stmt",
+        "binding_numeric_value",
+        "binding_integer_value",
+        "binding_dollar_num_positional_param",
+        "binding_custom_op_operator_expr",
+        "binding_psql_directive_line",
         "lexer_callback",
-        "token_callbacks",
         "token_categories",
         "token_classes",
         "token_flags",
@@ -72,8 +104,27 @@
         "handwritten_rest_of_line",
         "handwritten_string_lit_seq",
         "handwritten_unquoted_ident",
+        "obsolete_raw_line_parser",
         "obsolete_firstset_ref",
         "obsolete_sql_rules"
+      ]
+    },
+    {
+      "id": "obsolete-lexical-hooks",
+      "input": "hooks.input.rs",
+      "expected": "hooks.expected.rs",
+      "shapes": [
+        "obsolete_callback_functions",
+        "remove_scan_dollar_string",
+        "remove_reject_trailing_word",
+        "remove_skip_block_comment",
+        "remove_pg_lex",
+        "remove_psql_variable_repair",
+        "remove_operator_comment_repair",
+        "remove_frame_unit_predicate",
+        "remove_frame_unit_wrapper",
+        "binding_window_ref_name_wrapper",
+        "obsolete_parser_postcondition"
       ]
     },
     {
@@ -130,6 +181,36 @@
       "id": "qualified-disposition",
       "input": "unsupported-qualified-disposition.input.rs",
       "code": "unsupported.sequence-disposition"
+    },
+    {
+      "id": "inline-callback",
+      "input": "unsupported-inline-callback.input.rs",
+      "code": "unsupported.inline-callback"
+    },
+    {
+      "id": "central-callback",
+      "input": "unsupported-central-callback.input.rs",
+      "code": "unsupported.central-callback"
+    },
+    {
+      "id": "callback-declarations",
+      "input": "unsupported-callback-declarations.input.rs",
+      "code": "unsupported.callback-declarations"
+    },
+    {
+      "id": "post-lex-hook",
+      "input": "unsupported-post-lex.input.rs",
+      "code": "unsupported.post-lex-hook"
+    },
+    {
+      "id": "parser-postcondition",
+      "input": "unsupported-postcondition.input.rs",
+      "code": "unsupported.parser-postcondition"
+    },
+    {
+      "id": "raw-line-parser",
+      "input": "unsupported-raw-line.input.rs",
+      "code": "unsupported.raw-line-parser"
     }
   ]
 }

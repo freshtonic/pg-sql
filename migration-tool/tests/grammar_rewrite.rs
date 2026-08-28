@@ -137,6 +137,19 @@ fn every_manifest_fixture_rewrites_to_its_reviewed_bytes() {
 }
 
 #[test]
+fn every_reviewed_output_is_a_second_pass_fixed_point() {
+    let root = fixture_root();
+    let pass = pass();
+
+    for case in &pass.manifest().cases {
+        let expected_path = root.join(&case.expected);
+        let expected = fs::read_to_string(&expected_path).unwrap();
+        let second_pass = rewrite_source(&pass, &expected_path, &expected).unwrap();
+        assert_eq!(second_pass, expected, "fixture {}", case.id);
+    }
+}
+
+#[test]
 fn grammar_edits_are_validated_source_spans_and_are_byte_deterministic() {
     let root = fixture_root();
     let input_path = root.join("nodes.input.rs");
@@ -259,6 +272,86 @@ fn analogous_noncanonical_type_paths_and_arguments_fail_closed() {
             "qself-container",
             "pub struct Bad<T: Grammar> { pub value: <T as Grammar>::Seq0<Value, punct::Comma>, }",
             "unsupported.qualified-container",
+        ),
+    ];
+
+    for (id, source, expected_code) in cases {
+        let error = pass
+            .plan_edits(Path::new("src/adversarial.rs"), source)
+            .unwrap_err();
+        assert_eq!(error.code, expected_code, "case {id}");
+        assert!(!error.message.is_empty(), "case {id}");
+    }
+}
+
+#[test]
+fn obsolete_items_are_removed_only_when_their_full_reviewed_shape_matches() {
+    let pass = pass();
+    let cases = [
+        (
+            "changed callback body",
+            "pub fn scan_dollar_string(lexer: &mut Lexer<'_>) -> Action { lexer.changed() }",
+            "unsupported.obsolete-function-shape",
+        ),
+        (
+            "changed handwritten parser body",
+            "impl<'input> Parse<'input> for CustomOp<'input> { fn changed() {} }",
+            "unsupported.handwritten-parser-shape",
+        ),
+    ];
+
+    for (id, source, expected_code) in cases {
+        let error = pass
+            .plan_edits(Path::new("src/adversarial.rs"), source)
+            .unwrap_err();
+        assert_eq!(error.code, expected_code, "case {id}");
+        assert!(!error.message.is_empty(), "case {id}");
+    }
+}
+
+#[test]
+fn obsolete_escape_hatches_are_rejected_independent_of_token_spacing() {
+    let pass = pass();
+    let cases = [
+        (
+            "inline callback",
+            "pub struct Bad { #[lex(pattern=r\"x\",callback=crate::scan)] value: Word }",
+            "unsupported.inline-callback",
+        ),
+        (
+            "central callback",
+            "recursa::tokens! { literals { Word => r\"x\" with\ncrate::scan, } }",
+            "unsupported.central-callback",
+        ),
+        (
+            "callback declarations",
+            "recursa::tokens! { callbacks{scan=crate::scan} }",
+            "unsupported.callback-declarations",
+        ),
+        (
+            "post lex",
+            "recursa::tokens! { post_lex=crate::repair }",
+            "unsupported.post-lex-hook",
+        ),
+        (
+            "parser postcondition",
+            "#[recursa::parser (postcondition=crate::validate)] pub struct Bad;",
+            "unsupported.parser-postcondition",
+        ),
+        (
+            "parser rules",
+            "#[recursa::parser (rules=SqlRules)] pub struct Bad;",
+            "rewrite.unhandled-legacy-shape",
+        ),
+        (
+            "first set module",
+            "pub mod __firstset{}",
+            "rewrite.unhandled-legacy-shape",
+        ),
+        (
+            "first set import",
+            "use crate :: __firstset :: *;",
+            "rewrite.unhandled-legacy-shape",
         ),
     ];
 

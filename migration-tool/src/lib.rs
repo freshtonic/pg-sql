@@ -82,7 +82,7 @@ impl Mapping {
                 (
                     "migration-tool".into(),
                     WorkspaceTestCounts {
-                        tests: 36,
+                        tests: 41,
                         ignored: 1,
                     },
                 ),

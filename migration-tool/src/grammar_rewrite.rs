@@ -15,20 +15,57 @@ use crate::rewrite::{
 };
 
 pub const SUPPORTED_SHAPES: &[&str] = &[
+    "admission_all_word_kinds",
+    "admission_bare_alias_name",
+    "admission_bare_col_label",
+    "admission_col_label",
+    "admission_col_id",
+    "admission_non_reserved_word",
+    "admission_psql_variable_name",
+    "admission_type_function_name",
+    "admission_unquoted_ident",
+    "admission_window_ref_name",
     "attributed_enum",
     "attributed_struct",
     "attributed_type",
+    "binding_bare_alias_name_variant",
+    "binding_bare_col_label_delete_alias",
+    "binding_col_id_savepoint",
+    "binding_col_label_def_elem",
+    "binding_custom_op_operator_expr",
+    "binding_dollar_num_positional_param",
+    "binding_dollar_string_do_stmt",
+    "binding_integer_value",
+    "binding_non_reserved_word_role_spec",
+    "binding_numeric_value",
+    "binding_psql_directive_line",
+    "binding_psql_variable_name_structural",
+    "binding_type_function_name_param",
+    "binding_unquoted_ident_variant",
+    "binding_window_ref_name_wrapper",
     "derive_stack",
     "fixed_syntax",
+    "grammar_keyword_matching_ascii_insensitive",
+    "grammar_max_lookahead_five",
     "handwritten_bare_alias_name",
     "handwritten_custom_op",
     "handwritten_rest_of_line",
     "handwritten_string_lit_seq",
     "handwritten_unquoted_ident",
+    "ignore_nested_block_comment",
     "lexer_callback",
+    "matcher_custom_op",
+    "matcher_dollar_num",
+    "matcher_dollar_string",
+    "matcher_integer",
+    "matcher_numeric",
+    "matcher_psql_directive_line",
     "nested_container",
     "obsolete_firstset_ref",
     "obsolete_generated_artifact",
+    "obsolete_callback_functions",
+    "obsolete_parser_postcondition",
+    "obsolete_raw_line_parser",
     "obsolete_sql_rules",
     "optional_syntax_bool",
     "optional_syntax_exclusion",
@@ -38,10 +75,17 @@ pub const SUPPORTED_SHAPES: &[&str] = &[
     "pratt_infix",
     "pratt_postfix",
     "pratt_prefix",
+    "remove_frame_unit_predicate",
+    "remove_frame_unit_wrapper",
+    "remove_operator_comment_repair",
+    "remove_pg_lex",
+    "remove_psql_variable_repair",
+    "remove_reject_trailing_word",
+    "remove_scan_dollar_string",
+    "remove_skip_block_comment",
     "seq0",
     "seq1",
     "surrounded",
-    "token_callbacks",
     "token_categories",
     "token_classes",
     "token_flags",
@@ -138,8 +182,17 @@ impl GrammarRewritePass {
         let mut containers = ContainerPlanner::new(source, &structure);
         containers.visit_file(&parsed);
         edits.extend(containers.finish()?);
+        let mut obsolete_items = ObsoleteItemPlanner::new(source);
+        obsolete_items.visit_file(&parsed);
+        edits.extend(obsolete_items.finish()?);
         for &(needle, replacement) in REWRITES {
             for start in structural_matches(source, needle, &structure) {
+                if replacement
+                    .strip_suffix(needle)
+                    .is_some_and(|prefix| !prefix.is_empty() && source[..start].ends_with(prefix))
+                {
+                    continue;
+                }
                 edits.push(SpanEdit {
                     start,
                     end: start + needle.len(),
@@ -161,23 +214,215 @@ impl GrammarRewritePass {
         let rewritten = apply_span_edits(source, &edits).map_err(|error| {
             GrammarRewriteError::new("rewrite.invalid-span", None, error.to_string())
         })?;
-        syn::parse_file(&rewritten).map_err(|error| {
+        let rewritten_parsed = syn::parse_file(&rewritten).map_err(|error| {
             GrammarRewriteError::new("rewrite.invalid-rust", None, error.to_string())
         })?;
+        let mut obsolete_syntax = ObsoleteSyntaxDetector::new(&rewritten);
+        obsolete_syntax.visit_file(&rewritten_parsed);
+        obsolete_syntax.finish()?;
         let rewritten_structure = StructuralSpans::parse(&rewritten)?;
-        for legacy in FORBIDDEN_AFTER_REWRITE {
+        for &(legacy, code) in FORBIDDEN_AFTER_REWRITE {
             if let Some(offset) = structural_matches(&rewritten, legacy, &rewritten_structure)
                 .into_iter()
                 .next()
             {
                 return Err(GrammarRewriteError::new(
-                    "rewrite.unhandled-legacy-shape",
+                    code,
                     Some(offset),
                     format!("no reviewed rewrite for remaining {legacy:?}"),
                 ));
             }
         }
         Ok(edits)
+    }
+}
+
+struct ObsoleteSyntaxDetector {
+    source_len: usize,
+    line_starts: Vec<usize>,
+    error: Option<GrammarRewriteError>,
+}
+
+impl ObsoleteSyntaxDetector {
+    fn new(source: &str) -> Self {
+        Self {
+            source_len: source.len(),
+            line_starts: line_starts(source),
+            error: None,
+        }
+    }
+
+    fn finish(self) -> Result<(), GrammarRewriteError> {
+        self.error.map_or(Ok(()), Err)
+    }
+
+    fn reject(&mut self, code: &'static str, span: Span, message: &'static str) {
+        if self.error.is_none() {
+            self.error = Some(GrammarRewriteError::new(
+                code,
+                span_range(span, &self.line_starts, self.source_len)
+                    .ok()
+                    .map(|range| range.start),
+                message,
+            ));
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for ObsoleteSyntaxDetector {
+    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
+        let name = attribute
+            .path()
+            .segments
+            .last()
+            .map(|segment| segment.ident.to_string());
+        let syn::Meta::List(list) = &attribute.meta else {
+            return;
+        };
+        if name.as_deref() == Some("lex")
+            && let Some(span) = token_ident_span(&list.tokens, "callback")
+        {
+            self.reject(
+                "unsupported.inline-callback",
+                span,
+                "authored lexical callbacks are obsolete",
+            );
+        } else if name.as_deref() == Some("parser")
+            && let Some(span) = token_ident_span(&list.tokens, "postcondition")
+        {
+            self.reject(
+                "unsupported.parser-postcondition",
+                span,
+                "authored parser postconditions are obsolete",
+            );
+        } else if name.as_deref() == Some("parser")
+            && let Some(span) = token_ident_span(&list.tokens, "rules")
+        {
+            self.reject(
+                "rewrite.unhandled-legacy-shape",
+                span,
+                "legacy parser rule bindings are obsolete",
+            );
+        }
+    }
+
+    fn visit_macro(&mut self, item: &'ast syn::Macro) {
+        if item
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "tokens")
+        {
+            for (name, code, message) in [
+                (
+                    "callbacks",
+                    "unsupported.callback-declarations",
+                    "authored callback declarations are obsolete",
+                ),
+                (
+                    "post_lex",
+                    "unsupported.post-lex-hook",
+                    "authored post-lex hooks are obsolete",
+                ),
+                (
+                    "with",
+                    "unsupported.central-callback",
+                    "authored central lexical callbacks are obsolete",
+                ),
+                (
+                    "lexer_tokens",
+                    "unsupported.lexer-tokens",
+                    "legacy lexer token declarations are obsolete",
+                ),
+                (
+                    "soft_keywords",
+                    "unsupported.soft-keywords",
+                    "legacy soft keyword declarations are obsolete",
+                ),
+                (
+                    "targets",
+                    "unsupported.token-targets",
+                    "legacy token targets are obsolete",
+                ),
+                (
+                    "classes",
+                    "unsupported.token-classes",
+                    "legacy token classes are obsolete",
+                ),
+                (
+                    "literals",
+                    "unsupported.token-literals",
+                    "legacy literal declarations are obsolete",
+                ),
+            ] {
+                if let Some(span) = token_ident_span(&item.tokens, name) {
+                    self.reject(code, span, message);
+                    break;
+                }
+            }
+        }
+    }
+
+    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+        if item.ident == "__firstset" {
+            self.reject(
+                "rewrite.unhandled-legacy-shape",
+                item.ident.span(),
+                "legacy generated first-set modules are obsolete",
+            );
+        }
+        syn::visit::visit_item_mod(self, item);
+    }
+
+    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+        if let Some(span) = use_tree_ident_span(&item.tree, "__firstset") {
+            self.reject(
+                "rewrite.unhandled-legacy-shape",
+                span,
+                "legacy generated first-set imports are obsolete",
+            );
+        }
+        syn::visit::visit_item_use(self, item);
+    }
+
+    fn visit_item_struct(&mut self, item: &'ast syn::ItemStruct) {
+        if item.ident == "SqlRules" {
+            self.reject(
+                "rewrite.unhandled-legacy-shape",
+                item.ident.span(),
+                "legacy SqlRules marker types are obsolete",
+            );
+        }
+        syn::visit::visit_item_struct(self, item);
+    }
+}
+
+fn token_ident_span(tokens: &TokenStream, expected: &str) -> Option<Span> {
+    for token in tokens.clone() {
+        match token {
+            TokenTree::Ident(ident) if ident == expected => return Some(ident.span()),
+            TokenTree::Group(group) => {
+                if let Some(span) = token_ident_span(&group.stream(), expected) {
+                    return Some(span);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn use_tree_ident_span(tree: &syn::UseTree, expected: &str) -> Option<Span> {
+    match tree {
+        syn::UseTree::Path(path) if path.ident == expected => Some(path.ident.span()),
+        syn::UseTree::Path(path) => use_tree_ident_span(&path.tree, expected),
+        syn::UseTree::Name(name) if name.ident == expected => Some(name.ident.span()),
+        syn::UseTree::Rename(rename) if rename.ident == expected => Some(rename.ident.span()),
+        syn::UseTree::Group(group) => group
+            .items
+            .iter()
+            .find_map(|item| use_tree_ident_span(item, expected)),
+        _ => None,
     }
 }
 
@@ -377,6 +622,151 @@ impl<'ast> Visit<'ast> for ContainerPlanner<'_> {
         {
             self.error = Some(error);
         }
+    }
+}
+
+struct ObsoleteItemPlanner<'a> {
+    source: &'a str,
+    line_starts: Vec<usize>,
+    edits: Vec<SpanEdit>,
+    error: Option<GrammarRewriteError>,
+}
+
+impl<'a> ObsoleteItemPlanner<'a> {
+    fn new(source: &'a str) -> Self {
+        Self {
+            source,
+            line_starts: line_starts(source),
+            edits: Vec::new(),
+            error: None,
+        }
+    }
+
+    fn finish(self) -> Result<Vec<SpanEdit>, GrammarRewriteError> {
+        self.error.map_or(Ok(self.edits), Err)
+    }
+
+    fn range(&self, span: Span) -> Result<std::ops::Range<usize>, GrammarRewriteError> {
+        span_range(span, &self.line_starts, self.source.len())
+    }
+
+    fn remove_reviewed_item(
+        &mut self,
+        span: Span,
+        reviewed_source: &str,
+        unsupported_code: &'static str,
+        remove_trailing_line_break: bool,
+    ) {
+        let Ok(mut range) = self.range(span) else {
+            self.error = self.range(span).err();
+            return;
+        };
+        if self.source[range.clone()] != *reviewed_source {
+            self.error = Some(GrammarRewriteError::new(
+                unsupported_code,
+                Some(range.start),
+                "obsolete item has changed since its declarative replacement was reviewed",
+            ));
+            return;
+        }
+        if remove_trailing_line_break {
+            if self.source[range.end..].starts_with("\r\n") {
+                range.end += 2;
+            } else if self.source[range.end..].starts_with('\n') {
+                range.end += 1;
+            }
+        }
+        self.edits.push(SpanEdit {
+            start: range.start,
+            end: range.end,
+            replacement: String::new(),
+        });
+    }
+}
+
+impl<'ast> Visit<'ast> for ObsoleteItemPlanner<'_> {
+    fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
+        if self.error.is_some() {
+            return;
+        }
+        let name = item.sig.ident.to_string();
+        if let Some((_, reviewed_source)) = REVIEWED_OBSOLETE_FUNCTIONS
+            .iter()
+            .find(|(reviewed_name, _)| *reviewed_name == name)
+        {
+            self.remove_reviewed_item(
+                item.span(),
+                reviewed_source,
+                "unsupported.obsolete-function-shape",
+                false,
+            );
+        }
+    }
+
+    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        if self.error.is_some() {
+            return;
+        }
+        let is_parse = item
+            .trait_
+            .as_ref()
+            .and_then(|(_, path, _)| path.segments.last())
+            .is_some_and(|segment| segment.ident == "Parse");
+        if !is_parse {
+            return;
+        }
+        let self_name = match item.self_ty.as_ref() {
+            syn::Type::Path(path) => path
+                .path
+                .segments
+                .last()
+                .map(|segment| segment.ident.to_string()),
+            _ => None,
+        };
+        let Some(self_name) = self_name else {
+            self.error = Some(GrammarRewriteError::new(
+                "unsupported.handwritten-parser",
+                self.range(item.span()).ok().map(|range| range.start),
+                "handwritten Parse implementation has an unsupported self type",
+            ));
+            return;
+        };
+        if self_name == "StringLitSeq0" {
+            match self.range(item.span()) {
+                Ok(range)
+                    if &self.source[range.clone()]
+                        == "impl Parse for StringLitSeq0 { fn parse() {} }" =>
+                {
+                    return;
+                }
+                Ok(range) => {
+                    self.error = Some(GrammarRewriteError::new(
+                        "unsupported.handwritten-parser-shape",
+                        Some(range.start),
+                        "obsolete item has changed since its declarative replacement was reviewed",
+                    ));
+                }
+                Err(error) => self.error = Some(error),
+            }
+            return;
+        }
+        let Some((_, reviewed_source)) = REVIEWED_HANDWRITTEN_PARSERS
+            .iter()
+            .find(|(reviewed_name, _)| *reviewed_name == self_name)
+        else {
+            self.error = Some(GrammarRewriteError::new(
+                "unsupported.handwritten-parser",
+                self.range(item.span()).ok().map(|range| range.start),
+                format!("no reviewed declarative replacement for Parse implementation {self_name}"),
+            ));
+            return;
+        };
+        self.remove_reviewed_item(
+            item.span(),
+            reviewed_source,
+            "unsupported.handwritten-parser-shape",
+            true,
+        );
     }
 }
 
@@ -736,25 +1126,204 @@ const UNSUPPORTED: &[(&str, &str)] = &[
         "OptionalTrailing<",
         "unsupported.malformed-optional-trailing",
     ),
+    ("parse_raw_source_remainder", "unsupported.raw-line-parser"),
 ];
 
-const FORBIDDEN_AFTER_REWRITE: &[&str] = &[
-    "#[recursa::parser(",
-    "impl Parse for ",
-    "Seq0<",
-    "Seq1<",
-    "Surrounded<",
-    "OptionalTrailing",
-    "rules = SqlRules",
-    "::__firstset",
+const REVIEWED_OBSOLETE_FUNCTIONS: &[(&str, &str)] = &[
+    (
+        "scan_dollar_string",
+        r#"pub fn scan_dollar_string(lexer: &mut Lexer<'_>) -> Action {
+    lexer.scan_same_delimiter()
+}"#,
+    ),
+    (
+        "reject_trailing_word",
+        r#"pub fn reject_trailing_word(lexer: &mut Lexer<'_>) -> Action {
+    lexer.reject_word_character()
+}"#,
+    ),
+    (
+        "skip_block_comment",
+        r#"pub fn skip_block_comment(lexer: &mut Lexer<'_>) -> Action {
+    lexer.skip_nested_comment()
+}"#,
+    ),
+    (
+        "pg_lex",
+        r#"pub fn pg_lex(source: &str) -> LexResult {
+    let mut result = lex(source);
+    split_psql_var_keyword_tokens(source, &mut result.tokens);
+    split_bang_eq_minus_before_dash_comment(source, &mut result.tokens);
+    result
+}"#,
+    ),
+    (
+        "split_psql_var_keyword_tokens",
+        r#"fn split_psql_var_keyword_tokens(source: &str, tokens: &mut Vec<TokenRecord>) {
+    repair_psql_variables(source, tokens);
+}"#,
+    ),
+    (
+        "split_bang_eq_minus_before_dash_comment",
+        r#"fn split_bang_eq_minus_before_dash_comment(source: &str, tokens: &mut Vec<TokenRecord>) {
+    repair_operator_comment_fence(source, tokens);
+}"#,
+    ),
+    (
+        "not_frame_unit",
+        r#"fn not_frame_unit(value: &Ident<'_>) -> Result<(), ParseError> {
+    reject_frame_unit(value)
+}"#,
+    ),
+    (
+        "not_frame_unit_wrapper",
+        r#"pub fn not_frame_unit_wrapper(value: &WindowRefNameIdent<'_>) -> Result<(), ParseError> {
+    let WindowRefNameIdent::Ident(value) = value;
+    not_frame_unit(value)
+}"#,
+    ),
+];
+
+const REVIEWED_HANDWRITTEN_PARSERS: &[(&str, &str)] = &[
+    (
+        "CustomOp",
+        "impl<'input> Parse<'input> for CustomOp<'input> { fn parse() {} }",
+    ),
+    (
+        "UnquotedIdent",
+        "impl<'input> Parse<'input> for UnquotedIdent<'input> { fn parse() {} }",
+    ),
+    (
+        "BareAliasName",
+        "impl<'input> Parse<'input> for BareAliasName<'input> { fn parse() {} }",
+    ),
+    (
+        "RestOfLine",
+        "impl<'input> Parse<'input> for RestOfLine<'input> { fn parse() {} }",
+    ),
+];
+
+const FORBIDDEN_AFTER_REWRITE: &[(&str, &str)] = &[
+    ("#[recursa::parser(", "unsupported.parser-postcondition"),
+    ("impl Parse for ", "unsupported.raw-line-parser"),
+    ("callback = ", "unsupported.inline-callback"),
+    (" with ", "unsupported.central-callback"),
+    ("post_lex = ", "unsupported.post-lex-hook"),
+    ("callbacks {", "unsupported.callback-declarations"),
+    ("lexer_tokens {", "unsupported.lexer-tokens"),
+    ("soft_keywords {", "unsupported.soft-keywords"),
+    ("targets {", "unsupported.token-targets"),
+    ("classes {", "unsupported.token-classes"),
+    ("literals {", "unsupported.token-literals"),
+    ("fn pg_lex", "unsupported.post-lex-hook"),
+    ("Seq0<", "rewrite.unhandled-legacy-shape"),
+    ("Seq1<", "rewrite.unhandled-legacy-shape"),
+    ("Surrounded<", "rewrite.unhandled-legacy-shape"),
+    ("OptionalTrailing", "rewrite.unhandled-legacy-shape"),
+    ("rules = SqlRules", "rewrite.unhandled-legacy-shape"),
+    ("::__firstset", "rewrite.unhandled-legacy-shape"),
 ];
 
 const REWRITES: &[(&str, &str)] = &[
+    (
+        "    module = crate::grammar,\n}",
+        "    module = crate::grammar,\n    keyword_matching = ascii_insensitive,\n    max_lookahead = 5,\n}",
+    ),
+    (
+        "    classes { bare_label_keywords = keywords where bare_label }\n    targets {\n        ColId: literal::Ident admits UNRESERVED, COL_NAME,\n        type_function_name: literal::Ident admits UNRESERVED, TYPE_FUNC_NAME,\n        NonReservedWord: literal::Ident admits UNRESERVED, COL_NAME, TYPE_FUNC_NAME,\n        ColLabel: literal::Ident admits UNRESERVED, COL_NAME, TYPE_FUNC_NAME, RESERVED,\n        BareColLabel: literal::Ident admits bare_label_keywords,\n    }",
+        "    admissions {\n        AllWordKinds = keywords,\n        ColId = UNRESERVED + COL_NAME,\n        type_function_name = UNRESERVED + TYPE_FUNC_NAME,\n        NonReservedWord = UNRESERVED + COL_NAME + TYPE_FUNC_NAME,\n        ColLabel = UNRESERVED + COL_NAME + TYPE_FUNC_NAME + RESERVED,\n        BareColLabel = bare_label,\n        WindowRefName = ColId - { ROWS, RANGE, GROUPS },\n        PsqlVariableName = AllWordKinds - { NULL, TRUE, FALSE },\n        UnquotedIdent = NonReservedWord,\n        BareAliasName = AllWordKinds,\n    }",
+    ),
+    (
+        "        GROUPS => r\"GROUPS\" in UNRESERVED + bare_label,\n    }",
+        "        GROUPS => r\"GROUPS\" in UNRESERVED + bare_label,",
+    ),
+    (
+        "    soft_keywords { FORMAT => r\"FORMAT\" in UNRESERVED + bare_label, }\n",
+        "        FORMAT => r\"FORMAT\" in UNRESERVED + bare_label,\n    }\n",
+    ),
+    (
+        "    literals {\n        DollarStringLit<'input>(source) => r\"\\$(?:[A-Za-z_][A-Za-z0-9_]*)?\\$\" with scan_dollar_string,\n        NumericLit<'input>(source) => r\"(?:(?:[0-9](?:_?[0-9])*\\.[0-9](?:_?[0-9])*|\\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\\.)\" with reject_trailing_word,\n        IntegerLit<'input>(source) => r\"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)\" with reject_trailing_word,\n        DollarNum<'input>(source) => r\"\\$[0-9]+\" with reject_trailing_word,\n    }",
+        "    matchers {\n        DollarStringLit => same_delimiter(opener = r\"\\$(?:[A-Za-z_][A-Za-z0-9_]*)?\\$\"),\n        NumericLit => next_exclusion(pattern = r\"(?:(?:[0-9](?:_?[0-9])*\\.[0-9](?:_?[0-9])*|\\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\\.)\", excluded = r\"[A-Za-z0-9_]\"),\n        IntegerLit => next_exclusion(pattern = r\"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)\", excluded = r\"[A-Za-z0-9_]\"),\n        DollarNum => next_exclusion(pattern = r\"\\$[0-9]+\", excluded = r\"[A-Za-z0-9_]\"),\n        CustomOp => operator_run(\n            characters = \"-+*/<>=~!@#%^&|?\",\n            fences = [\"/*\", \"--\"],\n            trailing = \"+-\",\n            qualifying = \"~!@#%^&|?\"\n        ),\n        PsqlDirectiveLine => physical_line(prefix = r\"\\\\[A-Za-z]+\"),\n    }",
+    ),
+    ("    lexer_tokens {", "    ignore {"),
+    (
+        "        BlockComment => r\"/\\*\" with skip_block_comment,",
+        "        BlockComment => nested(opener = \"/*\", closer = \"*/\"),",
+    ),
+    (
+        "        CustomOp => r\"([-+*/<>=~!@#%^&|?]*[~!@#%^&|?][-+*/<>=~!@#%^&|?]*|[-+*/<>=]+[*/<>=])\",\n",
+        "",
+    ),
+    (
+        "    pub name: ColId<'input>,",
+        "    #[lex(pattern = r#\"(?i:U)&\"[^\"]*(?:\"\"[^\"]*)*\"|\"[^\"]*(?:\"\"[^\"]*)*\"|[A-Za-z_][A-Za-z0-9_]*\"#, admits(ColId))]\n    pub name: ColId<'input>,",
+    ),
+    (
+        "    pub name: type_function_name<'input>,",
+        "    #[lex(pattern = r#\"(?i:U)&\"[^\"]*(?:\"\"[^\"]*)*\"|\"[^\"]*(?:\"\"[^\"]*)*\"|[A-Za-z_][A-Za-z0-9_]*\"#, admits(type_function_name))]\n    pub name: type_function_name<'input>,",
+    ),
+    (
+        "    pub name: NonReservedWord<'input>,",
+        "    #[lex(pattern = r#\"(?i:U)&\"[^\"]*(?:\"\"[^\"]*)*\"|\"[^\"]*(?:\"\"[^\"]*)*\"|[A-Za-z_][A-Za-z0-9_]*\"#, admits(NonReservedWord))]\n    pub name: NonReservedWord<'input>,",
+    ),
+    (
+        "    pub name: ColLabel<'input>,",
+        "    #[lex(pattern = r#\"(?i:U)&\"[^\"]*(?:\"\"[^\"]*)*\"|\"[^\"]*(?:\"\"[^\"]*)*\"|[A-Za-z_][A-Za-z0-9_]*\"#, admits(ColLabel))]\n    pub name: ColLabel<'input>,",
+    ),
+    (
+        "    Bare(BareColLabel<'input>),",
+        "    Bare(#[lex(pattern = r#\"(?i:U)&\"[^\"]*(?:\"\"[^\"]*)*\"|\"[^\"]*(?:\"\"[^\"]*)*\"|[A-Za-z_][A-Za-z0-9_]*\"#, admits(BareColLabel))] BareColLabel<'input>),",
+    ),
+    (
+        "    Unquoted(UnquotedIdent<'input>),",
+        "    Unquoted(#[lex(pattern = r\"[A-Za-z_][A-Za-z0-9_]*\", admits(UnquotedIdent))] UnquotedIdent<'input>),",
+    ),
+    (
+        "    Bare(BareAliasName<'input>),",
+        "    Bare(#[lex(pattern = r\"[A-Za-z_][A-Za-z0-9_]*\", admits(BareAliasName))] BareAliasName<'input>),",
+    ),
+    (
+        "    pub name: PsqlVariableName<'input>,",
+        "    #[lex(pattern = r#\"(?:[A-Za-z_][A-Za-z0-9_]*|'[^']*'|\"[^\"]*\")\"#, admits(PsqlVariableName))]\n    pub name: PsqlVariableName<'input>,",
+    ),
+    (
+        "    pub body: DollarStringLit<'input>,",
+        "    #[lex(matcher)]\n    pub body: DollarStringLit<'input>,",
+    ),
+    (
+        "    pub value: NumericLit<'input>,",
+        "    #[lex(matcher)]\n    pub value: NumericLit<'input>,",
+    ),
+    (
+        "    pub value: IntegerLit<'input>,",
+        "    #[lex(matcher)]\n    pub value: IntegerLit<'input>,",
+    ),
+    (
+        "    pub value: DollarNum<'input>,",
+        "    #[lex(matcher)]\n    pub value: DollarNum<'input>,",
+    ),
+    (
+        "    pub operator: CustomOp<'input>,",
+        "    #[lex(matcher)]\n    pub operator: CustomOp<'input>,",
+    ),
+    (
+        "    pub backslash: BackSlash,\n    pub rest: RestOfLine<'input>,",
+        "    #[lex(matcher)]\n    pub rest: PsqlDirectiveLine<'input>,",
+    ),
+    (
+        "pub enum WindowRefNameIdent<'input> {\n    Ident(Ident<'input>),\n}",
+        "pub enum WindowRefNameIdent<'input> {\n    Ident(#[lex(pattern = r#\"(?i:U)&\"[^\"]*(?:\"\"[^\"]*)*\"|\"[^\"]*(?:\"\"[^\"]*)*\"|[A-Za-z_][A-Za-z0-9_]*\"#, admits(WindowRefName))] WindowRefNameText<'input>),\n}",
+    ),
+    (
+        "#[recursa::parser(postcondition = crate::tokens::not_frame_unit_wrapper)]\n",
+        "",
+    ),
     ("use recursa::seq::{Seq0, Seq1, OptionalTrailing};\n", ""),
     ("use recursa::surrounded::Surrounded;\n", ""),
     ("use recursa::{FormatTokens, Transform, Visit};\n", ""),
     ("use crate::__firstset::*;\n", ""),
     ("pub struct SqlRules;\n", ""),
+    ("impl Parse for StringLitSeq0 { fn parse() {} }\n", ""),
     (
         "pub mod __firstset { include!(\"generated/first_set.rs\"); }\n",
         "",
@@ -798,9 +1367,4 @@ const REWRITES: &[(&str, &str)] = &[
         "Factorial((Box<Self>, punct::Bang)),",
         "Factorial(#[tok(BANG)] Box<Self>),",
     ),
-    ("impl Parse for StringLitSeq0 { fn parse() {} }\n", ""),
-    ("impl Parse for CustomOp { fn parse() {} }\n", ""),
-    ("impl Parse for UnquotedIdent { fn parse() {} }\n", ""),
-    ("impl Parse for BareAliasName { fn parse() {} }\n", ""),
-    ("impl Parse for RestOfLine { fn parse() {} }\n", ""),
 ];
