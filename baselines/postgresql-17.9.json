@@ -1,0 +1,2289 @@
+{
+  "schema_version": 1,
+  "name": "postgresql-17.9",
+  "legacy": {
+    "commit": "1e71421d66baac15c8c5264e8f29b5f80122f50e",
+    "tree": "f3191ab707c8a957d1bb5fe142e74fc624fe6661",
+    "pg_sql_tree": "50e1376d16796e5f05db88d99dab42252a9f78a4"
+  },
+  "postgres": {
+    "release": "17.9",
+    "gitlink": "6d396980fc5aed4f1a525e0bd75cb16b25ed40ca"
+  },
+  "corpus": {
+    "root": "vendor/postgres/src/test/regress/sql",
+    "inclusion_rule": "exact file list declared by corpus_tests! in the legacy differential suite",
+    "skip_rules": [
+      "psql directives and COPY-from-stdin payloads are non-SQL",
+      "statements containing psql variable interpolation are not standalone SQL",
+      "a whole-file legacy parse failure yields no statements",
+      "PostgreSQL-accepted statements the legacy parser cannot model are skips"
+    ],
+    "available_files": 226,
+    "included": [
+      "advisory_lock.sql",
+      "aggregates.sql",
+      "alter_generic.sql",
+      "alter_operator.sql",
+      "alter_table.sql",
+      "amutils.sql",
+      "arrays.sql",
+      "async.sql",
+      "bit.sql",
+      "bitmapops.sql",
+      "boolean.sql",
+      "box.sql",
+      "brin.sql",
+      "brin_bloom.sql",
+      "brin_multi.sql",
+      "btree_index.sql",
+      "case.sql",
+      "char.sql",
+      "circle.sql",
+      "cluster.sql",
+      "collate.sql",
+      "combocid.sql",
+      "comments.sql",
+      "compression.sql",
+      "constraints.sql",
+      "conversion.sql",
+      "copy.sql",
+      "copy2.sql",
+      "copydml.sql",
+      "copyselect.sql",
+      "create_aggregate.sql",
+      "create_am.sql",
+      "create_cast.sql",
+      "create_function_c.sql",
+      "create_function_sql.sql",
+      "create_index.sql",
+      "create_index_spgist.sql",
+      "create_misc.sql",
+      "create_operator.sql",
+      "create_procedure.sql",
+      "create_role.sql",
+      "create_schema.sql",
+      "create_table.sql",
+      "create_table_like.sql",
+      "create_type.sql",
+      "create_view.sql",
+      "database.sql",
+      "date.sql",
+      "dbsize.sql",
+      "delete.sql",
+      "dependency.sql",
+      "domain.sql",
+      "drop_if_exists.sql",
+      "drop_operator.sql",
+      "encoding.sql",
+      "enum.sql",
+      "equivclass.sql",
+      "errors.sql",
+      "euc_kr.sql",
+      "event_trigger.sql",
+      "event_trigger_login.sql",
+      "explain.sql",
+      "expressions.sql",
+      "fast_default.sql",
+      "float4.sql",
+      "float8.sql",
+      "foreign_data.sql",
+      "foreign_key.sql",
+      "functional_deps.sql",
+      "generated.sql",
+      "geometry.sql",
+      "gin.sql",
+      "gist.sql",
+      "groupingsets.sql",
+      "guc.sql",
+      "hash_func.sql",
+      "hash_index.sql",
+      "hash_part.sql",
+      "horology.sql",
+      "identity.sql",
+      "incremental_sort.sql",
+      "index_including.sql",
+      "index_including_gist.sql",
+      "indexing.sql",
+      "indirect_toast.sql",
+      "inet.sql",
+      "infinite_recurse.sql",
+      "inherit.sql",
+      "init_privs.sql",
+      "insert.sql",
+      "insert_conflict.sql",
+      "int2.sql",
+      "int4.sql",
+      "int8.sql",
+      "interval.sql",
+      "join.sql",
+      "join_hash.sql",
+      "json.sql",
+      "json_encoding.sql",
+      "jsonb.sql",
+      "jsonb_jsonpath.sql",
+      "jsonpath.sql",
+      "jsonpath_encoding.sql",
+      "largeobject.sql",
+      "limit.sql",
+      "line.sql",
+      "lock.sql",
+      "lseg.sql",
+      "macaddr.sql",
+      "macaddr8.sql",
+      "maintain_every.sql",
+      "matview.sql",
+      "md5.sql",
+      "memoize.sql",
+      "merge.sql",
+      "misc.sql",
+      "misc_functions.sql",
+      "misc_sanity.sql",
+      "money.sql",
+      "multirangetypes.sql",
+      "mvcc.sql",
+      "name.sql",
+      "namespace.sql",
+      "numeric.sql",
+      "numeric_big.sql",
+      "numerology.sql",
+      "object_address.sql",
+      "oid.sql",
+      "oidjoins.sql",
+      "opr_sanity.sql",
+      "partition_aggregate.sql",
+      "partition_info.sql",
+      "partition_join.sql",
+      "partition_prune.sql",
+      "password.sql",
+      "path.sql",
+      "pg_lsn.sql",
+      "plancache.sql",
+      "plpgsql.sql",
+      "point.sql",
+      "polygon.sql",
+      "polymorphism.sql",
+      "portals.sql",
+      "portals_p2.sql",
+      "predicate.sql",
+      "prepare.sql",
+      "prepared_xacts.sql",
+      "privileges.sql",
+      "psql.sql",
+      "psql_crosstab.sql",
+      "publication.sql",
+      "random.sql",
+      "rangefuncs.sql",
+      "rangetypes.sql",
+      "regex.sql",
+      "regproc.sql",
+      "reindex_catalog.sql",
+      "reloptions.sql",
+      "replica_identity.sql",
+      "returning.sql",
+      "roleattributes.sql",
+      "rowsecurity.sql",
+      "rowtypes.sql",
+      "rules.sql",
+      "sanity_check.sql",
+      "security_label.sql",
+      "select.sql",
+      "select_distinct.sql",
+      "select_distinct_on.sql",
+      "select_having.sql",
+      "select_implicit.sql",
+      "select_into.sql",
+      "select_parallel.sql",
+      "select_views.sql",
+      "sequence.sql",
+      "spgist.sql",
+      "sqljson.sql",
+      "sqljson_jsontable.sql",
+      "sqljson_queryfuncs.sql",
+      "stats.sql",
+      "stats_ext.sql",
+      "strings.sql",
+      "subscription.sql",
+      "subselect.sql",
+      "sysviews.sql",
+      "tablesample.sql",
+      "tablespace.sql",
+      "temp.sql",
+      "test_setup.sql",
+      "text.sql",
+      "tid.sql",
+      "tidrangescan.sql",
+      "tidscan.sql",
+      "time.sql",
+      "timestamp.sql",
+      "timestamptz.sql",
+      "timetz.sql",
+      "transactions.sql",
+      "triggers.sql",
+      "truncate.sql",
+      "tsdicts.sql",
+      "tsearch.sql",
+      "tsrf.sql",
+      "tstypes.sql",
+      "tuplesort.sql",
+      "txid.sql",
+      "type_sanity.sql",
+      "typed_table.sql",
+      "unicode.sql",
+      "union.sql",
+      "updatable_views.sql",
+      "update.sql",
+      "uuid.sql",
+      "vacuum.sql",
+      "vacuum_parallel.sql",
+      "varchar.sql",
+      "window.sql",
+      "with.sql",
+      "write_parallel.sql",
+      "xid.sql",
+      "xml.sql",
+      "xmlmap.sql"
+    ],
+    "excluded": [
+      {
+        "file": "collate.icu.utf8.sql",
+        "reason": "legacy differential suite omitted fixture names that are not Rust identifiers"
+      },
+      {
+        "file": "collate.linux.utf8.sql",
+        "reason": "legacy differential suite omitted fixture names that are not Rust identifiers"
+      },
+      {
+        "file": "collate.utf8.sql",
+        "reason": "legacy differential suite omitted fixture names that are not Rust identifiers"
+      },
+      {
+        "file": "collate.windows.win1252.sql",
+        "reason": "legacy differential suite omitted fixture names that are not Rust identifiers"
+      }
+    ],
+    "files": [
+      {
+        "file": "advisory_lock.sql",
+        "statements": 23,
+        "outcomes": {
+          "pass": 23,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "aggregates.sql",
+        "statements": 513,
+        "outcomes": {
+          "pass": 513,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "alter_generic.sql",
+        "statements": 331,
+        "outcomes": {
+          "pass": 331,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "alter_operator.sql",
+        "statements": 65,
+        "outcomes": {
+          "pass": 65,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "alter_table.sql",
+        "statements": 1653,
+        "outcomes": {
+          "pass": 1653,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "amutils.sql",
+        "statements": 10,
+        "outcomes": {
+          "pass": 9,
+          "skip": 1,
+          "fail": 0
+        }
+      },
+      {
+        "file": "arrays.sql",
+        "statements": 483,
+        "outcomes": {
+          "pass": 483,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "async.sql",
+        "statements": 11,
+        "outcomes": {
+          "pass": 11,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "bit.sql",
+        "statements": 132,
+        "outcomes": {
+          "pass": 132,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "bitmapops.sql",
+        "statements": 10,
+        "outcomes": {
+          "pass": 10,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "boolean.sql",
+        "statements": 98,
+        "outcomes": {
+          "pass": 98,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "box.sql",
+        "statements": 101,
+        "outcomes": {
+          "pass": 101,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "brin.sql",
+        "statements": 66,
+        "outcomes": {
+          "pass": 66,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "brin_bloom.sql",
+        "statements": 38,
+        "outcomes": {
+          "pass": 38,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "brin_multi.sql",
+        "statements": 170,
+        "outcomes": {
+          "pass": 170,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "btree_index.sql",
+        "statements": 92,
+        "outcomes": {
+          "pass": 92,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "case.sql",
+        "statements": 64,
+        "outcomes": {
+          "pass": 64,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "char.sql",
+        "statements": 32,
+        "outcomes": {
+          "pass": 32,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "circle.sql",
+        "statements": 22,
+        "outcomes": {
+          "pass": 22,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "cluster.sql",
+        "statements": 204,
+        "outcomes": {
+          "pass": 204,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "collate.sql",
+        "statements": 144,
+        "outcomes": {
+          "pass": 144,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "combocid.sql",
+        "statements": 62,
+        "outcomes": {
+          "pass": 62,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "comments.sql",
+        "statements": 6,
+        "outcomes": {
+          "pass": 6,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "compression.sql",
+        "statements": 87,
+        "outcomes": {
+          "pass": 87,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "constraints.sql",
+        "statements": 317,
+        "outcomes": {
+          "pass": 317,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "conversion.sql",
+        "statements": 63,
+        "outcomes": {
+          "pass": 63,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "copy.sql",
+        "statements": 77,
+        "outcomes": {
+          "pass": 77,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "copy2.sql",
+        "statements": 199,
+        "outcomes": {
+          "pass": 199,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "copydml.sql",
+        "statements": 59,
+        "outcomes": {
+          "pass": 59,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "copyselect.sql",
+        "statements": 40,
+        "outcomes": {
+          "pass": 40,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_aggregate.sql",
+        "statements": 59,
+        "outcomes": {
+          "pass": 59,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_am.sql",
+        "statements": 142,
+        "outcomes": {
+          "pass": 142,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_cast.sql",
+        "statements": 24,
+        "outcomes": {
+          "pass": 24,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_function_c.sql",
+        "statements": 2,
+        "outcomes": {
+          "pass": 2,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_function_sql.sql",
+        "statements": 154,
+        "outcomes": {
+          "pass": 154,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_index.sql",
+        "statements": 608,
+        "outcomes": {
+          "pass": 607,
+          "skip": 1,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_index_spgist.sql",
+        "statements": 202,
+        "outcomes": {
+          "pass": 202,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_misc.sql",
+        "statements": 88,
+        "outcomes": {
+          "pass": 88,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_operator.sql",
+        "statements": 90,
+        "outcomes": {
+          "pass": 90,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_procedure.sql",
+        "statements": 109,
+        "outcomes": {
+          "pass": 109,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_role.sql",
+        "statements": 137,
+        "outcomes": {
+          "pass": 137,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_schema.sql",
+        "statements": 27,
+        "outcomes": {
+          "pass": 27,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_table.sql",
+        "statements": 327,
+        "outcomes": {
+          "pass": 327,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_table_like.sql",
+        "statements": 144,
+        "outcomes": {
+          "pass": 144,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_type.sql",
+        "statements": 80,
+        "outcomes": {
+          "pass": 80,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "create_view.sql",
+        "statements": 305,
+        "outcomes": {
+          "pass": 303,
+          "skip": 2,
+          "fail": 0
+        }
+      },
+      {
+        "file": "database.sql",
+        "statements": 16,
+        "outcomes": {
+          "pass": 16,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "date.sql",
+        "statements": 270,
+        "outcomes": {
+          "pass": 270,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "dbsize.sql",
+        "statements": 25,
+        "outcomes": {
+          "pass": 25,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "delete.sql",
+        "statements": 10,
+        "outcomes": {
+          "pass": 10,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "dependency.sql",
+        "statements": 62,
+        "outcomes": {
+          "pass": 62,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "domain.sql",
+        "statements": 462,
+        "outcomes": {
+          "pass": 462,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "drop_if_exists.sql",
+        "statements": 161,
+        "outcomes": {
+          "pass": 161,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "drop_operator.sql",
+        "statements": 12,
+        "outcomes": {
+          "pass": 12,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "encoding.sql",
+        "statements": 60,
+        "outcomes": {
+          "pass": 60,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "enum.sql",
+        "statements": 170,
+        "outcomes": {
+          "pass": 170,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "equivclass.sql",
+        "statements": 79,
+        "outcomes": {
+          "pass": 79,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "errors.sql",
+        "statements": 85,
+        "outcomes": {
+          "pass": 85,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "euc_kr.sql",
+        "statements": 2,
+        "outcomes": {
+          "pass": 2,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "event_trigger.sql",
+        "statements": 230,
+        "outcomes": {
+          "pass": 230,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "event_trigger_login.sql",
+        "statements": 10,
+        "outcomes": {
+          "pass": 10,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "explain.sql",
+        "statements": 50,
+        "outcomes": {
+          "pass": 50,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "expressions.sql",
+        "statements": 71,
+        "outcomes": {
+          "pass": 71,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "fast_default.sql",
+        "statements": 269,
+        "outcomes": {
+          "pass": 269,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "float4.sql",
+        "statements": 100,
+        "outcomes": {
+          "pass": 100,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "float8.sql",
+        "statements": 169,
+        "outcomes": {
+          "pass": 169,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "foreign_data.sql",
+        "statements": 529,
+        "outcomes": {
+          "pass": 529,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "foreign_key.sql",
+        "statements": 1154,
+        "outcomes": {
+          "pass": 1154,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "functional_deps.sql",
+        "statements": 40,
+        "outcomes": {
+          "pass": 40,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "generated.sql",
+        "statements": 119,
+        "outcomes": {
+          "pass": 119,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "geometry.sql",
+        "statements": 162,
+        "outcomes": {
+          "pass": 162,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "gin.sql",
+        "statements": 59,
+        "outcomes": {
+          "pass": 59,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "gist.sql",
+        "statements": 62,
+        "outcomes": {
+          "pass": 62,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "groupingsets.sql",
+        "statements": 171,
+        "outcomes": {
+          "pass": 171,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "guc.sql",
+        "statements": 214,
+        "outcomes": {
+          "pass": 214,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "hash_func.sql",
+        "statements": 41,
+        "outcomes": {
+          "pass": 41,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "hash_index.sql",
+        "statements": 96,
+        "outcomes": {
+          "pass": 96,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "hash_part.sql",
+        "statements": 28,
+        "outcomes": {
+          "pass": 28,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "horology.sql",
+        "statements": 330,
+        "outcomes": {
+          "pass": 330,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "identity.sql",
+        "statements": 270,
+        "outcomes": {
+          "pass": 270,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "incremental_sort.sql",
+        "statements": 119,
+        "outcomes": {
+          "pass": 119,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "index_including.sql",
+        "statements": 135,
+        "outcomes": {
+          "pass": 135,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "index_including_gist.sql",
+        "statements": 50,
+        "outcomes": {
+          "pass": 50,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "indexing.sql",
+        "statements": 560,
+        "outcomes": {
+          "pass": 560,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "indirect_toast.sql",
+        "statements": 27,
+        "outcomes": {
+          "pass": 27,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "inet.sql",
+        "statements": 109,
+        "outcomes": {
+          "pass": 109,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "infinite_recurse.sql",
+        "statements": 3,
+        "outcomes": {
+          "pass": 3,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "inherit.sql",
+        "statements": 677,
+        "outcomes": {
+          "pass": 677,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "init_privs.sql",
+        "statements": 4,
+        "outcomes": {
+          "pass": 4,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "insert.sql",
+        "statements": 387,
+        "outcomes": {
+          "pass": 387,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "insert_conflict.sql",
+        "statements": 257,
+        "outcomes": {
+          "pass": 257,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "int2.sql",
+        "statements": 76,
+        "outcomes": {
+          "pass": 76,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "int4.sql",
+        "statements": 94,
+        "outcomes": {
+          "pass": 94,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "int8.sql",
+        "statements": 167,
+        "outcomes": {
+          "pass": 167,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "interval.sql",
+        "statements": 442,
+        "outcomes": {
+          "pass": 442,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "join.sql",
+        "statements": 722,
+        "outcomes": {
+          "pass": 716,
+          "skip": 6,
+          "fail": 0
+        }
+      },
+      {
+        "file": "join_hash.sql",
+        "statements": 279,
+        "outcomes": {
+          "pass": 279,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "json.sql",
+        "statements": 406,
+        "outcomes": {
+          "pass": 406,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "json_encoding.sql",
+        "statements": 44,
+        "outcomes": {
+          "pass": 44,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "jsonb.sql",
+        "statements": 855,
+        "outcomes": {
+          "pass": 855,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "jsonb_jsonpath.sql",
+        "statements": 766,
+        "outcomes": {
+          "pass": 766,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "jsonpath.sql",
+        "statements": 224,
+        "outcomes": {
+          "pass": 224,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "jsonpath_encoding.sql",
+        "statements": 32,
+        "outcomes": {
+          "pass": 32,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "largeobject.sql",
+        "statements": 111,
+        "outcomes": {
+          "pass": 111,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "limit.sql",
+        "statements": 80,
+        "outcomes": {
+          "pass": 80,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "line.sql",
+        "statements": 35,
+        "outcomes": {
+          "pass": 35,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "lock.sql",
+        "statements": 130,
+        "outcomes": {
+          "pass": 130,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "lseg.sql",
+        "statements": 16,
+        "outcomes": {
+          "pass": 16,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "macaddr.sql",
+        "statements": 30,
+        "outcomes": {
+          "pass": 30,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "macaddr8.sql",
+        "statements": 63,
+        "outcomes": {
+          "pass": 63,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "maintain_every.sql",
+        "statements": 16,
+        "outcomes": {
+          "pass": 16,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "matview.sql",
+        "statements": 179,
+        "outcomes": {
+          "pass": 179,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "md5.sql",
+        "statements": 14,
+        "outcomes": {
+          "pass": 14,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "memoize.sql",
+        "statements": 69,
+        "outcomes": {
+          "pass": 69,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "merge.sql",
+        "statements": 572,
+        "outcomes": {
+          "pass": 572,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "misc.sql",
+        "statements": 55,
+        "outcomes": {
+          "pass": 55,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "misc_functions.sql",
+        "statements": 115,
+        "outcomes": {
+          "pass": 115,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "misc_sanity.sql",
+        "statements": 5,
+        "outcomes": {
+          "pass": 5,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "money.sql",
+        "statements": 109,
+        "outcomes": {
+          "pass": 109,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "multirangetypes.sql",
+        "statements": 605,
+        "outcomes": {
+          "pass": 605,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "mvcc.sql",
+        "statements": 10,
+        "outcomes": {
+          "pass": 10,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "name.sql",
+        "statements": 40,
+        "outcomes": {
+          "pass": 40,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "namespace.sql",
+        "statements": 42,
+        "outcomes": {
+          "pass": 42,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "numeric.sql",
+        "statements": 1018,
+        "outcomes": {
+          "pass": 1018,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "numeric_big.sql",
+        "statements": 552,
+        "outcomes": {
+          "pass": 552,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "numerology.sql",
+        "statements": 88,
+        "outcomes": {
+          "pass": 88,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "object_address.sql",
+        "statements": 81,
+        "outcomes": {
+          "pass": 81,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "oid.sql",
+        "statements": 37,
+        "outcomes": {
+          "pass": 37,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "oidjoins.sql",
+        "statements": 1,
+        "outcomes": {
+          "pass": 1,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "opr_sanity.sql",
+        "statements": 130,
+        "outcomes": {
+          "pass": 130,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "partition_aggregate.sql",
+        "statements": 135,
+        "outcomes": {
+          "pass": 135,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "partition_info.sql",
+        "statements": 73,
+        "outcomes": {
+          "pass": 73,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "partition_join.sql",
+        "statements": 600,
+        "outcomes": {
+          "pass": 600,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "partition_prune.sql",
+        "statements": 697,
+        "outcomes": {
+          "pass": 697,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "password.sql",
+        "statements": 45,
+        "outcomes": {
+          "pass": 45,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "path.sql",
+        "statements": 23,
+        "outcomes": {
+          "pass": 23,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "pg_lsn.sql",
+        "statements": 31,
+        "outcomes": {
+          "pass": 31,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "plancache.sql",
+        "statements": 97,
+        "outcomes": {
+          "pass": 97,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "plpgsql.sql",
+        "statements": 941,
+        "outcomes": {
+          "pass": 941,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "point.sql",
+        "statements": 43,
+        "outcomes": {
+          "pass": 43,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "polygon.sql",
+        "statements": 62,
+        "outcomes": {
+          "pass": 62,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "polymorphism.sql",
+        "statements": 423,
+        "outcomes": {
+          "pass": 423,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "portals.sql",
+        "statements": 349,
+        "outcomes": {
+          "pass": 349,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "portals_p2.sql",
+        "statements": 41,
+        "outcomes": {
+          "pass": 41,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "predicate.sql",
+        "statements": 42,
+        "outcomes": {
+          "pass": 42,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "prepare.sql",
+        "statements": 33,
+        "outcomes": {
+          "pass": 33,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "prepared_xacts.sql",
+        "statements": 83,
+        "outcomes": {
+          "pass": 83,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "privileges.sql",
+        "statements": 1216,
+        "outcomes": {
+          "pass": 1216,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "psql.sql",
+        "statements": 177,
+        "outcomes": {
+          "pass": 177,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "psql_crosstab.sql",
+        "statements": 29,
+        "outcomes": {
+          "pass": 29,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "publication.sql",
+        "statements": 655,
+        "outcomes": {
+          "pass": 655,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "random.sql",
+        "statements": 48,
+        "outcomes": {
+          "pass": 48,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "rangefuncs.sql",
+        "statements": 428,
+        "outcomes": {
+          "pass": 428,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "rangetypes.sql",
+        "statements": 407,
+        "outcomes": {
+          "pass": 407,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "regex.sql",
+        "statements": 105,
+        "outcomes": {
+          "pass": 105,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "regproc.sql",
+        "statements": 105,
+        "outcomes": {
+          "pass": 105,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "reindex_catalog.sql",
+        "statements": 20,
+        "outcomes": {
+          "pass": 20,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "reloptions.sql",
+        "statements": 63,
+        "outcomes": {
+          "pass": 63,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "replica_identity.sql",
+        "statements": 56,
+        "outcomes": {
+          "pass": 56,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "returning.sql",
+        "statements": 77,
+        "outcomes": {
+          "pass": 75,
+          "skip": 2,
+          "fail": 0
+        }
+      },
+      {
+        "file": "roleattributes.sql",
+        "statements": 80,
+        "outcomes": {
+          "pass": 80,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "rowsecurity.sql",
+        "statements": 774,
+        "outcomes": {
+          "pass": 774,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "rowtypes.sql",
+        "statements": 237,
+        "outcomes": {
+          "pass": 237,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "rules.sql",
+        "statements": 620,
+        "outcomes": {
+          "pass": 619,
+          "skip": 1,
+          "fail": 0
+        }
+      },
+      {
+        "file": "sanity_check.sql",
+        "statements": 3,
+        "outcomes": {
+          "pass": 3,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "security_label.sql",
+        "statements": 28,
+        "outcomes": {
+          "pass": 28,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "select.sql",
+        "statements": 87,
+        "outcomes": {
+          "pass": 86,
+          "skip": 1,
+          "fail": 0
+        }
+      },
+      {
+        "file": "select_distinct.sql",
+        "statements": 76,
+        "outcomes": {
+          "pass": 76,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "select_distinct_on.sql",
+        "statements": 8,
+        "outcomes": {
+          "pass": 8,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "select_having.sql",
+        "statements": 23,
+        "outcomes": {
+          "pass": 23,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "select_implicit.sql",
+        "statements": 44,
+        "outcomes": {
+          "pass": 44,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "select_into.sql",
+        "statements": 67,
+        "outcomes": {
+          "pass": 67,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "select_parallel.sql",
+        "statements": 235,
+        "outcomes": {
+          "pass": 235,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "select_views.sql",
+        "statements": 52,
+        "outcomes": {
+          "pass": 52,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "sequence.sql",
+        "statements": 260,
+        "outcomes": {
+          "pass": 260,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "spgist.sql",
+        "statements": 31,
+        "outcomes": {
+          "pass": 31,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "sqljson.sql",
+        "statements": 219,
+        "outcomes": {
+          "pass": 219,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "sqljson_jsontable.sql",
+        "statements": 117,
+        "outcomes": {
+          "pass": 117,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "sqljson_queryfuncs.sql",
+        "statements": 299,
+        "outcomes": {
+          "pass": 299,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "stats.sql",
+        "statements": 364,
+        "outcomes": {
+          "pass": 364,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "stats_ext.sql",
+        "statements": 816,
+        "outcomes": {
+          "pass": 816,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "strings.sql",
+        "statements": 460,
+        "outcomes": {
+          "pass": 460,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "subscription.sql",
+        "statements": 158,
+        "outcomes": {
+          "pass": 158,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "subselect.sql",
+        "statements": 269,
+        "outcomes": {
+          "pass": 269,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "sysviews.sql",
+        "statements": 27,
+        "outcomes": {
+          "pass": 27,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "tablesample.sql",
+        "statements": 56,
+        "outcomes": {
+          "pass": 56,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "tablespace.sql",
+        "statements": 202,
+        "outcomes": {
+          "pass": 202,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "temp.sql",
+        "statements": 161,
+        "outcomes": {
+          "pass": 161,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "test_setup.sql",
+        "statements": 60,
+        "outcomes": {
+          "pass": 60,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "text.sql",
+        "statements": 73,
+        "outcomes": {
+          "pass": 73,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "tid.sql",
+        "statements": 41,
+        "outcomes": {
+          "pass": 41,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "tidrangescan.sql",
+        "statements": 45,
+        "outcomes": {
+          "pass": 45,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "tidscan.sql",
+        "statements": 49,
+        "outcomes": {
+          "pass": 49,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "time.sql",
+        "statements": 44,
+        "outcomes": {
+          "pass": 44,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "timestamp.sql",
+        "statements": 169,
+        "outcomes": {
+          "pass": 169,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "timestamptz.sql",
+        "statements": 361,
+        "outcomes": {
+          "pass": 361,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "timetz.sql",
+        "statements": 57,
+        "outcomes": {
+          "pass": 57,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "transactions.sql",
+        "statements": 490,
+        "outcomes": {
+          "pass": 490,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "triggers.sql",
+        "statements": 1046,
+        "outcomes": {
+          "pass": 1046,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "truncate.sql",
+        "statements": 193,
+        "outcomes": {
+          "pass": 193,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "tsdicts.sql",
+        "statements": 126,
+        "outcomes": {
+          "pass": 126,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "tsearch.sql",
+        "statements": 408,
+        "outcomes": {
+          "pass": 408,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "tsrf.sql",
+        "statements": 74,
+        "outcomes": {
+          "pass": 74,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "tstypes.sql",
+        "statements": 223,
+        "outcomes": {
+          "pass": 223,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "tuplesort.sql",
+        "statements": 104,
+        "outcomes": {
+          "pass": 104,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "txid.sql",
+        "statements": 38,
+        "outcomes": {
+          "pass": 38,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "type_sanity.sql",
+        "statements": 60,
+        "outcomes": {
+          "pass": 60,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "typed_table.sql",
+        "statements": 28,
+        "outcomes": {
+          "pass": 28,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "unicode.sql",
+        "statements": 17,
+        "outcomes": {
+          "pass": 17,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "union.sql",
+        "statements": 191,
+        "outcomes": {
+          "pass": 191,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "updatable_views.sql",
+        "statements": 1100,
+        "outcomes": {
+          "pass": 1100,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "update.sql",
+        "statements": 257,
+        "outcomes": {
+          "pass": 257,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "uuid.sql",
+        "statements": 44,
+        "outcomes": {
+          "pass": 44,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "vacuum.sql",
+        "statements": 294,
+        "outcomes": {
+          "pass": 294,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "vacuum_parallel.sql",
+        "statements": 14,
+        "outcomes": {
+          "pass": 14,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "varchar.sql",
+        "statements": 22,
+        "outcomes": {
+          "pass": 22,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "window.sql",
+        "statements": 382,
+        "outcomes": {
+          "pass": 382,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "with.sql",
+        "statements": 306,
+        "outcomes": {
+          "pass": 302,
+          "skip": 4,
+          "fail": 0
+        }
+      },
+      {
+        "file": "write_parallel.sql",
+        "statements": 22,
+        "outcomes": {
+          "pass": 22,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "xid.sql",
+        "statements": 72,
+        "outcomes": {
+          "pass": 72,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "xml.sql",
+        "statements": 251,
+        "outcomes": {
+          "pass": 251,
+          "skip": 0,
+          "fail": 0
+        }
+      },
+      {
+        "file": "xmlmap.sql",
+        "statements": 40,
+        "outcomes": {
+          "pass": 40,
+          "skip": 0,
+          "fail": 0
+        }
+      }
+    ],
+    "total_statements": 43474,
+    "totals": {
+      "pass": 43456,
+      "skip": 18,
+      "fail": 0
+    }
+  },
+  "capture_build": {
+    "strategy": "capture-only pg-oracle build entry points direct generated PostgreSQL artifacts to Cargo OUT_DIR",
+    "fixtures": [
+      {
+        "file": "migration-tool/fixtures/baseline/build-pg.sh",
+        "sha256": "b97860f909c6bb11c453281c021235fa2ab9c19560d393faa887fe742bcb54d7"
+      },
+      {
+        "file": "migration-tool/fixtures/baseline/pg-oracle-build.rs",
+        "sha256": "f208ffc91be7ad270b827e9fb6fb38ed8433542bc81e20480794087629617d2f"
+      }
+    ]
+  },
+  "commands": {
+    "review": "cargo run --locked -p pg-sql-migrate -- baseline review --legacy-repository ../recursa-old --postgres-repository vendor/postgres --baseline baselines/postgresql-17.9.json",
+    "update": "cargo run --locked -p pg-sql-migrate -- baseline capture --legacy-repository ../recursa-old --postgres-repository vendor/postgres --output baselines/postgresql-17.9.json"
+  }
+}
