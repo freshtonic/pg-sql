@@ -1,0 +1,1 @@
+SELECT 1 WHERE a AND a AND a AND a AND a AND a AND a AND a AND a AND a;

@@ -1,0 +1,52 @@
+[package]
+name = "pg-sql"
+version = "0.1.0"
+edition = "2024"
+description = "PostgreSQL SQL parser built with recursa"
+license = "MIT"
+publish = false
+
+[features]
+arbitrary = ["dep:arbitrary", "recursa-core/arbitrary"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+recursa = { path = ".." }
+recursa-core = { path = "../recursa-core" }
+recursa-derive = { path = "../recursa-derive" }
+recursa-diagram = { path = "../recursa-diagram" }
+logos = "0.16"
+regex = "1"
+derive_more = { version = "2.1.1", features = ["deref"] }
+arbitrary = { version = "1", features = ["derive"], optional = true }
+# `Seq1` is backed by `vec1::Vec1`; the hand-rolled `StringLitSeq0::parse`
+# (see ast/expr.rs) builds a `Seq1` directly and needs `Vec1` to do so.
+vec1 = "1"
+
+[dev-dependencies]
+pg-oracle = { path = "../pg-oracle" }
+sqlparser = "0.52"
+tempfile = "3"
+serde_json = "1"
+
+[[bin]]
+name = "gen-stress"
+path = "src/bin/gen_stress.rs"
+
+[[bin]]
+name = "flame_target"
+path = "src/bin/flame_target.rs"
+
+[[bin]]
+name = "flame_report"
+path = "src/bin/flame_report.rs"
+
+[[bench]]
+name = "parse"
+harness = false
+
+[package.metadata.recursa.ast]
+derives = ["Debug", "Clone", "FormatTokens", "Visit", "Transform"]
+arbitrary_feature = "arbitrary"
+railroad = true
+parser_rules = "SqlRules"

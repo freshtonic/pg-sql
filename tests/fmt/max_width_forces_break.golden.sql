@@ -1,0 +1,5 @@
+SELECT
+    a,
+    b,
+    c,
+    d FROM t;

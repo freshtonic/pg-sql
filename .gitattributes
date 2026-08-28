@@ -1,0 +1,2 @@
+fixtures/** linguist-vendored
+src/generated/** linguist-generated

@@ -1,0 +1,33 @@
+//! Data Definition Language statements: CREATE/ALTER/DROP for tables, indexes, views, ...
+
+pub mod access_method;
+pub mod aggregate;
+pub mod cast;
+pub mod collation;
+pub mod conversion;
+pub mod database;
+pub mod domain;
+pub mod extension;
+pub mod foreign;
+pub mod function;
+pub mod index;
+pub mod language;
+pub mod large_object;
+pub mod materialized_view;
+pub mod operator;
+pub mod policy;
+pub mod procedure;
+pub mod publication;
+pub mod role;
+pub mod rule;
+pub mod schema;
+pub mod sequence;
+pub mod statistics;
+pub mod subscription;
+pub mod table;
+pub mod tablespace;
+pub mod text_search;
+pub mod transform;
+pub mod trigger;
+pub mod r#type;
+pub mod view;

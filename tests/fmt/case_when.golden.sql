@@ -1,0 +1,1 @@
+SELECT CASE WHEN a > 0 THEN 'pos' ELSE 'neg' END FROM t;
