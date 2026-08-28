@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly EXPECTED_LEGACY_COMMIT="1e71421d66baac15c8c5264e8f29b5f80122f50e"
+readonly EXPECTED_LEGACY_TREE="f3191ab707c8a957d1bb5fe142e74fc624fe6661"
+readonly EXPECTED_PG_SQL_TREE="50e1376d16796e5f05db88d99dab42252a9f78a4"
+readonly EXPECTED_PG_ORACLE_TREE="0780d057e4d54db150d0f388c45a720a825bcbcf"
+readonly EXPECTED_POSTGRES_GITLINK="6d396980fc5aed4f1a525e0bd75cb16b25ed40ca"
+readonly EXPECTED_SOURCE_CHECKPOINT="e97d3c3570c2a04ca9a233334b46d3f443800a5a"
+
+fail() {
+  echo "import provenance verification failed: $*" >&2
+  exit 1
+}
+
+manifest_value() {
+  local key="$1"
+  awk -v key="$key" '$1 == "#" && $2 == key { print $3 }' "$manifest"
+}
+
+verify_manifest_identity() {
+  local key="$1"
+  local expected="$2"
+  local actual
+  actual="$(manifest_value "$key")"
+  [[ "$actual" == "$expected" ]] || fail "$key is ${actual:-missing}, expected $expected"
+}
+
+readonly repo_root="$(git rev-parse --show-toplevel)"
+readonly manifest="$repo_root/docs/import-provenance.tsv"
+
+[[ -f "$manifest" ]] || fail "missing docs/import-provenance.tsv"
+
+verify_manifest_identity "legacy-commit" "$EXPECTED_LEGACY_COMMIT"
+verify_manifest_identity "legacy-tree" "$EXPECTED_LEGACY_TREE"
+verify_manifest_identity "pg-sql-tree" "$EXPECTED_PG_SQL_TREE"
+verify_manifest_identity "pg-oracle-tree" "$EXPECTED_PG_ORACLE_TREE"
+verify_manifest_identity "postgres-gitlink" "$EXPECTED_POSTGRES_GITLINK"
+verify_manifest_identity "source-checkpoint" "$EXPECTED_SOURCE_CHECKPOINT"
+
+git cat-file -e "$EXPECTED_SOURCE_CHECKPOINT^{commit}" 2>/dev/null ||
+  fail "source checkpoint $EXPECTED_SOURCE_CHECKPOINT is unavailable"
+git merge-base --is-ancestor "$EXPECTED_SOURCE_CHECKPOINT" HEAD ||
+  fail "source checkpoint $EXPECTED_SOURCE_CHECKPOINT is not an ancestor of HEAD"
+
+pg_sql_count=0
+pg_oracle_count=0
+bootstrap_count=0
+
+while IFS=$'\t' read -r section expected_mode expected_oid path; do
+  [[ -n "$section" && "${section:0:1}" != "#" ]] || continue
+
+  case "$section" in
+    pg-sql) ((pg_sql_count += 1)) ;;
+    pg-oracle) ((pg_oracle_count += 1)) ;;
+    bootstrap) ((bootstrap_count += 1)) ;;
+    *) fail "unknown manifest section $section" ;;
+  esac
+
+  entry="$(git ls-tree "$EXPECTED_SOURCE_CHECKPOINT" -- "$path")"
+  [[ -n "$entry" ]] || fail "$path is missing from the source checkpoint"
+
+  actual_mode="${entry%% *}"
+  entry_without_mode="${entry#* }"
+  entry_without_type="${entry_without_mode#* }"
+  actual_oid="${entry_without_type%%$'\t'*}"
+
+  [[ "$actual_mode" == "$expected_mode" ]] ||
+    fail "$path has mode $actual_mode, expected $expected_mode"
+  [[ "$actual_oid" == "$expected_oid" ]] ||
+    fail "$path has object $actual_oid, expected $expected_oid"
+done < "$manifest"
+
+[[ "$pg_sql_count" -eq 136 ]] || fail "manifest has $pg_sql_count pg-sql entries, expected 136"
+[[ "$pg_oracle_count" -eq 7 ]] || fail "manifest has $pg_oracle_count pg-oracle entries, expected 7"
+[[ "$bootstrap_count" -eq 1 ]] || fail "manifest has $bootstrap_count bootstrap entries, expected 1"
+
+actual_pg_sql_count="$(git ls-tree -r "$EXPECTED_SOURCE_CHECKPOINT" -- \
+  .gitattributes CLAUDE.md Cargo.toml README.md benches fixtures src tests vendor | wc -l | tr -d ' ')"
+actual_pg_oracle_count="$(git ls-tree -r "$EXPECTED_SOURCE_CHECKPOINT" -- pg-oracle | wc -l | tr -d ' ')"
+
+[[ "$actual_pg_sql_count" -eq 136 ]] ||
+  fail "source checkpoint has $actual_pg_sql_count pg-sql entries, expected 136"
+[[ "$actual_pg_oracle_count" -eq 7 ]] ||
+  fail "source checkpoint has $actual_pg_oracle_count pg-oracle entries, expected 7"
+
+current_gitlink="$(git ls-tree HEAD -- vendor/postgres | awk '{ print $1 " " $3 }')"
+[[ "$current_gitlink" == "160000 $EXPECTED_POSTGRES_GITLINK" ]] ||
+  fail "HEAD does not pin vendor/postgres to PostgreSQL 17.9"
+git diff --quiet HEAD -- vendor/postgres ||
+  fail "vendor/postgres differs from the committed PostgreSQL 17.9 gitlink"
+
+echo "Verified immutable import checkpoint $EXPECTED_SOURCE_CHECKPOINT"
+echo "  pg-sql: 136 entries ($EXPECTED_PG_SQL_TREE)"
+echo "  pg-oracle: 7 entries ($EXPECTED_PG_ORACLE_TREE)"
+echo "  PostgreSQL: $EXPECTED_POSTGRES_GITLINK"
