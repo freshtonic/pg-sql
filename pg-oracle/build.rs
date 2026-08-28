@@ -1,12 +1,15 @@
 use std::path::{Path, PathBuf};
 
 /// PostgreSQL source tree, relative to this crate's manifest directory.
-/// This is the `pg-sql/vendor/postgres` Git submodule, pinned to the
-/// `REL_17_9` tag. Initialize it with `git submodule update --init`.
-const PG_SOURCE_DIR: &str = "../pg-sql/vendor/postgres";
+/// This is the workspace's `vendor/postgres` Git submodule, pinned to 17.9.
+const PG_SOURCE_DIR: &str = "../vendor/postgres";
 
 fn pg_source_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(PG_SOURCE_DIR)
+}
+
+fn pg_build_dir() -> PathBuf {
+    PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo must set OUT_DIR")).join("postgres")
 }
 
 /// Files that only exist after `configure && make`. If any is missing, the
@@ -38,16 +41,16 @@ fn first_missing_generated(pg: &Path) -> Option<&'static str> {
 /// than failing with a "run this script" message, build it automatically by
 /// invoking `scripts/build-pg.sh` (idempotent: a no-op once built, so the
 /// slow path runs only once per clone).
-fn verify_pg_built(pg: &Path) {
-    if !pg.join("configure").exists() {
+fn verify_pg_built(source: &Path, build: &Path) {
+    if !source.join("configure").exists() {
         panic!(
             "PostgreSQL source not found at {}.\n\
-             Initialize the submodule: git submodule update --init pg-sql/vendor/postgres",
-            pg.display()
+             Initialize the submodule: git submodule update --init vendor/postgres",
+            source.display()
         );
     }
 
-    if first_missing_generated(pg).is_none() {
+    if first_missing_generated(build).is_none() {
         return;
     }
 
@@ -61,6 +64,7 @@ fn verify_pg_built(pg: &Path) {
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/build-pg.sh");
     let status = std::process::Command::new("bash")
         .arg(&script)
+        .arg(build)
         .status()
         .unwrap_or_else(|e| panic!("failed to launch {}: {e}", script.display()));
     if !status.success() {
@@ -72,13 +76,22 @@ fn verify_pg_built(pg: &Path) {
         );
     }
 
-    if let Some(missing) = first_missing_generated(pg) {
+    if let Some(missing) = first_missing_generated(build) {
         panic!(
-            "PostgreSQL checkout at {} is still missing {} after running \
+            "PostgreSQL build at {} is still missing {} after running \
              build-pg.sh.",
-            pg.display(),
+            build.display(),
             missing
         );
+    }
+}
+
+fn pg_source_file(source: &Path, build: &Path, relative: &str) -> PathBuf {
+    let generated = build.join(relative);
+    if generated.exists() {
+        generated
+    } else {
+        source.join(relative)
     }
 }
 
@@ -132,13 +145,22 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=csrc/oracle.c");
     println!("cargo:rerun-if-changed=csrc/pgo_elog_stub.c");
-    let pg = pg_source_dir();
-    verify_pg_built(&pg);
+    let pg_source = pg_source_dir();
+    let pg_build = pg_build_dir();
+    verify_pg_built(&pg_source, &pg_build);
 
     let mut build = cc::Build::new();
     build
-        .include(pg.join("src/include"))
-        .include(pg.join("src/backend")) // for generated headers
+        .include(pg_build.join("src/include"))
+        .include(pg_source.join("src/include"))
+        .include(pg_build.join("src/backend"))
+        .include(pg_build.join("src/backend/parser"))
+        .include(pg_build.join("src/backend/nodes"))
+        .include(pg_build.join("src/common"))
+        .include(pg_source.join("src/backend"))
+        .include(pg_source.join("src/backend/parser"))
+        .include(pg_source.join("src/backend/nodes"))
+        .include(pg_source.join("src/common"))
         .include("csrc")
         .flag_if_supported("-w") // PG sources warn a lot
         .flag_if_supported("-fno-strict-aliasing")
@@ -150,7 +172,7 @@ fn main() {
 
     // PostgreSQL backend sources.
     for rel in PG_SOURCES {
-        build.file(pg.join(rel));
+        build.file(pg_source_file(&pg_source, &pg_build, rel));
     }
 
     build.compile("pgoracle");
@@ -158,11 +180,11 @@ fn main() {
     // PostgreSQL's own static libs cover most remaining symbols.
     println!(
         "cargo:rustc-link-search=native={}",
-        pg.join("src/common").display()
+        pg_build.join("src/common").display()
     );
     println!(
         "cargo:rustc-link-search=native={}",
-        pg.join("src/port").display()
+        pg_build.join("src/port").display()
     );
     println!("cargo:rustc-link-lib=static=pgcommon");
     println!("cargo:rustc-link-lib=static=pgport");

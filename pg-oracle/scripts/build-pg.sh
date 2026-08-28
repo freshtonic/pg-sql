@@ -6,12 +6,18 @@
 # pinned to the REL_17_9 tag.
 set -euo pipefail
 
+# PostgreSQL's makefiles interpret PROFILE as compiler profiling flags. Cargo
+# exports PROFILE=debug/release to build scripts, so do not leak it into make.
+unset PROFILE
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PG_SRC="$SCRIPT_DIR/../../pg-sql/vendor/postgres"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PG_SRC="$REPO_ROOT/vendor/postgres"
+PG_BUILD="${1:-${PG_ORACLE_PG_BUILD_DIR:-$REPO_ROOT/target/postgres-17.9}}"
 
 if [ ! -f "$PG_SRC/configure" ]; then
   echo "PostgreSQL source not found at $PG_SRC" >&2
-  echo "Initialize the submodule: git submodule update --init pg-oracle/vendor/postgres" >&2
+  echo "Initialize the submodule: git submodule update --init vendor/postgres" >&2
   exit 1
 fi
 
@@ -22,12 +28,14 @@ case "$tag" in
   *) echo "WARNING: expected a REL_17_* tag, got '$tag'" >&2 ;;
 esac
 
-if [ ! -f "$PG_SRC/src/Makefile.global" ]; then
+mkdir -p "$PG_BUILD"
+
+if [ ! -f "$PG_BUILD/src/Makefile.global" ]; then
   echo "Configuring..."
-  ( cd "$PG_SRC" && ./configure --without-icu --without-zlib --without-readline )
+  ( cd "$PG_BUILD" && "$PG_SRC/configure" --without-icu --without-zlib --without-readline )
 fi
 
 echo "Building (this is slow the first time)..."
-make -C "$PG_SRC" -j"$(getconf _NPROCESSORS_ONLN)" all
+make -C "$PG_BUILD" -j"$(getconf _NPROCESSORS_ONLN)" all
 
-echo "Done. Generated sources and static libs are in place."
+echo "Done. Generated sources and static libs are in $PG_BUILD."

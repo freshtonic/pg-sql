@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+recursa_dir="${1:-$repo_root/../recursa}"
+revision_file="$repo_root/.recursa-revision"
+
+if [ ! -f "$revision_file" ]; then
+  echo "missing $revision_file" >&2
+  exit 1
+fi
+
+expected="$(tr -d '[:space:]' < "$revision_file")"
+actual="$(git -C "$recursa_dir" rev-parse HEAD)"
+
+if [ "$actual" != "$expected" ]; then
+  echo "Recursa checkout mismatch" >&2
+  echo "  expected: $expected" >&2
+  echo "  actual:   $actual" >&2
+  echo "Check out the recorded revision with:" >&2
+  echo "  git -C $recursa_dir checkout $expected" >&2
+  exit 1
+fi
+
+echo "Recursa revision verified: $actual"

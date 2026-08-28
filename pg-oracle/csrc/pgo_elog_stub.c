@@ -10,9 +10,8 @@
  * (which strips the same file down to referenced symbols). We do not copy
  * any parser logic — only build scaffolding.
  *
- * It also defines the handful of GUC globals the scanner/parser read
- * (standard_conforming_strings, escape_string_warning, backslash_quote) and
- * a few process globals the backend headers expect.
+ * It also defines the process globals the backend headers expect. Scanner
+ * configuration globals are owned by PostgreSQL's generated scan.c.
  */
 #include "postgres.h"
 
@@ -29,11 +28,6 @@
 #include "nodes/value.h"
 #include "nodes/parsenodes.h"
 #include "lib/stringinfo.h"
-
-/* ---- GUC globals read by the scanner/parser -------------------------- */
-int  backslash_quote = BACKSLASH_QUOTE_SAFE_ENCODING;
-bool escape_string_warning = true;
-bool standard_conforming_strings = true;
 
 /* ---- process globals the backend headers expect ---------------------- */
 volatile sig_atomic_t InterruptPending = false;

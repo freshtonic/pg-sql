@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  workspace:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pg-sql
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pg-sql
+          submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: freshtonic/recursa
+          path: recursa
+          fetch-depth: 0
+      - name: Check out the reviewed Recursa revision
+        run: git -C ../recursa checkout "$(tr -d '[:space:]' < .recursa-revision)"
+      - name: Verify workspace and dependency revision
+        run: |
+          scripts/tests/verify-workspace.sh
+          scripts/verify-recursa-revision
+      - name: Check migration tooling
+        run: cargo check --locked --package pg-sql-migrate
+
+  oracle:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pg-sql
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pg-sql
+          submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: freshtonic/recursa
+          path: recursa
+          fetch-depth: 0
+      - name: Check out the reviewed Recursa revision
+        run: git -C ../recursa checkout "$(tr -d '[:space:]' < .recursa-revision)"
+      - name: Install PostgreSQL build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bison flex
+      - name: Check PostgreSQL oracle
+        run: cargo check --locked --package pg-oracle
+      - name: Verify the PostgreSQL source stayed immutable
+        run: test -z "$(git -C vendor/postgres status --porcelain)"

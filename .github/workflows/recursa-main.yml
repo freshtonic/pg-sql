@@ -1,0 +1,29 @@
+name: Recursa main downstream check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 16 * * 1"
+
+jobs:
+  downstream:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pg-sql
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pg-sql
+      - uses: actions/checkout@v4
+        with:
+          repository: freshtonic/recursa
+          ref: main
+          path: recursa
+      # The imported grammar is intentionally not compiled until its auditable
+      # migration lands. These checks exercise the exact two path dependencies
+      # against main while retaining that phase boundary.
+      - name: Resolve the pg-sql workspace against Recursa main
+        run: cargo metadata --locked --no-deps --format-version 1
+      - name: Check the Recursa packages consumed by pg-sql
+        run: cargo check --manifest-path ../recursa/Cargo.toml --package recursa --package recursa-codegen

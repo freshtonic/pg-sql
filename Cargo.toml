@@ -2,19 +2,22 @@
 name = "pg-sql"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
 description = "PostgreSQL SQL parser built with recursa"
 license = "MIT"
 publish = false
 
+[workspace]
+resolver = "3"
+members = ["pg-oracle", "migration-tool"]
+default-members = ["pg-oracle", "migration-tool"]
+
 [features]
-arbitrary = ["dep:arbitrary", "recursa-core/arbitrary"]
+arbitrary = ["dep:arbitrary", "recursa/arbitrary"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-recursa = { path = ".." }
-recursa-core = { path = "../recursa-core" }
-recursa-derive = { path = "../recursa-derive" }
-recursa-diagram = { path = "../recursa-diagram" }
+recursa = { path = "../recursa/recursa" }
 logos = "0.16"
 regex = "1"
 derive_more = { version = "2.1.1", features = ["deref"] }
@@ -24,7 +27,7 @@ arbitrary = { version = "1", features = ["derive"], optional = true }
 vec1 = "1"
 
 [dev-dependencies]
-pg-oracle = { path = "../pg-oracle" }
+pg-oracle = { path = "pg-oracle" }
 sqlparser = "0.52"
 tempfile = "3"
 serde_json = "1"
@@ -50,3 +53,6 @@ derives = ["Debug", "Clone", "FormatTokens", "Visit", "Transform"]
 arbitrary_feature = "arbitrary"
 railroad = true
 parser_rules = "SqlRules"
+
+[build-dependencies]
+recursa-codegen = { path = "../recursa/recursa-codegen" }
