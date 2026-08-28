@@ -82,7 +82,7 @@ impl Mapping {
                 (
                     "migration-tool".into(),
                     WorkspaceTestCounts {
-                        tests: 41,
+                        tests: 46,
                         ignored: 1,
                     },
                 ),
@@ -1114,6 +1114,9 @@ fn semantic(
     shape: String,
     fixed: bool,
 ) -> SemanticRow {
+    if is_obsolete_file_surface_semantic(&id) {
+        return obsolete_file_surface_semantic(id, kind, location, shape);
+    }
     if fixed {
         SemanticRow {
             id,
@@ -1142,6 +1145,9 @@ fn semantic(
 }
 fn semantic_field(id: String, location: SourceLocation, ty: &syn::Type) -> SemanticRow {
     let shape = ty.to_token_stream().to_string();
+    if is_obsolete_file_surface_semantic(&id) {
+        return obsolete_file_surface_semantic(id, "field", location, shape);
+    }
     if is_bare_fixed_token(ty) {
         return SemanticRow {
             id,
@@ -1163,6 +1169,7 @@ fn semantic_field(id: String, location: SourceLocation, ty: &syn::Type) -> Seman
             .unwrap_or("token")
             .trim_start_matches("r#")
             .to_owned();
+        let syntax = fixed_syntax_ids(first_type_argument(ty).unwrap()).join(", ");
         let (disposition, rule, ported, rationale) = match optional_fixed_decision(&id) {
             Some(OptionalFixedDecision::SyntaxOnly) => (
                 Disposition::SyntaxOnlyExclusion,
@@ -1174,15 +1181,15 @@ fn semantic_field(id: String, location: SourceLocation, ty: &syn::Type) -> Seman
                 Disposition::ReviewedChange,
                 "semantic.optional-fixed-token.bool",
                 Some(format!(
-                    "{field}: bool; token carried by a conditional #[kwd]/#[tok] parse branch"
+                    "{field}: bool; {syntax} presence moves to #[presence({syntax})]"
                 )),
                 "token presence changes PostgreSQL behavior and is retained as an explicitly reviewed boolean",
             ),
             Some(OptionalFixedDecision::Sign) => (
                 Disposition::ReviewedChange,
-                "semantic.optional-fixed-token.sign-enum",
-                Some("Sign::{Positive, Negative}".to_owned()),
-                "minus presence becomes an explicit semantic sign enum; the token moves to the Negative variant's #[tok] attribute",
+                "semantic.optional-fixed-token.sign-bool",
+                Some("negative: bool; MINUS syntax moves to #[presence(MINUS)]".to_owned()),
+                "minus presence becomes the explicit `negative` semantic boolean accepted by Recursa's fixed-token presence declaration",
             ),
             Some(OptionalFixedDecision::NestedSyntaxOnly) => (
                 Disposition::ReviewedChange,
@@ -1217,7 +1224,7 @@ fn semantic_field(id: String, location: SourceLocation, ty: &syn::Type) -> Seman
             .unwrap_or("syntax")
             .trim_start_matches("r#")
             .to_owned();
-        let syntax = fixed_syntax_ids(first_type_argument(ty).unwrap()).join(" ");
+        let syntax = fixed_syntax_ids(first_type_argument(ty).unwrap()).join(", ");
         return match optional_fixed_decision(&id) {
             Some(OptionalFixedDecision::SyntaxOnly) => SemanticRow {
                 id,
@@ -1237,7 +1244,7 @@ fn semantic_field(id: String, location: SourceLocation, ty: &syn::Type) -> Seman
                 disposition: Disposition::ReviewedChange,
                 rule_id: "semantic.optional-fixed-token.bool".into(),
                 ported_shape: Some(format!(
-                    "{field}: bool; {syntax} syntax moves to #[kwd] attributes"
+                    "{field}: bool; {syntax} presence moves to #[presence({syntax})]"
                 )),
                 rationale: "presence of this reviewed pure-syntax group changes PostgreSQL behavior and is retained as a named semantic boolean".into(),
             },
@@ -1283,7 +1290,39 @@ fn semantic_field(id: String, location: SourceLocation, ty: &syn::Type) -> Seman
         id, kind: "field".into(), location, legacy_shape: shape,
         disposition: Disposition::PortedEquivalent,
         rule_id: if ported.changed { "semantic.recursa-container-transform" } else { "semantic.same-shape" }.into(),
-        rationale: if ported.changed { "Recursa's reviewed API deletes grammar wrappers: Vec/Vec1 retain cardinality, #[sep(..., trailing)] retains separators, and #[surrounded(...)] retains delimiters" } else { "the field carries semantic data whose qualified role and Rust value shape are preserved independently of legacy parser syntax" }.into(),
+        rationale: if ported.changed { "Recursa's reviewed API deletes grammar wrappers: Vec/Vec1 retain cardinality, #[sep(..., trailing)] retains separators, and #[tok(open, this, close)] retains delimiters" } else { "the field carries semantic data whose qualified role and Rust value shape are preserved independently of legacy parser syntax" }.into(),
+    }
+}
+
+fn is_obsolete_file_surface_semantic(id: &str) -> bool {
+    const ROOTS: &[&str] = &[
+        "ast::file::PsqlDirective",
+        "ast::file::PsqlCommand",
+        "ast::file::FileItem",
+    ];
+    ROOTS.iter().any(|root| {
+        id == *root
+            || id
+                .strip_prefix(root)
+                .is_some_and(|suffix| suffix.starts_with('.') || suffix.starts_with("::"))
+    })
+}
+
+fn obsolete_file_surface_semantic(
+    id: String,
+    kind: &str,
+    location: SourceLocation,
+    legacy_shape: String,
+) -> SemanticRow {
+    SemanticRow {
+        id,
+        kind: kind.into(),
+        location,
+        legacy_shape,
+        disposition: Disposition::ReviewedChange,
+        rule_id: "semantic.obsolete-file-recovery-surface".into(),
+        ported_shape: None,
+        rationale: "the legacy undifferentiated psql/recovery surface is removed; ADR 0005 requires separate strict SQL and psql documents plus a grammar-erased recovery projection".into(),
     }
 }
 
@@ -1347,7 +1386,7 @@ fn port_type(ty: &syn::Type) -> PortedType {
             let container = if name.as_deref() == Some("Seq0") {
                 "Vec"
             } else {
-                "vec1::Vec1"
+                "recursa::Vec1"
             };
             let separator = args.get(1).filter(|separator| !is_unit_type(separator));
             let trailing = args
@@ -1373,7 +1412,7 @@ fn port_type(ty: &syn::Type) -> PortedType {
             let (_, open) = fixed_token_attribute(args[0]);
             let (_, close) = fixed_token_attribute(args[2]);
             PortedType {
-                shape: format!("#[surrounded({}, this, {})] {}", open, close, inner.shape),
+                shape: format!("#[tok({}, this, {})] {}", open, close, inner.shape),
                 changed: true,
             }
         }

@@ -26,12 +26,19 @@ any semantic choice made by such syntax-only fields.
 Optional fixed tokens use a fail-closed table keyed by full qualified field ID.
 Reviewed PostgreSQL grammar filler such as optional `WITH`, `AS`, `=`, and
 `COLUMN` is a syntax-only exclusion. Behavior-affecting presence becomes a
-named boolean or domain enum; a new unreviewed ID makes inventory fail instead
-of inheriting a field-name policy. The same rule covers optional fixed-token
-groups and fixed tokens nested beside semantic payload. `Seq0` maps to `Vec`,
-`Seq1` to `vec1::Vec1`,
-separators and optional trailing separators move to `#[sep(..., trailing)]`,
-and `Surrounded` delimiters move to `#[surrounded(open, this, close)]`.
+named boolean through `#[presence(...)]`; a new unreviewed ID makes inventory
+fail instead of inheriting a field-name policy. The same rule covers optional
+fixed-token groups and fixed tokens nested beside semantic payload. `Seq0`
+maps to `Vec`, `Seq1` to `recursa::Vec1`, separators and optional trailing
+separators move to `#[sep(..., trailing)]`, and `Surrounded` delimiters move to
+`#[tok(open, this, close)]`.
+
+`semantic.obsolete-file-recovery-surface` explicitly removes the legacy
+`PsqlDirective`, `PsqlCommand`, and `FileItem` declarations and every child
+row. ADR 0005 replaces that undifferentiated remainder/recovery model with
+separate strict SQL and psql documents plus a grammar-erased recovery
+projection; the rewrite validates each removed top-level item's reviewed
+normalized shape before deleting its span.
 
 The test section separately records literal and macro-expanded tests, ignored
 tests, differential membership and exclusions, file-recovery fixture sites,

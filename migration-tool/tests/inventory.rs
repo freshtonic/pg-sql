@@ -1,6 +1,6 @@
 use std::fs;
 
-use pg_sql_migrate::{Mapping, inventory, to_canonical_inventory_json};
+use pg_sql_migrate::{Disposition, Mapping, inventory, to_canonical_inventory_json};
 
 fn write_provenance(root: &std::path::Path) {
     fs::create_dir_all(root.join("docs")).unwrap();
@@ -67,7 +67,7 @@ pub enum Query<'input> {
             .any(|row| row.id.ends_with("Query::Select.name")
                 && row.rule_id == "semantic.recursa-container-transform"
                 && row.ported_shape.as_deref()
-                    == Some("#[surrounded(LPAREN, this, RPAREN)] Ident < 'input >"))
+                    == Some("#[tok(LPAREN, this, RPAREN)] Ident < 'input >"))
     );
     assert!(report.semantics.iter().any(|row| {
         row.id.ends_with("Query::Select.optional_all")
@@ -78,7 +78,7 @@ pub enum Query<'input> {
             .semantics
             .iter()
             .any(|row| row.id.ends_with("Query::Select.minus")
-                && row.rule_id == "semantic.optional-fixed-token.sign-enum")
+                && row.rule_id == "semantic.optional-fixed-token.sign-bool")
     );
     assert!(
         report
@@ -104,7 +104,7 @@ pub enum Query<'input> {
         row.id.ends_with("Query::Select.or_replace")
             && row.rule_id == "semantic.optional-fixed-token.bool"
             && row.ported_shape.as_deref()
-                == Some("or_replace: bool; OR REPLACE syntax moves to #[kwd] attributes")
+                == Some("or_replace: bool; OR, REPLACE presence moves to #[presence(OR, REPLACE)]")
     }));
     assert_eq!(
         fs::read(root.path().join("src/ast/query.rs")).unwrap(),
@@ -302,6 +302,31 @@ fn checked_in_repository_matches_the_reviewed_contract() {
                 .ported_shape
                 .as_deref()
                 .is_some_and(|shape| shape.contains("#[sep(COMMA)]"))
+    }));
+    let obsolete_file_rows = report
+        .semantics
+        .iter()
+        .filter(|row| {
+            [
+                "ast::file::PsqlDirective",
+                "ast::file::PsqlCommand",
+                "ast::file::FileItem",
+            ]
+            .iter()
+            .any(|root| {
+                row.id == *root
+                    || row
+                        .id
+                        .strip_prefix(root)
+                        .is_some_and(|suffix| suffix.starts_with('.') || suffix.starts_with("::"))
+            })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(obsolete_file_rows.len(), 16);
+    assert!(obsolete_file_rows.iter().all(|row| {
+        row.rule_id == "semantic.obsolete-file-recovery-surface"
+            && matches!(&row.disposition, Disposition::ReviewedChange)
+            && row.ported_shape.is_none()
     }));
     assert!(
         report

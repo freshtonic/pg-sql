@@ -7,6 +7,10 @@ use pg_sql_migrate::rewrite::{
     FileDisposition, RewriteTreeRequest, SourceRewritePass, rewrite_source, rewrite_tree,
 };
 
+mod support;
+
+use support::assert_single_token_attachment;
+
 fn fixture_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/rewrite/grammar")
 }
@@ -133,6 +137,7 @@ fn every_manifest_fixture_rewrites_to_its_reviewed_bytes() {
         assert_eq!(actual, expected, "fixture {}", case.id);
         syn::parse_file(&actual)
             .unwrap_or_else(|error| panic!("fixture {} produced invalid Rust: {error}", case.id));
+        assert_single_token_attachment(&input_path, &actual);
     }
 }
 
@@ -178,6 +183,27 @@ fn grammar_edits_are_validated_source_spans_and_are_byte_deterministic() {
             .iter()
             .all(|edit| edit.end - edit.start < input.len())
     );
+}
+
+#[test]
+fn optional_token_dispositions_require_the_exact_inventoried_path_span_and_shape() {
+    let pass = pass();
+    let unreviewed = "pub struct Unreviewed { pub unique: Option<UNIQUE>, }\n";
+    assert!(
+        pass.plan_edits(Path::new("src/unreviewed.rs"), unreviewed)
+            .unwrap()
+            .is_empty()
+    );
+
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let source = fs::read_to_string(repository.join("src/ast/ddl/index.rs")).unwrap();
+    let drifted = source.replacen("Option<UNIQUE>", "Option<DEFAULT>", 1);
+    let error = pass
+        .plan_edits(Path::new("src/ast/ddl/index.rs"), &drifted)
+        .unwrap_err();
+
+    assert_eq!(error.code, "inventory.field-shape-drift");
+    assert!(error.message.contains("CreateIndexStmt.unique"));
 }
 
 #[test]
@@ -310,6 +336,38 @@ fn obsolete_items_are_removed_only_when_their_full_reviewed_shape_matches() {
 }
 
 #[test]
+fn obsolete_file_surface_requires_exact_shape_and_preserves_new_items() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let source = fs::read_to_string(repository.join("src/formatter.rs")).unwrap();
+    let drifted = source.replace(
+        "let mut output = String::new();",
+        "let mut output = String::with_capacity(64);",
+    );
+    let error = pass()
+        .plan_edits(Path::new("src/formatter.rs"), &drifted)
+        .unwrap_err();
+    assert_eq!(error.code, "unsupported.obsolete-file-surface-shape");
+
+    let extended = format!("{source}\npub fn newly_added_formatter_api() {{}}\n");
+    let rewritten = rewrite_source(&pass(), Path::new("src/formatter.rs"), &extended).unwrap();
+    assert!(rewritten.contains("pub fn format_tokens_sql"));
+    assert!(rewritten.contains("pub fn newly_added_formatter_api"));
+    assert!(!rewritten.contains("pub fn format_file"));
+}
+
+#[test]
+fn reviewed_string_literal_parser_is_removed_at_every_line_boundary() {
+    const PARSER: &str = "impl Parse for StringLitSeq0 { fn parse() {} }";
+
+    for (case, line_break) in [("lf", "\n"), ("crlf", "\r\n"), ("eof", "")] {
+        let source = format!("{PARSER}{line_break}");
+        let output = rewrite_source(&pass(), Path::new("src/string_lit_seq.rs"), &source).unwrap();
+
+        assert_eq!(output, "", "case {case}");
+    }
+}
+
+#[test]
 fn obsolete_escape_hatches_are_rejected_independent_of_token_spacing() {
     let pass = pass();
     let cases = [
@@ -339,11 +397,6 @@ fn obsolete_escape_hatches_are_rejected_independent_of_token_spacing() {
             "unsupported.parser-postcondition",
         ),
         (
-            "parser rules",
-            "#[recursa::parser (rules=SqlRules)] pub struct Bad;",
-            "rewrite.unhandled-legacy-shape",
-        ),
-        (
             "custom parser option with spacing",
             "#[recursa :: parser ( custom = parse_special )] pub struct Bad;",
             "unsupported.custom-parser-option",
@@ -361,12 +414,7 @@ fn obsolete_escape_hatches_are_rejected_independent_of_token_spacing() {
         (
             "first set module",
             "pub mod __firstset{}",
-            "rewrite.unhandled-legacy-shape",
-        ),
-        (
-            "first set import",
-            "use crate :: __firstset :: *;",
-            "rewrite.unhandled-legacy-shape",
+            "unsupported.obsolete-first-set-module",
         ),
         (
             "legacy container outside a field",
@@ -382,6 +430,21 @@ fn obsolete_escape_hatches_are_rejected_independent_of_token_spacing() {
         assert_eq!(error.code, expected_code, "case {id}");
         assert!(!error.message.is_empty(), "case {id}");
     }
+
+    let reviewed_rules = "#[recursa::parser (rules=SqlRules)] pub struct Reviewed;";
+    assert_eq!(
+        rewrite_source(&pass, Path::new("src/reviewed.rs"), reviewed_rules).unwrap(),
+        " pub struct Reviewed;"
+    );
+    assert_eq!(
+        rewrite_source(
+            &pass,
+            Path::new("src/reviewed.rs"),
+            "use crate :: __firstset :: *;"
+        )
+        .unwrap(),
+        ""
+    );
 }
 
 #[test]

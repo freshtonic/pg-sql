@@ -32,7 +32,7 @@ fn not_frame_unit(value: &Ident<'_>) -> Result<(), ParseError> {
 }
 
 #[derive(recursa::Node)]
-#[recursa::parser(postcondition = crate::tokens::not_frame_unit_wrapper)]
+#[recursa::parser(postcondition = crate::tokens::literal::not_frame_unit_wrapper)]
 pub enum WindowRefNameIdent<'input> {
     Ident(Ident<'input>),
 }
