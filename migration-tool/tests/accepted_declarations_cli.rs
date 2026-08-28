@@ -39,9 +39,9 @@ fn cli_publishes_reviewed_configuration_and_admissions_without_touching_source()
         fs::read(fixture.join("tokens.expected.rs")).unwrap()
     );
     let rewritten_tokens = fs::read_to_string(destination.join("grammar/tokens.rs")).unwrap();
-    assert!(rewritten_tokens.contains(
-        "pub struct PsqlDirective<'input> {\n    #[lex(matcher)]\n    pub rest: PsqlDirectiveLine<'input>,\n}"
-    ));
+    assert!(!rewritten_tokens.contains("PsqlDirectiveLine"));
+    assert!(!rewritten_tokens.contains("physical_line"));
+    assert!(!rewritten_tokens.contains("RestOfLine"));
     assert!(rewritten_tokens.contains(
         r##"#[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#, admits(ColId))]"##
     ));

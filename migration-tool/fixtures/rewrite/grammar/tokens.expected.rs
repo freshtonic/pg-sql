@@ -30,10 +30,10 @@ recursa::tokens! {
             trailing = "+-",
             qualifying = "~!@#%^&|?"
         ),
-        PsqlDirectiveLine => physical_line(prefix = r"\\[A-Za-z]+"),
     }
     ignore {
-        // Nested comments are ignored rather than emitted.
+        // Nested comments are excluded from the significant stream at this phase;
+        // Recursa #93 retains their immutable gap records before the public document seam.
         BlockComment => nested(opener = "/*", closer = "*/"),
     }
     admissions {
@@ -130,10 +130,4 @@ pub struct PositionalParam<'input> {
 pub struct OperatorExpr<'input> {
     #[lex(matcher)]
     pub operator: CustomOp<'input>,
-}
-
-#[derive(recursa::Node)]
-pub struct PsqlDirective<'input> {
-    #[lex(matcher)]
-    pub rest: PsqlDirectiveLine<'input>,
 }

@@ -38,7 +38,6 @@ pub const SUPPORTED_SHAPES: &[&str] = &[
     "binding_integer_value",
     "binding_non_reserved_word_role_spec",
     "binding_numeric_value",
-    "binding_psql_directive_line",
     "binding_psql_variable_name_structural",
     "binding_type_function_name_param",
     "binding_unquoted_ident_variant",
@@ -59,7 +58,6 @@ pub const SUPPORTED_SHAPES: &[&str] = &[
     "matcher_dollar_string",
     "matcher_integer",
     "matcher_numeric",
-    "matcher_psql_directive_line",
     "nested_container",
     "obsolete_firstset_ref",
     "obsolete_generated_artifact",
@@ -220,19 +218,6 @@ impl GrammarRewritePass {
         let mut obsolete_syntax = ObsoleteSyntaxDetector::new(&rewritten);
         obsolete_syntax.visit_file(&rewritten_parsed);
         obsolete_syntax.finish()?;
-        let rewritten_structure = StructuralSpans::parse(&rewritten)?;
-        for &(legacy, code) in FORBIDDEN_AFTER_REWRITE {
-            if let Some(offset) = structural_matches(&rewritten, legacy, &rewritten_structure)
-                .into_iter()
-                .next()
-            {
-                return Err(GrammarRewriteError::new(
-                    code,
-                    Some(offset),
-                    format!("no reviewed rewrite for remaining {legacy:?}"),
-                ));
-            }
-        }
         Ok(edits)
     }
 }
@@ -271,37 +256,49 @@ impl ObsoleteSyntaxDetector {
 
 impl<'ast> Visit<'ast> for ObsoleteSyntaxDetector {
     fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
-        let name = attribute
-            .path()
-            .segments
-            .last()
-            .map(|segment| segment.ident.to_string());
-        let syn::Meta::List(list) = &attribute.meta else {
+        if is_recursa_parser(attribute.path()) {
+            if let syn::Meta::List(list) = &attribute.meta {
+                if let Some(span) = token_ident_span(&list.tokens, "postcondition") {
+                    self.reject(
+                        "unsupported.parser-postcondition",
+                        span,
+                        "authored parser postconditions are obsolete",
+                    );
+                    return;
+                }
+                if let Some(span) = token_ident_span(&list.tokens, "custom") {
+                    self.reject(
+                        "unsupported.custom-parser-option",
+                        span,
+                        "authored custom parser options are obsolete",
+                    );
+                    return;
+                }
+                if let Some(span) = token_ident_span(&list.tokens, "rules") {
+                    self.reject(
+                        "rewrite.unhandled-legacy-shape",
+                        span,
+                        "legacy parser rule bindings are obsolete",
+                    );
+                    return;
+                }
+            }
+            self.reject(
+                "unsupported.obsolete-parser-attribute",
+                attribute.path().span(),
+                "remaining authored recursa::parser attributes are obsolete",
+            );
             return;
-        };
-        if name.as_deref() == Some("lex")
+        }
+
+        if attribute.path().is_ident("lex")
+            && let syn::Meta::List(list) = &attribute.meta
             && let Some(span) = token_ident_span(&list.tokens, "callback")
         {
             self.reject(
                 "unsupported.inline-callback",
                 span,
                 "authored lexical callbacks are obsolete",
-            );
-        } else if name.as_deref() == Some("parser")
-            && let Some(span) = token_ident_span(&list.tokens, "postcondition")
-        {
-            self.reject(
-                "unsupported.parser-postcondition",
-                span,
-                "authored parser postconditions are obsolete",
-            );
-        } else if name.as_deref() == Some("parser")
-            && let Some(span) = token_ident_span(&list.tokens, "rules")
-        {
-            self.reject(
-                "rewrite.unhandled-legacy-shape",
-                span,
-                "legacy parser rule bindings are obsolete",
             );
         }
     }
@@ -313,48 +310,7 @@ impl<'ast> Visit<'ast> for ObsoleteSyntaxDetector {
             .last()
             .is_some_and(|segment| segment.ident == "tokens")
         {
-            for (name, code, message) in [
-                (
-                    "callbacks",
-                    "unsupported.callback-declarations",
-                    "authored callback declarations are obsolete",
-                ),
-                (
-                    "post_lex",
-                    "unsupported.post-lex-hook",
-                    "authored post-lex hooks are obsolete",
-                ),
-                (
-                    "with",
-                    "unsupported.central-callback",
-                    "authored central lexical callbacks are obsolete",
-                ),
-                (
-                    "lexer_tokens",
-                    "unsupported.lexer-tokens",
-                    "legacy lexer token declarations are obsolete",
-                ),
-                (
-                    "soft_keywords",
-                    "unsupported.soft-keywords",
-                    "legacy soft keyword declarations are obsolete",
-                ),
-                (
-                    "targets",
-                    "unsupported.token-targets",
-                    "legacy token targets are obsolete",
-                ),
-                (
-                    "classes",
-                    "unsupported.token-classes",
-                    "legacy token classes are obsolete",
-                ),
-                (
-                    "literals",
-                    "unsupported.token-literals",
-                    "legacy literal declarations are obsolete",
-                ),
-            ] {
+            for &(name, code, message) in OBSOLETE_TOKEN_SYNTAX {
                 if let Some(span) = token_ident_span(&item.tokens, name) {
                     self.reject(code, span, message);
                     break;
@@ -395,7 +351,72 @@ impl<'ast> Visit<'ast> for ObsoleteSyntaxDetector {
         }
         syn::visit::visit_item_struct(self, item);
     }
+
+    fn visit_type_path(&mut self, type_path: &'ast syn::TypePath) {
+        if let Some(segment) = type_path.path.segments.last()
+            && matches!(
+                segment.ident.to_string().as_str(),
+                "Seq0" | "Seq1" | "Surrounded" | "OptionalTrailing"
+            )
+        {
+            self.reject(
+                "rewrite.unhandled-legacy-shape",
+                segment.ident.span(),
+                "legacy grammar containers are obsolete",
+            );
+        }
+        syn::visit::visit_type_path(self, type_path);
+    }
 }
+
+fn is_recursa_parser(path: &syn::Path) -> bool {
+    path.segments.len() == 2
+        && path.segments[0].ident == "recursa"
+        && path.segments[1].ident == "parser"
+}
+
+const OBSOLETE_TOKEN_SYNTAX: &[(&str, &str, &str)] = &[
+    (
+        "callbacks",
+        "unsupported.callback-declarations",
+        "authored callback declarations are obsolete",
+    ),
+    (
+        "post_lex",
+        "unsupported.post-lex-hook",
+        "authored post-lex hooks are obsolete",
+    ),
+    (
+        "with",
+        "unsupported.central-callback",
+        "authored central lexical callbacks are obsolete",
+    ),
+    (
+        "lexer_tokens",
+        "unsupported.lexer-tokens",
+        "legacy lexer token declarations are obsolete",
+    ),
+    (
+        "soft_keywords",
+        "unsupported.soft-keywords",
+        "legacy soft keyword declarations are obsolete",
+    ),
+    (
+        "targets",
+        "unsupported.token-targets",
+        "legacy token targets are obsolete",
+    ),
+    (
+        "classes",
+        "unsupported.token-classes",
+        "legacy token classes are obsolete",
+    ),
+    (
+        "literals",
+        "unsupported.token-literals",
+        "legacy literal declarations are obsolete",
+    ),
+];
 
 fn token_ident_span(tokens: &TokenStream, expected: &str) -> Option<Span> {
     for token in tokens.clone() {
@@ -1119,10 +1140,6 @@ fn is_generated_first_set(path: &Path) -> bool {
 const UNSUPPORTED: &[(&str, &str)] = &[
     ("UnknownGrammar<", "unsupported.unknown-container"),
     (
-        "#[recursa::parser(custom",
-        "unsupported.custom-parser-option",
-    ),
-    (
         "OptionalTrailing<",
         "unsupported.malformed-optional-trailing",
     ),
@@ -1203,27 +1220,6 @@ const REVIEWED_HANDWRITTEN_PARSERS: &[(&str, &str)] = &[
     ),
 ];
 
-const FORBIDDEN_AFTER_REWRITE: &[(&str, &str)] = &[
-    ("#[recursa::parser(", "unsupported.parser-postcondition"),
-    ("impl Parse for ", "unsupported.raw-line-parser"),
-    ("callback = ", "unsupported.inline-callback"),
-    (" with ", "unsupported.central-callback"),
-    ("post_lex = ", "unsupported.post-lex-hook"),
-    ("callbacks {", "unsupported.callback-declarations"),
-    ("lexer_tokens {", "unsupported.lexer-tokens"),
-    ("soft_keywords {", "unsupported.soft-keywords"),
-    ("targets {", "unsupported.token-targets"),
-    ("classes {", "unsupported.token-classes"),
-    ("literals {", "unsupported.token-literals"),
-    ("fn pg_lex", "unsupported.post-lex-hook"),
-    ("Seq0<", "rewrite.unhandled-legacy-shape"),
-    ("Seq1<", "rewrite.unhandled-legacy-shape"),
-    ("Surrounded<", "rewrite.unhandled-legacy-shape"),
-    ("OptionalTrailing", "rewrite.unhandled-legacy-shape"),
-    ("rules = SqlRules", "rewrite.unhandled-legacy-shape"),
-    ("::__firstset", "rewrite.unhandled-legacy-shape"),
-];
-
 const REWRITES: &[(&str, &str)] = &[
     (
         "    module = crate::grammar,\n}",
@@ -1243,7 +1239,7 @@ const REWRITES: &[(&str, &str)] = &[
     ),
     (
         "    literals {\n        DollarStringLit<'input>(source) => r\"\\$(?:[A-Za-z_][A-Za-z0-9_]*)?\\$\" with scan_dollar_string,\n        NumericLit<'input>(source) => r\"(?:(?:[0-9](?:_?[0-9])*\\.[0-9](?:_?[0-9])*|\\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\\.)\" with reject_trailing_word,\n        IntegerLit<'input>(source) => r\"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)\" with reject_trailing_word,\n        DollarNum<'input>(source) => r\"\\$[0-9]+\" with reject_trailing_word,\n    }",
-        "    matchers {\n        DollarStringLit => same_delimiter(opener = r\"\\$(?:[A-Za-z_][A-Za-z0-9_]*)?\\$\"),\n        NumericLit => next_exclusion(pattern = r\"(?:(?:[0-9](?:_?[0-9])*\\.[0-9](?:_?[0-9])*|\\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\\.)\", excluded = r\"[A-Za-z0-9_]\"),\n        IntegerLit => next_exclusion(pattern = r\"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)\", excluded = r\"[A-Za-z0-9_]\"),\n        DollarNum => next_exclusion(pattern = r\"\\$[0-9]+\", excluded = r\"[A-Za-z0-9_]\"),\n        CustomOp => operator_run(\n            characters = \"-+*/<>=~!@#%^&|?\",\n            fences = [\"/*\", \"--\"],\n            trailing = \"+-\",\n            qualifying = \"~!@#%^&|?\"\n        ),\n        PsqlDirectiveLine => physical_line(prefix = r\"\\\\[A-Za-z]+\"),\n    }",
+        "    matchers {\n        DollarStringLit => same_delimiter(opener = r\"\\$(?:[A-Za-z_][A-Za-z0-9_]*)?\\$\"),\n        NumericLit => next_exclusion(pattern = r\"(?:(?:[0-9](?:_?[0-9])*\\.[0-9](?:_?[0-9])*|\\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\\.)\", excluded = r\"[A-Za-z0-9_]\"),\n        IntegerLit => next_exclusion(pattern = r\"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)\", excluded = r\"[A-Za-z0-9_]\"),\n        DollarNum => next_exclusion(pattern = r\"\\$[0-9]+\", excluded = r\"[A-Za-z0-9_]\"),\n        CustomOp => operator_run(\n            characters = \"-+*/<>=~!@#%^&|?\",\n            fences = [\"/*\", \"--\"],\n            trailing = \"+-\",\n            qualifying = \"~!@#%^&|?\"\n        ),\n    }",
     ),
     ("    lexer_tokens {", "    ignore {"),
     (
@@ -1305,10 +1301,6 @@ const REWRITES: &[(&str, &str)] = &[
     (
         "    pub operator: CustomOp<'input>,",
         "    #[lex(matcher)]\n    pub operator: CustomOp<'input>,",
-    ),
-    (
-        "    pub backslash: BackSlash,\n    pub rest: RestOfLine<'input>,",
-        "    #[lex(matcher)]\n    pub rest: PsqlDirectiveLine<'input>,",
     ),
     (
         "pub enum WindowRefNameIdent<'input> {\n    Ident(Ident<'input>),\n}",

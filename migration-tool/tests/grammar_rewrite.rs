@@ -344,6 +344,21 @@ fn obsolete_escape_hatches_are_rejected_independent_of_token_spacing() {
             "rewrite.unhandled-legacy-shape",
         ),
         (
+            "custom parser option with spacing",
+            "#[recursa :: parser ( custom = parse_special )] pub struct Bad;",
+            "unsupported.custom-parser-option",
+        ),
+        (
+            "remaining pratt parser attribute",
+            "#[recursa :: parser ( pratt )] pub enum Bad { Value }",
+            "unsupported.obsolete-parser-attribute",
+        ),
+        (
+            "unknown parser option",
+            "#[recursa::parser (future_option = enabled)] pub struct Bad;",
+            "unsupported.obsolete-parser-attribute",
+        ),
+        (
             "first set module",
             "pub mod __firstset{}",
             "rewrite.unhandled-legacy-shape",
@@ -351,6 +366,11 @@ fn obsolete_escape_hatches_are_rejected_independent_of_token_spacing() {
         (
             "first set import",
             "use crate :: __firstset :: *;",
+            "rewrite.unhandled-legacy-shape",
+        ),
+        (
+            "legacy container outside a field",
+            "pub type Bad = Seq0<Value, punct::Comma>;",
             "rewrite.unhandled-legacy-shape",
         ),
     ];

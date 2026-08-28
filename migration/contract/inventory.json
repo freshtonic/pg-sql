@@ -182810,8 +182810,8 @@
               "path": "migration-tool/tests/accepted_declarations_cli.rs",
               "line": 97,
               "column": 4,
-              "byte_start": 3686,
-              "byte_end": 3750
+              "byte_start": 3703,
+              "byte_end": 3767
             },
             "contract": "post-bootstrap workspace-member test",
             "content_sha256": null
@@ -183036,10 +183036,10 @@
             "id": "rewrite_needles_inside_comments_and_literals_are_not_edits",
             "location": {
               "path": "migration-tool/tests/grammar_rewrite.rs",
-              "line": 368,
+              "line": 388,
               "column": 4,
-              "byte_start": 12500,
-              "byte_end": 12558
+              "byte_start": 13247,
+              "byte_end": 13305
             },
             "contract": "post-bootstrap workspace-member test",
             "content_sha256": null
@@ -183048,10 +183048,10 @@
             "id": "unsupported_needles_inside_comments_and_literals_are_not_errors",
             "location": {
               "path": "migration-tool/tests/grammar_rewrite.rs",
-              "line": 398,
+              "line": 418,
               "column": 4,
-              "byte_start": 13522,
-              "byte_end": 13585
+              "byte_start": 14269,
+              "byte_end": 14332
             },
             "contract": "post-bootstrap workspace-member test",
             "content_sha256": null
@@ -183398,10 +183398,10 @@
           "line": 1,
           "column": 1,
           "byte_start": 0,
-          "byte_end": 1597
+          "byte_end": 1961
         },
         "contract": "expected behavior and legacy/current limitation for gap examples",
-        "content_sha256": "08f7f4a3e7f8b447f7475131c65913af5ea25bd0663a63902ec88de0feb9e18d"
+        "content_sha256": "a76334b11b132067aa03577ce8eec9b6f4961a3074d3214e93aa3094f64f2e3b"
       },
       "examples": [
         {

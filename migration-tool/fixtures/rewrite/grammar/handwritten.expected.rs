@@ -1,5 +1,6 @@
 
-// These five legacy Parse implementations are replaced by reviewed Node and
-// token-target declarations; the surrounding explanation remains in place.
+// Four legacy Parse implementations have reviewed declarations. The generic
+// RestOfLine parser is removed; scanner-correct psql directives belong to #12.
+// The surrounding explanation remains in place.
 
 pub fn retained_helper() {}

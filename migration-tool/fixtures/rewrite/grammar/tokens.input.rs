@@ -24,7 +24,8 @@ recursa::tokens! {
         DollarNum<'input>(source) => r"\$[0-9]+" with reject_trailing_word,
     }
     lexer_tokens {
-        // Nested comments are ignored rather than emitted.
+        // Nested comments are excluded from the significant stream at this phase;
+        // Recursa #93 retains their immutable gap records before the public document seam.
         BlockComment => r"/\*" with skip_block_comment,
         CustomOp => r"([-+*/<>=~!@#%^&|?]*[~!@#%^&|?][-+*/<>=~!@#%^&|?]*|[-+*/<>=]+[*/<>=])",
     }
@@ -108,10 +109,4 @@ pub struct PositionalParam<'input> {
 #[derive(recursa::Node)]
 pub struct OperatorExpr<'input> {
     pub operator: CustomOp<'input>,
-}
-
-#[derive(recursa::Node)]
-pub struct PsqlDirective<'input> {
-    pub backslash: BackSlash,
-    pub rest: RestOfLine<'input>,
 }
