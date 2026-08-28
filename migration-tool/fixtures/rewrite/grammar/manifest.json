@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "inventory_contract": {
+    "parser_types": 1267,
+    "ast_types": 4,
+    "parse_roles": 178,
+    "pratt_enums": 1,
+    "handwritten_parsers": 5,
+    "token_counts": {
+      "token_callbacks": 5,
+      "token_categories": 4,
+      "token_classes": 1,
+      "token_flags": 1,
+      "token_keywords": 87,
+      "token_lexer_tokens": 3,
+      "token_literals": 12,
+      "token_punctuation": 99,
+      "token_soft_keywords": 397,
+      "token_targets": 5
+    }
+  },
+  "cases": [
+    {
+      "id": "nodes",
+      "input": "nodes.input.rs",
+      "expected": "nodes.expected.rs",
+      "shapes": [
+        "attributed_enum",
+        "attributed_struct",
+        "attributed_type",
+        "derive_stack",
+        "fixed_syntax",
+        "nested_container",
+        "optional_syntax_bool",
+        "optional_syntax_exclusion",
+        "optional_trailing",
+        "parser_attr",
+        "pratt_enum",
+        "pratt_infix",
+        "pratt_postfix",
+        "pratt_prefix",
+        "seq0",
+        "seq1",
+        "surrounded"
+      ]
+    },
+    {
+      "id": "tokens",
+      "input": "tokens.input.rs",
+      "expected": "tokens.expected.rs",
+      "shapes": [
+        "lexer_callback",
+        "token_callbacks",
+        "token_categories",
+        "token_classes",
+        "token_flags",
+        "token_keywords",
+        "token_lexer_tokens",
+        "token_literals",
+        "token_punctuation",
+        "token_soft_keywords",
+        "token_targets"
+      ]
+    },
+    {
+      "id": "handwritten-and-obsolete",
+      "input": "handwritten.input.rs",
+      "expected": "handwritten.expected.rs",
+      "shapes": [
+        "handwritten_bare_alias_name",
+        "handwritten_custom_op",
+        "handwritten_rest_of_line",
+        "handwritten_string_lit_seq",
+        "handwritten_unquoted_ident",
+        "obsolete_firstset_ref",
+        "obsolete_sql_rules"
+      ]
+    },
+    {
+      "id": "container-comment-trivia",
+      "input": "containers-comments.input.rs",
+      "expected": "containers-comments.expected.rs",
+      "shapes": []
+    }
+  ],
+  "omissions": [
+    {
+      "id": "generated-first-set",
+      "input": "src/generated/first_set.rs",
+      "shapes": ["obsolete_generated_artifact"]
+    }
+  ],
+  "unsupported": [
+    {
+      "id": "unknown-container",
+      "input": "unsupported.input.rs",
+      "code": "unsupported.unknown-container"
+    },
+    {
+      "id": "custom-parser-option",
+      "input": "unsupported-custom-parser.input.rs",
+      "code": "unsupported.custom-parser-option"
+    },
+    {
+      "id": "malformed-optional-trailing",
+      "input": "unsupported-optional-trailing.input.rs",
+      "code": "unsupported.malformed-optional-trailing"
+    },
+    {
+      "id": "unreviewed-sequence-shape",
+      "input": "unsupported-unreviewed-sequence.input.rs",
+      "code": "rewrite.unhandled-legacy-shape"
+    },
+    {
+      "id": "qualified-container",
+      "input": "unsupported-qualified-container.input.rs",
+      "code": "unsupported.qualified-container"
+    },
+    {
+      "id": "const-generic-argument",
+      "input": "unsupported-const-generic.input.rs",
+      "code": "unsupported.non-type-generic-argument"
+    },
+    {
+      "id": "parameterized-token-path",
+      "input": "unsupported-parameterized-token.input.rs",
+      "code": "unsupported.token-path"
+    },
+    {
+      "id": "qualified-disposition",
+      "input": "unsupported-qualified-disposition.input.rs",
+      "code": "unsupported.sequence-disposition"
+    }
+  ]
+}

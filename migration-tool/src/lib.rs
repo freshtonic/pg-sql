@@ -1,6 +1,9 @@
-//! Read-only inventory for the reproducible PostgreSQL grammar migration.
+//! Auditable tooling for the reproducible PostgreSQL grammar migration.
 
 pub mod baseline;
+pub mod grammar_rewrite;
+pub mod rewrite;
+pub mod test_call_rewrite;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -79,7 +82,7 @@ impl Mapping {
                 (
                     "migration-tool".into(),
                     WorkspaceTestCounts {
-                        tests: 12,
+                        tests: 36,
                         ignored: 1,
                     },
                 ),
