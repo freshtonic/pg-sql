@@ -118,14 +118,10 @@ actual_pg_oracle_count="$(git ls-tree -r "$EXPECTED_SOURCE_CHECKPOINT" -- pg-ora
 [[ "$actual_pg_oracle_count" -eq 7 ]] ||
   fail "source checkpoint has $actual_pg_oracle_count pg-oracle entries, expected 7"
 
-current_pg_sql_count="$(git ls-files \
-  .gitattributes CLAUDE.md Cargo.toml README.md benches fixtures src tests vendor |
-  awk '$0 != "tests/verify-import-provenance.sh" { count += 1 } END { print count + 0 }')"
-current_pg_oracle_count="$(git ls-files pg-oracle | wc -l | tr -d ' ')"
-[[ "$current_pg_sql_count" -eq 136 ]] ||
-  fail "current index has $current_pg_sql_count imported pg-sql entries, expected 136"
-[[ "$current_pg_oracle_count" -eq 7 ]] ||
-  fail "current index has $current_pg_oracle_count pg-oracle entries, expected 7"
+untracked_input="$(git ls-files --others --exclude-standard -- \
+  benches fixtures pg-oracle src tests vendor | sed -n '1p')"
+[[ -z "$untracked_input" ]] ||
+  fail "$untracked_input is untracked inside an immutable import area"
 
 current_gitlink="$(git ls-tree HEAD -- vendor/postgres | awk '{ print $1 " " $3 }')"
 [[ "$current_gitlink" == "160000 $EXPECTED_POSTGRES_GITLINK" ]] ||

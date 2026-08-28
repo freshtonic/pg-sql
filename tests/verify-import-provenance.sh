@@ -36,4 +36,12 @@ cp "$repo_root/docs/import-provenance.legacy-tree" "$test_dir/repository/docs/im
     echo "expected verification to reject a changed imported file" >&2
     exit 1
   fi
+
+  git checkout --quiet -- Cargo.toml
+  printf '// untracked contamination\n' > src/untracked-immutable-input.rs
+
+  if scripts/verify-import-provenance >/dev/null 2>&1; then
+    echo "expected verification to reject an untracked imported-source file" >&2
+    exit 1
+  fi
 )
