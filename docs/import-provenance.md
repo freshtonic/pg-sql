@@ -21,8 +21,8 @@ checkpoint. The only bootstrap addition in that checkpoint is the relocated
 root `.gitmodules`; `vendor/postgres` remains the exact legacy gitlink.
 
 Run `scripts/verify-import-provenance` from a clean checkout to verify the
-checkpoint, manifest, and current PostgreSQL gitlink without requiring the
-legacy repository as a sibling checkout.
+recorded legacy commit and tree, checkpoint manifest, and current immutable
+inputs without requiring the legacy repository as a sibling checkout.
 
 The named pre-transformation differential baseline is recorded in
 `baselines/postgresql-17.9.json`. It was captured from a detached disposable

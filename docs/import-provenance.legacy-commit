@@ -1,0 +1,12 @@
+tree f3191ab707c8a957d1bb5fe142e74fc624fe6661
+parent 1dd6b09d1de118bb8cd1a6ec67a10842bbdbc903
+author James Sadler <freshtonic@gmail.com> 1781956350 +1000
+committer James Sadler <freshtonic@gmail.com> 1781956350 +1000
+
+feat(diagram-core): optional href on Terminal/Token for clickable nodes
+
+Add a defaulted `href: Option<String>` field plus a `with_href` builder to
+`Terminal` and `Token`, mirroring `NonTerminal`. When set, `svg::to_railroad`
+wraps the rendered box in a `railroad::Link` (an `<a href>` anchor) via a new
+shared `link_or` helper now used by all three leaf arms. Geometry is
+unaffected; existing `::new(text)` call sites keep working.

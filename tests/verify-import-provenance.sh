@@ -14,6 +14,8 @@ git clone --quiet --no-local "$repo_root" "$test_dir/repository"
 mkdir -p "$test_dir/repository/scripts"
 cp "$verifier" "$test_dir/repository/scripts/verify-import-provenance"
 cp "$repo_root/docs/import-provenance.tsv" "$test_dir/repository/docs/import-provenance.tsv"
+cp "$repo_root/docs/import-provenance.legacy-commit" "$test_dir/repository/docs/import-provenance.legacy-commit"
+cp "$repo_root/docs/import-provenance.legacy-tree" "$test_dir/repository/docs/import-provenance.legacy-tree"
 
 (
   cd "$test_dir/repository"
@@ -24,6 +26,14 @@ cp "$repo_root/docs/import-provenance.tsv" "$test_dir/repository/docs/import-pro
 
   if scripts/verify-import-provenance >/dev/null 2>&1; then
     echo "expected verification to reject a changed PostgreSQL gitlink" >&2
+    exit 1
+  fi
+
+  git reset --quiet
+  printf '\n# changed\n' >> Cargo.toml
+
+  if scripts/verify-import-provenance >/dev/null 2>&1; then
+    echo "expected verification to reject a changed imported file" >&2
     exit 1
   fi
 )
