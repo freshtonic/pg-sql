@@ -2,8 +2,6 @@
 //! VACUUM/REINDEX/CLUSTER for their `( option [= value], ... )` lists.
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::names::QualifiedName;
@@ -19,22 +17,18 @@ use crate::tokens::{literal, punct};
 /// i.e. `ON`, `OFF`, `TRUE`, `FALSE`, `DEFAULT`, a numeric (signed or not),
 /// a string literal, or an identifier. We model that with `SetValue`, which
 /// is the same vocabulary `SET` accepts.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct VacuumOption<'input> {
     pub name: literal::AliasName<'input>,
     pub value: Option<crate::ast::session::set_reset::SetValue<'input>>,
 }
 
 /// Parenthesized options list: `( opt [= val] [, ...] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct VacuumOptions<'input> {
-    pub list: Surrounded<punct::LParen, Seq0<VacuumOption<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub list:  Vec<VacuumOption<'input> > ,
 }
 
 // -----------------------------------------------------------------------
@@ -47,14 +41,13 @@ pub struct VacuumOptions<'input> {
 ///
 /// `qualified_name [(column [, ...])]`. The optional column list applies to
 /// `VACUUM ANALYZE` to scope the analyze to specific columns.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct VacuumRelation<'input> {
     pub name: QualifiedName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns: Option<
-        Surrounded<punct::LParen, Seq1<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         recursa::Vec1<crate::tokens::ColId<'input> > ,
     >,
 }
 
@@ -70,18 +63,20 @@ pub struct VacuumRelation<'input> {
 /// and any combination of `FULL` / `FREEZE` / `VERBOSE` / `ANALYZE` is
 /// permitted in that fixed declaration order. Both forms share the optional
 /// trailing relation list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct VacuumStmt<'input> {
-    pub vacuum: VACUUM,
+    #[tok(VACUUM, this)]
     pub options: Option<VacuumOptions<'input>>,
-    pub full: Option<FULL>,
-    pub freeze: Option<FREEZE>,
-    pub verbose: Option<VERBOSE>,
-    pub analyze: Option<ANALYZE>,
-    pub relations: Option<Seq1<VacuumRelation<'input>, punct::Comma>>,
+    #[presence(FULL)]
+    pub full: bool,
+    #[presence(FREEZE)]
+    pub freeze: bool,
+    #[presence(VERBOSE)]
+    pub verbose: bool,
+    #[presence(ANALYZE)]
+    pub analyze: bool,
+    #[sep(COMMA)]
+    pub relations: Option<recursa::Vec1<VacuumRelation<'input> >>,
 }
 
 #[cfg(test)]
@@ -93,24 +88,30 @@ mod tests {
 
     #[test]
     fn parse_vacuum_full() {
-        let mut input = crate::tokens::test_input("VACUUM (FULL) tbl");
-        let stmt = VacuumStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("VACUUM (FULL) tbl");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = VacuumStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.options.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_vacuum_full_freeze() {
-        let mut input = crate::tokens::test_input("VACUUM (FULL, FREEZE) tbl");
-        let _stmt = VacuumStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("VACUUM (FULL, FREEZE) tbl");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = VacuumStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_vacuum_parallel_value() {
-        let mut input = crate::tokens::test_input("VACUUM (PARALLEL 2) tbl");
-        let _stmt = VacuumStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("VACUUM (PARALLEL 2) tbl");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = VacuumStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]

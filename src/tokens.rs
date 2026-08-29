@@ -1,6 +1,5 @@
 #![allow(non_camel_case_types)]
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 // Single-declaration token site.
@@ -20,87 +19,8 @@ use recursa_diagram::railroad;
 // and `literal` sub-modules below re-export them under the legacy paths so
 // the rest of the crate continues to use `keyword::SELECT`, `punct::LParen`,
 // `literal::DollarStringLit`, etc.
-/// logos callback for `DollarStringLit`.
-///
-/// The `#[regex]` matches only the opening `$tag$`. PG dollar-quoted strings
-/// close at a tag *matching the opener* — a back-reference no regex DFA can
-/// express. The callback reads the matched opener (which is identical to the
-/// close tag), scans the remainder for the next occurrence of that exact
-/// tag, and `bump`s the lexer past it. No matching close ⇒ `Error`.
-///
-/// Mirrors the byte-walker in `skip_failed_statement` (`pg-sql/src/ast/mod.rs`):
-/// all delimiters are ASCII so byte scanning is correct in UTF-8 source.
-pub fn scan_dollar_string(
-    lex: &mut ::logos::Lexer<'_, TokenKind>,
-) -> ::logos::FilterResult<(), ()> {
-    // The matched slice is the opening `$tag$`; the close tag is byte-identical.
-    let close = lex.slice();
-    let remainder = lex.remainder();
-    match remainder.find(close) {
-        Some(pos) => {
-            // Advance past the body and the closing tag.
-            lex.bump(pos + close.len());
-            ::logos::FilterResult::Emit(())
-        }
-        None => ::logos::FilterResult::Error(()),
-    }
-}
 
-/// logos callback for `BlockComment` — skips a `/* ... */` block comment,
-/// PostgreSQL-style with arbitrary nesting.
-///
-/// The `#[regex]` matches only the opening `/*`. logos's `#[logos(skip ...)]`
-/// directive takes a single regular expression, and a *nested* block comment
-/// is not a regular language — so block-comment skipping is done here: the
-/// callback scans `lexer.remainder()` tracking nesting depth, `bump`s past
-/// the matching close `*/`, and returns `Skip` so the comment never reaches
-/// the token array. An unterminated comment consumes to end-of-input,
-/// mirroring the old scannerless `ignored_len` behaviour.
-pub fn skip_block_comment(lex: &mut ::logos::Lexer<'_, TokenKind>) -> ::logos::Skip {
-    let bytes = lex.remainder().as_bytes();
-    let mut depth: u32 = 1;
-    let mut j = 0;
-    while j + 1 < bytes.len() {
-        if bytes[j] == b'/' && bytes[j + 1] == b'*' {
-            depth += 1;
-            j += 2;
-        } else if bytes[j] == b'*' && bytes[j + 1] == b'/' {
-            depth -= 1;
-            j += 2;
-            if depth == 0 {
-                break;
-            }
-        } else {
-            j += 1;
-        }
-    }
-    // depth != 0 ⇒ unclosed comment: consume to end-of-input.
-    lex.bump(if depth == 0 { j } else { bytes.len() });
-    ::logos::Skip
-}
 
-/// logos callback for `NumericLit` / `IntegerLit`.
-///
-/// logos has no `\b`, so the `\b`/`\B` trailing-boundary anchors are stripped
-/// from the patterns and this callback reproduces their effect: a numeric
-/// literal immediately butted against a word character (`[A-Za-z0-9_]`) — no
-/// whitespace separator — is a PostgreSQL "trailing junk after numeric
-/// literal" lex error, not a literal followed by an identifier.
-///
-/// Both the digit-terminated forms (old trailing `\b`) and the bare
-/// trailing-dot form `1.` (old trailing `\B` after `.`) reject on exactly the
-/// same condition: the next char being a word char. A rejected literal makes
-/// `lex` emit a `TOKEN_KIND_NONE` span, the statement falls to `Raw`, and
-/// psql emits the canonical PG error — preserving the differential-test
-/// behaviour the `\b`/`\B` anchors gave.
-pub fn reject_trailing_word(
-    lex: &mut ::logos::Lexer<'_, TokenKind>,
-) -> ::logos::FilterResult<(), ()> {
-    match lex.remainder().bytes().next() {
-        Some(b) if b.is_ascii_alphanumeric() || b == b'_' => ::logos::FilterResult::Error(()),
-        _ => ::logos::FilterResult::Emit(()),
-    }
-}
 
 recursa::tokens! {
     // Ignored content: ASCII whitespace and `-- line comments`. Both are
@@ -207,13 +127,11 @@ recursa::tokens! {
         SIMILAR      => r"SIMILAR" in TYPE_FUNC_NAME + bare_label,
         PLACING      => r"PLACING" in RESERVED + bare_label,
         TABLESAMPLE  => r"TABLESAMPLE" in TYPE_FUNC_NAME + bare_label,
-    },
     // Soft (non-reserved) keywords: recognised as keywords only where the
     // grammar asks for them; otherwise reclaimable as ordinary identifiers
     // (see `UnquotedIdent`'s `token_kind_is_soft` check). Covers Postgres
     // non-reserved / col-name / type-name keywords plus the SQL/JSON
     // function family — all common identifiers, so none may be reserved.
-    soft_keywords {
         JSON            => r"JSON" in COL_NAME + bare_label,
         JSON_VALUE      => r"JSON_VALUE" in COL_NAME + bare_label,
         JSON_QUERY      => r"JSON_QUERY" in COL_NAME + bare_label,
@@ -714,513 +632,192 @@ recursa::tokens! {
         RECHECK         => r"RECHECK" in UNRESERVED + bare_label,
     },
     punctuation {
-        Semi      => ";",          ";",
-        Comma     => ",",          ",",
-        LParen    => r"\(",        "(",
-        RParen    => r"\)",        ")",
+        SEMI      => ";",
+        COMMA     => ",",
+        LPAREN    => "(",
+        RPAREN    => ")",
         // Record comparison operators (`*=` etc.) — longest-match first so
         // they win over bare `Star`. Used only as Pratt infix operators.
-        StarLte   => r"\*<=",      "*<=",
-        StarGte   => r"\*>=",      "*>=",
-        StarNeq   => r"\*<>",      "*<>",
-        StarLt    => r"\*<",       "*<",
-        StarGt    => r"\*>",       "*>",
-        StarEq    => r"\*=",       "*=",
-        Star      => r"\*",        "*",
-        Dot       => r"\.",        ".",
+        STARLTE   => "*<=",
+        STARGTE   => "*>=",
+        STARNEQ   => "*<>",
+        STARLT    => "*<",
+        STARGT    => "*>",
+        STAREQ    => "*=",
+        STAR      => "*",
+        DOT       => ".",
         // 3-char `===` before 2-char `=>` and single-char `=`.
-        TripleEq   => "===",       "===",
-        Eq        => "=",          "=",
-        FatArrow  => r"=>",        "=>",
-        ColonEquals => r":=",      ":=",
+        TRIPLEEQ   => "===",
+        EQ        => "=",
+        FATARROW  => "=>",
+        COLONEQUALS => ":=",
         // 3-char `!==` and `!=-` before 2-char `!=`.
-        BangEqEq   => "!==",       "!==",
-        BangEqMinus => "!=-",      "!=-",
-        BangEq    => "!=",         "!=",
-        Neq       => "<>",         "<>",
+        BANGEQEQ   => "!==",
+        BANGEQMINUS => "!=-",
+        BANGEQ    => "!=",
+        NEQ       => "<>",
         // 3-char `<`-prefixed operators must come before 2-char `<=`/`<>`/`<<`
         // and before the single-char `<`.
         // 3-char `<<<` before 2-char `<<`.
-        LtLtLt     => r"<<<",      "<<<",
-        LtLtEq     => r"<<=",      "<<=",
-        LtLtPipe   => r"<<\|",     "<<|",
-        LtMinusGt  => r"<->",      "<->",
-        LtLt       => r"<<",       "<<",
-        Lte       => "<=",         "<=",
+        LTLTLT     => "<<<",
+        LTLTEQ     => "<<=",
+        LTLTPIPE   => "<<|",
+        LTMINUSGT  => "<->",
+        LTLT       => "<<",
+        LTE       => "<=",
         // Geometric "below" `<^` before single-char `<`.
-        LtCaret    => r"<\^",      "<^",
+        LTCARET    => "<^",
         // 3-char `>>=` before `>>`, then `>=`, `>`.
         // 3-char `>>>` before 2-char `>>`.
-        GtGtGt     => r">>>",      ">>>",
-        GtGtEq     => r">>=",      ">>=",
-        GtGt       => r">>",       ">>",
-        Gte       => ">=",         ">=",
+        GTGTGT     => ">>>",
+        GTGTEQ     => ">>=",
+        GTGT       => ">>",
+        GTE       => ">=",
         // Geometric "above" `>^` before single-char `>`.
-        GtCaret    => r">\^",      ">^",
-        Lt        => "<",          "<",
-        Gt        => ">",          ">",
-        ColonColon => "::",        "::",
-        Colon      => ":",          ":",
+        GTCARET    => ">^",
+        LT        => "<",
+        GT        => ">",
+        COLONCOLON => "::",
+        COLON      => ":",
         // Psql meta-commands that can terminate a SQL statement in place of `;`.
         // Must be listed before plain BackSlash so longest-match-wins picks the
         // specific directive over the bare backslash.
-        PsqlCrosstabview => r"\\crosstabview\b", "\\crosstabview",
-        PsqlGexec  => r"\\gexec\b", "\\gexec",
-        PsqlGset   => r"\\gset\b",  "\\gset",
-        PsqlGx     => r"\\gx\b",    "\\gx",
-        PsqlG      => r"\\g\b",     "\\g",
+        PSQLCROSSTABVIEW => "\\crosstabview",
+        PSQLGEXEC  => "\\gexec",
+        PSQLGSET   => "\\gset",
+        PSQLGX     => "\\gx",
+        PSQLG      => "\\g",
         // `\;` — psql batch separator: ends a statement without ending the
         // line. Listed before bare `BackSlash`.
-        PsqlBatchSemi => r"\\;",   "\\;",
-        BackSlash  => r"\\",       "\\",
-        Plus       => r"\+",       "+",
+        PSQLBATCHSEMI => "\\;",
+        BACKSLASH  => "\\",
+        PLUS       => "+",
         // 3-char `-|-` before 2-char `->>`/`->` before single-char `-`.
-        MinusPipeMinus => r"-\|-", "-|-",
-        Minus      => "-",         "-",
+        MINUSPIPEMINUS => "-|-",
+        MINUS      => "-",
         // 3-char `|>>` and `|&>` before 2-char `||`.
-        PipeGtGt       => r"\|>>", "|>>",
-        PipeAmpGt      => r"\|&>", "|&>",
+        PIPEGTGT       => "|>>",
+        PIPEAMPGT      => "|&>",
         // Cube-root `||/` (prefix operator). Must come before `||`.
-        PipePipeSlash  => r"\|\|/", "||/",
-        Concat     => r"\|\|",     "||",
+        PIPEPIPESLASH  => "||/",
+        CONCAT     => "||",
         // Square-root `|/` (prefix operator). Must come after `||/`/`||`
         // and before bare `|`.
-        PipeSlash      => r"\|/",  "|/",
+        PIPESLASH      => "|/",
         // Single-char `|` (bitwise OR). Must be declared after `||` and
         // other `|`-prefixed operators so longest-match picks the longer form.
-        Pipe       => r"\|",       "|",
-        Slash      => "/",         "/",
-        Percent    => "%",         "%",
-        LBracket   => r"\[",       "[",
-        RBracket   => r"\]",       "]",
+        PIPE       => "|",
+        SLASH      => "/",
+        PERCENT    => "%",
+        LBRACKET   => "[",
+        RBRACKET   => "]",
         // JSON/JSONB operators. Longer before shorter (longest-match-wins).
-        HashArrowArrow => r"#>>",      "#>>",
-        HashArrow      => r"#>",       "#>",
+        HASHARROWARROW => "#>>",
+        HASHARROW      => "#>",
         // 2-char `##` (geometric closest-point / path intersection). After
         // `#>>` and `#>` but before single-char `#`.
-        HashHash       => "##",        "##",
+        HASHHASH       => "##",
         // jsonb delete-path operator `#-`. Must precede single-char `Pound`
         // so longest-match-wins picks the 2-char form. Without this entry the
         // classifier splits `#-` into `Pound` + `Minus`, which the formatter
         // then re-emits as `# -` — re-parsed by PostgreSQL as two operators.
-        HashMinus      => r"#-",       "#-",
+        HASHMINUS      => "#-",
         // Single-char `#` (bitwise XOR). Must come after all longer `#`-prefixed
         // tokens so longest-match-wins.
-        Pound          => r"\#",       "#",
-        ArrowArrow     => r"->>",      "->>",
-        Arrow          => r"->",       "->",
+        POUND          => "#",
+        ARROWARROW     => "->>",
+        ARROW          => "->",
         // 3-char `?||` and `?-|` before 2-char `?|`/`?-` (longest-match-wins).
-        QuestionPipePipe => r"\?\|\|",  "?||",
-        QuestionDashPipe => r"\?-\|",   "?-|",
-        QuestionPipe   => r"\?\|",     "?|",
-        QuestionAmp    => r"\?&",      "?&",
-        QuestionHash   => r"\?#",      "?#",
-        QuestionDash   => r"\?-",      "?-",
+        QUESTIONPIPEPIPE => "?||",
+        QUESTIONDASHPIPE => "?-|",
+        QUESTIONPIPE   => "?|",
+        QUESTIONAMP    => "?&",
+        QUESTIONHASH   => "?#",
+        QUESTIONDASH   => "?-",
         // `@@@` before 3-char `@-@`/`@#@`/`@+@` before `@@` before `@?` / `@>`.
-        AtAtAt         => r"@@@",      "@@@",
+        ATATAT         => "@@@",
         // User-defined / geometric 3-char `@`-prefixed operators.
-        AtMinusAt      => r"@-@",      "@-@",
-        AtHashAt       => r"@#@",      "@#@",
-        AtPlusAt       => r"@\+@",     "@+@",
-        AtAt           => r"@@",       "@@",
-        AtQuestion     => r"@\?",      "@?",
-        AtGt           => r"@>",       "@>",
+        ATMINUSAT      => "@-@",
+        ATHASHAT       => "@#@",
+        ATPLUSAT       => "@+@",
+        ATAT           => "@@",
+        ATQUESTION     => "@?",
+        ATGT           => "@>",
         // Single-char `@` (prefix absolute-value operator). Declared after
         // all longer `@`-prefixed operators so longest-match-wins.
-        At             => r"@",        "@",
-        LtAt           => r"<@",       "<@",
-        Question       => r"\?",       "?",
+        AT             => "@",
+        LTAT           => "<@",
+        QUESTION       => "?",
         // `&`-prefixed range/geometric operators. 3-char `&<|` before 2-char.
-        AmpLtPipe      => r"&<\|",     "&<|",
-        AmpAmp         => r"&&",       "&&",
-        AmpLt          => r"&<",       "&<",
-        AmpGt          => r"&>",       "&>",
+        AMPLTPIPE      => "&<|",
+        AMPAMP         => "&&",
+        AMPLT          => "&<",
+        AMPGT          => "&>",
         // Single-char `&` (bitwise AND). Must follow all longer `&`-prefixed
         // operators so longest-match-wins.
-        Amp            => r"&",        "&",
+        AMP            => "&",
         // Locale-aware text comparison operators. 4-char before 3-char,
         // all before POSIX regex `~*`/`!~*`/`!~`/`~=`/`~`.
-        TildeLeqTilde  => r"~<=~",     "~<=~",
-        TildeGeqTilde  => r"~>=~",     "~>=~",
-        TildeLtTilde   => r"~<~",      "~<~",
-        TildeGtTilde   => r"~>~",      "~>~",
+        TILDELEQTILDE  => "~<=~",
+        TILDEGEQTILDE  => "~>=~",
+        TILDELTTILDE   => "~<~",
+        TILDEGTTILDE   => "~>~",
         // LIKE/ILIKE family operators. PG uses `~~`/`!~~`/`~~*`/`!~~*` as
         // the implementation operators for LIKE/NOT LIKE/ILIKE/NOT ILIKE.
         // Longer forms must precede shorter forms (and precede the POSIX
         // `~*`/`!~*`/`~`/`!~` family) so longest-match wins.
-        BangTildeTildeStar => r"!~~\*", "!~~*",
-        TildeTildeStar => r"~~\*",     "~~*",
-        BangTildeTilde => r"!~~",      "!~~",
-        TildeTilde     => r"~~",       "~~",
+        BANGTILDETILDESTAR => "!~~*",
+        TILDETILDESTAR => "~~*",
+        BANGTILDETILDE => "!~~",
+        TILDETILDE     => "~~",
         // POSIX regex match operators. Longest-first.
-        BangTildeStar  => r"!~\*",     "!~*",
-        TildeStar      => r"~\*",      "~*",
-        BangTilde      => r"!~",       "!~",
+        BANGTILDESTAR  => "!~*",
+        TILDESTAR      => "~*",
+        BANGTILDE      => "!~",
         // Geometric "same as" operator. Must precede bare `~`.
-        TildeEq        => r"~=",       "~=",
-        Tilde          => r"~",        "~",
+        TILDEEQ        => "~=",
+        TILDE          => "~",
         // Text "starts-with" operator `^@`. Must precede single-char `Caret`
         // so longest-match-wins picks the 2-char form. Without this entry the
         // classifier splits `^@` into `Caret` + `At`, which the formatter then
         // re-emits as `^ @` — re-parsed by PostgreSQL as two operators.
-        CaretAt        => r"\^@",      "^@",
+        CARETAT        => "^@",
         // Exponentiation operator (Postgres).
-        Caret          => r"\^",       "^",
+        CARET          => "^",
     },
-    literals {
-        // `DollarStringLit` — PG dollar-quoted string (`$tag$ ... $tag$`,
-        // `$$ ... $$`). The `#[regex]` matches only the opening `$tag$`; the
-        // `scan_dollar_string` logos callback then scans for the matching
-        // close tag (a back-reference no regex DFA can express) and bumps the
-        // lexer past it.
-        //
-        // The tag follows unquoted-identifier rules — empty, or
-        // `[A-Za-z_][A-Za-z0-9_]*` — so it cannot start with a digit. `$1$`
-        // is therefore NOT a dollar-string opening; `$1` lexes as `DollarNum`
-        // (a positional parameter), matching PostgreSQL.
-        //
-        // `#[arbitrary(custom)]`: the `#[regex]` pattern is only the opening
-        // `$tag$`, so the auto-generated pattern-sampled `Arbitrary` would
-        // yield an unterminated string. A hand-written `Arbitrary` (see the
-        // `arbitrary_impls` module below) supplies a complete `$tag$…$tag$`.
-        #[railroad(label = "<$ String Literal>")]
-        #[arbitrary(custom)]
-        DollarStringLit => r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$" with crate::tokens::scan_dollar_string,
-        #[railroad(label = "<Unicode Quoter Identifier>")]
-        UnicodeQuotedIdent => r#"(?i:U)&"[^"]*(?:""[^"]*)*""#,
-        #[railroad(label = "<Quoted Identifier>")]
-        QuotedIdent => r#""[^"]*(?:""[^"]*)*""#,
-        #[railroad(label = "<Unicode String Literal>")]
-        UnicodeStringLit => r"(?i:U)&'(?:[^']|'')*'",
-        #[railroad(label = "<Escape String Literal>")]
-        EscapeStringLit => r"(?i:E)'(?:[^'\\]|\\.|'')*'",
-        // Bit-string and hex-string literals: `B'10'`, `X'1FF'`. Declared
-        // before `StringLit` so longest-match-wins picks the prefixed form
-        // when the `B`/`X` prefix is present — otherwise the lexer would
-        // consume the prefix as an identifier and the quoted body as an
-        // ordinary `StringLit`, which the formatter then separates with a
-        // space (`B '10'`). Bodies use `[^']*` (no `''`-escape) because
-        // Postgres bit/hex strings cannot contain quotes. Invalid body
-        // contents (non-`0`/`1` inside `B'…'`, non-hex inside `X'…'`) are a
-        // parse-time error in PG, not a lex-time one — mirror that and
-        // accept any non-quote body at the lexer level.
-        #[railroad(label = "<Bit String Literal>")]
-        BitStringLit => r"(?i:B)'[^']*'",
-        #[railroad(label = "<Hex String Literal>")]
-        HexStringLit => r"(?i:X)'[^']*'",
-        #[railroad(label = "<String Literal>")]
-        StringLit  => r"'[^']*(?:''[^']*)*'",
-        // NumericLit must require a decimal point OR an exponent so it does
-        // not collide with bare integers (handled by IntegerLit). Forms:
-        //   123.45    .5    123.    1e10    1.5e-5    .5e10
-        // Declared before IntegerLit so longest-match-wins picks the longer
-        // literal when an exponent is present. NumericLit doesn't recognise
-        // the `0x`/`0o`/`0b` prefixes at all, so a hex/octal/binary literal
-        // (caught by IntegerLit below) cannot match NumericLit — Postgres has
-        // no hex-float literal form. The longest-match-wins tiebreak only
-        // matters for the bare-decimal arm (e.g. `0.5` vs `0`); ordering
-        // IntegerLit's non-decimal arms first inside its own alternation is
-        // mostly defensive — the `0x`/`0o`/`0b` prefixes don't conflict with
-        // its decimal arm either.
-        // Digit groups allow `_` as a separator between digits (Postgres 16+).
-        // A digit group is `[0-9](?:_?[0-9])*` — starts with a digit, and
-        // every subsequent `_` must be followed by a digit.
-        //
-        // Trailing-junk rejection: mirror Postgres flex's "trailing junk
-        // after numeric literal" rejection. Without it, `1.5abc` permissively
-        // splits into `NumericLit("1.5")` + `Ident("abc")`, but PG raises a lex
-        // error for that input.
-        //
-        // logos has no `\b`/`\B`, so the old trailing-boundary anchors are
-        // replaced by the `reject_trailing_word` logos callback. The two arms
-        // the old regex distinguished — digit-terminated forms (old `\b`) and
-        // the bare trailing-dot form `1.` (old `\B` after `.`) — reject on
-        // exactly the same condition: the next char being a word char
-        // (`[A-Za-z0-9_]`). One callback covers both. A rejected literal makes
-        // `lex` emit a `TOKEN_KIND_NONE` span, the statement falls to `Raw`,
-        // and psql emits the canonical PG error matching the regress oracle.
-        // See regress_numerology's trailing-junk fixtures.
-        //
-        // NumericLit requires a decimal point OR exponent so it does not
-        // collide with bare integers; declared before IntegerLit so
-        // longest-match-wins picks the longer literal when an exponent is
-        // present. Digit groups allow `_` as a separator (Postgres 16+).
-        #[railroad(label = "<Numeric Literal>")]
-        NumericLit => r"(?:(?:[0-9](?:_?[0-9])*\.[0-9](?:_?[0-9])*|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\.)" with crate::tokens::reject_trailing_word,
-        // IntegerLit accepts decimal, hex (`0x…`/`0X…`), octal (`0o…`/`0O…`),
-        // and binary (`0b…`/`0B…`) forms with optional `_` digit separators
-        // (Postgres 16+). The non-decimal alternatives are listed first so
-        // longest-match-wins picks them over the bare-decimal alternative
-        // when the `0x`/`0o`/`0b` prefix is present. The `reject_trailing_word`
-        // callback supplies the old trailing `\b` semantics — see NumericLit.
-        #[railroad(label = "<Integer Literal>")]
-        IntegerLit => r"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)" with crate::tokens::reject_trailing_word,
-        // Positional parameter reference: `$1`, `$2`, … used in function
-        // bodies and prepared statements. Declared as a *capturing* literal
-        // (not punctuation) so the digits survive into the AST — a punctuation
-        // token is a unit struct with a fixed display string and would
-        // collapse every `$n` to a bare `$`. `\$[0-9]+` does not prefix-conflict
-        // with the hand-rolled `DollarStringLit` (`$tag$…`), whose tag is
-        // `[a-zA-Z_]*` and so cannot start with a digit.
-        //
-        // The `reject_trailing_word` callback rejects `$1a` / `$0_1` — a
-        // parameter immediately followed by an identifier character. PG's
-        // scanner flags this as "trailing junk after parameter", so without
-        // the callback pg-sql would over-permissively split `$1a` into
-        // `$1` + `a` and accept SQL that PG rejects (caught by the
-        // differential `numerology` corpus).
-        #[railroad(label = "<Positional Parameter>")]
-        DollarNum => r"\$[0-9]+" with crate::tokens::reject_trailing_word,
-        // psql client variable substitution: `:foo` or `:'foo'` or `:"foo"`.
-        // Treated as an opaque expression atom so SELECTs that reference
-        // psql-set variables parse structurally.
-        #[railroad(label = "<psql var>")]
-        PsqlVar => r#":(?:[A-Za-z_][A-Za-z0-9_]*|'[^']*'|"[^"]*")"#,
-    },
-    // Lexer-only tokens: each contributes a `TokenKind` variant + `#[regex]`
-    // so logos lexes it, but the `tokens!` macro generates NO struct / `Parse`
-    // / `FormatTokens` for them. Their token types are hand-written below
-    // because their `Parse` impl does more than a plain kind-check.
-    lexer_tokens {
-        // `/* ... */` block comment (PostgreSQL allows nesting). The
-        // `#[regex]` matches only the opening `/*`; the `skip_block_comment`
-        // callback scans the nested body and returns `Skip`, so no
-        // `BlockComment` token ever reaches the array — the variant exists
-        // only to host the `#[regex]` + callback.
-        //
-        // Declared FIRST in this block so it outranks `CustomOp`: `/*` matches
-        // both `BlockComment` (`/\*`, 2 chars) and `CustomOp`
-        // (`[-+*/...]{2,}`, 2 chars). logos breaks an equal-length tie by
-        // priority, and the `tokens!` macro assigns priorities descending in
-        // declaration order — so `BlockComment` must precede `CustomOp` to win.
-        BlockComment => r"/\*" with crate::tokens::skip_block_comment,
-        // The single lexical "word" kind. In a real lexer one span yields one
-        // token, so `UnquotedIdent`, `BareAliasName`, and reserved/soft
-        // keywords all share this lexical kind; the hand-written `Parse` impls
-        // below reclaim soft keywords / keywords per their acceptance rules.
-        //
-        // FUTURE: declare `accepts soft_keywords` here so the first-set
-        // walker can include soft-keyword kinds in the `Unquoted` variant's
-        // first set. The macro syntax landed (see preceding commits) but
-        // two pieces of build-time codegen still need to honour
-        // `accepts_kinds`:
-        //   1. `compute_first_sets` (firstset.rs) — currently treats
-        //      every `TypeKind::Token` as a single-kind leaf, so adding
-        //      an `accepts` clause today inserts only the `UnquotedIdent`
-        //      branch into `Ident`'s first-set tree and drops soft-keyword
-        //      reclamation (verified by 102 broken pg-sql tests).
-        //   2. `emit_pratt_enum_impl` (parse_emit.rs) — Pratt nud kind-
-        //      match doesn't yet expand per accepted kind, so `Expr`
-        //      falls through to its sequential atom path on soft-keyword
-        //      input (e.g. `sum(c)` where `sum` lexes as `UnquotedIdent`
-        //      — observed as 45 broken tests once (1) is addressed).
-        // See docs/plans/2026-05-26-codegen-kind-match-universal.md
-        // §"Phase 6 — accepts-clause infrastructure (deferred)".
-        UnquotedIdent => r"[A-Za-z_][A-Za-z0-9_]*",
-        // Multi-char user-defined operator. logos longest-match resolves
-        // single-char punct (`+` → `Plus`) vs multi-char (`++` → `CustomOp`).
-        //
-        // Encodes PostgreSQL's operator-boundary rule from `scan.l`: a
-        // multi-char operator that ends in `+` or `-` must contain at
-        // least one of the "qualifying" chars `~ ! @ # ^ & | ? %`,
-        // otherwise the trailing `+`/`-` is stripped. The classic case
-        // is `=-`: PG lexes it as `Eq` + `Minus`, not as a single
-        // 2-char Op. The two alternatives below encode that:
-        //
-        //   alt A: contains a qualifying char anywhere (length >= 2).
-        //   alt B: only non-qualifying op chars and doesn't end in `+`/`-`.
-        //
-        // Alt B uses `[-+*/<>=]+[*/<>=]` — the final char is constrained
-        // to `[*/<>=]`, so `=-`, `=+`, `<-`, `++`, `+-`, `-+`, `*+`,
-        // `/-` and friends do NOT match `CustomOp` and instead lex as
-        // their single-char tokens.
-        CustomOp => r"([-+*/<>=~!@#%^&|?]*[~!@#%^&|?][-+*/<>=~!@#%^&|?]*|[-+*/<>=]+[*/<>=])",
-    },
-    // `bare_label_keywords` = every keyword carrying the `bare_label` flag,
-    // regardless of category. Used by `BareColLabel` to admit any keyword
-    // PG would accept as a bare (no-`AS`) column label.
-    classes {
-        bare_label_keywords = keywords where bare_label,
+    matchers {
+        DollarStringLit => same_delimiter(opener = r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$"),
+        NumericLit => next_exclusion(pattern = r"(?:(?:[0-9](?:_?[0-9])*\.[0-9](?:_?[0-9])*|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\.)", excluded = r"[A-Za-z0-9_]"),
+        IntegerLit => next_exclusion(pattern = r"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)", excluded = r"[A-Za-z0-9_]"),
+        DollarNum => next_exclusion(pattern = r"\$[0-9]+", excluded = r"[A-Za-z0-9_]"),
+        CustomOp => operator_run(
+            characters = "-+*/<>=~!@#%^&|?",
+            fences = ["/*", "--"],
+            trailing = "+-",
+            qualifying = "~!@#%^&|?"
+        ),
     }
-    // Postgres identifier-position nonterminals. Each target generates a
-    // restricted-admit keyword enum (`<Name>Keyword`) plus an outer
-    // two-variant target enum (`<Name> = Ident | <Name>Keyword`). The
-    // categories admitted by each target mirror the unions in PG's
-    // `gram.y`:
-    //
-    //   ColId               = IDENT + U + C
-    //   type_function_name  = IDENT + U + T
-    //   NonReservedWord     = IDENT + U + C + T
-    //   ColLabel            = IDENT + U + C + T + R   (all four categories)
-    //   BareColLabel        = IDENT + keywords with bare_label set
-    //
-    // No AST site references these types yet — Phase 3 migrates pg-sql's
-    // existing `Ident` AST sites to the appropriate target.
-    targets {
-        ColId              : literal::Ident admits UNRESERVED, COL_NAME,
-        type_function_name : literal::Ident admits UNRESERVED, TYPE_FUNC_NAME,
-        NonReservedWord    : literal::Ident admits UNRESERVED, COL_NAME, TYPE_FUNC_NAME,
-        ColLabel           : literal::Ident admits UNRESERVED, COL_NAME, TYPE_FUNC_NAME, RESERVED,
-        BareColLabel       : literal::Ident admits bare_label_keywords,
+    ignore {
+        // Nested comments remain non-emitting until classified trivia lands in #93.
+        BlockComment => nested(opener = "/*", closer = "*/"),
+    }
+    admissions {
+        AllWordKinds = keywords,
+        ColId = UNRESERVED + COL_NAME,
+        type_function_name = UNRESERVED + TYPE_FUNC_NAME,
+        NonReservedWord = UNRESERVED + COL_NAME + TYPE_FUNC_NAME,
+        ColLabel = UNRESERVED + COL_NAME + TYPE_FUNC_NAME + RESERVED,
+        BareColLabel = bare_label,
+        WindowRefName = ColId - { ROWS, RANGE, GROUPS },
+        PsqlVariableName = AllWordKinds - { NULL, TRUE, FALSE },
+        UnquotedIdent = NonReservedWord,
+        BareAliasName = AllWordKinds,
     }
 }
 
-/// Lex `src` for the pg-sql grammar — wraps the macro-generated `lex` and
-/// post-processes a single ambiguity left over from the logos lex pass.
-///
-/// The `PsqlVar` regex `:(?:[A-Za-z_]\w*|'…'|"…")` greedily consumes
-/// `:KEYWORD` (e.g. `:NULL`, `:TRUE`) as a single psql-variable token,
-/// shadowing the legitimate SQL parse `':' <bool literal>` inside
-/// array-slice bounds. Gram.y permits any `a_expr` in slice bounds, so this
-/// pass splits any `PsqlVar` whose body is a SQL reserved keyword into a
-/// `Colon` + keyword pair before the parser sees the cursor.
-///
-/// Only the bare-ident form of `PsqlVar` is split; quoted forms
-/// (`:'name'` / `:"name"`) carry their own delimiters and are never SQL
-/// keywords.
-pub fn pg_lex(src: &str) -> ::recursa::LexResult {
-    let mut lexed = lex(src);
-    split_psql_var_keyword_tokens(src, &mut lexed.tokens);
-    split_bang_eq_minus_before_dash_comment(src, &mut lexed.tokens);
-    lexed
-}
 
-/// Compensate for the `!=` + `--` greedy lex when the source has `!=--`.
-///
-/// PG's scan.l, presented with `!=--`, lexes `!=` (BangEq) and then skips
-/// the `-- …` line comment. logos can't model that with longest-match
-/// alone — it greedily takes the 3-char `!=-` (BangEqMinus) or the 4-char
-/// `!=--` (CustomOp) and treats the second `-` as part of the operator
-/// rather than the start of a line comment.
-///
-/// This pass walks the records: when it sees a `BangEqMinus` whose byte
-/// after `end` is `-`, OR a `CustomOp` / `BangEqMinus`-kind record whose
-/// source text begins with `!=--`, it rewrites the record as `BangEq` (2
-/// bytes) and drops every subsequent token that falls inside the
-/// line-comment span up to (but not including) the next newline.
-fn split_bang_eq_minus_before_dash_comment(
-    src: &str,
-    tokens: &mut Vec<::recursa_core::TokenRecord>,
-) {
-    let bang_eq_minus_kind = TokenKind::BangEqMinus as u16;
-    let custom_op_kind = TokenKind::CustomOp as u16;
-    let bang_eq_kind = TokenKind::BangEq as u16;
-    let bytes = src.as_bytes();
-    let mut i = 0;
-    while i < tokens.len() {
-        let rec = tokens[i];
-        // Two greedy-match cases:
-        //
-        //  - `BangEqMinus` (`!=-`, 3 bytes) followed in source by another
-        //    `-` — the legitimate 3-char operator (e.g. `CREATE OPERATOR
-        //    !=-` or `SELECT 10 !=-`) is unaffected because the next byte
-        //    after `-` is whitespace / `;`, not another `-`.
-        //
-        //  - `CustomOp` whose text starts with `!=--` — logos's multi-char
-        //    operator catch-all happily consumes all four chars even
-        //    though the trailing `--` should have started a line comment.
-        let start = rec.start as usize;
-        let end = rec.end as usize;
-        let split_at_2 = if rec.kind == bang_eq_minus_kind {
-            bytes.get(end).copied() == Some(b'-')
-        } else if rec.kind == custom_op_kind {
-            let text = &bytes[start..end];
-            text.len() >= 4 && text.starts_with(b"!=--")
-        } else {
-            false
-        };
-        if !split_at_2 {
-            i += 1;
-            continue;
-        }
-        // Rewrite the operator record into a BangEq covering the first two bytes.
-        tokens[i] = ::recursa_core::TokenRecord {
-            kind: bang_eq_kind,
-            start: rec.start,
-            end: rec.start + 2,
-        };
-        // The `-- …` line comment runs from `start + 2` up to the next
-        // newline. Drop every token whose span lies inside that comment.
-        let comment_start = start + 2;
-        let comment_end = bytes[comment_start..]
-            .iter()
-            .position(|&b| b == b'\n')
-            .map(|j| comment_start + j)
-            .unwrap_or(bytes.len());
-        let mut j = i + 1;
-        while j < tokens.len() {
-            let r = tokens[j];
-            if (r.start as usize) >= comment_end {
-                break;
-            }
-            if (r.end as usize) <= comment_end {
-                tokens.remove(j);
-                continue;
-            }
-            j += 1;
-        }
-        i += 1;
-    }
-}
 
-fn split_psql_var_keyword_tokens(src: &str, tokens: &mut Vec<::recursa_core::TokenRecord>) {
-    let psql_var_kind = TokenKind::PsqlVar as u16;
-    let colon_kind = TokenKind::Colon as u16;
-    let mut i = 0;
-    while i < tokens.len() {
-        let rec = tokens[i];
-        if rec.kind != psql_var_kind {
-            i += 1;
-            continue;
-        }
-        let text = &src[rec.start as usize..rec.end as usize];
-        // Only the `:ident` form (no quote after the colon) can name a
-        // SQL keyword; `:'…'` and `:"…"` carry literal delimiters.
-        let body = match text.as_bytes().get(1) {
-            Some(&b) if b.is_ascii_alphabetic() || b == b'_' => &text[1..],
-            _ => {
-                i += 1;
-                continue;
-            }
-        };
-        let Some(body_kind) = psql_var_body_keyword_kind(body) else {
-            i += 1;
-            continue;
-        };
-        // Replace the single PsqlVar record with [Colon, keyword].
-        let colon = ::recursa_core::TokenRecord {
-            kind: colon_kind,
-            start: rec.start,
-            end: rec.start + 1,
-        };
-        let body_rec = ::recursa_core::TokenRecord {
-            kind: body_kind,
-            start: rec.start + 1,
-            end: rec.end,
-        };
-        tokens[i] = colon;
-        tokens.insert(i + 1, body_rec);
-        i += 2;
-    }
-}
 
-/// Reserved keywords that pg-sql refuses to lex as the body of a bare-ident
-/// `PsqlVar`. Returns the matching `TokenKind` discriminant so the lex
-/// post-processor can re-emit the body as the proper keyword token.
-fn psql_var_body_keyword_kind(body: &str) -> Option<u16> {
-    // Compare case-insensitively against the (small) reserved-keyword set
-    // that legitimately appears after `:` in slice-bound positions. Extend
-    // this list as the corpus surfaces more cases.
-    if body.eq_ignore_ascii_case("NULL") {
-        Some(TokenKind::NULL as u16)
-    } else if body.eq_ignore_ascii_case("TRUE") {
-        Some(TokenKind::TRUE as u16)
-    } else if body.eq_ignore_ascii_case("FALSE") {
-        Some(TokenKind::FALSE as u16)
-    } else {
-        None
-    }
-}
 
 /// Lex `src` and build an `Input` borrowing a `'static`-leaked `LexResult`.
 ///
@@ -1232,7 +829,7 @@ fn psql_var_body_keyword_kind(body: &str) -> Option<u16> {
 #[cfg(test)]
 pub fn test_input(src: &'static str) -> ::recursa::Input<'static> {
     let lexed: &'static ::recursa::LexResult =
-        ::std::boxed::Box::leak(::std::boxed::Box::new(pg_lex(src)));
+        ::std::boxed::Box::leak(::std::boxed::Box::new(lex(src)));
     ::recursa::Input::new(src, lexed)
 }
 
@@ -1701,17 +1298,18 @@ pub mod literal {
     pub use super::Literal;
     pub use super::{
         BitStringLit, DollarNum, DollarStringLit, EscapeStringLit, HexStringLit, IntegerLit,
-        NumericLit, PsqlVar, QuotedIdent, StringLit, UnicodeQuotedIdent, UnicodeStringLit,
+        NumericLit, QuotedIdent, StringLit, UnicodeQuotedIdent, UnicodeStringLit,
     };
 
     use recursa::{Input, ParseError};
     use recursa_core::Parse;
 
-    /// Recover the borrowed source text of the token under the cursor.
-    /// Returns `None` at end-of-input.
-    fn current_text<'input>(input: &Input<'input>) -> Option<&'input str> {
-        let rec = input.current_record()?;
-        Some(&input.source()[rec.start as usize..rec.end as usize])
+
+    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub struct PsqlVariable<'input> {
+        #[tok(COLON)]
+        #[lex(pattern = r#"(?:[A-Za-z_][A-Za-z0-9_]*|'[^']*'|"[^"]*")"#, admits(PsqlVariableName))]
+        pub name: PsqlVariableName<'input>,
     }
 
     /// Catch-all for Postgres user-defined operator names.
@@ -1728,41 +1326,11 @@ pub mod literal {
     /// kind-check impl below, but `CustomOp` shares the `lexer_tokens` block
     /// with `UnquotedIdent` (whose `Parse` genuinely cannot be generated).
     #[derive(Visit, Transform, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
     #[visit(terminal)]
     #[transform(terminal)]
     #[railroad(label = "<operator>")]
     pub struct CustomOp<'input>(pub ::std::borrow::Cow<'input, str>);
 
-    impl<'input> Parse<'input> for CustomOp<'input> {
-        type Prefix = ();
-
-        fn meta() -> &'static recursa_core::Meta {
-            static META: recursa_core::Meta = recursa_core::Meta {
-                name: "CustomOp",
-                tags: &[],
-            };
-            &META
-        }
-
-        fn peek(input: &mut Input<'input>) -> bool {
-            input.peek_kind(0) == Some(super::TokenKind::CustomOp as u16)
-        }
-
-        fn parse(input: &mut Input<'input>) -> Result<Self, ParseError> {
-            if input.peek_kind(0) == Some(super::TokenKind::CustomOp as u16) {
-                let text = current_text(input).expect("current_record present");
-                input.advance();
-                Ok(CustomOp(::std::borrow::Cow::Borrowed(text)))
-            } else {
-                Err(ParseError::new(
-                    input.source_arc(),
-                    input.byte_offset()..input.byte_offset(),
-                    "CustomOp",
-                ))
-            }
-        }
-    }
 
     impl<'input> recursa::FormatTokens for CustomOp<'input> {
         fn format_tokens(&self, tokens: &mut Vec<recursa::fmt::Token>) {
@@ -1910,18 +1478,6 @@ pub mod literal {
         }
     }
 
-    /// `true` if `kind` is a token kind that `UnquotedIdent` accepts: its own
-    /// `UnquotedIdent` lexical kind, or any *soft* (non-reserved) keyword.
-    ///
-    /// In the logos token model every lexed word produces exactly one
-    /// `TokenKind`: a reserved keyword (`SELECT`), a soft keyword (`FORMAT`),
-    /// or the catch-all `UnquotedIdent`. Soft keywords are reclaimable as
-    /// ordinary identifiers wherever the grammar does not specifically ask
-    /// for the keyword — preserving the old classifier-path behaviour exactly.
-    /// Reserved keywords and all non-word kinds are rejected.
-    fn unquoted_ident_kind_ok(kind: u16) -> bool {
-        kind == super::TokenKind::UnquotedIdent as u16 || token_kind_is_soft(kind)
-    }
 
     /// Unquoted SQL identifier: a lexed word that is not a reserved keyword.
     #[derive(Visit, Transform, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1939,35 +1495,6 @@ pub mod literal {
     // a predicate over other kinds", so the impl is written by hand. Filed
     // as a recursa limitation: a `literals`/`lexer_tokens` mode that accepts
     // a set of kinds, or a kind-predicate hook.
-    impl<'input> Parse<'input> for UnquotedIdent<'input> {
-        type Prefix = ();
-
-        fn meta() -> &'static recursa_core::Meta {
-            static META: recursa_core::Meta = recursa_core::Meta {
-                name: "unquoted_ident",
-                tags: &[],
-            };
-            &META
-        }
-
-        fn peek(input: &mut Input<'input>) -> bool {
-            input.peek_kind(0).is_some_and(unquoted_ident_kind_ok)
-        }
-
-        fn parse(input: &mut Input<'input>) -> Result<Self, ParseError> {
-            if input.peek_kind(0).is_some_and(unquoted_ident_kind_ok) {
-                let text = current_text(input).expect("current_record present");
-                input.advance();
-                Ok(UnquotedIdent(::std::borrow::Cow::Borrowed(text)))
-            } else {
-                Err(ParseError::new(
-                    input.source_arc(),
-                    input.byte_offset()..input.byte_offset(),
-                    "UnquotedIdent",
-                ))
-            }
-        }
-    }
 
     impl<'input> recursa::FormatTokens for UnquotedIdent<'input> {
         fn format_tokens(&self, tokens: &mut Vec<recursa::fmt::Token>) {
@@ -1986,19 +1513,17 @@ pub mod literal {
     // explicit-quoted). Running the postcondition here only added a
     // second round of the keyword scan per Ident parse (profile pre-fix
     // showed Ident::parse at 40% of total parse time on numeric_big).
-    #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
     #[derive(Visit, Transform, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    #[recursa::parser]
     #[visit(terminal)]
     #[transform(terminal)]
     #[railroad(label = "<Identifier>")]
     pub enum Ident<'input> {
         #[railroad(label = "<Unicode Quoted>")]
-        UnicodeQuoted(UnicodeQuotedIdent<'input>),
+        UnicodeQuoted(#[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*""#)] UnicodeQuotedIdent<'input>),
         #[railroad(label = "<Quoted>")]
-        Quoted(literal::QuotedIdent<'input>),
+        Quoted(#[lex(pattern = r#""[^"]*(?:""[^"]*)*""#)] literal::QuotedIdent<'input>),
         #[railroad(label = "<Unquoted>")]
-        Unquoted(UnquotedIdent<'input>),
+        Unquoted(#[lex(pattern = r"[A-Za-z_][A-Za-z0-9_]*", admits(UnquotedIdent))] UnquotedIdent<'input>),
     }
 
     impl<'input> recursa::FormatTokens for Ident<'input> {
@@ -2022,30 +1547,8 @@ pub mod literal {
         }
     }
 
-    /// Frame-unit keywords that must be rejected when parsing a window
-    /// `ref_name` so they are not silently consumed as an identifier and
-    /// leave the frame clause stranded.
-    const WINDOW_FRAME_UNIT_KEYWORDS: &[&str] = &["ROWS", "RANGE", "GROUPS"];
 
-    fn is_frame_unit(s: &str) -> bool {
-        WINDOW_FRAME_UNIT_KEYWORDS
-            .iter()
-            .any(|kw| kw.eq_ignore_ascii_case(s))
-    }
 
-    /// Postcondition: reject idents that are window frame-unit keywords.
-    fn not_frame_unit<'input>(ident: &Ident<'input>) -> Result<(), ParseError> {
-        if let Ident::Unquoted(u) = ident
-            && is_frame_unit(&u.0)
-        {
-            return Err(ParseError::new(
-                u.0.to_string(),
-                0..u.0.len(),
-                "identifier (not ROWS/RANGE/GROUPS)",
-            ));
-        }
-        Ok(())
-    }
 
     /// Identifier usable as a window `ref_name` (existing-window reference).
     /// Rejects `ROWS`/`RANGE`/`GROUPS` so the window frame clause after the
@@ -2054,22 +1557,14 @@ pub mod literal {
     /// Modeled as a single-variant enum so the derive macro threads the
     /// postcondition through peek+parse (tuple structs don't currently
     /// support `#[parse(postcondition = ...)]`).
-    #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
     #[derive(Visit, Transform, FormatTokens, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    #[recursa::parser(postcondition = crate::tokens::literal::not_frame_unit_wrapper)]
     #[visit(terminal)]
     #[transform(terminal)]
     #[railroad(label = "<Window Ref Name>")]
     pub enum WindowRefNameIdent<'input> {
-        Ident(Ident<'input>),
+        Ident(#[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#, admits(WindowRefName))] WindowRefNameText<'input>),
     }
 
-    pub(crate) fn not_frame_unit_wrapper<'input>(
-        wrapper: &WindowRefNameIdent<'input>,
-    ) -> Result<(), ParseError> {
-        let WindowRefNameIdent::Ident(id) = wrapper;
-        not_frame_unit(id)
-    }
 
     // --- Alias name (any SQL word — identifier or keyword) ---
 
@@ -2089,40 +1584,7 @@ pub mod literal {
     // the token's first source byte being `[A-Za-z_]`: keyword and
     // `UnquotedIdent` text always starts there; `QuotedIdent` (`"`),
     // `DollarStringLit` (`$`), `PsqlVar` (`:`), numbers and operators do not.
-    impl<'input> Parse<'input> for BareAliasName<'input> {
-        type Prefix = ();
 
-        fn meta() -> &'static recursa_core::Meta {
-            static META: recursa_core::Meta = recursa_core::Meta {
-                name: "bare_alias_name",
-                tags: &[],
-            };
-            &META
-        }
-
-        fn peek(input: &mut Input<'input>) -> bool {
-            current_text(input).is_some_and(starts_word)
-        }
-
-        fn parse(input: &mut Input<'input>) -> Result<Self, ParseError> {
-            match current_text(input) {
-                Some(text) if starts_word(text) => {
-                    input.advance();
-                    Ok(BareAliasName(::std::borrow::Cow::Borrowed(text)))
-                }
-                _ => Err(ParseError::new(
-                    input.source_arc(),
-                    input.byte_offset()..input.byte_offset(),
-                    "BareAliasName",
-                )),
-            }
-        }
-    }
-
-    /// `true` if `text`'s first byte is an SQL word-start char (`[A-Za-z_]`).
-    fn starts_word(text: &str) -> bool {
-        matches!(text.as_bytes().first(), Some(b) if b.is_ascii_alphabetic() || *b == b'_')
-    }
 
     impl<'input> recursa::FormatTokens for BareAliasName<'input> {
         fn format_tokens(&self, tokens: &mut Vec<recursa::fmt::Token>) {
@@ -2135,9 +1597,7 @@ pub mod literal {
     ///
     /// Variant ordering: `UnicodeQuoted` (`U&"`) first (longest prefix),
     /// then `Quoted` (`"`), then `Bare` (letter).
-    #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
     #[derive(Visit, Transform, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    #[recursa::parser]
     #[visit(terminal)]
     #[transform(terminal)]
     #[railroad(label = "<Alias Name>")]
@@ -2147,7 +1607,7 @@ pub mod literal {
         #[railroad(label = "<Quoted>")]
         Quoted(QuotedIdent<'input>),
         #[railroad(label = "<Bare>")]
-        Bare(BareAliasName<'input>),
+        Bare(#[lex(pattern = r"[A-Za-z_][A-Za-z0-9_]*", admits(BareAliasName))] BareAliasName<'input>),
     }
 
     impl<'input> AliasName<'input> {
@@ -2173,11 +1633,6 @@ pub mod literal {
 
     // --- Rest of line ---
 
-    /// Matches the remainder of text on the current line (up to newline or end of input).
-    #[derive(Visit, Transform, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    #[visit(terminal)]
-    #[transform(terminal)]
-    pub struct RestOfLine<'input>(pub ::std::borrow::Cow<'input, str>);
 
     // Hand-written `Parse` impl — a genuine recursa gap. `RestOfLine` matches
     // raw source up to the next newline, content that is not lexable SQL
@@ -2187,47 +1642,7 @@ pub mod literal {
     // the token cursor past every token whose span lies within that line.
     // Filed as a recursa limitation: raw-source-spanning tokens have no
     // first-class model in the token-array design.
-    impl<'input> Parse<'input> for RestOfLine<'input> {
-        type Prefix = ();
 
-        fn meta() -> &'static recursa_core::Meta {
-            static META: recursa_core::Meta = recursa_core::Meta {
-                name: "rest_of_line",
-                tags: &[],
-            };
-            &META
-        }
-
-        fn peek(_input: &mut Input<'input>) -> bool {
-            // `RestOfLine` matches `[^\n]*` — it always succeeds (possibly
-            // matching the empty string), so peek is unconditionally true.
-            true
-        }
-
-        fn parse(input: &mut Input<'input>) -> Result<Self, ParseError> {
-            let source = input.source();
-            let start = input.byte_offset();
-            // The line runs from the current byte offset to the next newline.
-            let rel_end = source[start..].find('\n').unwrap_or(source.len() - start);
-            let line_end = start + rel_end;
-            let text = &source[start..line_end];
-            // Advance the token cursor past every token starting before the
-            // newline — those tokens belong to this line's raw text.
-            while input
-                .current_record()
-                .is_some_and(|r| (r.start as usize) < line_end)
-            {
-                input.advance();
-            }
-            Ok(RestOfLine(::std::borrow::Cow::Borrowed(text)))
-        }
-    }
-
-    impl<'input> recursa::FormatTokens for RestOfLine<'input> {
-        fn format_tokens(&self, tokens: &mut Vec<recursa::fmt::Token>) {
-            tokens.push(recursa::fmt::Token::String(self.0.as_ref().to_string()));
-        }
-    }
 
     // -- Manual Arbitrary impls for literal types --
     //
@@ -2289,12 +1704,6 @@ pub mod literal {
             }
         }
 
-        impl<'a> Arbitrary<'a> for RestOfLine<'_> {
-            fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
-                let body = arb_safe_body(u, 20)?;
-                Ok(Self(Cow::Owned(body)))
-            }
-        }
 
         impl<'a> Arbitrary<'a> for DollarStringLit<'_> {
             fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
@@ -2326,49 +1735,65 @@ mod tests {
 
     #[test]
     fn keyword_select_uppercase() {
-        let mut input = crate::tokens::test_input("SELECT");
+        let lexed = crate::tokens::lex("SELECT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(SELECT::peek(&mut input));
     }
 
     #[test]
     fn keyword_select_lowercase() {
-        let mut input = crate::tokens::test_input("select");
+        let lexed = crate::tokens::lex("select");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(SELECT::peek(&mut input));
     }
 
     #[test]
     fn keyword_select_mixed_case() {
-        let mut input = crate::tokens::test_input("SeLeCt");
+        let lexed = crate::tokens::lex("SeLeCt");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(SELECT::peek(&mut input));
     }
 
     #[test]
     fn keyword_select_not_prefix_of_identifier() {
-        let mut input = crate::tokens::test_input("SELECTED");
+        let lexed = crate::tokens::lex("SELECTED");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(!SELECT::peek(&mut input));
     }
 
     #[test]
     fn keyword_bool_not_prefix_of_booleq() {
-        let mut input = crate::tokens::test_input("booleq");
+        let lexed = crate::tokens::lex("booleq");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(!BOOL::peek(&mut input));
     }
 
     #[test]
     fn keyword_bool_matches_standalone() {
-        let mut input = crate::tokens::test_input("bool");
+        let lexed = crate::tokens::lex("bool");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(BOOL::peek(&mut input));
     }
 
     #[test]
     fn keyword_boolean_matches() {
-        let mut input = crate::tokens::test_input("BOOLEAN");
+        let lexed = crate::tokens::lex("BOOLEAN");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(BOOLEAN::peek(&mut input));
     }
 
     #[test]
     fn keyword_not_matches() {
-        let mut input = crate::tokens::test_input("NOT");
+        let lexed = crate::tokens::lex("NOT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(NOT::peek(&mut input));
     }
 
@@ -2376,32 +1801,42 @@ mod tests {
 
     #[test]
     fn punctuation_semicolon() {
-        let mut input = crate::tokens::test_input(";");
-        let _ = Semi::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(";");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _ = Semi::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn punctuation_neq() {
-        let mut input = crate::tokens::test_input("<>");
+        let lexed = crate::tokens::lex("<>");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(Neq::peek(&mut input));
     }
 
     #[test]
     fn punctuation_colon_colon() {
-        let mut input = crate::tokens::test_input("::");
+        let lexed = crate::tokens::lex("::");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(ColonColon::peek(&mut input));
     }
 
     #[test]
     fn punctuation_lte() {
-        let mut input = crate::tokens::test_input("<=");
+        let lexed = crate::tokens::lex("<=");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(Lte::peek(&mut input));
     }
 
     #[test]
     fn punctuation_gte() {
-        let mut input = crate::tokens::test_input(">=");
+        let lexed = crate::tokens::lex(">=");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(Gte::peek(&mut input));
     }
 
@@ -2409,25 +1844,33 @@ mod tests {
 
     #[test]
     fn punctuation_tilde_leq_tilde() {
-        let mut input = crate::tokens::test_input("~<=~");
+        let lexed = crate::tokens::lex("~<=~");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(TildeLeqTilde::peek(&mut input));
     }
 
     #[test]
     fn punctuation_tilde_geq_tilde() {
-        let mut input = crate::tokens::test_input("~>=~");
+        let lexed = crate::tokens::lex("~>=~");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(TildeGeqTilde::peek(&mut input));
     }
 
     #[test]
     fn punctuation_tilde_lt_tilde() {
-        let mut input = crate::tokens::test_input("~<~");
+        let lexed = crate::tokens::lex("~<~");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(TildeLtTilde::peek(&mut input));
     }
 
     #[test]
     fn punctuation_tilde_gt_tilde() {
-        let mut input = crate::tokens::test_input("~>~");
+        let lexed = crate::tokens::lex("~>~");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(TildeGtTilde::peek(&mut input));
     }
 
@@ -2441,25 +1884,33 @@ mod tests {
 
     #[test]
     fn punctuation_tilde_tilde() {
-        let mut input = crate::tokens::test_input("~~");
+        let lexed = crate::tokens::lex("~~");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(TildeTilde::peek(&mut input));
     }
 
     #[test]
     fn punctuation_bang_tilde_tilde() {
-        let mut input = crate::tokens::test_input("!~~");
+        let lexed = crate::tokens::lex("!~~");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(BangTildeTilde::peek(&mut input));
     }
 
     #[test]
     fn punctuation_tilde_tilde_star() {
-        let mut input = crate::tokens::test_input("~~*");
+        let lexed = crate::tokens::lex("~~*");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(TildeTildeStar::peek(&mut input));
     }
 
     #[test]
     fn punctuation_bang_tilde_tilde_star() {
-        let mut input = crate::tokens::test_input("!~~*");
+        let lexed = crate::tokens::lex("!~~*");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(BangTildeTildeStar::peek(&mut input));
     }
 
@@ -2469,74 +1920,96 @@ mod tests {
     #[test]
     fn tilde_tilde_wins_over_tilde() {
         // `~~` should not be consumed as two `~` tokens.
-        let mut input = crate::tokens::test_input("~~");
-        let _tok = TildeTilde::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("~~");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _tok = TildeTilde::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn tilde_tilde_star_wins_over_tilde_star() {
         // `~~*` should not be consumed as `~` + `~*`.
-        let mut input = crate::tokens::test_input("~~*");
-        let _tok = TildeTildeStar::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("~~*");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _tok = TildeTildeStar::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn bang_tilde_tilde_wins_over_bang_tilde() {
         // `!~~` should not be consumed as `!~` + `~`.
-        let mut input = crate::tokens::test_input("!~~");
-        let _tok = BangTildeTilde::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("!~~");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _tok = BangTildeTilde::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn bang_tilde_tilde_star_wins_over_bang_tilde_star() {
         // `!~~*` should not be consumed as `!~` + `~*` or `!~~` + `*`.
-        let mut input = crate::tokens::test_input("!~~*");
-        let _tok = BangTildeTildeStar::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("!~~*");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _tok = BangTildeTildeStar::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn punctuation_triple_eq() {
-        let mut input = crate::tokens::test_input("===");
+        let lexed = crate::tokens::lex("===");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(TripleEq::peek(&mut input));
     }
 
     #[test]
     fn punctuation_bang_eq_eq() {
-        let mut input = crate::tokens::test_input("!==");
+        let lexed = crate::tokens::lex("!==");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(BangEqEq::peek(&mut input));
     }
 
     #[test]
     fn punctuation_hash_hash() {
-        let mut input = crate::tokens::test_input("##");
+        let lexed = crate::tokens::lex("##");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(HashHash::peek(&mut input));
     }
 
     #[test]
     fn punctuation_at_minus_at() {
-        let mut input = crate::tokens::test_input("@-@");
+        let lexed = crate::tokens::lex("@-@");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(AtMinusAt::peek(&mut input));
     }
 
     #[test]
     fn punctuation_at_hash_at() {
-        let mut input = crate::tokens::test_input("@#@");
+        let lexed = crate::tokens::lex("@#@");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(AtHashAt::peek(&mut input));
     }
 
     #[test]
     fn punctuation_at_plus_at() {
-        let mut input = crate::tokens::test_input("@+@");
+        let lexed = crate::tokens::lex("@+@");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(AtPlusAt::peek(&mut input));
     }
 
     #[test]
     fn punctuation_bang_eq_minus() {
-        let mut input = crate::tokens::test_input("!=-");
+        let lexed = crate::tokens::lex("!=-");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(BangEqMinus::peek(&mut input));
     }
 
@@ -2545,67 +2018,85 @@ mod tests {
     #[test]
     fn tilde_leq_tilde_wins_over_tilde() {
         // ~<=~ should not be consumed as ~ then <=~
-        let mut input = crate::tokens::test_input("~<=~");
-        let _tok = TildeLeqTilde::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("~<=~");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _tok = TildeLeqTilde::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn triple_eq_wins_over_eq() {
-        let mut input = crate::tokens::test_input("===");
-        let _tok = TripleEq::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("===");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _tok = TripleEq::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn bang_eq_eq_wins_over_bang_eq() {
-        let mut input = crate::tokens::test_input("!==");
-        let _tok = BangEqEq::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("!==");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _tok = BangEqEq::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn hash_hash_wins_over_pound() {
-        let mut input = crate::tokens::test_input("##");
-        let _tok = HashHash::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("##");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _tok = HashHash::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn at_minus_at_wins_over_at() {
-        let mut input = crate::tokens::test_input("@-@");
-        let _tok = AtMinusAt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("@-@");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _tok = AtMinusAt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     // --- String literal tests ---
 
     #[test]
     fn string_literal_simple() {
-        let mut input = crate::tokens::test_input("'hello world'");
-        let lit = StringLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'hello world'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = StringLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "'hello world'");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn string_literal_with_escaped_quote() {
-        let mut input = crate::tokens::test_input("'it''s'");
-        let lit = StringLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'it''s'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = StringLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "'it''s'");
     }
 
     #[test]
     fn string_literal_empty() {
-        let mut input = crate::tokens::test_input("''");
-        let lit = StringLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("''");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = StringLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "''");
     }
 
     #[test]
     fn string_literal_with_spaces() {
-        let mut input = crate::tokens::test_input("'   f           '");
-        let lit = StringLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'   f           '");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = StringLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "'   f           '");
     }
 
@@ -2613,15 +2104,19 @@ mod tests {
 
     #[test]
     fn integer_literal() {
-        let mut input = crate::tokens::test_input("42");
-        let lit = IntegerLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("42");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "42");
     }
 
     #[test]
     fn integer_literal_zero() {
-        let mut input = crate::tokens::test_input("0");
-        let lit = IntegerLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("0");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "0");
     }
 
@@ -2629,50 +2124,64 @@ mod tests {
 
     #[test]
     fn numeric_literal_simple_decimal() {
-        let mut input = crate::tokens::test_input("4.5");
-        let lit = NumericLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("4.5");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "4.5");
     }
 
     #[test]
     fn numeric_literal_leading_dot() {
-        let mut input = crate::tokens::test_input(".5");
-        let lit = NumericLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex(".5");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, ".5");
     }
 
     #[test]
     fn numeric_literal_exponent_int() {
-        let mut input = crate::tokens::test_input("2e3");
-        let lit = NumericLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("2e3");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "2e3");
     }
 
     #[test]
     fn numeric_literal_decimal_with_exponent() {
-        let mut input = crate::tokens::test_input("4.5e10");
-        let lit = NumericLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("4.5e10");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "4.5e10");
     }
 
     #[test]
     fn numeric_literal_negative_exponent() {
-        let mut input = crate::tokens::test_input("1.5e-5");
-        let lit = NumericLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("1.5e-5");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "1.5e-5");
     }
 
     #[test]
     fn numeric_literal_large_exponent() {
-        let mut input = crate::tokens::test_input("4.4e131071");
-        let lit = NumericLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("4.4e131071");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "4.4e131071");
     }
 
     #[test]
     fn integer_literal_with_underscores() {
-        let mut input = crate::tokens::test_input("100_000_000_000_000");
-        let lit = IntegerLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("100_000_000_000_000");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "100_000_000_000_000");
     }
 
@@ -2682,11 +2191,13 @@ mod tests {
     // closes.
     #[test]
     fn integer_literal_hex_lowercase_prefix() {
-        let mut input = crate::tokens::test_input("0x42F");
-        let lit = IntegerLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("0x42F");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "0x42F");
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -2694,11 +2205,13 @@ mod tests {
 
     #[test]
     fn integer_literal_hex_uppercase_prefix() {
-        let mut input = crate::tokens::test_input("0X1A2b");
-        let lit = IntegerLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("0X1A2b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "0X1A2b");
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -2706,11 +2219,13 @@ mod tests {
 
     #[test]
     fn integer_literal_hex_with_underscores() {
-        let mut input = crate::tokens::test_input("0xFF_FF");
-        let lit = IntegerLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("0xFF_FF");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "0xFF_FF");
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -2718,11 +2233,13 @@ mod tests {
 
     #[test]
     fn integer_literal_octal_prefix() {
-        let mut input = crate::tokens::test_input("0o273");
-        let lit = IntegerLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("0o273");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "0o273");
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -2730,11 +2247,13 @@ mod tests {
 
     #[test]
     fn integer_literal_binary_prefix() {
-        let mut input = crate::tokens::test_input("0b101");
-        let lit = IntegerLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("0b101");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "0b101");
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -2745,12 +2264,14 @@ mod tests {
     #[test]
     fn integer_literal_radix_prefix_leading_underscore() {
         for src in ["0b_10_0101", "0x_FF", "0o_7"] {
-            let mut input = crate::tokens::test_input(src);
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let lit =
-                IntegerLit::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                IntegerLit::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert_eq!(lit.0, src);
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -2797,8 +2318,10 @@ mod tests {
 
     #[test]
     fn numeric_literal_with_underscores() {
-        let mut input = crate::tokens::test_input("1_234.567_89");
-        let lit = NumericLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("1_234.567_89");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "1_234.567_89");
     }
 
@@ -2840,8 +2363,10 @@ mod tests {
     #[test]
     fn integer_literal_does_not_match_decimal() {
         // Bare integer still works
-        let mut input = crate::tokens::test_input("42");
-        let lit = IntegerLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("42");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "42");
     }
 
@@ -2997,11 +2522,13 @@ mod tests {
 
     #[test]
     fn bit_string_literal_uppercase_prefix() {
-        let mut input = crate::tokens::test_input("B'10'");
-        let lit = BitStringLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("B'10'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = BitStringLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "B'10'");
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -3009,11 +2536,13 @@ mod tests {
 
     #[test]
     fn bit_string_literal_lowercase_prefix() {
-        let mut input = crate::tokens::test_input("b'001'");
-        let lit = BitStringLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("b'001'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = BitStringLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "b'001'");
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -3021,11 +2550,13 @@ mod tests {
 
     #[test]
     fn bit_string_literal_empty() {
-        let mut input = crate::tokens::test_input("B''");
-        let lit = BitStringLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("B''");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = BitStringLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "B''");
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -3033,11 +2564,13 @@ mod tests {
 
     #[test]
     fn hex_string_literal_uppercase_prefix() {
-        let mut input = crate::tokens::test_input("X'1FF'");
-        let lit = HexStringLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("X'1FF'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = HexStringLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "X'1FF'");
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -3045,11 +2578,13 @@ mod tests {
 
     #[test]
     fn hex_string_literal_lowercase_prefix() {
-        let mut input = crate::tokens::test_input("x'42f'");
-        let lit = HexStringLit::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("x'42f'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = HexStringLit::parse(&mut input).unwrap().into_ast();
         assert_eq!(lit.0, "x'42f'");
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -3093,8 +2628,10 @@ mod tests {
         // Two distinct `$$ ... $$` strings around a `SELECT 1;` — the FIRST
         // must end at the first `$$`, not over-match to the last `$$`.
         let src = "$$ A $$ SELECT 1; $$ B $$";
-        let mut input = crate::tokens::test_input(src);
-        let first = DollarStringLit::parse(&mut input).expect("first $$...$$ must parse");
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let first = DollarStringLit::parse(&mut input).expect("first $$...$$ must parse").into_ast();
         assert_eq!(
             first.0.as_ref(),
             "$$ A $$",
@@ -3110,8 +2647,10 @@ mod tests {
         // `$foo$` close. This is the key "back-reference" behaviour that the
         // NFA-based regex can't express.
         let src = "$foo$ body $bar$ more $foo$";
-        let mut input = crate::tokens::test_input(src);
-        let lit = DollarStringLit::parse(&mut input).expect("named-tag dollar-string must parse");
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = DollarStringLit::parse(&mut input).expect("named-tag dollar-string must parse").into_ast();
         assert_eq!(
             lit.0.as_ref(),
             "$foo$ body $bar$ more $foo$",
@@ -3124,8 +2663,10 @@ mod tests {
         // Two separate `$foo$...$foo$` literals — the first must end at the
         // first matching `$foo$`, not over-match into the second.
         let src = "$foo$ A $foo$ X $foo$ B $foo$";
-        let mut input = crate::tokens::test_input(src);
-        let first = DollarStringLit::parse(&mut input).expect("first $foo$...$foo$ must parse");
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let first = DollarStringLit::parse(&mut input).expect("first $foo$...$foo$ must parse").into_ast();
         assert_eq!(
             first.0.as_ref(),
             "$foo$ A $foo$",
@@ -3141,9 +2682,11 @@ mod tests {
         // `MatchKind::All` over-matched, consuming both dollar-strings in one
         // 25-byte token.
         let src = "$$ A $$ SELECT 1; $$ B $$";
-        let mut input = crate::tokens::test_input(src);
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         let first =
-            DollarStringLit::parse(&mut input).expect("first $$...$$ must parse with classifier");
+            DollarStringLit::parse(&mut input).expect("first $$...$$ must parse with classifier").into_ast();
         assert_eq!(
             first.0.as_ref(),
             "$$ A $$",
@@ -3155,8 +2698,10 @@ mod tests {
     fn dollar_string_lit_empty_body() {
         // `$$$$` is an empty dollar-quoted string with empty tag.
         let src = "$$$$";
-        let mut input = crate::tokens::test_input(src);
-        let lit = DollarStringLit::parse(&mut input).expect("empty $$$$ must parse");
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let lit = DollarStringLit::parse(&mut input).expect("empty $$$$ must parse").into_ast();
         assert_eq!(lit.0.as_ref(), "$$$$");
     }
 
@@ -3166,13 +2711,17 @@ mod tests {
         // start with a digit. `$1$...$1$` is therefore NOT a dollar-quoted
         // string — `$1` is a positional parameter (`DollarNum`).
         let src = "$1$x$1$";
-        let mut input = crate::tokens::test_input(src);
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(
             DollarStringLit::parse(&mut input).is_err(),
             "$1$...$1$ must NOT parse as a dollar-string (tag cannot start with a digit)",
         );
-        let mut input = crate::tokens::test_input(src);
-        let num = DollarNum::parse(&mut input).expect("$1 must parse as DollarNum");
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let num = DollarNum::parse(&mut input).expect("$1 must parse as DollarNum").into_ast();
         assert_eq!(num.0.as_ref(), "$1");
     }
 
@@ -3190,11 +2739,13 @@ mod tests {
             "target", "source", "key", "name", "value", "data", "update", "insert", "type",
             "method", "owner", "action", "level", "off",
         ] {
-            let mut input = crate::tokens::test_input(word);
+            let lexed = crate::tokens::lex(word);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let id = super::literal::UnquotedIdent::parse(&mut input)
-                .unwrap_or_else(|e| panic!("soft keyword {word:?} should parse as ident: {e}"));
+                .unwrap_or_else(|e| panic!("soft keyword {word:?} should parse as ident: {e}")).into_ast();
             assert_eq!(id.0.as_ref(), word);
-            assert!(input.is_empty(), "leftover after {word:?}");
+            assert!(input.is_eof(), "leftover after {word:?}");
         }
     }
 
@@ -3205,7 +2756,9 @@ mod tests {
         // alias), `NULLS` (index opclass), `PARTITION` (window spec — the
         // only window keyword not guarded by `not_frame_unit`).
         for word in ["select", "from", "where", "set", "nulls", "partition"] {
-            let mut input = crate::tokens::test_input(word);
+            let lexed = crate::tokens::lex(word);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             assert!(
                 super::literal::UnquotedIdent::parse(&mut input).is_err(),
                 "reserved/clause keyword {word:?} must not parse as an identifier"
@@ -3226,40 +2779,52 @@ mod tests {
 
     #[test]
     fn identifier_simple() {
-        let mut input = crate::tokens::test_input("my_table");
-        let id = Ident::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("my_table");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = Ident::parse(&mut input).unwrap().into_ast();
         assert_eq!(id.text(), "my_table");
     }
 
     #[test]
     fn identifier_with_digits() {
-        let mut input = crate::tokens::test_input("f1");
-        let id = Ident::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = Ident::parse(&mut input).unwrap().into_ast();
         assert_eq!(id.text(), "f1");
     }
 
     #[test]
     fn identifier_uppercase() {
-        let mut input = crate::tokens::test_input("BOOLTBL1");
-        let id = Ident::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("BOOLTBL1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = Ident::parse(&mut input).unwrap().into_ast();
         assert_eq!(id.text(), "BOOLTBL1");
     }
 
     #[test]
     fn unquoted_rejects_keyword_select() {
-        let mut input = crate::tokens::test_input("SELECT");
+        let lexed = crate::tokens::lex("SELECT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(!UnquotedIdent::peek(&mut input));
     }
 
     #[test]
     fn unquoted_rejects_keyword_true() {
-        let mut input = crate::tokens::test_input("true");
+        let lexed = crate::tokens::lex("true");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(!UnquotedIdent::peek(&mut input));
     }
 
     #[test]
     fn unquoted_rejects_keyword_null() {
-        let mut input = crate::tokens::test_input("NULL");
+        let lexed = crate::tokens::lex("NULL");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(!UnquotedIdent::peek(&mut input));
     }
 
@@ -3267,9 +2832,13 @@ mod tests {
     fn ident_enum_rejects_keyword() {
         // Under the new Parse semantics, postcondition on enum wraps both peek and parse:
         // peek forks+runs parse, so peek returns false for a keyword input.
-        let mut input = crate::tokens::test_input("SELECT");
+        let lexed = crate::tokens::lex("SELECT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         assert!(!Ident::peek(&mut input));
-        let mut input2 = crate::tokens::test_input("SELECT");
+        let input2_lexed = crate::tokens::lex("SELECT");
+        assert_eq!(input2_lexed.errors().count(), 0, "lex errors in input2");
+        let mut input2 = input2_lexed.input();
         assert!(Ident::parse(&mut input2).is_err());
     }
 
@@ -3278,9 +2847,11 @@ mod tests {
         // ROWS is unreserved in PostgreSQL and must be usable as a plain
         // identifier (e.g. `FROM rows`, `SELECT range FROM t`).
         for w in ["rows", "ROWS", "range", "groups"] {
-            let mut input = crate::tokens::test_input(w);
+            let lexed = crate::tokens::lex(w);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let id =
-                Ident::parse(&mut input).unwrap_or_else(|_| panic!("{w} should parse as Ident"));
+                Ident::parse(&mut input).unwrap_or_else(|_| panic!("{w} should parse as Ident")).into_ast();
             assert_eq!(id.text(), w);
         }
     }
@@ -3290,7 +2861,9 @@ mod tests {
         // Window `ref_name` must reject ROWS/RANGE/GROUPS so the frame
         // clause after the (optional) ref_name still parses.
         for w in ["rows", "ROWS", "range", "RANGE", "groups", "GROUPS"] {
-            let mut input = crate::tokens::test_input(w);
+            let lexed = crate::tokens::lex(w);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             assert!(
                 !WindowRefNameIdent::peek(&mut input),
                 "{w} must not peek as a window ref_name"
@@ -3300,59 +2873,75 @@ mod tests {
 
     #[test]
     fn window_ref_name_accepts_plain_ident() {
-        let mut input = crate::tokens::test_input("w1");
-        let id = WindowRefNameIdent::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("w1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = WindowRefNameIdent::parse(&mut input).unwrap().into_ast();
         let WindowRefNameIdent::Ident(inner) = &id;
         assert_eq!(inner.text(), "w1");
     }
 
     #[test]
     fn ident_enum_parses_quoted() {
-        let mut input = crate::tokens::test_input("\"SELECT\"");
-        let id = Ident::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("\"SELECT\"");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = Ident::parse(&mut input).unwrap().into_ast();
         assert_eq!(id.text(), "\"SELECT\"");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn identifier_accepts_keyword_prefix() {
-        let mut input = crate::tokens::test_input("isfalse");
-        let id = Ident::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("isfalse");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = Ident::parse(&mut input).unwrap().into_ast();
         assert_eq!(id.text(), "isfalse");
     }
 
     #[test]
     fn identifier_accepts_booleq() {
-        let mut input = crate::tokens::test_input("booleq");
-        let id = Ident::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("booleq");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = Ident::parse(&mut input).unwrap().into_ast();
         assert_eq!(id.text(), "booleq");
     }
 
     #[test]
     fn identifier_accepts_boolne() {
-        let mut input = crate::tokens::test_input("boolne");
-        let id = Ident::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("boolne");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = Ident::parse(&mut input).unwrap().into_ast();
         assert_eq!(id.text(), "boolne");
     }
 
     #[test]
     fn identifier_accepts_isnul() {
-        let mut input = crate::tokens::test_input("isnul");
-        let id = Ident::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("isnul");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = Ident::parse(&mut input).unwrap().into_ast();
         assert_eq!(id.text(), "isnul");
     }
 
     #[test]
     fn identifier_accepts_istrue() {
-        let mut input = crate::tokens::test_input("istrue");
-        let id = Ident::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("istrue");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = Ident::parse(&mut input).unwrap().into_ast();
         assert_eq!(id.text(), "istrue");
     }
 
     #[test]
     fn identifier_accepts_pg_input_is_valid() {
-        let mut input = crate::tokens::test_input("pg_input_is_valid");
-        let id = Ident::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("pg_input_is_valid");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let id = Ident::parse(&mut input).unwrap().into_ast();
         assert_eq!(id.text(), "pg_input_is_valid");
     }
 }
@@ -3364,7 +2953,9 @@ mod ident_enum_tests {
 
     #[test]
     fn ident_peek_rejects_from_keyword() {
-        let mut input = crate::tokens::test_input("FROM");
+        let lexed = crate::tokens::lex("FROM");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         eprintln!("Ident::peek(FROM) = {}", Ident::peek(&mut input));
         assert!(
             !Ident::peek(&mut input),

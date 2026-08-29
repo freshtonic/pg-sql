@@ -1,8 +1,6 @@
 /// Name-shaped AST primitives: qualified names, role names, type names,
 /// operator names, and the rename/owner/schema action clauses that bundle them.
 use recursa::seq::Seq1;
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::tokens::keyword::*;
@@ -10,12 +8,10 @@ use crate::tokens::{literal, punct};
 
 /// A comma-separated list of qualified (dotted) names — Postgres'
 /// `any_name_list` / `name_list` in DROP-family statements.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
 pub struct NameList<'input> {
-    pub names: Seq1<QualifiedName<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub names: recursa::Vec1<QualifiedName<'input> >,
 }
 
 impl<'input> NameList<'input> {
@@ -37,21 +33,17 @@ impl<'input> NameList<'input> {
 /// pseudo-roles `CURRENT_ROLE` / `CURRENT_USER` / `SESSION_USER` are not yet
 /// modelled — when a corpus statement needs one, add reserved-keyword tokens
 /// and extend this enum to a tuple variant per form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
 pub struct RoleSpec<'input> {
+    #[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#, admits(NonReservedWord))]
     pub name: crate::tokens::NonReservedWord<'input>,
 }
 
 /// A comma-separated list of roles — Postgres' `role_list`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
 pub struct RoleList<'input> {
-    pub roles: Seq1<RoleSpec<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub roles: recursa::Vec1<RoleSpec<'input> >,
 }
 
 impl<'input> RoleList<'input> {
@@ -81,12 +73,10 @@ pub use crate::ast::shared::expr::TypeName;
 /// (`int[]`, `text[]`) survives. PG's `type_name_list` is built from
 /// `Typename`, which includes the `[]`/`[N]` array suffix(es) — the bare
 /// `TypeName` enum in pg-sql models only `SimpleTypename`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, PartialEq, Eq, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
 pub struct TypeNameList<'input> {
-    pub types: Seq1<crate::ast::shared::expr::CastType<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub types: recursa::Vec1<crate::ast::shared::expr::CastType<'input> >,
 }
 
 /// The `(...)` argument signature on `DROP AGGREGATE name(...)`.
@@ -94,20 +84,19 @@ pub struct TypeNameList<'input> {
 /// The corpus only exercises `(*)` (zero-argument aggregate) and a plain
 /// comma-separated type list. The ordered-set `(... ORDER BY ...)` forms and
 /// named/moded `aggr_arg`s are not used by any DROP corpus statement.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, PartialEq, Eq, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
 pub enum AggregateArgs<'input> {
-    /// `(*)` — the zero-argument aggregate (spelled like `COUNT(*)`).
-    Star(recursa::surrounded::Surrounded<punct::LParen, punct::Star, punct::RParen>),
+    #[tok(LPAREN, STAR, RPAREN)] /// `(*)` — the zero-argument aggregate (spelled like `COUNT(*)`).
+    Star,
     /// `(type, ...)` — explicit argument type list.
     Types(
-        recursa::surrounded::Surrounded<
-            punct::LParen,
-            Seq1<TypeName<'input>, punct::Comma>,
-            punct::RParen,
-        >,
+        #[tok(LPAREN, this, RPAREN)]
+        #[sep(COMMA)]
+        recursa::surrounded::
+
+            recursa::Vec1<TypeName<'input> >
+
+        ,
     ),
 }
 
@@ -117,12 +106,10 @@ pub enum AggregateArgs<'input> {
 /// Must NOT collide with `Expr::QualRef` at the Pratt level because
 /// `QualifiedName` is only used in non-expression positions (FROM targets,
 /// DROP targets, ALTER targets, etc.).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
 pub struct QualifiedName<'input> {
-    pub parts: Seq1<literal::Ident<'input>, punct::Dot>,
+    #[sep(DOT)]
+    pub parts: recursa::Vec1<literal::Ident<'input> >,
 }
 
 impl<'input> QualifiedName<'input> {
@@ -143,12 +130,9 @@ impl<'input> QualifiedName<'input> {
 ///
 /// Variant ordering: keyword variants first so their `SET(`/`SET ` form
 /// is matched before the generic `Name(QualifiedName)` fallback.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FuncDefName<'input> {
-    Set(SET),
+    #[tok(SET)] Set,
     Name(QualifiedName<'input>),
 }
 
@@ -166,13 +150,9 @@ impl<'input> FuncDefName<'input> {
 /// statements. Postgres routes most of these through `RenameStmt`, but
 /// pg-sql's dispatcher commits on the leading `ALTER objtype ...`
 /// keywords, so each `Alter*Stmt` re-models its own rename branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RenameTo<'input> {
-    pub rename: RENAME,
-    pub to: TO,
+    #[tok(RENAME, TO, this)]
     pub new_name: literal::Ident<'input>,
 }
 
@@ -180,13 +160,9 @@ pub struct RenameTo<'input> {
 /// statements. Postgres routes most of these through `AlterOwnerStmt`,
 /// but pg-sql's dispatcher commits on the leading `ALTER objtype ...`
 /// keywords, so each `Alter*Stmt` re-models its own owner branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OwnerTo<'input> {
-    pub owner: OWNER,
-    pub to: TO,
+    #[tok(OWNER, TO, this)]
     pub new_owner: RoleSpec<'input>,
 }
 
@@ -195,13 +171,9 @@ pub struct OwnerTo<'input> {
 /// Postgres routes most of these through `AlterObjectSchemaStmt`, but
 /// pg-sql's dispatcher commits on the leading `ALTER objtype ...`
 /// keywords, so each `Alter*Stmt` re-models its own set-schema branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetSchemaClause<'input> {
-    pub set: SET,
-    pub schema: SCHEMA,
+    #[tok(SET, SCHEMA, this)]
     pub new_schema: literal::Ident<'input>,
 }
 
@@ -225,96 +197,93 @@ pub struct SetSchemaClause<'input> {
 /// an operator name, and excluding it lets the few corpus `CREATE OPERATOR
 /// =>` lines surface as [`crate::ast::FileItem::ParseError`], matching
 /// PG's rejection on both sides of the differential oracle.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum OperatorName<'input> {
     // Multi-char tokens whose spelling is purely operator chars. Each is
     // a single logos token kind so their peek regexes are disjoint.
-    StarLte(punct::StarLte),
-    StarGte(punct::StarGte),
-    StarNeq(punct::StarNeq),
-    StarLt(punct::StarLt),
-    StarGt(punct::StarGt),
-    StarEq(punct::StarEq),
-    TripleEq(punct::TripleEq),
-    BangEqEq(punct::BangEqEq),
-    BangEqMinus(punct::BangEqMinus),
-    BangEq(punct::BangEq),
-    LtLtLt(punct::LtLtLt),
-    LtLtEq(punct::LtLtEq),
-    LtLtPipe(punct::LtLtPipe),
-    LtMinusGt(punct::LtMinusGt),
-    LtLt(punct::LtLt),
-    LtCaret(punct::LtCaret),
-    LtAt(punct::LtAt),
-    GtGtGt(punct::GtGtGt),
-    GtGtEq(punct::GtGtEq),
-    GtGt(punct::GtGt),
-    GtCaret(punct::GtCaret),
-    HashArrowArrow(punct::HashArrowArrow),
-    HashArrow(punct::HashArrow),
-    HashHash(punct::HashHash),
-    HashMinus(punct::HashMinus),
-    ArrowArrow(punct::ArrowArrow),
-    Arrow(punct::Arrow),
-    MinusPipeMinus(punct::MinusPipeMinus),
-    PipeGtGt(punct::PipeGtGt),
-    PipeAmpGt(punct::PipeAmpGt),
-    PipePipeSlash(punct::PipePipeSlash),
-    Concat(punct::Concat),
-    PipeSlash(punct::PipeSlash),
-    QuestionPipePipe(punct::QuestionPipePipe),
-    QuestionDashPipe(punct::QuestionDashPipe),
-    QuestionPipe(punct::QuestionPipe),
-    QuestionAmp(punct::QuestionAmp),
-    QuestionHash(punct::QuestionHash),
-    QuestionDash(punct::QuestionDash),
-    AtAtAt(punct::AtAtAt),
-    AtMinusAt(punct::AtMinusAt),
-    AtHashAt(punct::AtHashAt),
-    AtPlusAt(punct::AtPlusAt),
-    AtAt(punct::AtAt),
-    AtQuestion(punct::AtQuestion),
-    AtGt(punct::AtGt),
-    AmpLtPipe(punct::AmpLtPipe),
-    AmpAmp(punct::AmpAmp),
-    AmpLt(punct::AmpLt),
-    AmpGt(punct::AmpGt),
-    TildeLeqTilde(punct::TildeLeqTilde),
-    TildeGeqTilde(punct::TildeGeqTilde),
-    TildeLtTilde(punct::TildeLtTilde),
-    TildeGtTilde(punct::TildeGtTilde),
-    BangTildeTildeStar(punct::BangTildeTildeStar),
-    TildeTildeStar(punct::TildeTildeStar),
-    BangTildeTilde(punct::BangTildeTilde),
-    TildeTilde(punct::TildeTilde),
-    BangTildeStar(punct::BangTildeStar),
-    TildeStar(punct::TildeStar),
-    BangTilde(punct::BangTilde),
-    TildeEq(punct::TildeEq),
-    CaretAt(punct::CaretAt),
+    #[tok(STARLTE)] StarLte,
+    #[tok(STARGTE)] StarGte,
+    #[tok(STARNEQ)] StarNeq,
+    #[tok(STARLT)] StarLt,
+    #[tok(STARGT)] StarGt,
+    #[tok(STAREQ)] StarEq,
+    #[tok(TRIPLEEQ)] TripleEq,
+    #[tok(BANGEQEQ)] BangEqEq,
+    #[tok(BANGEQMINUS)] BangEqMinus,
+    #[tok(BANGEQ)] BangEq,
+    #[tok(LTLTLT)] LtLtLt,
+    #[tok(LTLTEQ)] LtLtEq,
+    #[tok(LTLTPIPE)] LtLtPipe,
+    #[tok(LTMINUSGT)] LtMinusGt,
+    #[tok(LTLT)] LtLt,
+    #[tok(LTCARET)] LtCaret,
+    #[tok(LTAT)] LtAt,
+    #[tok(GTGTGT)] GtGtGt,
+    #[tok(GTGTEQ)] GtGtEq,
+    #[tok(GTGT)] GtGt,
+    #[tok(GTCARET)] GtCaret,
+    #[tok(HASHARROWARROW)] HashArrowArrow,
+    #[tok(HASHARROW)] HashArrow,
+    #[tok(HASHHASH)] HashHash,
+    #[tok(HASHMINUS)] HashMinus,
+    #[tok(ARROWARROW)] ArrowArrow,
+    #[tok(ARROW)] Arrow,
+    #[tok(MINUSPIPEMINUS)] MinusPipeMinus,
+    #[tok(PIPEGTGT)] PipeGtGt,
+    #[tok(PIPEAMPGT)] PipeAmpGt,
+    #[tok(PIPEPIPESLASH)] PipePipeSlash,
+    #[tok(CONCAT)] Concat,
+    #[tok(PIPESLASH)] PipeSlash,
+    #[tok(QUESTIONPIPEPIPE)] QuestionPipePipe,
+    #[tok(QUESTIONDASHPIPE)] QuestionDashPipe,
+    #[tok(QUESTIONPIPE)] QuestionPipe,
+    #[tok(QUESTIONAMP)] QuestionAmp,
+    #[tok(QUESTIONHASH)] QuestionHash,
+    #[tok(QUESTIONDASH)] QuestionDash,
+    #[tok(ATATAT)] AtAtAt,
+    #[tok(ATMINUSAT)] AtMinusAt,
+    #[tok(ATHASHAT)] AtHashAt,
+    #[tok(ATPLUSAT)] AtPlusAt,
+    #[tok(ATAT)] AtAt,
+    #[tok(ATQUESTION)] AtQuestion,
+    #[tok(ATGT)] AtGt,
+    #[tok(AMPLTPIPE)] AmpLtPipe,
+    #[tok(AMPAMP)] AmpAmp,
+    #[tok(AMPLT)] AmpLt,
+    #[tok(AMPGT)] AmpGt,
+    #[tok(TILDELEQTILDE)] TildeLeqTilde,
+    #[tok(TILDEGEQTILDE)] TildeGeqTilde,
+    #[tok(TILDELTTILDE)] TildeLtTilde,
+    #[tok(TILDEGTTILDE)] TildeGtTilde,
+    #[tok(BANGTILDETILDESTAR)] BangTildeTildeStar,
+    #[tok(TILDETILDESTAR)] TildeTildeStar,
+    #[tok(BANGTILDETILDE)] BangTildeTilde,
+    #[tok(TILDETILDE)] TildeTilde,
+    #[tok(BANGTILDESTAR)] BangTildeStar,
+    #[tok(TILDESTAR)] TildeStar,
+    #[tok(BANGTILDE)] BangTilde,
+    #[tok(TILDEEQ)] TildeEq,
+    #[tok(CARETAT)] CaretAt,
     // Single-char punct tokens (the `MathOp` set plus the bare operator
     // characters PG treats as operator chars).
-    Lte(punct::Lte),
-    Gte(punct::Gte),
-    Neq(punct::Neq),
-    Plus(punct::Plus),
-    Minus(punct::Minus),
-    Star(punct::Star),
-    Slash(punct::Slash),
-    Percent(punct::Percent),
-    Caret(punct::Caret),
-    Lt(punct::Lt),
-    Gt(punct::Gt),
-    Eq(punct::Eq),
-    Tilde(punct::Tilde),
-    At(punct::At),
-    Pound(punct::Pound),
-    Amp(punct::Amp),
-    Pipe(punct::Pipe),
-    Question(punct::Question),
+    #[tok(LTE)] Lte,
+    #[tok(GTE)] Gte,
+    #[tok(NEQ)] Neq,
+    #[tok(PLUS)] Plus,
+    #[tok(MINUS)] Minus,
+    #[tok(STAR)] Star,
+    #[tok(SLASH)] Slash,
+    #[tok(PERCENT)] Percent,
+    #[tok(CARET)] Caret,
+    #[tok(LT)] Lt,
+    #[tok(GT)] Gt,
+    #[tok(EQ)] Eq,
+    #[tok(TILDE)] Tilde,
+    #[tok(AT)] At,
+    #[tok(POUND)] Pound,
+    #[tok(AMP)] Amp,
+    #[tok(PIPE)] Pipe,
+    #[tok(QUESTION)] Question,
     // Multi-char catch-all. Listed last because each of the specific punct
     // tokens above wins at the lexer level (logos longest-match-wins with
     // declaration order tiebreaker); only operator names that don't match
@@ -332,10 +301,7 @@ pub enum OperatorName<'input> {
 /// Variant ordering: `Qualified` starts with `Ident`, `Plain` starts with a
 /// punct/operator token. Their first sets are disjoint, so order is for
 /// clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum QualifiedOperatorName<'input> {
     /// `[schema.]op` — at least one `Ident.` segment followed by an
     /// `OperatorName`.
@@ -346,10 +312,7 @@ pub enum QualifiedOperatorName<'input> {
 
 /// A schema-qualified operator name: one or more `Ident.` segments followed
 /// by an `OperatorName`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct QualifiedOperatorPath<'input> {
     pub first: QualifiedOperatorPrefix<'input>,
     pub rest: Vec<QualifiedOperatorPrefix<'input>>,
@@ -357,13 +320,10 @@ pub struct QualifiedOperatorPath<'input> {
 }
 
 /// One `Ident.` segment of a qualified operator name's schema prefix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct QualifiedOperatorPrefix<'input> {
+    #[tok(this, DOT)]
     pub name: literal::Ident<'input>,
-    pub dot: punct::Dot,
 }
 
 /// `(left, right)` argument-type signature on `operator_with_argtypes` —
@@ -383,51 +343,37 @@ pub struct QualifiedOperatorPrefix<'input> {
 /// slot is `NONE`. We list `LeftUnary` (begins with `NONE`) before the
 /// binary forms so its leading `NONE` is unambiguous; the binary case must
 /// then commit on a `Typename` in the first slot.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum OperatorArgtypes<'input> {
     /// `(NONE, Typename)` — left-unary (prefix) operator signature.
-    LeftUnary(Surrounded<punct::LParen, OperatorArgtypesLeftUnary<'input>, punct::RParen>),
+    LeftUnary(#[tok(LPAREN, this, RPAREN)]  OperatorArgtypesLeftUnary<'input> ),
     /// `(Typename, NONE)` — right-unary (postfix) operator. PostgreSQL no
     /// longer supports postfix operators at runtime, but the grammar still
     /// accepts the spelling; we round-trip it.
-    RightUnary(Surrounded<punct::LParen, OperatorArgtypesRightUnary<'input>, punct::RParen>),
+    RightUnary(#[tok(LPAREN, this, RPAREN)]  OperatorArgtypesRightUnary<'input> ),
     /// `(Typename, Typename)` — binary operator signature.
-    Binary(Surrounded<punct::LParen, OperatorArgtypesBinary<'input>, punct::RParen>),
+    Binary(#[tok(LPAREN, this, RPAREN)]  OperatorArgtypesBinary<'input> ),
 }
 
 /// Inner content of `(NONE, Typename)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OperatorArgtypesLeftUnary<'input> {
-    pub left: NONE,
-    pub comma: punct::Comma,
+    #[tok(NONE, COMMA, this)]
     pub right: TypeName<'input>,
 }
 
 /// Inner content of `(Typename, NONE)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OperatorArgtypesRightUnary<'input> {
+    #[tok(this, COMMA, NONE)]
     pub left: TypeName<'input>,
-    pub comma: punct::Comma,
-    pub right: NONE,
 }
 
 /// Inner content of `(Typename, Typename)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OperatorArgtypesBinary<'input> {
     pub left: TypeName<'input>,
-    pub comma: punct::Comma,
+    #[tok(COMMA, this)]
     pub right: TypeName<'input>,
 }
 
@@ -435,10 +381,7 @@ pub struct OperatorArgtypesBinary<'input> {
 /// full reference to a specific operator (including overload signature)
 /// used by `DROP OPERATOR`, `ALTER OPERATOR`, `COMMENT ON OPERATOR`,
 /// `SECURITY LABEL ON OPERATOR`, etc.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OperatorWithArgtypes<'input> {
     pub name: QualifiedOperatorName<'input>,
     pub args: OperatorArgtypes<'input>,

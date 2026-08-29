@@ -1,7 +1,9 @@
 //! Auditable tooling for the reproducible PostgreSQL grammar migration.
 
 pub mod baseline;
+pub mod execution;
 pub mod grammar_rewrite;
+pub mod migration_contract;
 pub mod rewrite;
 pub mod test_call_rewrite;
 
@@ -825,6 +827,11 @@ impl<'a> Scan<'a> {
                 "generation-drift",
                 "legacy workspace codegen checks",
                 "current Recursa owns matching-version generation in OUT_DIR",
+            ),
+            exclusion(
+                "obsolete-file-cli",
+                "src/main.rs",
+                "the legacy CLI constructs the retired FileItem recovery AST and is replaced only after strict document APIs land",
             ),
             exclusion(
                 "depth-and-flame-tools",

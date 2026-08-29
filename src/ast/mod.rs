@@ -13,13 +13,8 @@ pub mod utility;
 #[cfg(test)]
 pub(crate) mod test_support;
 
-pub use self::file::{
-    FileItem, PsqlCommand, PsqlDirective, PsqlTerminator, StatementTerminator, TerminatedStatement,
-    is_copy_data_terminator, is_psql_conditional_close, is_psql_conditional_midbranch,
-    is_psql_conditional_open, is_psql_quit, parse_sql_file, parse_sql_file_with_spans,
-};
+pub use self::file::{PsqlTerminator, StatementTerminator, TerminatedStatement};
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 // The `Statement` enum references ~170 *Stmt types defined across every
@@ -106,10 +101,7 @@ use self::{
 /// - `Values` (CompoundQuery) starts with VALUES/TABLE/SELECT so it could
 ///   conflict. It must come after Explain but before bare Select to handle
 ///   `VALUES ... UNION ALL ...` and `TABLE tablename`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum Statement<'input> {
     // --- Multi-keyword statements (longest first_pattern first) ---
     #[railroad(label = "WITH ..")]
@@ -497,10 +489,12 @@ mod tests {
     #[test]
     fn parse_bang_eq_minus_line_comment_split() {
         let src = "SELECT 2 !=-- comment to be removed by psql\n  1";
-        let mut input = crate::tokens::test_input(src);
-        let _stmt = Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
         let leftover = &input.source()[input.byte_offset()..];
-        assert!(input.is_empty(), "leftover: {leftover:?}");
+        assert!(input.is_eof(), "leftover: {leftover:?}");
     }
 
     /// Operator-form `LIKE` / `NOT LIKE` / `ILIKE` / `NOT ILIKE` — PG's
@@ -515,11 +509,13 @@ mod tests {
             "SELECT 'foo' ~~* 'bar'",
             "SELECT 'foo' !~~* 'bar'",
         ] {
-            let mut input = crate::tokens::test_input(src);
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let _stmt =
-                Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -532,9 +528,11 @@ mod tests {
     #[test]
     fn parse_subscript_assign_slice_null_bound() {
         let src = "UPDATE arrtest SET c[1:NULL] = '{16,25}' WHERE array_dims(c) is null";
-        let mut input = crate::tokens::test_input(src);
-        let _stmt = Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
+        assert!(input.is_eof());
     }
 
     /// `IS [NFC|NFD|NFKC|NFKD] NORMALIZED` and `IS NOT [NFC|NFD|NFKC|NFKD]
@@ -553,11 +551,13 @@ mod tests {
             "SELECT U&'\\00E4\\24D1c' IS NFC NORMALIZED AS test_nfc",
             "SELECT U&'\\00E4\\24D1c' IS NORMALIZED AS test_default",
         ] {
-            let mut input = crate::tokens::test_input(src);
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let _stmt =
-                Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -576,11 +576,13 @@ mod tests {
             "CREATE FUNCTION set(tabname name) RETURNS VOID AS $$ BEGIN END; $$ LANGUAGE plpgsql",
             "DROP FUNCTION set(name)",
         ] {
-            let mut input = crate::tokens::test_input(src);
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let _stmt =
-                Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -1028,8 +1030,10 @@ mod tests {
 
     #[test]
     fn parse_statement_select() {
-        let mut input = crate::tokens::test_input("SELECT 1 AS one");
-        let stmt = Statement::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT 1 AS one");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = Statement::parse(&mut input).unwrap().into_ast();
         // Bare SELECT now matches via CompoundQuery path since Values variant
         // precedes Select for compound query (UNION etc.) support.
         assert!(matches!(stmt, Statement::Values(_)));
@@ -1037,44 +1041,56 @@ mod tests {
 
     #[test]
     fn parse_statement_create_table() {
-        let mut input = crate::tokens::test_input("CREATE TABLE t (f1 bool)");
-        let stmt = Statement::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TABLE t (f1 bool)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = Statement::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt, Statement::CreateTable(_)));
     }
 
     #[test]
     fn parse_statement_insert() {
-        let mut input = crate::tokens::test_input("INSERT INTO t (f1) VALUES (true)");
-        let stmt = Statement::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO t (f1) VALUES (true)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = Statement::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt, Statement::Insert(_)));
     }
 
     #[test]
     fn parse_statement_delete() {
-        let mut input = crate::tokens::test_input("DELETE FROM t WHERE a > 1");
-        let stmt = Statement::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DELETE FROM t WHERE a > 1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = Statement::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt, Statement::Delete(_)));
     }
 
     #[test]
     fn parse_statement_drop_table() {
-        let mut input = crate::tokens::test_input("DROP TABLE t");
-        let stmt = Statement::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP TABLE t");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = Statement::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt, Statement::DropTable(_)));
     }
 
     #[test]
     fn parse_psql_command_statement() {
-        let mut input = crate::tokens::test_input("SELECT 1;");
-        let cmd = PsqlCommand::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT 1;");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let cmd = PsqlCommand::parse(&mut input).unwrap().into_ast();
         assert!(matches!(cmd, PsqlCommand::Statement(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_psql_command_directive() {
-        let mut input = crate::tokens::test_input("\\pset null '(null)'\n");
-        let cmd = PsqlCommand::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("\\pset null '(null)'\n");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let cmd = PsqlCommand::parse(&mut input).unwrap().into_ast();
         match cmd {
             PsqlCommand::Directive(d) => assert_eq!(d.rest.0, "pset null '(null)'"),
             _ => panic!("expected directive"),
@@ -1083,16 +1099,20 @@ mod tests {
 
     #[test]
     fn parse_select_with_where_and_bool_test() {
-        let mut input = crate::tokens::test_input("SELECT f1 FROM BOOLTBL1 WHERE f1 IS TRUE;");
-        let cmd = PsqlCommand::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT f1 FROM BOOLTBL1 WHERE f1 IS TRUE;");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let cmd = PsqlCommand::parse(&mut input).unwrap().into_ast();
         assert!(matches!(cmd, PsqlCommand::Statement(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_full_insert_with_type_cast() {
-        let mut input = crate::tokens::test_input("INSERT INTO BOOLTBL1 (f1) VALUES (bool 't');");
-        let cmd = PsqlCommand::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO BOOLTBL1 (f1) VALUES (bool 't');");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let cmd = PsqlCommand::parse(&mut input).unwrap().into_ast();
         assert!(matches!(cmd, PsqlCommand::Statement(_)));
     }
 }

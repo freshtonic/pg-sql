@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -30,12 +28,9 @@ use recursa_diagram::railroad;
 /// ident; `Func` is detected by the function-call shape via `Expr`. We
 /// model `func_expr_windowless` by re-using `Expr` and letting any
 /// expression that begins like a function call lex into the `Func` arm.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum StatsParam<'input> {
-    Paren(Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>),
+    Paren(#[tok(LPAREN, this, RPAREN)]  Box<Expr<'input>> ),
     Func(StatsFuncParam<'input>),
     Bare(crate::tokens::NonReservedWord<'input>),
 }
@@ -43,23 +38,20 @@ pub enum StatsParam<'input> {
 /// A bare function call as a `stats_param` — `ident '(' args ')'`. The
 /// argument list is captured as a raw `Expr` so any of PG's `func_expr_*`
 /// shapes round-trip.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct StatsFuncParam<'input> {
     pub name: QualifiedName<'input>,
-    pub args: Surrounded<punct::LParen, Seq0<Box<Expr<'input>>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:  Vec<Box<Expr<'input>> > ,
 }
 
 /// `ON stats_param (, stats_param)*` clause on `CREATE STATISTICS`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct StatisticsOnClause<'input> {
-    pub on: ON,
-    pub params: Seq1<StatsParam<'input>, punct::Comma>,
+    #[tok(ON, this)]
+    #[sep(COMMA)]
+    pub params: recursa::Vec1<StatsParam<'input> >,
 }
 
 /// `FROM table_ref (, table_ref)*` clause on `CREATE STATISTICS`. Re-uses
@@ -67,13 +59,11 @@ pub struct StatisticsOnClause<'input> {
 /// TABLESAMPLE, function table, XMLTABLE, JSON_TABLE) is accepted — gram.y's
 /// CreateStatsStmt rule explicitly uses `from_list`, even though PG
 /// semantically rejects most of these.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct StatisticsFromClause<'input> {
-    pub from: FROM,
-    pub tables: Seq1<crate::ast::dml::select::TableRef<'input>, punct::Comma>,
+    #[tok(FROM, this)]
+    #[sep(COMMA)]
+    pub tables: recursa::Vec1<crate::ast::dml::select::TableRef<'input> >,
 }
 
 /// `CREATE STATISTICS [IF NOT EXISTS] [name] [(stat_type, ...)]
@@ -84,30 +74,24 @@ pub struct StatisticsFromClause<'input> {
 /// trailers optional so the partial forms round-trip without pg-sql claiming
 /// to fix PG-rejected SQL — the differential test verifies PG still rejects
 /// the formatted output.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateStatisticsStmt<'input> {
-    pub create: CREATE,
-    pub statistics: STATISTICS,
+    #[tok(CREATE, STATISTICS, this)]
     pub if_not_exists: Option<IfNotExists>,
     pub name: Option<QualifiedName<'input>>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub stat_types: Option<
-        Surrounded<punct::LParen, Seq1<literal::AliasName<'input>, punct::Comma>, punct::RParen>,
+         recursa::Vec1<literal::AliasName<'input> > ,
     >,
     pub on: Option<StatisticsOnClause<'input>>,
     pub from: Option<StatisticsFromClause<'input>>,
 }
 
 /// `DROP STATISTICS [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropStatisticsStmt<'input> {
-    pub drop: DROP,
-    pub statistics: STATISTICS,
+    #[tok(DROP, STATISTICS, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -118,23 +102,16 @@ pub struct DropStatisticsStmt<'input> {
 ///
 /// Variant ordering: `DEFAULT` is a hard keyword (distinct first token
 /// from a numeric literal), so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SetStatisticsValue<'input> {
-    Default(DEFAULT),
+    #[tok(DEFAULT)] Default,
     Value(SignedIconst<'input>),
 }
 
 /// `SET STATISTICS value` clause on `ALTER STATISTICS`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterStatisticsSetStatisticsClause<'input> {
-    pub set: SET,
-    pub statistics: STATISTICS,
+    #[tok(SET, STATISTICS, this)]
     pub value: SetStatisticsValue<'input>,
 }
 
@@ -148,10 +125,7 @@ pub struct AlterStatisticsSetStatisticsClause<'input> {
 /// STATISTICS` (followed by a keyword) disambiguate on the second
 /// token. `SET STATISTICS` is listed before `SET SCHEMA` only for
 /// readability — both have a unique two-token prefix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterStatisticsAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -168,13 +142,9 @@ pub enum AlterStatisticsAction<'input> {
 /// only exercises the SET STATISTICS form) — a strict per-action gate
 /// would require either a sub-grammar dispatcher or two separate
 /// statement types. The corpus oracle catches any regression here.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterStatisticsStmt<'input> {
-    pub alter: ALTER,
-    pub statistics: STATISTICS,
+    #[tok(ALTER, STATISTICS, this)]
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
     pub action: AlterStatisticsAction<'input>,
@@ -189,49 +159,53 @@ mod tests {
 
     #[test]
     fn parse_alter_statistics_set_statistics_default() {
-        let mut input =
-            crate::tokens::test_input("ALTER STATISTICS IF EXISTS ab1_a_b_stats SET STATISTICS 0");
-        let _stmt = AlterStatisticsStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER STATISTICS IF EXISTS ab1_a_b_stats SET STATISTICS 0");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterStatisticsStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_statistics_set_statistics_negative() {
-        let mut input =
-            crate::tokens::test_input("ALTER STATISTICS ab1_a_b_stats SET STATISTICS -1");
-        let _stmt = AlterStatisticsStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER STATISTICS ab1_a_b_stats SET STATISTICS -1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterStatisticsStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_statistics_full() {
-        let mut input =
-            crate::tokens::test_input("CREATE STATISTICS s ON a, b FROM ext_stats_test");
-        let stmt = CreateStatisticsStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE STATISTICS s ON a, b FROM ext_stats_test");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateStatisticsStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_not_exists.is_none());
         assert!(stmt.name.is_some());
         assert!(stmt.on.is_some());
         assert!(stmt.from.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_statistics_with_kinds_and_if_not_exists() {
-        let mut input = crate::tokens::test_input(
-            "CREATE STATISTICS IF NOT EXISTS s (ndistinct, dependencies) ON a, b FROM tab",
-        );
-        let stmt = CreateStatisticsStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE STATISTICS IF NOT EXISTS s (ndistinct, dependencies) ON a, b FROM tab");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateStatisticsStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_not_exists.is_some());
         assert!(stmt.stat_types.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_statistics_paren_expr() {
-        let mut input =
-            crate::tokens::test_input("CREATE STATISTICS s ON (a + b), c FROM ext_stats_test");
-        let stmt = CreateStatisticsStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE STATISTICS s ON (a + b), c FROM ext_stats_test");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateStatisticsStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.on.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

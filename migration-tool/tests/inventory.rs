@@ -1,6 +1,73 @@
 use std::fs;
+use std::path::Path;
+use std::process::Command;
 
-use pg_sql_migrate::{Disposition, Mapping, inventory, to_canonical_inventory_json};
+use pg_sql_migrate::migration_contract::{MIGRATION_SOURCE_COMMIT, POSTGRES_GITLINK};
+use pg_sql_migrate::{Mapping, inventory, to_canonical_inventory_json};
+
+fn git_output(repository: &Path, arguments: &[&str]) -> Vec<u8> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repository)
+        .args(arguments)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {arguments:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    output.stdout
+}
+
+fn materialize_frozen_inventory_input(repository: &Path, destination: &Path) {
+    let listing = git_output(repository, &["ls-tree", "-r", MIGRATION_SOURCE_COMMIT]);
+    for line in String::from_utf8(listing).unwrap().lines() {
+        let (metadata, relative) = line.split_once('\t').unwrap();
+        let mode = metadata.split_whitespace().next().unwrap();
+        if mode == "160000" {
+            continue;
+        }
+        let target = destination.join(relative);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        let object = format!("{MIGRATION_SOURCE_COMMIT}:{relative}");
+        fs::write(target, git_output(repository, &["show", &object])).unwrap();
+    }
+
+    let common_git =
+        String::from_utf8(git_output(repository, &["rev-parse", "--git-common-dir"])).unwrap();
+    let postgres_git = Path::new(common_git.trim()).join("modules/vendor/postgres");
+    assert!(
+        postgres_git.is_dir(),
+        "PostgreSQL submodule object database is unavailable"
+    );
+    let corpus_prefix = "src/test/regress/sql";
+    let output = Command::new("git")
+        .arg(format!("--git-dir={}", postgres_git.display()))
+        .args([
+            "ls-tree",
+            "-r",
+            "--name-only",
+            POSTGRES_GITLINK,
+            "--",
+            corpus_prefix,
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    for relative in String::from_utf8(output.stdout).unwrap().lines() {
+        let target = destination.join("vendor/postgres").join(relative);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        let object = format!("{POSTGRES_GITLINK}:{relative}");
+        let output = Command::new("git")
+            .arg(format!("--git-dir={}", postgres_git.display()))
+            .args(["show", &object])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        fs::write(target, output.stdout).unwrap();
+    }
+}
 
 fn write_provenance(root: &std::path::Path) {
     fs::create_dir_all(root.join("docs")).unwrap();
@@ -193,120 +260,136 @@ fn workspace_member_tests_are_discovered_separately_from_legacy_tests() {
 }
 
 #[test]
-fn checked_in_repository_matches_the_reviewed_contract() {
+fn checked_in_legacy_contract_remains_fully_reviewed_after_publication() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap();
-    let report = inventory(root, &Mapping::migration_contract()).unwrap();
+    let temporary = tempfile::tempdir().unwrap();
+    materialize_frozen_inventory_input(root, temporary.path());
+    let regenerated = inventory(temporary.path(), &Mapping::migration_contract()).unwrap();
+    let regenerated = to_canonical_inventory_json(&regenerated).unwrap();
+    let checked_in = fs::read(root.join("migration/contract/inventory.json")).unwrap();
+    assert_eq!(regenerated.as_bytes(), checked_in);
+    let report: serde_json::Value = serde_json::from_str(&regenerated).unwrap();
+    let provenance = report["provenance"].as_object().unwrap();
     assert_eq!(
-        report.provenance.legacy_commit,
+        provenance["legacy_commit"],
         "1e71421d66baac15c8c5264e8f29b5f80122f50e"
     );
     assert_eq!(
-        report.provenance.legacy_tree,
+        provenance["legacy_tree"],
         "f3191ab707c8a957d1bb5fe142e74fc624fe6661"
     );
     assert_eq!(
-        report.provenance.pg_sql_tree,
+        provenance["pg_sql_tree"],
         "50e1376d16796e5f05db88d99dab42252a9f78a4"
     );
     assert_eq!(
-        report.provenance.pg_oracle_tree,
+        provenance["pg_oracle_tree"],
         "0780d057e4d54db150d0f388c45a720a825bcbcf"
     );
     assert_eq!(
-        report.provenance.postgres_gitlink,
+        provenance["postgres_gitlink"],
         "6d396980fc5aed4f1a525e0bd75cb16b25ed40ca"
     );
     assert_eq!(
-        report.provenance.source_checkpoint,
+        provenance["source_checkpoint"],
         "e97d3c3570c2a04ca9a233334b46d3f443800a5a"
     );
-    assert_eq!(report.summary.expanded_tests, 1_539);
-    assert_eq!(report.summary.file_recovery_sites, 238);
-    assert_eq!(report.tests.corpus_fixtures.len(), 222);
-    assert_eq!(report.tests.formatter_goldens.len(), 10);
-    let oracle = report
-        .tests
-        .workspace_members
-        .iter()
-        .find(|member| member.member == "pg-oracle")
-        .unwrap();
-    assert_eq!(oracle.tests.len(), 3);
+
+    let summary = report["summary"].as_object().unwrap();
+    assert_eq!(summary["semantic_rows"], 8_040);
+    assert_eq!(summary["expanded_tests"], 1_539);
+    assert_eq!(summary["file_recovery_sites"], 238);
+    let tests = report["tests"].as_object().unwrap();
+    assert_eq!(tests["corpus_fixtures"].as_array().unwrap().len(), 222);
+    assert_eq!(tests["formatter_goldens"].as_array().unwrap().len(), 10);
     assert!(
-        report
-            .tests
-            .corpus_fixtures
+        tests["corpus_fixtures"]
+            .as_array()
+            .unwrap()
             .iter()
-            .all(|fixture| fixture.content_sha256.is_some())
+            .all(|fixture| fixture["content_sha256"].as_str().is_some())
     );
-    assert!(report.semantics.len() > 5_000);
-    assert!(
-        report
-            .semantics
-            .iter()
-            .any(|row| row.id == "ast::file::FileItem")
-    );
-    assert!(
-        report
-            .semantics
-            .iter()
-            .any(|row| row.id == "ast::shared::expr::StringLitSeq0")
-    );
-    assert!(report.semantics.iter().any(|row| {
-        row.id == "ast::shared::expr::StringLitSeq0.parts"
-            && row.rule_id == "semantic.recursa-container-transform"
+
+    let semantics = report["semantics"].as_array().unwrap();
+    assert_eq!(semantics.len(), 8_040);
+    assert!(semantics.iter().all(|row| {
+        row["id"].as_str().is_some_and(|value| !value.is_empty())
+            && row["rule_id"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+            && row["rationale"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+            && matches!(
+                row["disposition"].as_str(),
+                Some(
+                    "ported_equivalent"
+                        | "reviewed_change"
+                        | "syntax_only_exclusion"
+                        | "framework_exclusion"
+                        | "recursa_gap"
+                )
+            )
     }));
-    assert!(report.semantics.iter().any(|row| {
-        row.id == "ast::ddl::function::ExtractedFuncBody" && row.kind == "semantic_view"
-    }));
+    let semantic = |id: &str| {
+        semantics
+            .iter()
+            .find(|row| row["id"] == id)
+            .unwrap_or_else(|| panic!("missing reviewed semantic row {id}"))
+    };
     assert_eq!(
-        report
-            .semantics
+        semantic("ast::file::FileItem")["disposition"],
+        "reviewed_change"
+    );
+    assert_eq!(
+        semantic("ast::shared::expr::StringLitSeq0.parts")["rule_id"],
+        "semantic.recursa-container-transform"
+    );
+    assert_eq!(
+        semantic("ast::ddl::function::ExtractedFuncBody")["kind"],
+        "semantic_view"
+    );
+    assert_eq!(
+        semantics
             .iter()
             .filter(|row| {
-                row.rule_id.starts_with("semantic.optional-fixed-token")
-                    || row.rule_id.starts_with("syntax.optional-fixed-token")
+                row["rule_id"].as_str().is_some_and(|rule| {
+                    rule.starts_with("semantic.optional-fixed-token")
+                        || rule.starts_with("syntax.optional-fixed-token")
+                })
             })
             .count(),
         132
     );
-    assert!(report.semantics.iter().any(|row| {
-        row.id == "ast::ddl::database::CreateDatabaseStmt.with"
-            && row.rule_id == "syntax.optional-fixed-token"
-            && row.ported_shape.is_none()
+    assert_eq!(
+        semantic("ast::ddl::index::CreateIndexStmt.unique")["rule_id"],
+        "semantic.optional-fixed-token.bool"
+    );
+    assert_eq!(
+        semantic("ast::ddl::sequence::SeqRestartOption.with")["rule_id"],
+        "semantic.optional-fixed-token.nested-syntax-exclusion"
+    );
+    assert!(semantics.iter().all(|row| {
+        row["rule_id"] != "unsupported.optional-fixed-token"
+            && row["ported_shape"].as_str().is_none_or(|shape| {
+                !shape.contains("WithWith")
+                    && !shape.contains("WithoutWith")
+                    && !shape.contains("punct ::")
+                    && !shape.contains("keyword ::")
+            })
     }));
-    assert!(report.semantics.iter().any(|row| {
-        row.id == "ast::ddl::index::CreateIndexStmt.unique"
-            && row.rule_id == "semantic.optional-fixed-token.bool"
-    }));
-    assert!(report.semantics.iter().any(|row| {
-        row.id == "ast::ddl::sequence::SeqRestartOption.with"
-            && row.rule_id == "semantic.optional-fixed-token.nested-syntax-exclusion"
-    }));
-    assert!(report.semantics.iter().all(|row| {
-        row.rule_id != "unsupported.optional-fixed-token"
-            && row
-                .ported_shape
-                .as_deref()
-                .is_none_or(|shape| !shape.contains("WithWith") && !shape.contains("WithoutWith"))
-    }));
-    assert!(report.semantics.iter().all(|row| {
-        row.ported_shape
-            .as_ref()
-            .is_none_or(|shape| !shape.contains("punct ::") && !shape.contains("keyword ::"))
-    }));
-    assert!(report.semantics.iter().any(|row| {
-        row.rule_id == "semantic.recursa-container-transform"
-            && row
-                .ported_shape
-                .as_deref()
+    assert!(semantics.iter().any(|row| {
+        row["rule_id"] == "semantic.recursa-container-transform"
+            && row["ported_shape"]
+                .as_str()
                 .is_some_and(|shape| shape.contains("#[sep(COMMA)]"))
     }));
-    let obsolete_file_rows = report
-        .semantics
+    let obsolete_file_rows = semantics
         .iter()
         .filter(|row| {
+            let id = row["id"].as_str().unwrap();
             [
                 "ast::file::PsqlDirective",
                 "ast::file::PsqlCommand",
@@ -314,9 +397,8 @@ fn checked_in_repository_matches_the_reviewed_contract() {
             ]
             .iter()
             .any(|root| {
-                row.id == *root
-                    || row
-                        .id
+                id == *root
+                    || id
                         .strip_prefix(root)
                         .is_some_and(|suffix| suffix.starts_with('.') || suffix.starts_with("::"))
             })
@@ -324,16 +406,15 @@ fn checked_in_repository_matches_the_reviewed_contract() {
         .collect::<Vec<_>>();
     assert_eq!(obsolete_file_rows.len(), 16);
     assert!(obsolete_file_rows.iter().all(|row| {
-        row.rule_id == "semantic.obsolete-file-recovery-surface"
-            && matches!(&row.disposition, Disposition::ReviewedChange)
-            && row.ported_shape.is_none()
+        row["rule_id"] == "semantic.obsolete-file-recovery-surface"
+            && row["disposition"] == "reviewed_change"
+            && row["ported_shape"].is_null()
     }));
     assert!(
-        report
-            .recursa_gaps
+        report["recursa_gaps"]
+            .as_array()
+            .unwrap()
             .iter()
-            .all(|gap| !gap.examples.is_empty())
+            .all(|gap| !gap["examples"].as_array().unwrap().is_empty())
     );
-    let checked_in = fs::read_to_string(root.join("migration/contract/inventory.json")).unwrap();
-    assert_eq!(to_canonical_inventory_json(&report).unwrap(), checked_in);
 }

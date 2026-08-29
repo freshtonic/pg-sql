@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::ddl::role::DefList;
 use crate::ast::shared::expr::*;
@@ -17,41 +15,28 @@ use recursa_diagram::railroad;
 
 /// `CREATE TEXT SEARCH { PARSER | DICTIONARY | TEMPLATE | CONFIGURATION }
 /// name (def_list)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateTextSearchStmt<'input> {
-    pub create: CREATE,
-    pub text: TEXT,
-    pub search: SEARCH,
+    #[tok(CREATE, TEXT, SEARCH, this)]
     pub kind: TextSearchObjectKind,
     pub name: QualifiedName<'input>,
     pub definition: DefList<'input>,
 }
 
 /// The object kind after `DROP TEXT SEARCH`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TextSearchObjectKind {
-    Configuration(crate::tokens::soft_keyword::CONFIGURATION),
-    Dictionary(crate::tokens::soft_keyword::DICTIONARY),
-    Parser(crate::tokens::soft_keyword::PARSER),
-    Template(crate::tokens::soft_keyword::TEMPLATE),
+    #[tok(CONFIGURATION)] Configuration,
+    #[tok(DICTIONARY)] Dictionary,
+    #[tok(PARSER)] Parser,
+    #[tok(TEMPLATE)] Template,
 }
 
 /// `DROP TEXT SEARCH {CONFIGURATION | DICTIONARY | PARSER | TEMPLATE}
 /// [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropTextSearchStmt<'input> {
-    pub drop: DROP,
-    pub text: TEXT,
-    pub search: SEARCH,
+    #[tok(DROP, TEXT, SEARCH, this)]
     pub kind: TextSearchObjectKind,
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
@@ -61,24 +46,19 @@ pub struct DropTextSearchStmt<'input> {
 /// `FOR name_list` — token-type list on `ALTER TEXT SEARCH CONFIGURATION
 /// ... { ADD | ALTER | DROP } MAPPING FOR ...`. Tokens are plain `name`s
 /// (Postgres' `ColId`), not dotted `any_name`s.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TextSearchTokenList<'input> {
-    pub for_: FOR,
-    pub tokens: Seq1<crate::tokens::ColId<'input>, punct::Comma>,
+    #[tok(FOR, this)]
+    #[sep(COMMA)]
+    pub tokens: recursa::Vec1<crate::tokens::ColId<'input> >,
 }
 
 /// `WITH any_name_list` — dictionary list on `ALTER TEXT SEARCH
 /// CONFIGURATION ... { ADD | ALTER } MAPPING FOR ... WITH ...`.
 /// Dictionaries are dotted `any_name`s.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TextSearchWithDicts<'input> {
-    pub with: WITH,
+    #[tok(WITH, this)]
     pub dicts: NameList<'input>,
 }
 
@@ -93,29 +73,22 @@ pub struct TextSearchWithDicts<'input> {
 /// assuming the two are adjacent — but they're separated by the token
 /// list, so the prefix-driven parse path fails and the whole statement
 /// surfaces as a [`crate::ast::FileItem::ParseError`].
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TSConfigAddMapping<'input> {
-    pub add: ADD,
-    pub mapping: MAPPING,
-    pub for_: FOR,
-    pub tokens: Seq1<crate::tokens::ColId<'input>, punct::Comma>,
-    pub with: WITH,
+    #[tok(ADD, MAPPING, FOR, this)]
+    #[sep(COMMA)]
+    pub tokens: recursa::Vec1<crate::tokens::ColId<'input> >,
+    #[tok(WITH, this)]
     pub dicts: NameList<'input>,
 }
 
 /// `REPLACE any_name WITH any_name` — the dictionary-replacement tail
 /// shared by the two `ALTER MAPPING REPLACE ...` forms.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TSConfigReplaceClause<'input> {
-    pub replace: REPLACE,
+    #[tok(REPLACE, this)]
     pub old_dict: QualifiedName<'input>,
-    pub with: WITH,
+    #[tok(WITH, this)]
     pub new_dict: QualifiedName<'input>,
 }
 
@@ -127,10 +100,7 @@ pub struct TSConfigReplaceClause<'input> {
 ///
 /// Variant ordering: `With` (peek = `WITH`) and `Replace` (peek =
 /// `REPLACE`) are keyword-disjoint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TSConfigAlterMappingForTail<'input> {
     With(TextSearchWithDicts<'input>),
     Replace(TSConfigReplaceClause<'input>),
@@ -139,10 +109,7 @@ pub enum TSConfigAlterMappingForTail<'input> {
 /// `ALTER MAPPING FOR name_list { WITH any_name_list | REPLACE old WITH new }`
 /// — gram.y's `ALTER_TSCONFIG_ALTER_MAPPING_FOR_TOKEN` and
 /// `ALTER_TSCONFIG_REPLACE_DICT_FOR_TOKEN`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TSConfigAlterMappingFor<'input> {
     pub tokens: TextSearchTokenList<'input>,
     pub tail: TSConfigAlterMappingForTail<'input>,
@@ -155,35 +122,24 @@ pub struct TSConfigAlterMappingFor<'input> {
 ///
 /// Variant ordering: `ForTokens` (peek = `FOR`) and `Replace`
 /// (peek = `REPLACE`) are keyword-disjoint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TSConfigAlterMappingKind<'input> {
     ForTokens(TSConfigAlterMappingFor<'input>),
     Replace(TSConfigReplaceClause<'input>),
 }
 
 /// `ALTER MAPPING ...` action on `ALTER TEXT SEARCH CONFIGURATION`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TSConfigAlterMapping<'input> {
-    pub alter: ALTER,
-    pub mapping: MAPPING,
+    #[tok(ALTER, MAPPING, this)]
     pub kind: TSConfigAlterMappingKind<'input>,
 }
 
 /// `DROP MAPPING [IF EXISTS] FOR name_list` — Postgres'
 /// `ALTER_TSCONFIG_DROP_MAPPING` branch (with optional `IF EXISTS`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TSConfigDropMapping<'input> {
-    pub drop: DROP,
-    pub mapping: MAPPING,
+    #[tok(DROP, MAPPING, this)]
     pub if_exists: Option<IfExists>,
     pub tokens: TextSearchTokenList<'input>,
 }
@@ -196,10 +152,7 @@ pub struct TSConfigDropMapping<'input> {
 /// Variant ordering: each branch has a distinct leading keyword
 /// (`RENAME`, `OWNER`, `SET`, `ADD`, `ALTER`, `DROP`), so the variants
 /// are keyword-disjoint and order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterTSConfigurationAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -211,12 +164,9 @@ pub enum AlterTSConfigurationAction<'input> {
 
 /// `CONFIGURATION name action` — body of
 /// `ALTER TEXT SEARCH CONFIGURATION ...`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTSConfigurationBody<'input> {
-    pub configuration: crate::tokens::soft_keyword::CONFIGURATION,
+    #[tok(CONFIGURATION, this)]
     pub name: QualifiedName<'input>,
     pub action: AlterTSConfigurationAction<'input>,
 }
@@ -228,10 +178,7 @@ pub struct AlterTSConfigurationBody<'input> {
 /// Variant ordering: keyword-distinct branches first (`Rename` on
 /// `RENAME`, `Owner` on `OWNER`, `SetSchema` on `SET`); the `Definition`
 /// branch starts with `(` (a `DefList`), so it cannot collide.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterTSDictionaryAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -241,12 +188,9 @@ pub enum AlterTSDictionaryAction<'input> {
 
 /// `DICTIONARY name action` — body of
 /// `ALTER TEXT SEARCH DICTIONARY ...`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTSDictionaryBody<'input> {
-    pub dictionary: crate::tokens::soft_keyword::DICTIONARY,
+    #[tok(DICTIONARY, this)]
     pub name: QualifiedName<'input>,
     pub action: AlterTSDictionaryAction<'input>,
 }
@@ -258,33 +202,24 @@ pub struct AlterTSDictionaryBody<'input> {
 ///
 /// Variant ordering: `Rename` (peek = `RENAME`) and `SetSchema`
 /// (peek = `SET`) are keyword-disjoint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterTSRenameSchemaAction<'input> {
     Rename(RenameTo<'input>),
     SetSchema(SetSchemaClause<'input>),
 }
 
 /// `PARSER name action` — body of `ALTER TEXT SEARCH PARSER ...`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTSParserBody<'input> {
-    pub parser: crate::tokens::soft_keyword::PARSER,
+    #[tok(PARSER, this)]
     pub name: QualifiedName<'input>,
     pub action: AlterTSRenameSchemaAction<'input>,
 }
 
 /// `TEMPLATE name action` — body of `ALTER TEXT SEARCH TEMPLATE ...`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTSTemplateBody<'input> {
-    pub template: crate::tokens::soft_keyword::TEMPLATE,
+    #[tok(TEMPLATE, this)]
     pub name: QualifiedName<'input>,
     pub action: AlterTSRenameSchemaAction<'input>,
 }
@@ -292,10 +227,7 @@ pub struct AlterTSTemplateBody<'input> {
 /// The `CONFIGURATION | DICTIONARY | PARSER | TEMPLATE` body of
 /// `ALTER TEXT SEARCH ...`. Each branch is gated by a distinct soft
 /// keyword token.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterTextSearchBody<'input> {
     Configuration(AlterTSConfigurationBody<'input>),
     Dictionary(AlterTSDictionaryBody<'input>),
@@ -307,14 +239,9 @@ pub enum AlterTextSearchBody<'input> {
 /// name action` — Postgres' `AlterTSConfigurationStmt`,
 /// `AlterTSDictionaryStmt`, and the text-search branches of
 /// `RenameStmt` / `AlterOwnerStmt` / `AlterObjectSchemaStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTextSearchStmt<'input> {
-    pub alter: ALTER,
-    pub text: TEXT,
-    pub search: SEARCH,
+    #[tok(ALTER, TEXT, SEARCH, this)]
     pub body: AlterTextSearchBody<'input>,
 }
 
@@ -327,56 +254,60 @@ mod tests {
 
     #[test]
     fn parse_drop_text_search_configuration() {
-        let mut input = crate::tokens::test_input("DROP TEXT SEARCH CONFIGURATION IF EXISTS tsc1");
-        let stmt = DropTextSearchStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP TEXT SEARCH CONFIGURATION IF EXISTS tsc1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropTextSearchStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt.kind, TextSearchObjectKind::Configuration(_)));
         assert!(stmt.if_exists.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_text_search_dictionary() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TEXT SEARCH DICTIONARY alt_ts_dict1 (template=simple)",
-        );
-        let _stmt = CreateTextSearchStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TEXT SEARCH DICTIONARY alt_ts_dict1 (template=simple)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTextSearchStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_text_search_configuration_rename() {
-        let mut input = crate::tokens::test_input(
-            "ALTER TEXT SEARCH CONFIGURATION alt_ts_conf1 RENAME TO alt_ts_conf2",
-        );
-        let _stmt = AlterTextSearchStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TEXT SEARCH CONFIGURATION alt_ts_conf1 RENAME TO alt_ts_conf2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTextSearchStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_text_search_parser() {
-        let mut input = crate::tokens::test_input("DROP TEXT SEARCH PARSER my_parser");
-        let _stmt = DropTextSearchStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("DROP TEXT SEARCH PARSER my_parser");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = DropTextSearchStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_text_search_dictionary_structured() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TEXT SEARCH DICTIONARY ispell (Template=ispell, DictFile=ispell_sample)",
-        );
-        let stmt = CreateTextSearchStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TEXT SEARCH DICTIONARY ispell (Template=ispell, DictFile=ispell_sample)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTextSearchStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt.kind, TextSearchObjectKind::Dictionary(_)));
         assert_eq!(stmt.name.object(), "ispell");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_text_search_configuration() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TEXT SEARCH CONFIGURATION ispell_tst (PARSER = default)",
-        );
-        let stmt = CreateTextSearchStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TEXT SEARCH CONFIGURATION ispell_tst (PARSER = default)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTextSearchStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt.kind, TextSearchObjectKind::Configuration(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

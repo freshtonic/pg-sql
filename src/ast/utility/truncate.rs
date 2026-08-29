@@ -1,7 +1,6 @@
 //! TRUNCATE statement.
 
 use recursa::seq::Seq1;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::flags::DropBehavior;
@@ -13,13 +12,10 @@ use crate::tokens::soft_keyword::{CONTINUE, RESTART};
 // --- TRUNCATE ---
 
 /// `{ RESTART | CONTINUE } IDENTITY` — Postgres' `opt_restart_seqs`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum RestartSeqs {
-    Restart((RESTART, IDENTITY)),
-    Continue((CONTINUE, IDENTITY)),
+    #[tok(RESTART, IDENTITY)] Restart,
+    #[tok(CONTINUE, IDENTITY)] Continue,
 }
 
 /// A single relation reference in a `TRUNCATE` statement — Postgres'
@@ -29,14 +25,13 @@ pub enum RestartSeqs {
 /// (default) inheritance behaviour explicit. The `ONLY (name)` parenthesised
 /// form is not exercised by any TRUNCATE corpus statement, so it is not
 /// modelled (matches the `LockRelation` shape).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TruncateRelation<'input> {
-    pub only: Option<ONLY>,
+    #[presence(ONLY)]
+    pub only: bool,
     pub name: QualifiedName<'input>,
-    pub star: Option<punct::Star>,
+    #[presence(STAR)]
+    pub star: bool,
 }
 
 /// ```sql
@@ -44,14 +39,11 @@ pub struct TruncateRelation<'input> {
 ///     [ { RESTART | CONTINUE } IDENTITY ]
 ///     [ CASCADE | RESTRICT ]
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["dml"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TruncateStmt<'input> {
-    pub truncate: TRUNCATE,
-    pub table: Option<TABLE>,
-    pub relations: Seq1<TruncateRelation<'input>, punct::Comma>,
+    #[tok(TRUNCATE, optional(TABLE), this)]
+    #[sep(COMMA)]
+    pub relations: recursa::Vec1<TruncateRelation<'input> >,
     pub restart_seqs: Option<RestartSeqs>,
     pub behavior: Option<DropBehavior>,
 }

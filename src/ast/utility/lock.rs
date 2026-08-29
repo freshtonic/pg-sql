@@ -1,7 +1,6 @@
 //! LOCK statement.
 
 use recursa::seq::Seq1;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::names::QualifiedName;
@@ -16,14 +15,13 @@ use crate::tokens::punct;
 /// `ONLY name` excludes inheritance children; a trailing `*` makes the
 /// (default) inheritance behaviour explicit. The `ONLY (name)` parenthesised
 /// form is not exercised by any corpus statement, so it is not modelled.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LockRelation<'input> {
-    pub only: Option<ONLY>,
+    #[presence(ONLY)]
+    pub only: bool,
     pub name: QualifiedName<'input>,
-    pub star: Option<punct::Star>,
+    #[presence(STAR)]
+    pub star: bool,
 }
 
 /// A `LOCK` lock-mode name — Postgres' `lock_type`.
@@ -31,45 +29,36 @@ pub struct LockRelation<'input> {
 /// Variant ordering: the three-word `SHARE ROW EXCLUSIVE` /
 /// `SHARE UPDATE EXCLUSIVE` forms precede the two-word `ROW EXCLUSIVE` and the
 /// bare `SHARE`, so longest-match-wins picks the most specific spelling.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum LockType {
-    AccessShare((ACCESS, SHARE)),
-    AccessExclusive((ACCESS, EXCLUSIVE)),
-    ShareRowExclusive((SHARE, ROW, EXCLUSIVE)),
-    ShareUpdateExclusive((SHARE, UPDATE, EXCLUSIVE)),
-    RowShare((ROW, SHARE)),
-    RowExclusive((ROW, EXCLUSIVE)),
-    Share(SHARE),
-    Exclusive(EXCLUSIVE),
+    #[tok(ACCESS, SHARE)] AccessShare,
+    #[tok(ACCESS, EXCLUSIVE)] AccessExclusive,
+    #[tok(SHARE, ROW, EXCLUSIVE)] ShareRowExclusive,
+    #[tok(SHARE, UPDATE, EXCLUSIVE)] ShareUpdateExclusive,
+    #[tok(ROW, SHARE)] RowShare,
+    #[tok(ROW, EXCLUSIVE)] RowExclusive,
+    #[tok(SHARE)] Share,
+    #[tok(EXCLUSIVE)] Exclusive,
 }
 
 /// The `IN lock_type MODE` clause on a `LOCK` statement — Postgres' `opt_lock`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LockMode {
-    pub in_kw: IN,
+    #[tok(IN, this, MODE)]
     pub lock_type: LockType,
-    pub mode_kw: MODE,
 }
 
 /// ```sql
 /// LOCK [TABLE] name [, ...] [IN mode MODE] [NOWAIT]
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LockStmt<'input> {
-    pub lock: LOCK,
-    pub table: Option<TABLE>,
-    pub relations: Seq1<LockRelation<'input>, punct::Comma>,
+    #[tok(LOCK, optional(TABLE), this)]
+    #[sep(COMMA)]
+    pub relations: recursa::Vec1<LockRelation<'input> >,
     pub mode: Option<LockMode>,
-    pub nowait: Option<NOWAIT>,
+    #[presence(NOWAIT)]
+    pub nowait: bool,
 }
 
 #[cfg(test)]

@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -19,13 +17,10 @@ use recursa_diagram::railroad;
 /// further down (used by DROP CAST): the CREATE form uses `Typename`
 /// (PG allows array/precision modifiers), so each type field is `CastType`,
 /// not the bare `common::TypeName` used by DROP CAST today.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateCastSignature<'input> {
     pub source: CastType<'input>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub target: CastType<'input>,
 }
 
@@ -33,28 +28,23 @@ pub struct CreateCastSignature<'input> {
 /// (the parenthesised form). The cast function is mandatory: bare-name
 /// (`args_unspecified`) forms are not exercised by the corpus and are not
 /// modelled here.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CastFunctionRef<'input> {
     pub name: QualifiedName<'input>,
-    pub args: Surrounded<
-        punct::LParen,
-        Seq0<crate::ast::ddl::function::FuncParam<'input>, punct::Comma>,
-        punct::RParen,
-    >,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:
+
+        Vec<crate::ast::ddl::function::FuncParam<'input> >
+
+    ,
 }
 
 /// `WITH FUNCTION function_with_argtypes` — the function-coercion branch of
 /// `CREATE CAST`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CastWithFunction<'input> {
-    pub with: WITH,
-    pub function: FUNCTION,
+    #[tok(WITH, FUNCTION, this)]
     pub func: CastFunctionRef<'input>,
 }
 
@@ -68,69 +58,50 @@ pub struct CastWithFunction<'input> {
 /// here is `WithFunction` then `WithInout` because `WithFunction` has the
 /// longer specific match; the actual second-token disambiguation is handled
 /// by the combined peek regex.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CastImpl<'input> {
     WithFunction(CastWithFunction<'input>),
-    WithInout((WITH, INOUT)),
-    WithoutFunction((WITHOUT, FUNCTION)),
+    #[tok(WITH, INOUT)] WithInout,
+    #[tok(WITHOUT, FUNCTION)] WithoutFunction,
 }
 
 /// `AS { IMPLICIT | ASSIGNMENT }` — the trailing `cast_context` keyword on
 /// `CREATE CAST`. Absent ⇒ `EXPLICIT` (the default).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CastContextKind {
-    Implicit(IMPLICIT),
-    Assignment(ASSIGNMENT),
+    #[tok(IMPLICIT)] Implicit,
+    #[tok(ASSIGNMENT)] Assignment,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CastContext {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub kind: CastContextKind,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateCastStmt<'input> {
-    pub create: CREATE,
-    pub cast: CAST,
-    pub signature: Surrounded<punct::LParen, CreateCastSignature<'input>, punct::RParen>,
+    #[tok(CREATE, CAST, LPAREN, this, RPAREN)]
+    pub signature:  CreateCastSignature<'input> ,
     pub r#impl: CastImpl<'input>,
     pub context: Option<CastContext>,
 }
 
 /// The `(source AS target)` type pair inside a `DROP CAST` statement.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CastSignature<'input> {
     pub source: crate::ast::shared::names::TypeName<'input>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub target: crate::ast::shared::names::TypeName<'input>,
 }
 
 /// `DROP CAST [IF EXISTS] (source AS target) [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropCastStmt<'input> {
-    pub drop: DROP,
-    pub cast: CAST,
+    #[tok(DROP, CAST, this)]
     pub if_exists: Option<IfExists>,
-    pub signature: Surrounded<punct::LParen, CastSignature<'input>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    pub signature:  CastSignature<'input> ,
     pub behavior: Option<DropBehavior>,
 }
 
@@ -143,47 +114,51 @@ mod tests {
 
     #[test]
     fn parse_drop_cast() {
-        let mut input = crate::tokens::test_input("DROP CAST IF EXISTS (text AS text) RESTRICT");
-        let stmt = DropCastStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP CAST IF EXISTS (text AS text) RESTRICT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropCastStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
         assert!(stmt.behavior.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_cast_without_function() {
-        let mut input =
-            crate::tokens::test_input("CREATE CAST (text AS casttesttype) WITHOUT FUNCTION");
-        let stmt = CreateCastStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE CAST (text AS casttesttype) WITHOUT FUNCTION");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateCastStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt.r#impl, CastImpl::WithoutFunction(_)));
         assert!(stmt.context.is_none());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_cast_with_inout_implicit() {
-        let mut input =
-            crate::tokens::test_input("CREATE CAST (int4 AS casttesttype) WITH INOUT AS IMPLICIT");
-        let stmt = CreateCastStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE CAST (int4 AS casttesttype) WITH INOUT AS IMPLICIT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateCastStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt.r#impl, CastImpl::WithInout(_)));
         assert!(matches!(
             stmt.context.as_ref().unwrap().kind,
             CastContextKind::Implicit(_)
         ));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_cast_with_function_assignment() {
-        let mut input = crate::tokens::test_input(
-            "CREATE CAST (int4 AS casttesttype) WITH FUNCTION int4_casttesttype(int4) AS ASSIGNMENT",
-        );
-        let stmt = CreateCastStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE CAST (int4 AS casttesttype) WITH FUNCTION int4_casttesttype(int4) AS ASSIGNMENT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateCastStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt.r#impl, CastImpl::WithFunction(_)));
         assert!(matches!(
             stmt.context.as_ref().unwrap().kind,
             CastContextKind::Assignment(_)
         ));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

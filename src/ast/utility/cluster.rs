@@ -1,7 +1,6 @@
 //! CLUSTER statement. The shared `VacuumOption`/`VacuumOptions` types live
 //! in `utility/vacuum.rs`.
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::names::QualifiedName;
@@ -11,20 +10,14 @@ use crate::tokens::keyword::*;
 // --- CLUSTER ---
 
 /// `USING index_name` — Postgres' `cluster_index_specification`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ClusterUsingIndex<'input> {
-    pub using: USING,
+    #[tok(USING, this)]
     pub index: crate::tokens::ColId<'input>,
 }
 
 /// Modern target: `qualified_name [USING index]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ClusterModernTarget<'input> {
     pub table: QualifiedName<'input>,
     pub using_index: Option<ClusterUsingIndex<'input>>,
@@ -34,13 +27,10 @@ pub struct ClusterModernTarget<'input> {
 ///
 /// `ON` after the first identifier disambiguates this from the modern form
 /// (which would have `USING` there, or nothing).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ClusterLegacyTarget<'input> {
     pub index: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
 }
 
@@ -53,10 +43,7 @@ pub struct ClusterLegacyTarget<'input> {
 /// identifier (no `USING`). Declaration-order tiebreak prefers the legacy
 /// form when both could parse a prefix, but the modern form is selected
 /// once the parser sees no `ON` after the leading identifier.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ClusterTarget<'input> {
     Legacy(ClusterLegacyTarget<'input>),
     Modern(ClusterModernTarget<'input>),
@@ -71,14 +58,12 @@ pub enum ClusterTarget<'input> {
 /// In the parenthesised form, `options` is `Some` and `verbose` is `None`
 /// (the option list expresses `VERBOSE` instead). In any legacy form,
 /// `options` is `None` and `verbose` may be `Some` or `None`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ClusterStmt<'input> {
-    pub cluster: CLUSTER,
+    #[tok(CLUSTER, this)]
     pub options: Option<VacuumOptions<'input>>,
-    pub verbose: Option<VERBOSE>,
+    #[presence(VERBOSE)]
+    pub verbose: bool,
     pub target: Option<ClusterTarget<'input>>,
 }
 

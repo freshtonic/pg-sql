@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -18,14 +16,9 @@ use recursa_diagram::railroad;
 /// `AlterOwnerStmt` branch for large objects. The only modifiable
 /// attribute is owner; large objects have no rename / set-schema /
 /// other actions.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterLargeObjectStmt<'input> {
-    pub alter: ALTER,
-    pub large: LARGE,
-    pub object: OBJECT,
+    #[tok(ALTER, LARGE, OBJECT, this)]
     pub oid: NumericOnly<'input>,
     pub owner_to: OwnerTo<'input>,
 }
@@ -39,8 +32,10 @@ mod tests {
 
     #[test]
     fn parse_alter_large_object() {
-        let mut input = crate::tokens::test_input("ALTER LARGE OBJECT 42 OWNER TO regress_lo_user");
-        let _stmt = AlterLargeObjectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER LARGE OBJECT 42 OWNER TO regress_lo_user");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterLargeObjectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 }

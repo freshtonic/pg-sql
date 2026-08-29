@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::ddl::trigger::ConstraintAttributeElem;
 use crate::ast::shared::expr::*;
@@ -16,52 +14,34 @@ use crate::tokens::{literal, punct};
 use recursa_diagram::railroad;
 
 /// `COLLATE name` clause on a domain.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DomainCollate<'input> {
-    pub collate: COLLATE,
+    #[tok(COLLATE, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `[CONSTRAINT name]` prefix on a domain constraint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DomainConstraintName<'input> {
-    pub constraint: CONSTRAINT,
+    #[tok(CONSTRAINT, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `NOT NULL` domain constraint body.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct DomainNotNull {
-    pub not: NOT,
-    pub null: NULL,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum DomainNotNull { #[tok(NOT, NULL)] Value, }
 
 /// `CHECK (expr)` domain constraint body.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DomainCheckBody<'input> {
-    pub check: CHECK,
-    pub expr: Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>,
+    #[tok(CHECK, LPAREN, this, RPAREN)]
+    pub expr:  Box<Expr<'input>> ,
 }
 
 /// `DEFAULT expr` clause — domain default value.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DomainDefault<'input> {
-    pub default: DEFAULT,
+    #[tok(DEFAULT, this)]
     pub expr: Box<Expr<'input>>,
 }
 
@@ -71,50 +51,36 @@ pub struct DomainDefault<'input> {
 ///
 /// Variant ordering: `NotNull` (`NOT NULL`, 2 tokens) before `Null`; `Check`
 /// and `Default` are keyword-led and unambiguous.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DomainConstraintBody<'input> {
     NotNull(DomainNotNull),
-    Null(NULL),
+    #[tok(NULL)] Null,
     Check(DomainCheckBody<'input>),
     Default(DomainDefault<'input>),
 }
 
 /// A single domain constraint — `[CONSTRAINT name] body`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DomainConstraint<'input> {
     pub name: Option<DomainConstraintName<'input>>,
     pub body: DomainConstraintBody<'input>,
 }
 
 /// `CREATE DOMAIN name [AS] Typename [COLLATE name] [constraint_list]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateDomainStmt<'input> {
-    pub create: CREATE,
-    pub domain: DOMAIN,
+    #[tok(CREATE, DOMAIN, this)]
     pub name: QualifiedName<'input>,
-    pub r#as: Option<AS>,
+    #[tok(optional(AS), this)]
     pub type_name: CastType<'input>,
     pub collate: Option<DomainCollate<'input>>,
     pub constraints: Vec<DomainConstraint<'input>>,
 }
 
 /// `DROP DOMAIN [IF EXISTS] type [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropDomainStmt<'input> {
-    pub drop: DROP,
-    pub domain: DOMAIN,
+    #[tok(DROP, DOMAIN, this)]
     pub if_exists: Option<IfExists>,
     pub types: TypeNameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -124,13 +90,10 @@ pub struct DropDomainStmt<'input> {
 /// `DomainConstraintElem` (the ALTER DOMAIN-specific form). Differs from
 /// CREATE DOMAIN's `DomainCheckBody` by carrying the optional trailing
 /// `ConstraintAttributeSpec` (e.g. `NOT VALID`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainCheckConstraint<'input> {
-    pub check: CHECK,
-    pub expr: Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>,
+    #[tok(CHECK, LPAREN, this, RPAREN)]
+    pub expr:  Box<Expr<'input>> ,
     pub attrs: Vec<ConstraintAttributeElem>,
 }
 
@@ -138,13 +101,9 @@ pub struct AlterDomainCheckConstraint<'input> {
 /// `DomainConstraintElem` (ALTER DOMAIN-specific form). The corpus
 /// exercises only the bare `NOT NULL` form, but the grammar allows the
 /// optional `ConstraintAttributeSpec` trailer.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainNotNullConstraint {
-    pub not: NOT,
-    pub null: NULL,
+    #[tok(NOT, NULL, this)]
     pub attrs: Vec<ConstraintAttributeElem>,
 }
 
@@ -153,10 +112,7 @@ pub struct AlterDomainNotNullConstraint {
 ///
 /// Variant ordering: variants begin with distinct keywords (`CHECK` /
 /// `NOT`), so order is for clarity only.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterDomainConstraintElem<'input> {
     Check(AlterDomainCheckConstraint<'input>),
     NotNull(AlterDomainNotNullConstraint),
@@ -164,105 +120,63 @@ pub enum AlterDomainConstraintElem<'input> {
 
 /// `[CONSTRAINT name] DomainConstraintElem` on ALTER DOMAIN ADD —
 /// reuses the shared `DomainConstraintName` prefix from CREATE DOMAIN.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainConstraint<'input> {
     pub name: Option<DomainConstraintName<'input>>,
     pub elem: AlterDomainConstraintElem<'input>,
 }
 
 /// `ADD [CONSTRAINT name] DomainConstraintElem` — ADD action on ALTER DOMAIN.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainAdd<'input> {
-    pub add: ADD,
+    #[tok(ADD, this)]
     pub constraint: AlterDomainConstraint<'input>,
 }
 
 /// `DROP CONSTRAINT [IF EXISTS] name [CASCADE | RESTRICT]` — DROP CONSTRAINT
 /// action on ALTER DOMAIN.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainDropConstraint<'input> {
-    pub drop: DROP,
-    pub constraint: CONSTRAINT,
+    #[tok(DROP, CONSTRAINT, this)]
     pub if_exists: Option<IfExists>,
     pub name: crate::tokens::ColId<'input>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// `VALIDATE CONSTRAINT name` — VALIDATE action on ALTER DOMAIN.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainValidate<'input> {
-    pub validate: VALIDATE,
-    pub constraint: CONSTRAINT,
+    #[tok(VALIDATE, CONSTRAINT, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `RENAME CONSTRAINT old TO new` — RenameStmt branch for domain constraints.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainRenameConstraint<'input> {
-    pub rename: RENAME,
-    pub constraint: CONSTRAINT,
+    #[tok(RENAME, CONSTRAINT, this)]
     pub old_name: crate::tokens::ColId<'input>,
-    pub to: TO,
+    #[tok(TO, this)]
     pub new_name: crate::tokens::ColId<'input>,
 }
 
 /// `SET DEFAULT expr` — SET DEFAULT action on ALTER DOMAIN.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainSetDefault<'input> {
-    pub set: SET,
-    pub default: DEFAULT,
+    #[tok(SET, DEFAULT, this)]
     pub expr: Box<Expr<'input>>,
 }
 
 /// `DROP DEFAULT` — DROP DEFAULT action on ALTER DOMAIN.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct AlterDomainDropDefault {
-    pub drop: DROP,
-    pub default: DEFAULT,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum AlterDomainDropDefault { #[tok(DROP, DEFAULT)] Value, }
 
 /// `SET NOT NULL` — SET NOT NULL action on ALTER DOMAIN.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct AlterDomainSetNotNull {
-    pub set: SET,
-    pub not: NOT,
-    pub null: NULL,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum AlterDomainSetNotNull { #[tok(SET, NOT, NULL)] Value, }
 
 /// `DROP NOT NULL` — DROP NOT NULL action on ALTER DOMAIN.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct AlterDomainDropNotNull {
-    pub drop: DROP,
-    pub not: NOT,
-    pub null: NULL,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum AlterDomainDropNotNull { #[tok(DROP, NOT, NULL)] Value, }
 
 /// One action on `ALTER DOMAIN any_name action` — Postgres' `AlterDomainStmt`,
 /// `RenameStmt`, `AlterOwnerStmt` and `AlterObjectSchemaStmt` branches for
@@ -277,10 +191,7 @@ pub struct AlterDomainDropNotNull {
 ///   distinct.
 /// - `RenameConstraint` (two-token `RENAME CONSTRAINT`) must precede the
 ///   single-keyword `Rename` (`RENAME TO`) since both start with `RENAME`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterDomainAction<'input> {
     Add(AlterDomainAdd<'input>),
     DropConstraint(AlterDomainDropConstraint<'input>),
@@ -297,13 +208,9 @@ pub enum AlterDomainAction<'input> {
 
 /// `ALTER DOMAIN any_name action` — Postgres' `AlterDomainStmt`,
 /// `RenameStmt`, `AlterOwnerStmt`, and `AlterObjectSchemaStmt` branches.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainStmt<'input> {
-    pub alter: ALTER,
-    pub domain: DOMAIN,
+    #[tok(ALTER, DOMAIN, this)]
     pub name: QualifiedName<'input>,
     pub action: AlterDomainAction<'input>,
 }
@@ -317,42 +224,46 @@ mod tests {
 
     #[test]
     fn parse_create_domain_simple() {
-        let mut input = crate::tokens::test_input("CREATE DOMAIN domaintext text");
-        let stmt = CreateDomainStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE DOMAIN domaintext text");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateDomainStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "domaintext");
         assert!(stmt.r#as.is_none());
         assert!(stmt.constraints.is_empty());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_domain_check_default_notnull() {
-        let mut input = crate::tokens::test_input(
-            "CREATE DOMAIN dcheck varchar(15) NOT NULL DEFAULT 'a' CHECK (VALUE = 'a')",
-        );
-        let stmt = CreateDomainStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE DOMAIN dcheck varchar(15) NOT NULL DEFAULT 'a' CHECK (VALUE = 'a')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateDomainStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.constraints.len(), 3);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_domain_named_constraint() {
-        let mut input = crate::tokens::test_input(
-            "CREATE DOMAIN testdomain1 AS int CONSTRAINT unsigned CHECK (value > 0)",
-        );
-        let stmt = CreateDomainStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE DOMAIN testdomain1 AS int CONSTRAINT unsigned CHECK (value > 0)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateDomainStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.r#as.is_some());
         assert_eq!(stmt.constraints.len(), 1);
         assert!(stmt.constraints[0].name.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_domain_array_with_size() {
         // `int4[1]` — `[N]` array bound, exercised by domain.sql.
-        let mut input = crate::tokens::test_input("CREATE DOMAIN domainint4arr int4[1]");
-        let stmt = CreateDomainStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE DOMAIN domainint4arr int4[1]");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateDomainStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.type_name.array_suffixes.len(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

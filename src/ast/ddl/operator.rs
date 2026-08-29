@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::ddl::role::DefList;
 use crate::ast::shared::expr::*;
@@ -32,13 +30,9 @@ use recursa_diagram::railroad;
 /// the modelled form rejects them, and any input that uses them surfaces
 /// as a [`crate::ast::FileItem::ParseError`] (also rejected by Postgres,
 /// so the differential oracle stays valid).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateOperatorStmt<'input> {
-    pub create: CREATE,
-    pub operator: OPERATOR,
+    #[tok(CREATE, OPERATOR, this)]
     pub name: QualifiedOperatorName<'input>,
     pub definition: DefList<'input>,
 }
@@ -49,38 +43,24 @@ pub type DropOperatorTarget<'input> = OperatorWithArgtypes<'input>;
 
 /// `DROP OPERATOR [IF EXISTS] op(args) [, ...] [CASCADE | RESTRICT]` —
 /// Postgres' `RemoveOperStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropOperatorStmt<'input> {
-    pub drop: DROP,
-    pub operator: OPERATOR,
+    #[tok(DROP, OPERATOR, this)]
     pub if_exists: Option<IfExists>,
-    pub targets: Seq1<DropOperatorTarget<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub targets: recursa::Vec1<DropOperatorTarget<'input> >,
     pub behavior: Option<DropBehavior>,
 }
 
 /// `FOR SEARCH` — the opclass-purpose marker for search support operators.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct OpclassPurposeSearch {
-    pub r#for: FOR,
-    pub search: SEARCH,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum OpclassPurposeSearch { #[tok(FOR, SEARCH)] Value, }
 
 /// `FOR ORDER BY family_name` — the opclass-purpose marker on ordering
 /// operators, naming the operator family that owns the order semantics.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OpclassPurposeOrderBy<'input> {
-    pub r#for: FOR,
-    pub order: ORDER,
-    pub by: BY,
+    #[tok(FOR, ORDER, BY, this)]
     pub family_name: QualifiedName<'input>,
 }
 
@@ -89,10 +69,7 @@ pub struct OpclassPurposeOrderBy<'input> {
 ///
 /// Variant ordering: each variant has a distinct two-token prefix (`FOR
 /// SEARCH` vs `FOR ORDER`), so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum OpclassPurpose<'input> {
     OrderBy(OpclassPurposeOrderBy<'input>),
     Search(OpclassPurposeSearch),
@@ -107,29 +84,25 @@ pub enum OpclassPurpose<'input> {
 /// (`OPERATOR Iconst operator_with_argtypes opclass_purpose opt_recheck`)
 /// requires it. `RECHECK` is the legacy no-op modifier — still accepted by
 /// PG for old-dump portability and round-tripped here.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OpclassItemOperator<'input> {
-    pub operator: OPERATOR,
+    #[tok(OPERATOR, this)]
     pub number: literal::IntegerLit<'input>,
     pub name: crate::ast::shared::names::QualifiedOperatorName<'input>,
     pub argtypes: Option<crate::ast::shared::names::OperatorArgtypes<'input>>,
     pub purpose: Option<OpclassPurpose<'input>>,
-    pub recheck: Option<RECHECK>,
+    #[presence(RECHECK)]
+    pub recheck: bool,
 }
 
 /// `'(' type_list ')' function_with_argtypes` — the class-args + function
 /// pair on `FUNCTION n (type_list) function_with_argtypes`. Used by the
 /// rarer four-arg form of FUNCTION opclass items.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OpclassItemFunctionClassArgs<'input> {
+    #[tok(LPAREN, this, RPAREN)]
     pub class_args:
-        Surrounded<punct::LParen, crate::ast::shared::names::TypeNameList<'input>, punct::RParen>,
+         crate::ast::shared::names::TypeNameList<'input> ,
     pub func: crate::ast::ddl::function::DropFunctionTarget<'input>,
 }
 
@@ -139,10 +112,7 @@ pub struct OpclassItemFunctionClassArgs<'input> {
 ///
 /// Variant ordering: `WithClassArgs` (starts with `(`) before `Plain` (starts
 /// with an ident from `func_name`). Their first-token sets are disjoint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum OpclassItemFunctionBody<'input> {
     WithClassArgs(OpclassItemFunctionClassArgs<'input>),
     Plain(crate::ast::ddl::function::DropFunctionTarget<'input>),
@@ -150,23 +120,17 @@ pub enum OpclassItemFunctionBody<'input> {
 
 /// `FUNCTION Iconst [(type_list)] function_with_argtypes` — the function
 /// support-procedure entry in an opclass_item list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OpclassItemFunction<'input> {
-    pub function: FUNCTION,
+    #[tok(FUNCTION, this)]
     pub number: literal::IntegerLit<'input>,
     pub body: OpclassItemFunctionBody<'input>,
 }
 
 /// `STORAGE Typename` — the storage-type entry in an opclass_item list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OpclassItemStorage<'input> {
-    pub storage: STORAGE,
+    #[tok(STORAGE, this)]
     pub r#type: crate::ast::shared::names::TypeName<'input>,
 }
 
@@ -176,10 +140,7 @@ pub struct OpclassItemStorage<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`OPERATOR` / `FUNCTION` / `STORAGE`), so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum OpclassItem<'input> {
     Operator(OpclassItemOperator<'input>),
     Function(OpclassItemFunction<'input>),
@@ -188,28 +149,24 @@ pub enum OpclassItem<'input> {
 
 /// `OPERATOR Iconst '(' type_list ')'` — the operator-drop entry in an
 /// ALTER OPERATOR FAMILY ... DROP list. (`opclass_drop` in gram.y.)
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OpclassDropOperator<'input> {
-    pub operator: OPERATOR,
+    #[tok(OPERATOR, this)]
     pub number: literal::IntegerLit<'input>,
+    #[tok(LPAREN, this, RPAREN)]
     pub argtypes:
-        Surrounded<punct::LParen, crate::ast::shared::names::TypeNameList<'input>, punct::RParen>,
+         crate::ast::shared::names::TypeNameList<'input> ,
 }
 
 /// `FUNCTION Iconst '(' type_list ')'` — the function-drop entry in an
 /// ALTER OPERATOR FAMILY ... DROP list. (`opclass_drop` in gram.y.)
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OpclassDropFunction<'input> {
-    pub function: FUNCTION,
+    #[tok(FUNCTION, this)]
     pub number: literal::IntegerLit<'input>,
+    #[tok(LPAREN, this, RPAREN)]
     pub argtypes:
-        Surrounded<punct::LParen, crate::ast::shared::names::TypeNameList<'input>, punct::RParen>,
+         crate::ast::shared::names::TypeNameList<'input> ,
 }
 
 /// One entry in an `opclass_drop_list`: either an `OPERATOR Iconst (types)` or
@@ -217,10 +174,7 @@ pub struct OpclassDropFunction<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword, so order
 /// is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum OpclassDrop<'input> {
     Operator(OpclassDropOperator<'input>),
     Function(OpclassDropFunction<'input>),
@@ -228,71 +182,55 @@ pub enum OpclassDrop<'input> {
 
 /// `FAMILY family_name` — the optional clause naming an enclosing operator
 /// family on `CREATE OPERATOR CLASS ... USING method [FAMILY family]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateOpClassFamilyClause<'input> {
-    pub family: FAMILY,
+    #[tok(FAMILY, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `CREATE OPERATOR CLASS any_name [DEFAULT] FOR TYPE Typename USING access_method
 /// [FAMILY family_name] AS opclass_item [, ...]` — Postgres'
 /// `CreateOpClassStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateOperatorClassStmt<'input> {
-    pub create: CREATE,
-    pub operator: OPERATOR,
-    pub class: CLASS,
+    #[tok(CREATE, OPERATOR, CLASS, this)]
     pub name: QualifiedName<'input>,
-    pub default: Option<DEFAULT>,
-    pub r#for: FOR,
-    pub r#type: TYPE,
+    #[tok(this, FOR, TYPE)]
+    #[presence(DEFAULT)]
+    pub default: bool,
     pub datatype: crate::ast::shared::names::TypeName<'input>,
-    pub using: USING,
+    #[tok(USING, this)]
     pub access_method: crate::tokens::ColId<'input>,
     pub family: Option<CreateOpClassFamilyClause<'input>>,
-    pub r#as: AS,
-    pub items: Seq1<OpclassItem<'input>, punct::Comma>,
+    #[tok(AS, this)]
+    #[sep(COMMA)]
+    pub items: recursa::Vec1<OpclassItem<'input> >,
 }
 
 /// `CREATE OPERATOR FAMILY any_name USING access_method` — Postgres'
 /// `CreateOpFamilyStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateOperatorFamilyStmt<'input> {
-    pub create: CREATE,
-    pub operator: OPERATOR,
-    pub family: FAMILY,
+    #[tok(CREATE, OPERATOR, FAMILY, this)]
     pub name: QualifiedName<'input>,
-    pub using: USING,
+    #[tok(USING, this)]
     pub access_method: crate::tokens::ColId<'input>,
 }
 
 /// `ADD opclass_item [, ...]` — the add arm of ALTER OPERATOR FAMILY.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterOperatorFamilyAdd<'input> {
-    pub add: ADD,
-    pub items: Seq1<OpclassItem<'input>, punct::Comma>,
+    #[tok(ADD, this)]
+    #[sep(COMMA)]
+    pub items: recursa::Vec1<OpclassItem<'input> >,
 }
 
 /// `DROP opclass_drop [, ...]` — the drop arm of ALTER OPERATOR FAMILY.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterOperatorFamilyDrop<'input> {
-    pub drop: DROP,
-    pub items: Seq1<OpclassDrop<'input>, punct::Comma>,
+    #[tok(DROP, this)]
+    #[sep(COMMA)]
+    pub items: recursa::Vec1<OpclassDrop<'input> >,
 }
 
 /// One action on `ALTER OPERATOR FAMILY name USING method action` — covers
@@ -301,10 +239,7 @@ pub struct AlterOperatorFamilyDrop<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword (`ADD`,
 /// `DROP`, `RENAME`, `OWNER`, `SET`), so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterOperatorFamilyAction<'input> {
     Add(AlterOperatorFamilyAdd<'input>),
     Drop(AlterOperatorFamilyDrop<'input>),
@@ -316,16 +251,11 @@ pub enum AlterOperatorFamilyAction<'input> {
 /// `ALTER OPERATOR FAMILY any_name USING access_method action` — Postgres'
 /// `AlterOpFamilyStmt` plus the operator-family branches of `RenameStmt` /
 /// `AlterOwnerStmt` / `AlterObjectSchemaStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterOperatorFamilyStmt<'input> {
-    pub alter: ALTER,
-    pub operator: OPERATOR,
-    pub family: FAMILY,
+    #[tok(ALTER, OPERATOR, FAMILY, this)]
     pub name: QualifiedName<'input>,
-    pub using: USING,
+    #[tok(USING, this)]
     pub access_method: crate::tokens::ColId<'input>,
     pub action: AlterOperatorFamilyAction<'input>,
 }
@@ -338,10 +268,7 @@ pub struct AlterOperatorFamilyStmt<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`RENAME`, `OWNER`, `SET`), so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterOperatorClassAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -352,50 +279,35 @@ pub enum AlterOperatorClassAction<'input> {
 /// Postgres' operator-class branches of `RenameStmt` / `AlterOwnerStmt`
 /// / `AlterObjectSchemaStmt`. The ADD/DROP body lives only on the
 /// `AlterOpFamilyStmt` (FAMILY) production.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterOperatorClassStmt<'input> {
-    pub alter: ALTER,
-    pub operator: OPERATOR,
-    pub class: CLASS,
+    #[tok(ALTER, OPERATOR, CLASS, this)]
     pub name: QualifiedName<'input>,
-    pub using: USING,
+    #[tok(USING, this)]
     pub access_method: crate::tokens::ColId<'input>,
     pub action: AlterOperatorClassAction<'input>,
 }
 
 /// `DROP OPERATOR CLASS [IF EXISTS] any_name USING access_method
 /// [CASCADE | RESTRICT]` — Postgres' `DropOpClassStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropOperatorClassStmt<'input> {
-    pub drop: DROP,
-    pub operator: OPERATOR,
-    pub class: CLASS,
+    #[tok(DROP, OPERATOR, CLASS, this)]
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
-    pub using: USING,
+    #[tok(USING, this)]
     pub access_method: crate::tokens::ColId<'input>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// `DROP OPERATOR FAMILY [IF EXISTS] any_name USING access_method
 /// [CASCADE | RESTRICT]` — Postgres' `DropOpFamilyStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropOperatorFamilyStmt<'input> {
-    pub drop: DROP,
-    pub operator: OPERATOR,
-    pub family: FAMILY,
+    #[tok(DROP, OPERATOR, FAMILY, this)]
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
-    pub using: USING,
+    #[tok(USING, this)]
     pub access_method: crate::tokens::ColId<'input>,
     pub behavior: Option<DropBehavior>,
 }
@@ -405,12 +317,9 @@ pub struct DropOperatorFamilyStmt<'input> {
 ///
 /// The def-list inside the parens is the same `def_list` body shared with
 /// CREATE OPERATOR / CREATE AGGREGATE / etc. and is captured by [`DefList`].
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterOperatorSetOptions<'input> {
-    pub set: SET,
+    #[tok(SET, this)]
     pub options: DefList<'input>,
 }
 
@@ -424,10 +333,7 @@ pub struct AlterOperatorSetOptions<'input> {
 /// Variant ordering: `SetSchema` (multi-token `SET SCHEMA`) must precede
 /// `SetOptions` (single-token `SET` then a `(`), since both begin with
 /// `SET` and longest-match-wins picks the more specific path first.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterOperatorAction<'input> {
     SetSchema(SetSchemaClause<'input>),
     SetOptions(AlterOperatorSetOptions<'input>),
@@ -435,13 +341,9 @@ pub enum AlterOperatorAction<'input> {
 }
 
 /// `ALTER OPERATOR op(args) { SET (...) | SET SCHEMA name | OWNER TO role }`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterOperatorStmt<'input> {
-    pub alter: ALTER,
-    pub operator: OPERATOR,
+    #[tok(ALTER, OPERATOR, this)]
     pub target: OperatorWithArgtypes<'input>,
     pub action: AlterOperatorAction<'input>,
 }
@@ -455,206 +357,216 @@ mod tests {
 
     #[test]
     fn parse_create_operator_custom_op() {
-        let mut input = crate::tokens::test_input(
-            "CREATE OPERATOR @-@ ( leftarg = int4, rightarg = int4, procedure = int4mi )",
-        );
-        let _stmt = CreateOperatorStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE OPERATOR @-@ ( leftarg = int4, rightarg = int4, procedure = int4mi )");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateOperatorStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_operator_custom_op() {
-        let mut input = crate::tokens::test_input("DROP OPERATOR ===(bigint, bigint)");
-        let _stmt = DropOperatorStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("DROP OPERATOR ===(bigint, bigint)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = DropOperatorStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_custom_op() {
-        let mut input = crate::tokens::test_input(
-            "ALTER OPERATOR @+@(int4, int4) OWNER TO regress_alter_generic_user2",
-        );
-        let _stmt = AlterOperatorStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER OPERATOR @+@(int4, int4) OWNER TO regress_alter_generic_user2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterOperatorStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_operator_commutator_custom_op() {
         // From `create_operator.sql`: `COMMUTATOR = ===` on a CREATE OPERATOR
         // body. The RHS of the `=` is itself a custom operator.
-        let mut input = crate::tokens::test_input(
-            "CREATE OPERATOR === (\
+        let lexed = crate::tokens::lex("CREATE OPERATOR === (\
                  LEFTARG = boolean,\
                  RIGHTARG = boolean,\
                  PROCEDURE = fn_op2,\
                  COMMUTATOR = ===,\
                  NEGATOR = !==\
-             )",
-        );
-        let _stmt = CreateOperatorStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+             )");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateOperatorStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_set_commutator_custom_op() {
         // From `alter_operator.sql`: `SET (COMMUTATOR = ====)` — the RHS is
         // a 4-char custom op (`====`) which lexes as `CustomOp`.
-        let mut input =
-            crate::tokens::test_input("ALTER OPERATOR === (boolean, real) SET (COMMUTATOR = ====)");
-        let _stmt = AlterOperatorStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER OPERATOR === (boolean, real) SET (COMMUTATOR = ====)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterOperatorStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_set_negator_at_eq() {
         // `SET (COMMUTATOR = @=)` — `@=` is a 2-char custom op starting with `@`.
-        let mut input =
-            crate::tokens::test_input("ALTER OPERATOR === (boolean, real) SET (COMMUTATOR = @=)");
-        let _stmt = AlterOperatorStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER OPERATOR === (boolean, real) SET (COMMUTATOR = @=)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterOperatorStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_operator_single_char() {
-        let mut input = crate::tokens::test_input(
-            "CREATE OPERATOR = (procedure = int8alias1eq, leftarg = int8alias1, rightarg = int8alias1)",
-        );
-        let _stmt = CreateOperatorStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE OPERATOR = (procedure = int8alias1eq, leftarg = int8alias1, rightarg = int8alias1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateOperatorStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_operator_single_char() {
-        let mut input = crate::tokens::test_input("DROP OPERATOR <|(bigint, bigint)");
-        let _stmt = DropOperatorStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("DROP OPERATOR <|(bigint, bigint)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = DropOperatorStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_operator_family_basic() {
-        let mut input = crate::tokens::test_input("CREATE OPERATOR FAMILY my_family USING hash");
-        let stmt = CreateOperatorFamilyStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE OPERATOR FAMILY my_family USING hash");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateOperatorFamilyStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "my_family");
         assert_eq!(stmt.access_method.text(), "hash");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_operator_class_storage_only() {
-        let mut input = crate::tokens::test_input(
-            "CREATE OPERATOR CLASS alt_opc1 FOR TYPE uuid USING hash AS STORAGE uuid",
-        );
-        let stmt = CreateOperatorClassStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE OPERATOR CLASS alt_opc1 FOR TYPE uuid USING hash AS STORAGE uuid");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateOperatorClassStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "alt_opc1");
         assert!(stmt.default.is_none());
         assert!(stmt.family.is_none());
         assert_eq!(stmt.items.iter().count(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_operator_class_default_with_family() {
-        let mut input = crate::tokens::test_input(
-            "CREATE OPERATOR CLASS my_ops DEFAULT FOR TYPE int4 USING btree \
-             FAMILY my_fam AS OPERATOR 1 < , OPERATOR 3 = , FUNCTION 1 my_cmp(int4, int4)",
-        );
-        let stmt = CreateOperatorClassStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE OPERATOR CLASS my_ops DEFAULT FOR TYPE int4 USING btree \
+             FAMILY my_fam AS OPERATOR 1 < , OPERATOR 3 = , FUNCTION 1 my_cmp(int4, int4)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateOperatorClassStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.default.is_some());
         assert!(stmt.family.is_some());
         assert_eq!(stmt.items.iter().count(), 3);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_family_add() {
-        let mut input = crate::tokens::test_input(
-            "ALTER OPERATOR FAMILY alt_opf17 USING btree ADD \
-             OPERATOR 1 < (int4, int4), FUNCTION 1 btint4cmp(int4, int4)",
-        );
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER OPERATOR FAMILY alt_opf17 USING btree ADD \
+             OPERATOR 1 < (int4, int4), FUNCTION 1 btint4cmp(int4, int4)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_family_drop() {
-        let mut input = crate::tokens::test_input(
-            "ALTER OPERATOR FAMILY alt_opf11 USING gist DROP OPERATOR 1 (int4, int4)",
-        );
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER OPERATOR FAMILY alt_opf11 USING gist DROP OPERATOR 1 (int4, int4)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_family_rename() {
-        let mut input = crate::tokens::test_input(
-            "ALTER OPERATOR FAMILY alt_opf1 USING hash RENAME TO alt_opf3",
-        );
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER OPERATOR FAMILY alt_opf1 USING hash RENAME TO alt_opf3");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_family_owner() {
-        let mut input = crate::tokens::test_input(
-            "ALTER OPERATOR FAMILY alt_opf1 USING hash OWNER TO regress_alter_generic_user1",
-        );
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER OPERATOR FAMILY alt_opf1 USING hash OWNER TO regress_alter_generic_user1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_family_set_schema() {
-        let mut input = crate::tokens::test_input(
-            "ALTER OPERATOR FAMILY alt_opf2 USING hash SET SCHEMA alt_nsp2",
-        );
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER OPERATOR FAMILY alt_opf2 USING hash SET SCHEMA alt_nsp2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_family_add_order_by() {
         // `OPERATOR n any_op FOR ORDER BY family_name` — the ordering-operator
         // arm of opclass_purpose.
-        let mut input = crate::tokens::test_input(
-            "ALTER OPERATOR FAMILY alt_opf10 USING btree ADD \
-             OPERATOR 1 < (int4, int4) FOR ORDER BY some_family",
-        );
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER OPERATOR FAMILY alt_opf10 USING btree ADD \
+             OPERATOR 1 < (int4, int4) FOR ORDER BY some_family");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterOperatorFamilyStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_operator_class_basic() {
-        let mut input = crate::tokens::test_input("DROP OPERATOR CLASS my_ops USING btree CASCADE");
-        let stmt = DropOperatorClassStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP OPERATOR CLASS my_ops USING btree CASCADE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropOperatorClassStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "my_ops");
         assert_eq!(stmt.access_method.text(), "btree");
         assert!(stmt.if_exists.is_none());
         assert!(stmt.behavior.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_operator_family_if_exists() {
-        let mut input = crate::tokens::test_input(
-            "DROP OPERATOR FAMILY IF EXISTS my_family USING hash RESTRICT",
-        );
-        let stmt = DropOperatorFamilyStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP OPERATOR FAMILY IF EXISTS my_family USING hash RESTRICT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropOperatorFamilyStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
         assert!(stmt.behavior.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_operator_class_recheck_modifier() {
         // Legacy `RECHECK` modifier on opclass operator items — PG accepts it
         // for old-dump portability (no-op since 8.4) and we round-trip it.
-        let mut input = crate::tokens::test_input(
-            "CREATE OPERATOR CLASS legacy_ops FOR TYPE int4 USING gist AS \
-             OPERATOR 1 < RECHECK, STORAGE int4",
-        );
-        let stmt = CreateOperatorClassStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE OPERATOR CLASS legacy_ops FOR TYPE int4 USING gist AS \
+             OPERATOR 1 < RECHECK, STORAGE int4");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateOperatorClassStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.items.iter().count(), 2);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

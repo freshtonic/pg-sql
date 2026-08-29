@@ -2,8 +2,6 @@
 //! `PREPARE TRANSACTION 'gid'` form).
 
 use recursa::seq::Seq0;
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::expr::Expr;
@@ -20,10 +18,7 @@ use crate::tokens::{literal, punct};
 /// grammar (`SELECT`, set operations, `VALUES`, `TABLE`, and `WITH`). The
 /// other four variants have disjoint leading keywords, so variant order does
 /// not affect disambiguation.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PreparableStmt<'input> {
     Query(Box<crate::ast::dml::values::Subquery<'input>>),
     Insert(Box<crate::ast::dml::insert::InsertStmt<'input>>),
@@ -34,23 +29,18 @@ pub enum PreparableStmt<'input> {
 
 /// `( typename [, ...] )` parameter-type list on a `PREPARE` statement
 /// (`prep_type_clause` in `gram.y`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PrepareTypes<'input> {
-    pub types: Surrounded<punct::LParen, TypeNameList<'input>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    pub types:  TypeNameList<'input> ,
 }
 
 /// Body of a standard `PREPARE name [(types)] AS stmt` statement.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PrepareStandardBody<'input> {
     pub name: literal::AliasName<'input>,
     pub types: Option<PrepareTypes<'input>>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub body: PreparableStmt<'input>,
 }
 
@@ -58,12 +48,9 @@ pub struct PrepareStandardBody<'input> {
 /// form (`gram.y::TransactionStmt: PREPARE TRANSACTION Sconst`). Distinct
 /// from the `PREPARE name … AS stmt` form modelled by
 /// [`PrepareStandardBody`].
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PrepareTransactionBody<'input> {
-    pub transaction: TRANSACTION,
+    #[tok(TRANSACTION, this)]
     pub gid: literal::StringLit<'input>,
 }
 
@@ -75,10 +62,7 @@ pub struct PrepareTransactionBody<'input> {
 /// `tokens::literal::BareAliasName::peek`). Declaration order is the
 /// tiebreaker, so `Transaction` must come first to win when the source is
 /// literally `PREPARE TRANSACTION 'gid'`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PrepareStmtBody<'input> {
     Transaction(PrepareTransactionBody<'input>),
     Standard(PrepareStandardBody<'input>),
@@ -88,34 +72,27 @@ pub enum PrepareStmtBody<'input> {
 /// PREPARE name [ (typename [, ...]) ] AS PreparableStmt
 /// PREPARE TRANSACTION 'gid'
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PrepareStmt<'input> {
-    pub prepare: PREPARE,
+    #[tok(PREPARE, this)]
     pub body: PrepareStmtBody<'input>,
 }
 
 /// `( expr [, ...] )` argument list on an `EXECUTE` statement
 /// (`execute_param_clause` in `gram.y`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExecuteParams<'input> {
-    pub params: Surrounded<punct::LParen, Seq0<Expr<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub params:  Vec<Expr<'input> > ,
 }
 
 /// ```sql
 /// EXECUTE name [ (expr [, ...]) ]
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExecuteStmt<'input> {
-    pub execute: EXECUTE,
+    #[tok(EXECUTE, this)]
     pub name: literal::AliasName<'input>,
     pub params: Option<ExecuteParams<'input>>,
 }
@@ -124,25 +101,18 @@ pub struct ExecuteStmt<'input> {
 ///
 /// Variant ordering: `All` (the `ALL` keyword) before `Name` so the reserved
 /// word is not swallowed as a statement name.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DeallocateTarget<'input> {
-    All(ALL),
+    #[tok(ALL)] All,
     Name(literal::AliasName<'input>),
 }
 
 /// ```sql
 /// DEALLOCATE [PREPARE] { name | ALL }
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DeallocateStmt<'input> {
-    pub deallocate: DEALLOCATE,
-    pub prepare: Option<PREPARE>,
+    #[tok(DEALLOCATE, optional(PREPARE), this)]
     pub target: DeallocateTarget<'input>,
 }
 

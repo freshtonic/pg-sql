@@ -5,7 +5,10 @@ use clap::{Parser, Subcommand};
 use pg_sql_migrate::baseline::{
     CaptureOptions, capture_baseline, to_canonical_json, write_baseline,
 };
-use pg_sql_migrate::grammar_rewrite::GrammarRewritePass;
+use pg_sql_migrate::execution::{
+    publication_tree_digest, published_source_digest, verify_execution,
+};
+use pg_sql_migrate::grammar_rewrite::{GeneratedWhitespaceCleanupPass, GrammarRewritePass};
 use pg_sql_migrate::rewrite::{RewriteTreeRequest, SourceRewritePass, rewrite_tree};
 use pg_sql_migrate::test_call_rewrite::TestCallRewritePass;
 use pg_sql_migrate::{Mapping, inventory, to_canonical_inventory_json};
@@ -35,10 +38,42 @@ enum Command {
         #[command(subcommand)]
         command: BaselineCommand,
     },
+    /// Verify the checked record of the one-shot grammar migration.
+    Execution {
+        #[command(subcommand)]
+        command: ExecutionCommand,
+    },
     /// Publish a validated rewritten copy; the source tree is never modified.
     Rewrite {
         #[command(subcommand)]
         command: RewriteCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExecutionCommand {
+    /// Match the immutable identities and reviewed digest to the published tree.
+    Verify {
+        #[arg(long, default_value = ".")]
+        repository_root: PathBuf,
+        #[arg(long, default_value = "migration/execution.json")]
+        record: PathBuf,
+    },
+    /// Print the canonical digest of a migrated pg-sql source tree.
+    Digest {
+        #[arg(long)]
+        tree_root: PathBuf,
+        #[arg(long, default_value = "docs/import-provenance.tsv")]
+        manifest: PathBuf,
+        #[arg(long = "omit")]
+        omitted_paths: Vec<String>,
+    },
+    /// Print the canonical digest of the exact published Cargo/source membership and modes.
+    PublicationDigest {
+        #[arg(long, default_value = ".")]
+        repository_root: PathBuf,
+        #[arg(long, default_value = "docs/import-provenance.tsv")]
+        manifest: PathBuf,
     },
 }
 
@@ -127,6 +162,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("baseline matches fresh capture: {}", baseline.display());
             }
         },
+        Command::Execution { command } => match command {
+            ExecutionCommand::Verify {
+                repository_root,
+                record,
+            } => {
+                verify_execution(&repository_root, &record)?;
+                println!("migration execution matches {}", record.display());
+            }
+            ExecutionCommand::Digest {
+                tree_root,
+                manifest,
+                omitted_paths,
+            } => {
+                let omitted_paths = omitted_paths.into_iter().collect();
+                println!(
+                    "{}",
+                    published_source_digest(&tree_root, &manifest, &omitted_paths)?
+                );
+            }
+            ExecutionCommand::PublicationDigest {
+                repository_root,
+                manifest,
+            } => println!("{}", publication_tree_digest(&repository_root, &manifest)?),
+        },
         Command::Rewrite { command } => match command {
             RewriteCommand::Grammar {
                 source_root,
@@ -136,7 +195,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } => {
                 let manifest = fs::read_to_string(manifest)?;
                 let pass = GrammarRewritePass::from_manifest_json(&manifest)?;
-                publish_rewrite(&source_root, &destination_root, &new_repository_root, &pass)?;
+                publish_rewrites(
+                    &source_root,
+                    &destination_root,
+                    &new_repository_root,
+                    &[&pass, &GeneratedWhitespaceCleanupPass],
+                )?;
             }
             RewriteCommand::TestCalls {
                 source_root,
@@ -159,11 +223,20 @@ fn publish_rewrite(
     new_repository_root: &std::path::Path,
     pass: &dyn SourceRewritePass,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    publish_rewrites(source_root, destination_root, new_repository_root, &[pass])
+}
+
+fn publish_rewrites(
+    source_root: &std::path::Path,
+    destination_root: &std::path::Path,
+    new_repository_root: &std::path::Path,
+    passes: &[&dyn SourceRewritePass],
+) -> Result<(), Box<dyn std::error::Error>> {
     rewrite_tree(RewriteTreeRequest {
         source_root,
         destination_root,
         new_repository_root,
-        passes: &[pass],
+        passes,
     })?;
     println!("published {}", destination_root.display());
     Ok(())

@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::session::notify::NotifyStmt;
 use crate::ast::shared::expr::*;
@@ -17,35 +15,26 @@ use recursa_diagram::railroad;
 
 /// Rule event — Postgres' `event` rule (a strict subset of trigger events):
 /// `SELECT | INSERT | UPDATE | DELETE`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum RuleEvent {
-    Select(SELECT),
-    Insert(INSERT),
-    Update(UPDATE),
-    Delete(DELETE),
+    #[tok(SELECT)] Select,
+    #[tok(INSERT)] Insert,
+    #[tok(UPDATE)] Update,
+    #[tok(DELETE)] Delete,
 }
 
 /// `INSTEAD | ALSO` — Postgres' `opt_instead`. Either keyword is optional;
 /// when absent the rule fires alongside the original command (`ALSO`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum RuleInsteadAlso {
-    Instead(INSTEAD),
-    Also(ALSO),
+    #[tok(INSTEAD)] Instead,
+    #[tok(ALSO)] Also,
 }
 
 /// `WHERE expr` clause on a rule. Postgres allows any `a_expr`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RuleWhereClause<'input> {
-    pub where_: WHERE,
+    #[tok(WHERE, this)]
     pub expr: Box<Expr<'input>>,
 }
 
@@ -67,10 +56,7 @@ pub struct RuleWhereClause<'input> {
 ///
 /// Variant ordering: `With` and `Values` lead with their own keyword and
 /// don't collide with the DML statement leads.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum RuleActionStmt<'input> {
     With(Box<crate::ast::shared::with_clause::WithStatement<'input>>),
     Values(Box<crate::ast::dml::values::Subquery<'input>>),
@@ -86,59 +72,50 @@ pub enum RuleActionStmt<'input> {
 ///
 /// Variant ordering: distinct first tokens (`NOTHING` keyword, `(` punct, or
 /// statement-leading keyword) so disambiguation is unambiguous.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum RuleActions<'input> {
-    Nothing(NOTHING),
+    #[tok(NOTHING)] Nothing,
     /// `'(' stmt; stmt; … ')'` — RuleActionMulti, accepting empty statements
     /// between semicolons. We use `Seq0` with `Semi` separator and an
     /// optional trailing separator so `(stmt;)` and `(stmt; stmt;)` both
     /// round-trip.
     Multi(
-        Surrounded<
-            punct::LParen,
-            Seq0<RuleActionStmt<'input>, punct::Semi, recursa::seq::OptionalTrailing>,
-            punct::RParen,
-        >,
+        #[tok(LPAREN, this, RPAREN)]
+        #[sep(SEMI, trailing)]
+
+
+            Vec<RuleActionStmt<'input>  >
+
+        ,
     ),
     Single(Box<RuleActionStmt<'input>>),
 }
 
 /// `CREATE [OR REPLACE] RULE name AS ON event TO qualified_name [WHERE expr]
 /// DO [INSTEAD|ALSO] RuleActionList` — Postgres' `RuleStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateRuleStmt<'input> {
-    pub create: CREATE,
-    pub or_replace: Option<(OR, REPLACE)>,
-    pub rule: RULE,
+    #[tok(CREATE, this, RULE)]
+    #[presence(OR, REPLACE)]
+    pub or_replace: bool,
     pub name: crate::tokens::ColId<'input>,
-    pub r#as: AS,
-    pub on: ON,
+    #[tok(AS, ON, this)]
     pub event: RuleEvent,
-    pub to: TO,
+    #[tok(TO, this)]
     pub table: QualifiedName<'input>,
     pub where_clause: Option<RuleWhereClause<'input>>,
-    pub r#do: DO,
+    #[tok(DO, this)]
     pub instead_also: Option<RuleInsteadAlso>,
     pub actions: RuleActions<'input>,
 }
 
 /// `DROP RULE [IF EXISTS] name ON table [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropRuleStmt<'input> {
-    pub drop: DROP,
-    pub rule: RULE,
+    #[tok(DROP, RULE, this)]
     pub if_exists: Option<IfExists>,
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub behavior: Option<DropBehavior>,
 }
@@ -146,15 +123,11 @@ pub struct DropRuleStmt<'input> {
 /// `ALTER RULE name ON qualified_name RENAME TO new` — Postgres'
 /// `RenameStmt` branch for rules. Rules have no OWNER / SET SCHEMA
 /// actions in gram.y, so RENAME is the only branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterRuleStmt<'input> {
-    pub alter: ALTER,
-    pub rule: RULE,
+    #[tok(ALTER, RULE, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub rename_to: RenameTo<'input>,
 }
@@ -168,10 +141,11 @@ mod tests {
 
     #[test]
     fn parse_alter_rule_rename() {
-        let mut input =
-            crate::tokens::test_input("ALTER RULE InsertRule ON rule_v1 RENAME TO NewInsertRule");
-        let _stmt = AlterRuleStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER RULE InsertRule ON rule_v1 RENAME TO NewInsertRule");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterRuleStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]

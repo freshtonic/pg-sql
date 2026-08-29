@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -18,133 +16,97 @@ use recursa_diagram::railroad;
 ///
 /// Variant ordering: multi-word `InsteadOf` first so the longer match wins
 /// when `INSTEAD` is followed by `OF`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TriggerActionTime {
-    InsteadOf((INSTEAD, OF)),
-    Before(BEFORE),
-    After(AFTER),
+    #[tok(INSTEAD, OF)] InsteadOf,
+    #[tok(BEFORE)] Before,
+    #[tok(AFTER)] After,
 }
 
 /// `UPDATE OF col[, col …]` — column list following an UPDATE trigger event.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TriggerUpdateOfColumns<'input> {
-    pub of: OF,
-    pub columns: Seq1<crate::tokens::ColId<'input>, punct::Comma>,
+    #[tok(OF, this)]
+    #[sep(COMMA)]
+    pub columns: recursa::Vec1<crate::tokens::ColId<'input> >,
 }
 
 /// `UPDATE [OF cols]` — UPDATE trigger event with optional column list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TriggerUpdateEvent<'input> {
-    pub update: UPDATE,
+    #[tok(UPDATE, this)]
     pub of: Option<TriggerUpdateOfColumns<'input>>,
 }
 
 /// One trigger event — Postgres' `TriggerOneEvent`:
 /// `INSERT | DELETE | UPDATE [OF cols] | TRUNCATE`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TriggerOneEvent<'input> {
-    Insert(INSERT),
-    Delete(DELETE),
+    #[tok(INSERT)] Insert,
+    #[tok(DELETE)] Delete,
     Update(TriggerUpdateEvent<'input>),
-    Truncate(TRUNCATE),
+    #[tok(TRUNCATE)] Truncate,
 }
 
 /// `ROW | STATEMENT` — granularity selector after `FOR [EACH]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TriggerForType {
-    Row(ROW),
-    Statement(STATEMENT),
+    #[tok(ROW)] Row,
+    #[tok(STATEMENT)] Statement,
 }
 
 /// `FOR [EACH] {ROW | STATEMENT}` — Postgres' `TriggerForSpec`. When omitted
 /// PG defaults to `STATEMENT`, but we preserve absence in the AST so the
 /// formatter round-trips source verbatim.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TriggerForSpec {
-    pub r#for: FOR,
-    pub each: Option<EACH>,
+    #[tok(FOR, optional(EACH), this)]
     pub kind: TriggerForType,
 }
 
 /// `WHEN (expr)` — Postgres' `TriggerWhen` clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TriggerWhenClause<'input> {
-    pub when: WHEN,
-    pub expr: Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>,
+    #[tok(WHEN, LPAREN, this, RPAREN)]
+    pub expr:  Box<Expr<'input>> ,
 }
 
 /// `NEW | OLD` — Postgres' `TransitionOldOrNew`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TransitionOldOrNew {
-    Old(OLD),
-    New(NEW),
+    #[tok(OLD)] Old,
+    #[tok(NEW)] New,
 }
 
 /// `ROW | TABLE` — Postgres' `TransitionRowOrTable`. ROW is permitted by
 /// gram.y though semantically only TABLE makes sense for transition tables.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TransitionRowOrTable {
-    Table(TABLE),
-    Row(ROW),
+    #[tok(TABLE)] Table,
+    #[tok(ROW)] Row,
 }
 
 /// A single `REFERENCING` transition: `{OLD|NEW} {TABLE|ROW} [AS] name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TriggerTransition<'input> {
     pub old_or_new: TransitionOldOrNew,
     pub row_or_table: TransitionRowOrTable,
-    pub r#as: Option<AS>,
+    #[tok(optional(AS), this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `REFERENCING transition+` — one or more transition-table clauses.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TriggerReferencing<'input> {
-    pub referencing: REFERENCING,
+    #[tok(REFERENCING, this)]
     pub transitions: Vec<TriggerTransition<'input>>,
 }
 
 /// `FUNCTION | PROCEDURE` — Postgres' `FUNCTION_or_PROCEDURE`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FunctionOrProcedure {
-    Function(FUNCTION),
-    Procedure(PROCEDURE),
+    #[tok(FUNCTION)] Function,
+    #[tok(PROCEDURE)] Procedure,
 }
 
 /// A single trigger function argument — Postgres' `TriggerFuncArg`:
@@ -152,10 +114,7 @@ pub enum FunctionOrProcedure {
 ///
 /// Variant ordering: numeric forms before integer (NumericLit longest-match
 /// wins on `.` / `e`); literal `StringLit` before identifier `AliasName`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TriggerFuncArg<'input> {
     Numeric(literal::NumericLit<'input>),
     Integer(literal::IntegerLit<'input>),
@@ -164,22 +123,18 @@ pub enum TriggerFuncArg<'input> {
 }
 
 /// `(arg, …)` argument list passed to the trigger's EXECUTE FUNCTION/PROCEDURE.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TriggerExecArgs<'input> {
-    pub args: Surrounded<punct::LParen, Seq0<TriggerFuncArg<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:  Vec<TriggerFuncArg<'input> > ,
 }
 
 /// `EXECUTE {FUNCTION | PROCEDURE} func_name(args)` — Postgres' trigger
 /// action clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TriggerExecuteClause<'input> {
-    pub execute: EXECUTE,
+    #[tok(EXECUTE, this)]
     pub kind: FunctionOrProcedure,
     pub func_name: QualifiedName<'input>,
     pub args: TriggerExecArgs<'input>,
@@ -189,18 +144,16 @@ pub struct TriggerExecuteClause<'input> {
 /// qualified_name [REFERENCING …] [FOR [EACH] {ROW|STATEMENT}] [WHEN (expr)]
 /// EXECUTE {FUNCTION|PROCEDURE} func_name(args)` — Postgres' `CreateTrigStmt`
 /// (non-constraint form).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateTriggerStmt<'input> {
-    pub create: CREATE,
-    pub or_replace: Option<(OR, REPLACE)>,
-    pub trigger: TRIGGER,
+    #[tok(CREATE, this, TRIGGER)]
+    #[presence(OR, REPLACE)]
+    pub or_replace: bool,
     pub name: crate::tokens::ColId<'input>,
     pub timing: TriggerActionTime,
-    pub events: Seq1<TriggerOneEvent<'input>, OR>,
-    pub on: ON,
+    #[sep(OR)]
+    pub events: recursa::Vec1<TriggerOneEvent<'input> >,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub referencing: Option<TriggerReferencing<'input>>,
     pub for_spec: Option<TriggerForSpec>,
@@ -212,15 +165,11 @@ pub struct CreateTriggerStmt<'input> {
 /// action shared by ALTER TRIGGER / ALTER MATERIALIZED VIEW / ALTER INDEX
 /// (and several others). The optional `NO` toggles whether the extension
 /// dependency is added (`DEPENDS ...`) or removed (`NO DEPENDS ...`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DependsOnExtension<'input> {
-    pub no: Option<NO>,
-    pub depends: DEPENDS,
-    pub on: ON,
-    pub extension: EXTENSION,
+    #[tok(this, DEPENDS, ON, EXTENSION)]
+    #[presence(NO)]
+    pub no: bool,
     pub name: crate::tokens::ColId<'input>,
 }
 
@@ -229,10 +178,7 @@ pub struct DependsOnExtension<'input> {
 ///
 /// Variant ordering: variants begin with distinct leading keywords
 /// (`RENAME` / `NO` / `DEPENDS`), so order is for clarity only.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterTriggerAction<'input> {
     Rename(RenameTo<'input>),
     Depends(DependsOnExtension<'input>),
@@ -242,27 +188,20 @@ pub enum AlterTriggerAction<'input> {
 /// [NO] DEPENDS ON EXTENSION name }` — Postgres' `RenameStmt` and
 /// `AlterObjectDependsStmt` branches for triggers. There is no OWNER /
 /// SET SCHEMA / ENABLE branch on triggers in gram.y.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTriggerStmt<'input> {
-    pub alter: ALTER,
-    pub trigger: TRIGGER,
+    #[tok(ALTER, TRIGGER, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub action: AlterTriggerAction<'input>,
 }
 
 /// `FROM qualified_name` — Postgres' `OptConstrFromTable` (the referenced
 /// table on a constraint trigger).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ConstrFromTable<'input> {
-    pub from: FROM,
+    #[tok(FROM, this)]
     pub table: QualifiedName<'input>,
 }
 
@@ -275,17 +214,14 @@ pub struct ConstrFromTable<'input> {
 ///
 /// Variant ordering: longer/multi-keyword forms first
 /// (`NOT DEFERRABLE`/`NOT VALID`/`INITIALLY …`/`NO INHERIT`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ConstraintAttributeElem {
-    NotDeferrable((NOT, DEFERRABLE)),
-    NotValid((NOT, VALID)),
-    NoInherit((NO, INHERIT)),
-    InitiallyImmediate((INITIALLY, IMMEDIATE)),
-    InitiallyDeferred((INITIALLY, DEFERRED)),
-    Deferrable(DEFERRABLE),
+    #[tok(NOT, DEFERRABLE)] NotDeferrable,
+    #[tok(NOT, VALID)] NotValid,
+    #[tok(NO, INHERIT)] NoInherit,
+    #[tok(INITIALLY, IMMEDIATE)] InitiallyImmediate,
+    #[tok(INITIALLY, DEFERRED)] InitiallyDeferred,
+    #[tok(DEFERRABLE)] Deferrable,
 }
 
 /// `CREATE [OR REPLACE] CONSTRAINT TRIGGER name AFTER events ON table
@@ -295,40 +231,31 @@ pub enum ConstraintAttributeElem {
 ///
 /// PG rejects `OR REPLACE` semantically here, but gram.y accepts it; we
 /// mirror the grammar.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateConstraintTriggerStmt<'input> {
-    pub create: CREATE,
-    pub or_replace: Option<(OR, REPLACE)>,
-    pub constraint: CONSTRAINT,
-    pub trigger: TRIGGER,
+    #[tok(CREATE, this, CONSTRAINT, TRIGGER)]
+    #[presence(OR, REPLACE)]
+    pub or_replace: bool,
     pub name: crate::tokens::ColId<'input>,
-    pub after: AFTER,
-    pub events: Seq1<TriggerOneEvent<'input>, OR>,
-    pub on: ON,
+    #[tok(AFTER, this)]
+    #[sep(OR)]
+    pub events: recursa::Vec1<TriggerOneEvent<'input> >,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub from_table: Option<ConstrFromTable<'input>>,
     pub constraint_attrs: Vec<ConstraintAttributeElem>,
-    pub r#for: FOR,
-    pub each: EACH,
-    pub row: ROW,
+    #[tok(FOR, EACH, ROW, this)]
     pub when_clause: Option<TriggerWhenClause<'input>>,
     pub execute_clause: TriggerExecuteClause<'input>,
 }
 
 /// `DROP TRIGGER [IF EXISTS] name ON table [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropTriggerStmt<'input> {
-    pub drop: DROP,
-    pub trigger: TRIGGER,
+    #[tok(DROP, TRIGGER, this)]
     pub if_exists: Option<IfExists>,
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub behavior: Option<DropBehavior>,
 }
@@ -336,61 +263,49 @@ pub struct DropTriggerStmt<'input> {
 /// A single `event_trigger_when_item`: `tag IN ('a', 'b', …)`. The
 /// filter-tag name is a `ColId` (identifier or unreserved keyword); the
 /// values are `Sconst` (single-quoted strings).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct EventTriggerWhenItem<'input> {
     pub tag: literal::AliasName<'input>,
-    pub r#in: IN,
+    #[tok(IN, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub values:
-        Surrounded<punct::LParen, Seq1<literal::StringLit<'input>, punct::Comma>, punct::RParen>,
+         recursa::Vec1<literal::StringLit<'input> > ,
 }
 
 /// `WHEN item AND item AND …` — Postgres' `event_trigger_when_list`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct EventTriggerWhenClause<'input> {
-    pub when: WHEN,
-    pub items: Seq1<EventTriggerWhenItem<'input>, AND>,
+    #[tok(WHEN, this)]
+    #[sep(AND)]
+    pub items: recursa::Vec1<EventTriggerWhenItem<'input> >,
 }
 
 /// `CREATE EVENT TRIGGER name ON event_name [WHEN filters]
 /// EXECUTE {FUNCTION|PROCEDURE} func_name()` — Postgres' `CreateEventTrigStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateEventTriggerStmt<'input> {
-    pub create: CREATE,
-    pub event: EVENT,
-    pub trigger: TRIGGER,
+    #[tok(CREATE, EVENT, TRIGGER, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     /// The event name (e.g. `sql_drop`, `ddl_command_start`) is a `ColLabel`
     /// in gram.y — any identifier-or-keyword.
     pub event_name: literal::AliasName<'input>,
     pub when_filters: Option<EventTriggerWhenClause<'input>>,
-    pub execute: EXECUTE,
+    #[tok(EXECUTE, this)]
     pub kind: FunctionOrProcedure,
     pub func_name: QualifiedName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     /// `()` — event triggers never take arguments. We use `Seq0` for the
     /// empty body so the `Surrounded` helper stays uniform with other
     /// EXECUTE clauses; PG only ever produces an empty list here.
-    pub args: Surrounded<punct::LParen, Seq0<TriggerFuncArg<'input>, punct::Comma>, punct::RParen>,
+    pub args:  Vec<TriggerFuncArg<'input> > ,
 }
 
 /// `DROP EVENT TRIGGER [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropEventTriggerStmt<'input> {
-    pub drop: DROP,
-    pub event: EVENT,
-    pub trigger: TRIGGER,
+    #[tok(DROP, EVENT, TRIGGER, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -402,15 +317,12 @@ pub struct DropEventTriggerStmt<'input> {
 /// Variant ordering: the two-token `ENABLE REPLICA` / `ENABLE ALWAYS` forms
 /// come before bare `ENABLE` so longest-match-wins picks the longer spelling
 /// first. `DISABLE` is keyword-disjoint, so its position is for clarity only.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum EnableTrigger {
-    EnableReplica((ENABLE, REPLICA)),
-    EnableAlways((ENABLE, ALWAYS)),
-    Enable(ENABLE),
-    Disable(DISABLE),
+    #[tok(ENABLE, REPLICA)] EnableReplica,
+    #[tok(ENABLE, ALWAYS)] EnableAlways,
+    #[tok(ENABLE)] Enable,
+    #[tok(DISABLE)] Disable,
 }
 
 /// One action on `ALTER EVENT TRIGGER name action` — Postgres'
@@ -419,10 +331,7 @@ pub enum EnableTrigger {
 ///
 /// Variant ordering: variants begin with distinct leading keywords
 /// (`ENABLE`/`DISABLE`/`RENAME`/`OWNER`), so order is for clarity only.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterEventTriggerAction<'input> {
     Enable(EnableTrigger),
     Rename(RenameTo<'input>),
@@ -431,14 +340,9 @@ pub enum AlterEventTriggerAction<'input> {
 
 /// `ALTER EVENT TRIGGER name action` — Postgres' `AlterEventTrigStmt` plus
 /// the event-trigger branches of `RenameStmt` / `AlterOwnerStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterEventTriggerStmt<'input> {
-    pub alter: ALTER,
-    pub event: EVENT,
-    pub trigger: TRIGGER,
+    #[tok(ALTER, EVENT, TRIGGER, this)]
     pub name: crate::tokens::ColId<'input>,
     pub action: AlterEventTriggerAction<'input>,
 }
@@ -452,30 +356,34 @@ mod tests {
 
     #[test]
     fn parse_drop_trigger_on_table() {
-        let mut input = crate::tokens::test_input("DROP TRIGGER IF EXISTS trg ON my_table CASCADE");
-        let stmt = DropTriggerStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP TRIGGER IF EXISTS trg ON my_table CASCADE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropTriggerStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
         assert_eq!(stmt.name.text(), "trg");
         assert_eq!(stmt.table.object(), "my_table");
         assert!(stmt.behavior.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_event_trigger() {
-        let mut input = crate::tokens::test_input("DROP EVENT TRIGGER et1");
-        let stmt = DropEventTriggerStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP EVENT TRIGGER et1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropEventTriggerStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.names.len(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_trigger_rename() {
-        let mut input = crate::tokens::test_input(
-            "ALTER TRIGGER modified_a ON main_table RENAME TO modified_modified_a",
-        );
-        let _stmt = AlterTriggerStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TRIGGER modified_a ON main_table RENAME TO modified_modified_a");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTriggerStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]

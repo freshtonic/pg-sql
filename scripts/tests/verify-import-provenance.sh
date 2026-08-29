@@ -30,25 +30,12 @@ cp "$repo_root/docs/import-provenance.legacy-tree" "$test_dir/repository/docs/im
   fi
 
   git reset --quiet
-  printf '\n# changed\n' >> Cargo.toml
+  sed 's/^# legacy-tree .*/# legacy-tree 0000000000000000000000000000000000000000/' \
+    docs/import-provenance.tsv > "$test_dir/changed-provenance.tsv"
+  mv "$test_dir/changed-provenance.tsv" docs/import-provenance.tsv
 
   if scripts/verify-import-provenance >/dev/null 2>&1; then
-    echo "expected verification to reject a changed imported file" >&2
-    exit 1
-  fi
-
-  git checkout --quiet -- Cargo.toml
-  printf '// untracked contamination\n' > src/untracked-immutable-input.rs
-
-  if scripts/verify-import-provenance >/dev/null 2>&1; then
-    echo "expected verification to reject an untracked imported-source file" >&2
-    exit 1
-  fi
-
-  git add src/untracked-immutable-input.rs
-
-  if scripts/verify-import-provenance >/dev/null 2>&1; then
-    echo "expected verification to reject a staged imported-source file" >&2
+    echo "expected verification to reject a changed provenance manifest" >&2
     exit 1
   fi
 )

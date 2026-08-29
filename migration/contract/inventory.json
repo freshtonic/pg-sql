@@ -183441,6 +183441,11 @@
       "rationale": "current Recursa owns matching-version generation in OUT_DIR"
     },
     {
+      "id": "obsolete-file-cli",
+      "legacy_location": "src/main.rs",
+      "rationale": "the legacy CLI constructs the retired FileItem recovery AST and is replaced only after strict document APIs land"
+    },
+    {
       "id": "depth-and-flame-tools",
       "legacy_location": "src/bin/depth_probe.rs; src/flame*.rs",
       "rationale": "explicitly deferred unless needed for regression diagnosis"

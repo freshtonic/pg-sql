@@ -20,9 +20,12 @@ already had their exact legacy object IDs in the planning commit; the other
 checkpoint. The only bootstrap addition in that checkpoint is the relocated
 root `.gitmodules`; `vendor/postgres` remains the exact legacy gitlink.
 
-Run `scripts/verify-import-provenance` from a clean checkout to verify the
-recorded legacy commit and tree, checkpoint manifest, and current immutable
-inputs without requiring the legacy repository as a sibling checkout.
+Run `scripts/verify-import-provenance` to verify the recorded legacy commit and
+tree, the exact source-import checkpoint manifest, and the PostgreSQL gitlink
+without requiring the legacy repository as a sibling checkout. The verifier
+checks the checkpoint's Git objects rather than the current files: after the
+one-shot grammar migration, those current files are the reviewed output rather
+than immutable inputs.
 
 The named pre-transformation differential baseline is recorded in
 `baselines/postgresql-17.9.json`. It was captured from a detached disposable

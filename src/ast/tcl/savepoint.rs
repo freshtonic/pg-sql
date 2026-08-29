@@ -1,30 +1,24 @@
 //! Savepoint statements: SAVEPOINT, RELEASE.
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::tokens::keyword::*;
 
 /// SAVEPOINT name
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["tcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SavepointStmt<'input> {
-    pub savepoint: SAVEPOINT,
+    #[tok(SAVEPOINT, this)]
+    #[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#, admits(ColId))]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// ```sql
 /// RELEASE [SAVEPOINT] name
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["tcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReleaseStmt<'input> {
-    pub release: RELEASE,
-    pub savepoint: Option<SAVEPOINT>,
+    #[tok(RELEASE, optional(SAVEPOINT), this)]
+    #[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#, admits(ColId))]
     pub name: crate::tokens::ColId<'input>,
 }
 

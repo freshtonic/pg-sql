@@ -6,8 +6,6 @@
 //! all three live in this file.
 
 use recursa::seq::Seq1;
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::flags::DropBehavior;
@@ -37,55 +35,39 @@ use crate::tokens::{literal, punct};
 
 /// `'(' column [, …] ')'` — the optional column list on `SELECT (a, b)` and
 /// related column-level privileges (Postgres' `opt_column_list` / `columnList`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PrivColumnList<'input> {
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub cols:
-        Surrounded<punct::LParen, Seq1<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         recursa::Vec1<crate::tokens::ColId<'input> > ,
 }
 
 /// `ALTER SYSTEM` privilege keyword — Postgres' `privilege: ALTER SYSTEM_P`.
 ///
 /// Modeled as its own struct so the multi-keyword form sorts before the
 /// `Named` variant in `Privilege` (longest-match-wins).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct AlterSystemPriv {
-    pub alter: ALTER,
-    pub system: SYSTEM,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum AlterSystemPriv { #[tok(ALTER, SYSTEM)] Value, }
 
 /// `SELECT [(columns)]` privilege.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SelectPriv<'input> {
-    pub select: SELECT,
+    #[tok(SELECT, this)]
     pub cols: Option<PrivColumnList<'input>>,
 }
 
 /// `REFERENCES [(columns)]` privilege.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReferencesPriv<'input> {
-    pub references: REFERENCES,
+    #[tok(REFERENCES, this)]
     pub cols: Option<PrivColumnList<'input>>,
 }
 
 /// `CREATE [(columns)]` privilege.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreatePriv<'input> {
-    pub create: CREATE,
+    #[tok(CREATE, this)]
     pub cols: Option<PrivColumnList<'input>>,
 }
 
@@ -93,10 +75,7 @@ pub struct CreatePriv<'input> {
 ///
 /// Covers INSERT/UPDATE/DELETE/TRUNCATE/USAGE/EXECUTE/CONNECT/TEMPORARY/TEMP/
 /// MAINTAIN/TRIGGER and any role-name-as-privilege in the role-membership form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct NamedPriv<'input> {
     pub name: crate::tokens::NonReservedWord<'input>,
     pub cols: Option<PrivColumnList<'input>>,
@@ -109,10 +88,7 @@ pub struct NamedPriv<'input> {
 /// `Named` because they are reserved keywords (so `Named`'s `Ident` won't
 /// accept them anyway) but listing them first makes the disambiguation
 /// explicit.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum Privilege<'input> {
     AlterSystem(AlterSystemPriv),
     Select(SelectPriv<'input>),
@@ -122,52 +98,32 @@ pub enum Privilege<'input> {
 }
 
 /// `ALL` with no follow-up keyword or column list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct AllBarePrivs {
-    pub all: ALL,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum AllBarePrivs { #[tok(ALL)] Value, }
 
 /// `ALL PRIVILEGES`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct AllPrivilegesPrivs {
-    pub all: ALL,
-    pub privileges: PRIVILEGES,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum AllPrivilegesPrivs { #[tok(ALL, PRIVILEGES)] Value, }
 
 /// `ALL (columns)` — column-scoped variant of `ALL`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AllColsPrivs<'input> {
-    pub all: ALL,
+    #[tok(ALL, this)]
     pub cols: PrivColumnList<'input>,
 }
 
 /// `ALL PRIVILEGES (columns)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AllPrivilegesColsPrivs<'input> {
-    pub all: ALL,
-    pub privileges: PRIVILEGES,
+    #[tok(ALL, PRIVILEGES, this)]
     pub cols: PrivColumnList<'input>,
 }
 
 /// `privilege [, …]` — non-`ALL` privilege list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PrivilegeList<'input> {
-    pub items: Seq1<Privilege<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub items: recursa::Vec1<Privilege<'input> >,
 }
 
 /// The leading privileges/role list of a GRANT/REVOKE — Postgres' `privileges`.
@@ -176,10 +132,7 @@ pub struct PrivilegeList<'input> {
 /// ALL-prefixed forms. `List` is the catch-all and must come after every
 /// `ALL`-prefixed variant because `ALL` is a hard keyword that `Privilege`'s
 /// `Named` won't accept anyway.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum Privileges<'input> {
     AllPrivilegesCols(AllPrivilegesColsPrivs<'input>),
     AllPrivileges(AllPrivilegesPrivs),
@@ -189,212 +142,142 @@ pub enum Privileges<'input> {
 }
 
 /// `TABLE name [, …]` — explicit-keyword table target.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableTarget<'input> {
-    pub table: TABLE,
-    pub names: Seq1<QualifiedName<'input>, punct::Comma>,
+    #[tok(TABLE, this)]
+    #[sep(COMMA)]
+    pub names: recursa::Vec1<QualifiedName<'input> >,
 }
 
 /// `SEQUENCE name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SequenceTarget<'input> {
-    pub sequence: SEQUENCE,
-    pub names: Seq1<QualifiedName<'input>, punct::Comma>,
+    #[tok(SEQUENCE, this)]
+    #[sep(COMMA)]
+    pub names: recursa::Vec1<QualifiedName<'input> >,
 }
 
 /// `FOREIGN DATA WRAPPER name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForeignDataWrapperTarget<'input> {
-    pub foreign: FOREIGN,
-    pub data: DATA,
-    pub wrapper: WRAPPER,
+    #[tok(FOREIGN, DATA, WRAPPER, this)]
     pub names: NameList<'input>,
 }
 
 /// `FOREIGN SERVER name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForeignServerTarget<'input> {
-    pub foreign: FOREIGN,
-    pub server: SERVER,
+    #[tok(FOREIGN, SERVER, this)]
     pub names: NameList<'input>,
 }
 
 /// `FUNCTION sig [, …]` — uses the same `(name(args))` shape as `DROP FUNCTION`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionTarget<'input> {
-    pub function: FUNCTION,
-    pub sigs: Seq1<crate::ast::ddl::function::DropFunctionTarget<'input>, punct::Comma>,
+    #[tok(FUNCTION, this)]
+    #[sep(COMMA)]
+    pub sigs: recursa::Vec1<crate::ast::ddl::function::DropFunctionTarget<'input> >,
 }
 
 /// `PROCEDURE sig [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ProcedureTarget<'input> {
-    pub procedure: PROCEDURE,
-    pub sigs: Seq1<crate::ast::ddl::function::DropFunctionTarget<'input>, punct::Comma>,
+    #[tok(PROCEDURE, this)]
+    #[sep(COMMA)]
+    pub sigs: recursa::Vec1<crate::ast::ddl::function::DropFunctionTarget<'input> >,
 }
 
 /// `ROUTINE sig [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RoutineTarget<'input> {
-    pub routine: ROUTINE,
-    pub sigs: Seq1<crate::ast::ddl::function::DropFunctionTarget<'input>, punct::Comma>,
+    #[tok(ROUTINE, this)]
+    #[sep(COMMA)]
+    pub sigs: recursa::Vec1<crate::ast::ddl::function::DropFunctionTarget<'input> >,
 }
 
 /// `DATABASE name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DatabaseTarget<'input> {
-    pub database: DATABASE,
+    #[tok(DATABASE, this)]
     pub names: NameList<'input>,
 }
 
 /// `DOMAIN any_name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DomainTarget<'input> {
-    pub domain: DOMAIN,
+    #[tok(DOMAIN, this)]
     pub names: NameList<'input>,
 }
 
 /// `LANGUAGE name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LanguageTarget<'input> {
-    pub language: LANGUAGE,
+    #[tok(LANGUAGE, this)]
     pub names: NameList<'input>,
 }
 
 /// `LARGE OBJECT oid [, …]` — `NumericOnly_list`. Corpus uses only positive
 /// `IntegerLit`s; signed and floating-point forms are not exercised.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LargeObjectTarget<'input> {
-    pub large: LARGE,
-    pub object: crate::tokens::soft_keyword::OBJECT,
-    pub oids: Seq1<literal::IntegerLit<'input>, punct::Comma>,
+    #[tok(LARGE, OBJECT, this)]
+    #[sep(COMMA)]
+    pub oids: recursa::Vec1<literal::IntegerLit<'input> >,
 }
 
 /// `SCHEMA name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SchemaTarget<'input> {
-    pub schema: SCHEMA,
+    #[tok(SCHEMA, this)]
     pub names: NameList<'input>,
 }
 
 /// `TABLESPACE name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TablespaceTarget<'input> {
-    pub tablespace: TABLESPACE,
+    #[tok(TABLESPACE, this)]
     pub names: NameList<'input>,
 }
 
 /// `TYPE any_name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TypeTarget<'input> {
-    pub r#type: TYPE,
+    #[tok(TYPE, this)]
     pub names: NameList<'input>,
 }
 
 /// `ALL TABLES IN SCHEMA name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AllTablesInSchemaTarget<'input> {
-    pub all: ALL,
-    pub tables: crate::tokens::soft_keyword::TABLES,
-    pub r#in: IN,
-    pub schema: SCHEMA,
+    #[tok(ALL, TABLES, IN, SCHEMA, this)]
     pub names: NameList<'input>,
 }
 
 /// `ALL SEQUENCES IN SCHEMA name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AllSequencesInSchemaTarget<'input> {
-    pub all: ALL,
-    pub sequences: SEQUENCES,
-    pub r#in: IN,
-    pub schema: SCHEMA,
+    #[tok(ALL, SEQUENCES, IN, SCHEMA, this)]
     pub names: NameList<'input>,
 }
 
 /// `ALL FUNCTIONS IN SCHEMA name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AllFunctionsInSchemaTarget<'input> {
-    pub all: ALL,
-    pub functions: crate::tokens::soft_keyword::FUNCTIONS,
-    pub r#in: IN,
-    pub schema: SCHEMA,
+    #[tok(ALL, FUNCTIONS, IN, SCHEMA, this)]
     pub names: NameList<'input>,
 }
 
 /// `ALL PROCEDURES IN SCHEMA name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AllProceduresInSchemaTarget<'input> {
-    pub all: ALL,
-    pub procedures: crate::tokens::soft_keyword::PROCEDURES,
-    pub r#in: IN,
-    pub schema: SCHEMA,
+    #[tok(ALL, PROCEDURES, IN, SCHEMA, this)]
     pub names: NameList<'input>,
 }
 
 /// `ALL ROUTINES IN SCHEMA name [, …]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AllRoutinesInSchemaTarget<'input> {
-    pub all: ALL,
-    pub routines: crate::tokens::soft_keyword::ROUTINES,
-    pub r#in: IN,
-    pub schema: SCHEMA,
+    #[tok(ALL, ROUTINES, IN, SCHEMA, this)]
     pub names: NameList<'input>,
 }
 
@@ -405,12 +288,10 @@ pub struct AllRoutinesInSchemaTarget<'input> {
 /// first token is an identifier — anything earlier whose first set is an
 /// identifier (none exist here, all targets start with keywords) would
 /// otherwise win.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct BareTablesTarget<'input> {
-    pub names: Seq1<QualifiedName<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub names: recursa::Vec1<QualifiedName<'input> >,
 }
 
 /// `privilege_target` — what comes between `ON` and `TO`/`FROM` in
@@ -422,10 +303,7 @@ pub struct BareTablesTarget<'input> {
 /// so it must not eat a keyword-led variant. `FOREIGN DATA WRAPPER` is listed
 /// before `FOREIGN SERVER` so the longer match wins (both start with
 /// `FOREIGN`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PrivilegeTarget<'input> {
     AllTablesInSchema(AllTablesInSchemaTarget<'input>),
     AllSequencesInSchema(AllSequencesInSchemaTarget<'input>),
@@ -450,12 +328,9 @@ pub enum PrivilegeTarget<'input> {
 }
 
 /// `GROUP role` — a grantee with explicit `GROUP` prefix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GroupGrantee<'input> {
-    pub group: GROUP,
+    #[tok(GROUP, this)]
     pub role: RoleSpec<'input>,
 }
 
@@ -468,109 +343,76 @@ pub struct GroupGrantee<'input> {
 /// equivalent tree.
 ///
 /// Variant ordering: `Group` (two-token) before `Role` so longest match wins.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum Grantee<'input> {
     Group(GroupGrantee<'input>),
     Role(RoleSpec<'input>),
 }
 
 /// `grantee [, …]` — comma-separated grantees.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GranteeList<'input> {
-    pub items: Seq1<Grantee<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub items: recursa::Vec1<Grantee<'input> >,
 }
 
 /// `WITH GRANT OPTION` — privilege-grant trailing clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct WithGrantOption {
-    pub with: WITH,
-    pub grant: GRANT,
-    pub option: OPTION,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum WithGrantOption { #[tok(WITH, GRANT, OPTION)] Value, }
 
 /// `GRANTED BY role` — optional grantor reference.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GrantedBy<'input> {
-    pub granted: crate::tokens::soft_keyword::GRANTED,
-    pub by: BY,
+    #[tok(GRANTED, BY, this)]
     pub role: RoleSpec<'input>,
 }
 
 /// `{ADMIN|INHERIT|SET}` — the keyword on a role-grant `WITH` option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WithRoleOptKind {
-    Admin(crate::tokens::soft_keyword::ADMIN),
-    Inherit(INHERIT),
-    Set(SET),
+    #[tok(ADMIN)] Admin,
+    #[tok(INHERIT)] Inherit,
+    #[tok(SET)] Set,
 }
 
 /// `{OPTION|TRUE|FALSE}` — the value of a role-grant `WITH` option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WithRoleOptValue {
-    Option(OPTION),
-    True(TRUE),
-    False(FALSE),
+    #[tok(OPTION)] Option,
+    #[tok(TRUE)] True,
+    #[tok(FALSE)] False,
 }
 
 /// `kind value` pair — Postgres' `grant_role_opt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WithRoleOpt {
     pub kind: WithRoleOptKind,
     pub value: WithRoleOptValue,
 }
 
 /// `WITH opt [, …]` — role-grant trailing options block.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WithRoleOpts {
-    pub with: WITH,
-    pub opts: Seq1<WithRoleOpt, punct::Comma>,
+    #[tok(WITH, this)]
+    #[sep(COMMA)]
+    pub opts: recursa::Vec1<WithRoleOpt >,
 }
 
 /// `ON target TO grantees …` — the privilege-grant body of GRANT.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GrantPrivilegeBody<'input> {
-    pub on: ON,
+    #[tok(ON, this)]
     pub target: PrivilegeTarget<'input>,
-    pub to: TO,
+    #[tok(TO, this)]
     pub grantees: GranteeList<'input>,
     pub grant_option: Option<WithGrantOption>,
     pub granted_by: Option<GrantedBy<'input>>,
 }
 
 /// `TO roles [WITH …] [GRANTED BY …]` — the role-membership body of GRANT.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GrantRoleBody<'input> {
-    pub to: TO,
+    #[tok(TO, this)]
     pub roles: RoleList<'input>,
     pub with: Option<WithRoleOpts>,
     pub granted_by: Option<GrantedBy<'input>>,
@@ -582,10 +424,7 @@ pub struct GrantRoleBody<'input> {
 /// Variant ordering: `Privilege` first because its leading `ON` is a single
 /// keyword that the `Role` variant's leading `TO` can't shadow; both have
 /// disjoint first sets, so ordering is mostly cosmetic.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum GrantBody<'input> {
     Privilege(GrantPrivilegeBody<'input>),
     Role(GrantRoleBody<'input>),
@@ -593,47 +432,35 @@ pub enum GrantBody<'input> {
 
 /// `GRANT privileges (ON target TO …) | (TO roles …)` — Postgres'
 /// `GrantStmt`/`GrantRoleStmt` unified.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["dcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GrantStmt<'input> {
-    pub grant: GRANT,
+    #[tok(GRANT, this)]
     pub privileges: Privileges<'input>,
     pub body: GrantBody<'input>,
 }
 
 /// `ON target FROM grantees …` — the privilege-revoke body.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RevokePrivilegeBody<'input> {
-    pub on: ON,
+    #[tok(ON, this)]
     pub target: PrivilegeTarget<'input>,
-    pub from: FROM,
+    #[tok(FROM, this)]
     pub grantees: GranteeList<'input>,
     pub granted_by: Option<GrantedBy<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// `FROM roles …` — the role-membership revoke body.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RevokeRoleBody<'input> {
-    pub from: FROM,
+    #[tok(FROM, this)]
     pub roles: RoleList<'input>,
     pub granted_by: Option<GrantedBy<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// The body of a `REVOKE` after the leading privilege/role list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum RevokeBody<'input> {
     Privilege(RevokePrivilegeBody<'input>),
     Role(RevokeRoleBody<'input>),
@@ -641,57 +468,26 @@ pub enum RevokeBody<'input> {
 
 /// `GRANT OPTION FOR` — the leading "revoke only the grant option" prefix on
 /// the privilege-revoke form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct RevokeGrantOptionFor {
-    pub grant: GRANT,
-    pub option: OPTION,
-    pub r#for: FOR,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum RevokeGrantOptionFor { #[tok(GRANT, OPTION, FOR)] Value, }
 
 /// `ADMIN OPTION FOR` — the role-revoke counterpart that strips just the
 /// ADMIN option from an existing role grant.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct RevokeAdminOptionFor {
-    pub admin: crate::tokens::soft_keyword::ADMIN,
-    pub option: OPTION,
-    pub r#for: FOR,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum RevokeAdminOptionFor { #[tok(ADMIN, OPTION, FOR)] Value, }
 
 /// `INHERIT OPTION FOR` — strips just INHERIT.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct RevokeInheritOptionFor {
-    pub inherit: INHERIT,
-    pub option: OPTION,
-    pub r#for: FOR,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum RevokeInheritOptionFor { #[tok(INHERIT, OPTION, FOR)] Value, }
 
 /// `SET OPTION FOR` — strips just SET.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct RevokeSetOptionFor {
-    pub set: SET,
-    pub option: OPTION,
-    pub r#for: FOR,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum RevokeSetOptionFor { #[tok(SET, OPTION, FOR)] Value, }
 
 /// Optional `… OPTION FOR` prefix on `REVOKE`. PG distinguishes `GRANT OPTION
 /// FOR` (privilege form) from `{ADMIN|INHERIT|SET} OPTION FOR` (role form);
 /// the body following the privileges decides which it actually is.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum RevokeOptionFor {
     GrantOption(RevokeGrantOptionFor),
     AdminOption(RevokeAdminOptionFor),
@@ -700,12 +496,9 @@ pub enum RevokeOptionFor {
 }
 
 /// `REVOKE [… OPTION FOR] privileges (ON target FROM …) | (FROM roles …)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["dcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RevokeStmt<'input> {
-    pub revoke: REVOKE,
+    #[tok(REVOKE, this)]
     pub option_for: Option<RevokeOptionFor>,
     pub privileges: Privileges<'input>,
     pub body: RevokeBody<'input>,
@@ -718,32 +511,26 @@ pub struct RevokeStmt<'input> {
 /// `defacl_privilege_target` — the object-kind keyword inside ADP. Postgres
 /// only allows one of TABLES / SEQUENCES / FUNCTIONS / PROCEDURES / ROUTINES
 /// / SCHEMAS / TYPES.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DefAclTarget {
-    Tables(crate::tokens::soft_keyword::TABLES),
-    Sequences(SEQUENCES),
-    Functions(crate::tokens::soft_keyword::FUNCTIONS),
-    Procedures(crate::tokens::soft_keyword::PROCEDURES),
-    Routines(crate::tokens::soft_keyword::ROUTINES),
-    Schemas(crate::tokens::soft_keyword::SCHEMAS),
-    Types(crate::tokens::soft_keyword::TYPES),
+    #[tok(TABLES)] Tables,
+    #[tok(SEQUENCES)] Sequences,
+    #[tok(FUNCTIONS)] Functions,
+    #[tok(PROCEDURES)] Procedures,
+    #[tok(ROUTINES)] Routines,
+    #[tok(SCHEMAS)] Schemas,
+    #[tok(TYPES)] Types,
 }
 
 /// `GRANT privileges ON defacl_target TO grantees [WITH GRANT OPTION]` — the
 /// inner GRANT of ALTER DEFAULT PRIVILEGES.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DefAclGrant<'input> {
-    pub grant: GRANT,
+    #[tok(GRANT, this)]
     pub privileges: Privileges<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub target: DefAclTarget,
-    pub to: TO,
+    #[tok(TO, this)]
     pub grantees: GranteeList<'input>,
     pub grant_option: Option<WithGrantOption>,
 }
@@ -751,86 +538,62 @@ pub struct DefAclGrant<'input> {
 /// `REVOKE [GRANT OPTION FOR] privileges ON defacl_target FROM grantees
 /// [CASCADE|RESTRICT]` — the inner REVOKE of ALTER DEFAULT PRIVILEGES. Note:
 /// no `GRANTED BY` in ADP's revoke per `gram.y`'s `DefACLAction`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DefAclRevoke<'input> {
-    pub revoke: REVOKE,
+    #[tok(REVOKE, this)]
     pub grant_option_for: Option<RevokeGrantOptionFor>,
     pub privileges: Privileges<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub target: DefAclTarget,
-    pub from: FROM,
+    #[tok(FROM, this)]
     pub grantees: GranteeList<'input>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// The inner action of `ALTER DEFAULT PRIVILEGES`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DefAclAction<'input> {
     Grant(DefAclGrant<'input>),
     Revoke(DefAclRevoke<'input>),
 }
 
 /// `FOR { ROLE | USER }` — Postgres' `FOR ROLE` and its `FOR USER` synonym.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ForRoleOrUser {
-    Role(ROLE),
-    User(USER),
+    #[tok(ROLE)] Role,
+    #[tok(USER)] User,
 }
 
 /// `FOR { ROLE | USER } role [, …]` — restricts the default privileges to
 /// the listed role(s).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DefAclForRoleOption<'input> {
-    pub r#for: FOR,
+    #[tok(FOR, this)]
     pub role_or_user: ForRoleOrUser,
     pub roles: RoleList<'input>,
 }
 
 /// `IN SCHEMA name [, …]` — restricts the default privileges to listed
 /// schema(s).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DefAclInSchemaOption<'input> {
-    pub r#in: IN,
-    pub schema: SCHEMA,
+    #[tok(IN, SCHEMA, this)]
     pub names: NameList<'input>,
 }
 
 /// A single `DefACLOption` — either `FOR ROLE …` or `IN SCHEMA …`. The
 /// grammar allows them to repeat in arbitrary order, so an unordered list of
 /// these covers every legal form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DefAclOption<'input> {
     ForRole(DefAclForRoleOption<'input>),
     InSchema(DefAclInSchemaOption<'input>),
 }
 
 /// `ALTER DEFAULT PRIVILEGES [DefACLOption …] (GRANT … | REVOKE …)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDefaultPrivilegesStmt<'input> {
-    pub alter: ALTER,
-    pub default: DEFAULT,
-    pub privileges: PRIVILEGES,
+    #[tok(ALTER, DEFAULT, PRIVILEGES, this)]
     pub options: Vec<DefAclOption<'input>>,
     pub action: DefAclAction<'input>,
 }

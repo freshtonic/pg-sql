@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::ddl::table::{AlterTableCmds, CreateGenericOptions};
 use crate::ast::ddl::view::RenameColumnClause;
@@ -22,10 +20,7 @@ use recursa_diagram::railroad;
 ///
 /// Variant ordering: variants begin with distinct leading keywords
 /// (`LIMIT` / `EXCEPT`), so order is for clarity only.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ImportQualification<'input> {
     LimitTo(ImportLimitTo<'input>),
     Except(ImportExcept<'input>),
@@ -35,99 +30,70 @@ pub enum ImportQualification<'input> {
 /// set. The table list is `relation_expr_list` in gram.y; corpus
 /// statements use plain qualified names only, so we model the list as
 /// `Seq1` of `QualifiedName` separated by commas.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ImportLimitTo<'input> {
-    pub limit: LIMIT,
-    pub to: TO,
-    pub names: Surrounded<punct::LParen, Seq1<QualifiedName<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LIMIT, TO, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub names:  recursa::Vec1<QualifiedName<'input> > ,
 }
 
 /// `EXCEPT (table[, ...])` — exclude the named tables from the import.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ImportExcept<'input> {
-    pub except: EXCEPT,
-    pub names: Surrounded<punct::LParen, Seq1<QualifiedName<'input>, punct::Comma>, punct::RParen>,
+    #[tok(EXCEPT, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub names:  recursa::Vec1<QualifiedName<'input> > ,
 }
 
 /// `IMPORT FOREIGN SCHEMA remote [LIMIT TO ... | EXCEPT ...] FROM SERVER
 /// server INTO local [OPTIONS (...)]` — Postgres' `ImportForeignSchemaStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ImportForeignSchemaStmt<'input> {
-    pub import: IMPORT,
-    pub foreign: FOREIGN,
-    pub schema: SCHEMA,
+    #[tok(IMPORT, FOREIGN, SCHEMA, this)]
     pub remote: crate::tokens::ColId<'input>,
     pub qualification: Option<ImportQualification<'input>>,
-    pub from: FROM,
-    pub server: SERVER,
+    #[tok(FROM, SERVER, this)]
     pub server_name: crate::tokens::ColId<'input>,
-    pub into: INTO,
+    #[tok(INTO, this)]
     pub local: crate::tokens::ColId<'input>,
     pub options: Option<crate::ast::ddl::table::CreateGenericOptions<'input>>,
 }
 
 /// `TYPE sconst` clause on CREATE SERVER — Postgres' `opt_type`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ServerTypeClause<'input> {
-    pub r#type: TYPE,
+    #[tok(TYPE, this)]
     pub value: CopySconst<'input>,
 }
 
 /// `VERSION { sconst | NULL }` — Postgres' `foreign_server_version`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ServerVersionValue<'input> {
-    Null(NULL),
+    #[tok(NULL)] Null,
     String(CopySconst<'input>),
 }
 
 /// `VERSION value` clause on CREATE/ALTER SERVER.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ServerVersionClause<'input> {
-    pub version: VERSION,
+    #[tok(VERSION, this)]
     pub value: ServerVersionValue<'input>,
 }
 
 /// `FOREIGN DATA WRAPPER name` — the FDW reference on CREATE SERVER and
 /// CREATE FOREIGN DATA WRAPPER's own header.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForeignDataWrapperRef<'input> {
-    pub foreign: FOREIGN,
-    pub data: DATA,
-    pub wrapper: WRAPPER,
+    #[tok(FOREIGN, DATA, WRAPPER, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `CREATE SERVER [IF NOT EXISTS] name [TYPE sconst]
 /// [VERSION { sconst | NULL }] FOREIGN DATA WRAPPER fdw
 /// [OPTIONS (...)]` — Postgres' `CreateForeignServerStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateServerStmt<'input> {
-    pub create: CREATE,
-    pub server: SERVER,
+    #[tok(CREATE, SERVER, this)]
     pub if_not_exists: Option<IfNotExists>,
     pub name: crate::tokens::ColId<'input>,
     pub server_type: Option<ServerTypeClause<'input>>,
@@ -137,13 +103,9 @@ pub struct CreateServerStmt<'input> {
 }
 
 /// `DROP SERVER [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropServerStmt<'input> {
-    pub drop: DROP,
-    pub server: SERVER,
+    #[tok(DROP, SERVER, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -168,10 +130,7 @@ pub struct DropServerStmt<'input> {
 /// `Add`, `Drop`) before the bare [`GenericOption`] (which starts with
 /// a `ColLabel` identifier). The three prefixed variants have disjoint
 /// first tokens, so order among them is for clarity only.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterGenericOption<'input> {
     Set(AlterGenericOptionSet<'input>),
     Add(AlterGenericOptionAdd<'input>),
@@ -181,35 +140,26 @@ pub enum AlterGenericOption<'input> {
 
 /// `SET name 'value'` — the `SET`-prefixed variant of
 /// `alter_generic_option_elem`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterGenericOptionSet<'input> {
-    pub set: SET,
+    #[tok(SET, this)]
     pub option: crate::ast::ddl::table::GenericOption<'input>,
 }
 
 /// `ADD name 'value'` — the `ADD`-prefixed variant of
 /// `alter_generic_option_elem`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterGenericOptionAdd<'input> {
-    pub add: ADD,
+    #[tok(ADD, this)]
     pub option: crate::ast::ddl::table::GenericOption<'input>,
 }
 
 /// `DROP name` — the `DROP`-prefixed variant of
 /// `alter_generic_option_elem`. Unlike `SET` / `ADD` it takes only the
 /// option name (a `ColLabel`), with no value.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterGenericOptionDrop<'input> {
-    pub drop: DROP,
+    #[tok(DROP, this)]
     pub name: literal::AliasName<'input>,
 }
 
@@ -217,14 +167,12 @@ pub struct AlterGenericOptionDrop<'input> {
 /// `alter_generic_options`. The `ALTER`-side counterpart of
 /// [`CreateGenericOptions`]; differs only in that each element may
 /// carry an `ADD` / `SET` / `DROP` prefix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterGenericOptions<'input> {
-    pub options: OPTIONS,
+    #[tok(OPTIONS, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub list:
-        Surrounded<punct::LParen, Seq1<AlterGenericOption<'input>, punct::Comma>, punct::RParen>,
+         recursa::Vec1<AlterGenericOption<'input> > ,
 }
 
 /// One action on `ALTER SERVER name action` — covers Postgres'
@@ -241,10 +189,7 @@ pub struct AlterGenericOptions<'input> {
 /// variants sharing the `VERSION` prefix would otherwise need
 /// multi-token first-set lookahead that doesn't account for the
 /// version literal between `VERSION` and `OPTIONS`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterServerAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -254,10 +199,7 @@ pub enum AlterServerAction<'input> {
 
 /// `VERSION value [OPTIONS (...)]` — Postgres' `AlterForeignServerStmt`
 /// VERSION branch, with optional trailing generic-options clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterServerVersionAction<'input> {
     pub version: ServerVersionClause<'input>,
     pub options: Option<AlterGenericOptions<'input>>,
@@ -272,13 +214,9 @@ pub struct AlterServerVersionAction<'input> {
 /// the parser accepts it to avoid a
 /// [`crate::ast::FileItem::ParseError`] (the differential oracle stays
 /// valid because both sides round-trip rejected).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterServerStmt<'input> {
-    pub alter: ALTER,
-    pub server: SERVER,
+    #[tok(ALTER, SERVER, this)]
     pub name: crate::tokens::ColId<'input>,
     pub action: Option<AlterServerAction<'input>>,
 }
@@ -301,10 +239,7 @@ pub struct AlterServerStmt<'input> {
 /// [`AlterFdwAction::GenericOpts`] variant. Splitting these two avoids
 /// a struct whose first field is an empty-allowed `Vec<FdwOption>` —
 /// such a struct has an empty first-set and breaks enum peek dispatch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFdwOptsAction<'input> {
     pub head: FdwOption<'input>,
     pub rest: Vec<FdwOption<'input>>,
@@ -328,10 +263,7 @@ pub struct AlterFdwOptsAction<'input> {
 /// struct whose first field is a possibly-empty `Vec<FdwOption>` has an
 /// empty first-set and the enum's combined peek regex can't dispatch on
 /// `OPTIONS`. Splitting gives each variant a concrete first-set.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterFdwAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -350,13 +282,9 @@ pub enum AlterFdwAction<'input> {
 /// structured AST rather than surfacing as a
 /// [`crate::ast::FileItem::ParseError`]; the differential oracle still
 /// passes because the round-tripped output is also PG-rejected.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFdwBody<'input> {
-    pub data: DATA,
-    pub wrapper: WRAPPER,
+    #[tok(DATA, WRAPPER, this)]
     pub name: crate::tokens::ColId<'input>,
     pub action: Option<AlterFdwAction<'input>>,
 }
@@ -383,10 +311,7 @@ pub struct AlterFdwBody<'input> {
 /// - `SetSchema` (`SET SCHEMA …`) — disjoint from every `SET …` action
 ///   inside `alter_table_cmd` (which all use different 2nd tokens).
 /// - `Cmds` last — the comma-separated `alter_table_cmds` catch-all.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterForeignTableAction<'input> {
     RenameColumn(RenameColumnClause<'input>),
     Rename(RenameTo<'input>),
@@ -404,16 +329,15 @@ pub enum AlterForeignTableAction<'input> {
 /// forms on ALTER FOREIGN TABLE, but we still accept `ONLY`/`*` for
 /// grammar fidelity — the same shape used by `AlterTableSingle` for
 /// regular tables.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterForeignTableBody<'input> {
-    pub table: TABLE,
+    #[tok(TABLE, this)]
     pub if_exists: Option<IfExists>,
-    pub only: Option<ONLY>,
+    #[presence(ONLY)]
+    pub only: bool,
     pub name: QualifiedName<'input>,
-    pub star: Option<punct::Star>,
+    #[presence(STAR)]
+    pub star: bool,
     pub action: AlterForeignTableAction<'input>,
 }
 
@@ -421,10 +345,7 @@ pub struct AlterForeignTableBody<'input> {
 /// (`AlterFdwStmt`) or `TABLE ...` (`AlterForeignTableStmt`).
 /// Discriminated by the first post-`FOREIGN` token (`DATA` vs `TABLE`);
 /// the two first-tokens are disjoint so peek order is for clarity only.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterForeignBody<'input> {
     Fdw(AlterFdwBody<'input>),
     Table(AlterForeignTableBody<'input>),
@@ -433,13 +354,9 @@ pub enum AlterForeignBody<'input> {
 /// `ALTER FOREIGN ...` umbrella statement covering
 /// `ALTER FOREIGN DATA WRAPPER ...` (Postgres' `AlterFdwStmt`) and
 /// `ALTER FOREIGN TABLE ...` (Postgres' `AlterForeignTableStmt`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterForeignStmt<'input> {
-    pub alter: ALTER,
-    pub foreign: FOREIGN,
+    #[tok(ALTER, FOREIGN, this)]
     pub body: AlterForeignBody<'input>,
 }
 
@@ -448,34 +365,25 @@ pub struct AlterForeignStmt<'input> {
 /// Variant ordering: the two-token `NO HANDLER` / `NO VALIDATOR` forms
 /// come before their single-token counterparts so longest-match-wins
 /// picks the `NO`-prefixed spelling first.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FdwOption<'input> {
-    NoHandler((NO, HANDLER)),
-    NoValidator((NO, VALIDATOR)),
+    #[tok(NO, HANDLER)] NoHandler,
+    #[tok(NO, VALIDATOR)] NoValidator,
     Handler(FdwHandlerOption<'input>),
     Validator(FdwValidatorOption<'input>),
 }
 
 /// `HANDLER handler_name` — Postgres' `fdw_option` HANDLER branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FdwHandlerOption<'input> {
-    pub handler: HANDLER,
+    #[tok(HANDLER, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `VALIDATOR handler_name` — Postgres' `fdw_option` VALIDATOR branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FdwValidatorOption<'input> {
-    pub validator: VALIDATOR,
+    #[tok(VALIDATOR, this)]
     pub name: QualifiedName<'input>,
 }
 
@@ -486,40 +394,32 @@ pub struct FdwValidatorOption<'input> {
 /// The fdw_options list is order-free and separator-free; we model it
 /// with `Vec<FdwOption>` so it stops at the first non-option token
 /// (OPTIONS or end-of-statement).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateFdwBody<'input> {
-    pub data: DATA,
-    pub wrapper: WRAPPER,
+    #[tok(DATA, WRAPPER, this)]
     pub name: crate::tokens::ColId<'input>,
     pub fdw_options: Vec<FdwOption<'input>>,
     pub options: Option<CreateGenericOptions<'input>>,
 }
 
 /// `SERVER name` reference on CREATE FOREIGN TABLE.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForeignTableServerClause<'input> {
-    pub server: SERVER,
+    #[tok(SERVER, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// Body of `CREATE FOREIGN TABLE name (cols) [INHERITS (...)] SERVER name
 /// [OPTIONS (...)]` — Postgres' columns form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForeignTableColumnsBody<'input> {
-    pub columns: Surrounded<
-        punct::LParen,
-        recursa::seq::Seq0<crate::ast::ddl::table::ColumnOrConstraint<'input>, punct::Comma>,
-        punct::RParen,
-    >,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub columns:
+
+        recursa::seq::Vec<crate::ast::ddl::table::ColumnOrConstraint<'input> >
+
+    ,
     pub inherits: Option<crate::ast::ddl::table::InheritsClause<'input>>,
     pub server: ForeignTableServerClause<'input>,
     pub options: Option<CreateGenericOptions<'input>>,
@@ -530,23 +430,22 @@ pub struct ForeignTableColumnsBody<'input> {
 /// partition form. The bound is `for_values: Option` of `ForValuesClause`
 /// OR `default: Option` of `DEFAULT` (exactly one of the two should be
 /// `Some` for a syntactically valid statement).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForeignTablePartitionBody<'input> {
-    pub partition: PARTITION,
-    pub of: OF,
+    #[tok(PARTITION, OF, this)]
     pub parent: QualifiedName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub column_options: Option<
-        Surrounded<
-            punct::LParen,
-            recursa::seq::Seq0<crate::ast::ddl::table::PartitionColumnOption<'input>, punct::Comma>,
-            punct::RParen,
-        >,
+
+
+            recursa::seq::Vec<crate::ast::ddl::table::PartitionColumnOption<'input> >
+
+        ,
     >,
     pub for_values: Option<crate::ast::ddl::table::ForValuesClause<'input>>,
-    pub default: Option<DEFAULT>,
+    #[presence(DEFAULT)]
+    pub default: bool,
     pub server: ForeignTableServerClause<'input>,
     pub options: Option<CreateGenericOptions<'input>>,
 }
@@ -557,10 +456,7 @@ pub struct ForeignTablePartitionBody<'input> {
 ///
 /// Variant ordering: `Partition` (`PARTITION` keyword) is listed before
 /// `Columns` (which starts with `(`); the two have disjoint first tokens.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CreateForeignTableBody<'input> {
     Partition(ForeignTablePartitionBody<'input>),
     Columns(ForeignTableColumnsBody<'input>),
@@ -568,12 +464,9 @@ pub enum CreateForeignTableBody<'input> {
 
 /// `TABLE [IF NOT EXISTS] name body` — the body of
 /// `CREATE FOREIGN TABLE ...` after the `CREATE FOREIGN` head.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateForeignTableBodyStmt<'input> {
-    pub table: TABLE,
+    #[tok(TABLE, this)]
     pub if_not_exists: Option<IfNotExists>,
     pub name: QualifiedName<'input>,
     pub body: CreateForeignTableBody<'input>,
@@ -583,10 +476,7 @@ pub struct CreateForeignTableBodyStmt<'input> {
 /// or `TABLE ...` (CreateForeignTableStmt). Discriminated by the first
 /// post-`FOREIGN` token (`DATA` vs `TABLE`); both first tokens are
 /// disjoint so peek order is for clarity only.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CreateForeignBody<'input> {
     Fdw(CreateFdwBody<'input>),
     Table(CreateForeignTableBodyStmt<'input>),
@@ -594,35 +484,24 @@ pub enum CreateForeignBody<'input> {
 
 /// `CREATE FOREIGN ...` umbrella statement covering both
 /// `CREATE FOREIGN DATA WRAPPER ...` and `CREATE FOREIGN TABLE ...`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateForeignStmt<'input> {
-    pub create: CREATE,
-    pub foreign: FOREIGN,
+    #[tok(CREATE, FOREIGN, this)]
     pub body: CreateForeignBody<'input>,
 }
 
 /// The object kind after `DROP FOREIGN`: `DATA WRAPPER` or `TABLE`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ForeignObjectKind {
-    DataWrapper((DATA, WRAPPER)),
-    Table(TABLE),
+    #[tok(DATA, WRAPPER)] DataWrapper,
+    #[tok(TABLE)] Table,
 }
 
 /// `DROP FOREIGN {DATA WRAPPER | TABLE} [IF EXISTS] name [, ...]
 /// [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropForeignStmt<'input> {
-    pub drop: DROP,
-    pub foreign: FOREIGN,
+    #[tok(DROP, FOREIGN, this)]
     pub kind: ForeignObjectKind,
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
@@ -638,19 +517,23 @@ mod tests {
 
     #[test]
     fn parse_drop_foreign_data_wrapper() {
-        let mut input = crate::tokens::test_input("DROP FOREIGN DATA WRAPPER fdw1");
-        let stmt = DropForeignStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP FOREIGN DATA WRAPPER fdw1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropForeignStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt.kind, ForeignObjectKind::DataWrapper(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_foreign_table() {
-        let mut input = crate::tokens::test_input("DROP FOREIGN TABLE IF EXISTS ft1, ft2");
-        let stmt = DropForeignStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP FOREIGN TABLE IF EXISTS ft1, ft2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropForeignStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt.kind, ForeignObjectKind::Table(_)));
         assert_eq!(stmt.names.len(), 2);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     /// Bare `ALTER FOREIGN DATA WRAPPER name` — PG itself rejects this
@@ -661,9 +544,11 @@ mod tests {
     /// also PG-rejected.
     #[test]
     fn parse_alter_fdw_bare() {
-        let mut input = crate::tokens::test_input("ALTER FOREIGN DATA WRAPPER foo");
-        let _stmt = AlterForeignStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER FOREIGN DATA WRAPPER foo");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterForeignStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// Bare `ALTER SERVER name` — similar over-permissive acceptance for
@@ -671,9 +556,11 @@ mod tests {
     /// options, or both).
     #[test]
     fn parse_alter_server_bare() {
-        let mut input = crate::tokens::test_input("ALTER SERVER s0");
-        let _stmt = AlterServerStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER SERVER s0");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterServerStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]

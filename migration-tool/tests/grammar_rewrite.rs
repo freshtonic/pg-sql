@@ -1,8 +1,10 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use pg_sql_migrate::grammar_rewrite::{GrammarRewritePass, SUPPORTED_SHAPES};
+use pg_sql_migrate::migration_contract::{MIGRATION_SOURCE_COMMIT, OMITTED_PATHS};
 use pg_sql_migrate::rewrite::{
     FileDisposition, RewriteTreeRequest, SourceRewritePass, rewrite_source, rewrite_tree,
 };
@@ -18,6 +20,24 @@ fn fixture_root() -> PathBuf {
 fn pass() -> GrammarRewritePass {
     let manifest = fs::read_to_string(fixture_root().join("manifest.json")).unwrap();
     GrammarRewritePass::from_manifest_json(&manifest).unwrap()
+}
+
+fn frozen_migration_source(path: &str) -> String {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let output = Command::new("git")
+        .args([
+            "-C",
+            repository.to_str().unwrap(),
+            "show",
+            &format!("{MIGRATION_SOURCE_COMMIT}:{path}"),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "failed to materialize frozen {path}"
+    );
+    String::from_utf8(output.stdout).unwrap()
 }
 
 #[test]
@@ -81,6 +101,13 @@ fn generated_first_set_artifact_is_omitted_instead_of_emptied() {
         FileDisposition::Omit
     );
     assert!(pass.edits(&input_path, &input).unwrap().is_empty());
+    for path in OMITTED_PATHS {
+        assert_eq!(
+            pass.file_disposition(Path::new(path)).unwrap(),
+            FileDisposition::Omit,
+            "obsolete post-migration surface {path}"
+        );
+    }
 
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("legacy");
@@ -195,8 +222,7 @@ fn optional_token_dispositions_require_the_exact_inventoried_path_span_and_shape
             .is_empty()
     );
 
-    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    let source = fs::read_to_string(repository.join("src/ast/ddl/index.rs")).unwrap();
+    let source = frozen_migration_source("src/ast/ddl/index.rs");
     let drifted = source.replacen("Option<UNIQUE>", "Option<DEFAULT>", 1);
     let error = pass
         .plan_edits(Path::new("src/ast/ddl/index.rs"), &drifted)
@@ -337,8 +363,7 @@ fn obsolete_items_are_removed_only_when_their_full_reviewed_shape_matches() {
 
 #[test]
 fn obsolete_file_surface_requires_exact_shape_and_preserves_new_items() {
-    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    let source = fs::read_to_string(repository.join("src/formatter.rs")).unwrap();
+    let source = frozen_migration_source("src/formatter.rs");
     let drifted = source.replace(
         "let mut output = String::new();",
         "let mut output = String::with_capacity(64);",
@@ -353,6 +378,26 @@ fn obsolete_file_surface_requires_exact_shape_and_preserves_new_items() {
     assert!(rewritten.contains("pub fn format_tokens_sql"));
     assert!(rewritten.contains("pub fn newly_added_formatter_api"));
     assert!(!rewritten.contains("pub fn format_file"));
+}
+
+#[test]
+fn obsolete_explicit_bins_require_exact_manifest_blocks() {
+    let cargo = frozen_migration_source("Cargo.toml");
+    let rewritten = rewrite_source(&pass(), Path::new("Cargo.toml"), &cargo).unwrap();
+    assert!(rewritten.contains("path = \"src/bin/gen_stress.rs\""));
+    assert!(!rewritten.contains("src/bin/flame_target.rs"));
+    assert!(!rewritten.contains("src/bin/flame_report.rs"));
+
+    let drifted = cargo.replace(
+        "path = \"src/bin/flame_target.rs\"",
+        "path = \"src/bin/renamed_flame_target.rs\"",
+    );
+    let error = pass().edits(Path::new("Cargo.toml"), &drifted).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported.obsolete-bin-manifest")
+    );
 }
 
 #[test]

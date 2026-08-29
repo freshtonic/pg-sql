@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -15,31 +13,24 @@ use crate::tokens::{literal, punct};
 use recursa_diagram::railroad;
 
 /// `CREATE [DEFAULT] CONVERSION name FOR 'src_enc' TO 'dst_enc' FROM func`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateConversionStmt<'input> {
-    pub create: CREATE,
-    pub default: Option<DEFAULT>,
-    pub conversion: CONVERSION,
+    #[tok(CREATE, this, CONVERSION)]
+    #[presence(DEFAULT)]
+    pub default: bool,
     pub name: QualifiedName<'input>,
-    pub r#for: FOR,
+    #[tok(FOR, this)]
     pub src_encoding: literal::StringLit<'input>,
-    pub to: TO,
+    #[tok(TO, this)]
     pub dest_encoding: literal::StringLit<'input>,
-    pub from: FROM,
+    #[tok(FROM, this)]
     pub func_name: QualifiedName<'input>,
 }
 
 /// `DROP CONVERSION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropConversionStmt<'input> {
-    pub drop: DROP,
-    pub conversion: CONVERSION,
+    #[tok(DROP, CONVERSION, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -51,10 +42,7 @@ pub struct DropConversionStmt<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`RENAME`, `OWNER`, `SET`), so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterConversionAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -63,13 +51,9 @@ pub enum AlterConversionAction<'input> {
 
 /// `ALTER CONVERSION any_name action` — Postgres' `RenameStmt` /
 /// `AlterOwnerStmt` / `AlterObjectSchemaStmt` branches for conversions.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterConversionStmt<'input> {
-    pub alter: ALTER,
-    pub conversion: CONVERSION,
+    #[tok(ALTER, CONVERSION, this)]
     pub name: QualifiedName<'input>,
     pub action: AlterConversionAction<'input>,
 }
@@ -83,47 +67,49 @@ mod tests {
 
     #[test]
     fn parse_alter_conversion_set_schema() {
-        let mut input = crate::tokens::test_input("ALTER CONVERSION alt_conv2 SET SCHEMA alt_nsp2");
-        let _stmt = AlterConversionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER CONVERSION alt_conv2 SET SCHEMA alt_nsp2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterConversionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_default_conversion() {
-        let mut input = crate::tokens::test_input(
-            "CREATE DEFAULT CONVERSION mydef FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8",
-        );
-        let _stmt = CreateConversionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE DEFAULT CONVERSION mydef FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateConversionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_conversion_without_default() {
-        let mut input = crate::tokens::test_input(
-            "CREATE CONVERSION myconv FOR 'UTF8' TO 'LATIN1' FROM utf8_to_iso8859_1",
-        );
-        let _stmt = CreateConversionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE CONVERSION myconv FOR 'UTF8' TO 'LATIN1' FROM utf8_to_iso8859_1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateConversionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_conversion_plain() {
-        let mut input = crate::tokens::test_input(
-            "CREATE CONVERSION myconv FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8",
-        );
-        let stmt = CreateConversionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE CONVERSION myconv FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateConversionStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.default.is_none());
         assert_eq!(stmt.name.object(), "myconv");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_default_conversion_structured() {
-        let mut input = crate::tokens::test_input(
-            "CREATE DEFAULT CONVERSION public.mydef FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8",
-        );
-        let stmt = CreateConversionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE DEFAULT CONVERSION public.mydef FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateConversionStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.default.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

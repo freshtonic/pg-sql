@@ -3,7 +3,6 @@
 //! `tcl/savepoint.rs`; PREPARE/EXECUTE/DEALLOCATE in `tcl/prepared.rs`.
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::names::QualifiedName;
@@ -15,25 +14,18 @@ use crate::tokens::{literal, punct};
 /// Isolation level following `ISOLATION LEVEL`.
 ///
 /// Variant ordering: multi-word forms before single-word `Serializable`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum IsolationLevelKind {
-    RepeatableRead((REPEATABLE, READ)),
-    ReadCommitted((READ, COMMITTED)),
-    ReadUncommitted((READ, UNCOMMITTED)),
-    Serializable(SERIALIZABLE),
+    #[tok(REPEATABLE, READ)] RepeatableRead,
+    #[tok(READ, COMMITTED)] ReadCommitted,
+    #[tok(READ, UNCOMMITTED)] ReadUncommitted,
+    #[tok(SERIALIZABLE)] Serializable,
 }
 
 /// `ISOLATION LEVEL level` transaction mode.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IsolationLevelMode {
-    pub isolation: ISOLATION,
-    pub level_kw: LEVEL,
+    #[tok(ISOLATION, LEVEL, this)]
     pub level: IsolationLevelKind,
 }
 
@@ -41,165 +33,121 @@ pub struct IsolationLevelMode {
 ///
 /// Variant ordering: multi-word before single, and `NotDeferrable` (NOT
 /// DEFERRABLE) before bare `Deferrable`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TransactionMode<'input> {
     IsolationLevel(IsolationLevelMode),
-    ReadOnly((READ, ONLY)),
-    ReadWrite((READ, WRITE)),
-    NotDeferrable((NOT, DEFERRABLE)),
-    Deferrable(DEFERRABLE),
+    #[tok(READ, ONLY)] ReadOnly,
+    #[tok(READ, WRITE)] ReadWrite,
+    #[tok(NOT, DEFERRABLE)] NotDeferrable,
+    #[tok(DEFERRABLE)] Deferrable,
     Snapshot(SnapshotMode<'input>),
 }
 
 /// `SNAPSHOT 'snapshot_id'` — import a serializable transaction snapshot.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SnapshotMode<'input> {
-    pub snapshot: SNAPSHOT,
+    #[tok(SNAPSHOT, this)]
     pub id: literal::StringLit<'input>,
 }
 
 /// Optional `WORK | TRANSACTION` suffix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WorkOrTransaction {
-    Work(WORK),
-    Transaction(TRANSACTION),
+    #[tok(WORK)] Work,
+    #[tok(TRANSACTION)] Transaction,
 }
 
 /// BEGIN [WORK | TRANSACTION] [transaction_mode [, ...]]
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["tcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct BeginStmt<'input> {
-    pub begin: BEGIN,
+    #[tok(BEGIN, this)]
     pub work: Option<WorkOrTransaction>,
-    pub modes: Option<Seq0<TransactionMode<'input>, punct::Comma>>,
+    #[sep(COMMA)]
+    pub modes: Option<Vec<TransactionMode<'input> >>,
 }
 
 /// END [WORK | TRANSACTION] — alias for COMMIT.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["tcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct EndStmt {
-    pub end: END,
+    #[tok(END, this)]
     pub work: Option<WorkOrTransaction>,
 }
 
 /// ABORT [WORK | TRANSACTION] — alias for ROLLBACK.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["tcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AbortStmt {
-    pub abort: ABORT,
+    #[tok(ABORT, this)]
     pub work: Option<WorkOrTransaction>,
 }
 
 /// START TRANSACTION [transaction_mode [, ...]]
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["tcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct StartTransactionStmt<'input> {
-    pub start: START,
-    pub transaction: TRANSACTION,
-    pub modes: Option<Seq0<TransactionMode<'input>, punct::Comma>>,
+    #[tok(START, TRANSACTION, this)]
+    #[sep(COMMA)]
+    pub modes: Option<Vec<TransactionMode<'input> >>,
 }
 
 /// SET TRANSACTION transaction_mode [, ...]
 /// SET SESSION CHARACTERISTICS AS TRANSACTION transaction_mode [, ...]
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["tcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetTransactionStmt<'input> {
-    pub set: SET,
+    #[tok(SET, this)]
     pub target: SetTransactionTarget,
-    pub modes: Seq0<TransactionMode<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub modes: Vec<TransactionMode<'input> >,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SetTransactionTarget {
-    SessionCharacteristics((SESSION, CHARACTERISTICS, AS, TRANSACTION)),
-    Transaction(TRANSACTION),
+    #[tok(SESSION, CHARACTERISTICS, AS, TRANSACTION)] SessionCharacteristics,
+    #[tok(TRANSACTION)] Transaction,
 }
 
 /// `SET CONSTRAINTS { ALL | name [, …] } { DEFERRED | IMMEDIATE }`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["tcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetConstraintsStmt<'input> {
-    pub set: SET,
-    pub constraints: CONSTRAINTS,
+    #[tok(SET, CONSTRAINTS, this)]
     pub target: SetConstraintsTarget<'input>,
     pub mode: DeferredMode,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SetConstraintsTarget<'input> {
-    All(ALL),
+    #[tok(ALL)] All,
     /// Per gram.y `constraints_set_list: qualified_name_list`. Schema-qualified
     /// names are required for cross-schema constraints (`fkpart3.fkey`).
-    Names(Seq1<QualifiedName<'input>, punct::Comma>),
+    Names(#[sep(COMMA)] recursa::Vec1<QualifiedName<'input> >),
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DeferredMode {
-    Deferred(DEFERRED),
-    Immediate(IMMEDIATE),
+    #[tok(DEFERRED)] Deferred,
+    #[tok(IMMEDIATE)] Immediate,
 }
 
 /// `AND [NO] CHAIN` transaction-chaining suffix on `COMMIT` / `ROLLBACK`.
 ///
 /// Variant ordering: `AND NO CHAIN` (3 tokens) before `AND CHAIN` (2 tokens)
 /// so the longer form wins longest-match disambiguation.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TransactionChain {
-    NoChain((AND, NO, CHAIN)),
-    Chain((AND, CHAIN)),
+    #[tok(AND, NO, CHAIN)] NoChain,
+    #[tok(AND, CHAIN)] Chain,
 }
 
 /// `WORK | TRANSACTION` followed by an optional `AND [NO] CHAIN` chain clause —
 /// the `opt_transaction opt_transaction_chain` form of `COMMIT` / `ROLLBACK`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommitWithWork {
     pub work: WorkOrTransaction,
     pub chain: Option<TransactionChain>,
 }
 
 /// `PREPARED 'gid'` — the two-phase-commit form of `COMMIT` / `ROLLBACK`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PreparedGid<'input> {
-    pub prepared: PREPARED,
+    #[tok(PREPARED, this)]
     pub gid: literal::StringLit<'input>,
 }
 
@@ -207,10 +155,7 @@ pub struct PreparedGid<'input> {
 ///
 /// Variant ordering: first-sets are disjoint (`PREPARED`, `WORK`/`TRANSACTION`,
 /// `AND`), so order does not affect disambiguation.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CommitBody<'input> {
     Prepared(PreparedGid<'input>),
     WithWork(CommitWithWork),
@@ -219,33 +164,23 @@ pub enum CommitBody<'input> {
 
 /// COMMIT \[WORK | TRANSACTION\] \[AND \[NO\] CHAIN\]
 /// COMMIT PREPARED 'gid'
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["tcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommitStmt<'input> {
-    pub commit: COMMIT,
+    #[tok(COMMIT, this)]
     pub body: Option<CommitBody<'input>>,
 }
 
 /// `TO [SAVEPOINT] name` — the savepoint target of `ROLLBACK TO`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RollbackToClause<'input> {
-    pub to: TO,
-    pub savepoint: Option<SAVEPOINT>,
+    #[tok(TO, optional(SAVEPOINT), this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// What follows `WORK`/`TRANSACTION` in a `ROLLBACK`: either a `TO` savepoint
 /// clause or an `AND [NO] CHAIN` clause. First-sets (`TO` vs `AND`) are
 /// disjoint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum RollbackAfterWork<'input> {
     To(RollbackToClause<'input>),
     Chain(TransactionChain),
@@ -253,10 +188,7 @@ pub enum RollbackAfterWork<'input> {
 
 /// `WORK | TRANSACTION` followed by an optional `TO`/`AND CHAIN` clause —
 /// the `opt_transaction (opt_transaction_chain | TO ...)` form of `ROLLBACK`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RollbackWithWork<'input> {
     pub work: WorkOrTransaction,
     pub after: Option<RollbackAfterWork<'input>>,
@@ -266,10 +198,7 @@ pub struct RollbackWithWork<'input> {
 ///
 /// Variant ordering: first-sets are disjoint (`PREPARED`, `WORK`/`TRANSACTION`,
 /// `TO`, `AND`), so order does not affect disambiguation.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum RollbackBody<'input> {
     Prepared(PreparedGid<'input>),
     WithWork(RollbackWithWork<'input>),
@@ -280,12 +209,9 @@ pub enum RollbackBody<'input> {
 /// ROLLBACK \[WORK | TRANSACTION\] \[AND \[NO\] CHAIN\]
 /// ROLLBACK \[WORK | TRANSACTION\] TO \[SAVEPOINT\] name
 /// ROLLBACK PREPARED 'gid'
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["tcl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RollbackStmt<'input> {
-    pub rollback: ROLLBACK,
+    #[tok(ROLLBACK, this)]
     pub body: Option<RollbackBody<'input>>,
 }
 
@@ -298,68 +224,83 @@ mod tests {
 
     #[test]
     fn parse_end_stmt() {
-        let mut input = crate::tokens::test_input("END");
-        let _stmt = EndStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("END");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = EndStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_abort_stmt() {
-        let mut input = crate::tokens::test_input("ABORT");
-        let _stmt = AbortStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ABORT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AbortStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_abort_work() {
-        let mut input = crate::tokens::test_input("ABORT WORK");
-        let _stmt = AbortStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ABORT WORK");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AbortStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_start_transaction_read_write() {
-        let mut input = crate::tokens::test_input("START TRANSACTION READ WRITE");
-        let _stmt = StartTransactionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("START TRANSACTION READ WRITE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = StartTransactionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_set_transaction_modes() {
-        let mut input = crate::tokens::test_input(
-            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE",
-        );
-        let _stmt = SetTransactionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SetTransactionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_set_transaction_read_write() {
-        let mut input = crate::tokens::test_input("SET TRANSACTION READ WRITE");
-        let _stmt = SetTransactionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SET TRANSACTION READ WRITE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SetTransactionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_set_session_characteristics() {
-        let mut input =
-            crate::tokens::test_input("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
-        let _stmt = SetTransactionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SetTransactionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_set_transaction_snapshot() {
-        let mut input = crate::tokens::test_input("SET TRANSACTION SNAPSHOT 'FFF-FFF-F'");
-        let _stmt = SetTransactionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SET TRANSACTION SNAPSHOT 'FFF-FFF-F'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SetTransactionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_set_constraints_all_deferred() {
-        let mut input = crate::tokens::test_input("SET CONSTRAINTS ALL DEFERRED");
-        let _stmt = SetConstraintsStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SET CONSTRAINTS ALL DEFERRED");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SetConstraintsStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// `SET CONSTRAINTS qualified_name [, …] mode` — `constraints_set_list`
@@ -367,31 +308,38 @@ mod tests {
     /// `fkpart3.fkey` must parse (foreign_key.sql corpus).
     #[test]
     fn parse_set_constraints_qualified_name_deferred() {
-        let mut input = crate::tokens::test_input("SET CONSTRAINTS fkpart3.fkey DEFERRED");
-        let _stmt = SetConstraintsStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SET CONSTRAINTS fkpart3.fkey DEFERRED");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SetConstraintsStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_set_constraints_multiple_names_immediate() {
-        let mut input =
-            crate::tokens::test_input("SET CONSTRAINTS schema_a.c1, schema_b.c2 IMMEDIATE");
-        let _stmt = SetConstraintsStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SET CONSTRAINTS schema_a.c1, schema_b.c2 IMMEDIATE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SetConstraintsStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_begin_isolation() {
-        let mut input = crate::tokens::test_input("BEGIN ISOLATION LEVEL SERIALIZABLE");
-        let _stmt = BeginStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("BEGIN ISOLATION LEVEL SERIALIZABLE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = BeginStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn commit_bare_has_no_body() {
-        let mut input = crate::tokens::test_input("COMMIT");
-        let stmt = CommitStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("COMMIT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CommitStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
         assert!(stmt.body.is_none());
     }
 
@@ -426,9 +374,11 @@ mod tests {
 
     #[test]
     fn rollback_bare_has_no_body() {
-        let mut input = crate::tokens::test_input("ROLLBACK");
-        let stmt = RollbackStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ROLLBACK");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = RollbackStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
         assert!(stmt.body.is_none());
     }
 

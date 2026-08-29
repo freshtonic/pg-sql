@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::ddl::role::DefList;
 use crate::ast::shared::expr::*;
@@ -20,59 +18,39 @@ use recursa_diagram::railroad;
 ///
 /// Variant ordering: `From` (keyword-led) before `Options` (paren-led) — they
 /// begin with different tokens so peek disambiguation is unambiguous.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CreateCollationBody<'input> {
     From(CollationFromClause<'input>),
     Options(DefList<'input>),
 }
 
 /// `FROM existing_collation_name` — copy an existing collation.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CollationFromClause<'input> {
-    pub from: FROM,
+    #[tok(FROM, this)]
     pub name: QualifiedName<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateCollationStmt<'input> {
-    pub create: CREATE,
-    pub collation: COLLATION,
+    #[tok(CREATE, COLLATION, this)]
     pub if_not_exists: Option<IfNotExists>,
     pub name: QualifiedName<'input>,
     pub body: CreateCollationBody<'input>,
 }
 
 /// `DROP COLLATION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropCollationStmt<'input> {
-    pub drop: DROP,
-    pub collation: COLLATION,
+    #[tok(DROP, COLLATION, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// `REFRESH VERSION` — Postgres' `AlterCollationStmt` action.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct CollationRefreshVersion {
-    pub refresh: REFRESH,
-    pub version: VERSION,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum CollationRefreshVersion { #[tok(REFRESH, VERSION)] Value, }
 
 /// One action on `ALTER COLLATION any_name action` — Postgres'
 /// `RenameStmt`, `AlterOwnerStmt`, `AlterObjectSchemaStmt`, and
@@ -80,10 +58,7 @@ pub struct CollationRefreshVersion {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`RENAME`, `OWNER`, `SET`, `REFRESH`), so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterCollationAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -94,13 +69,9 @@ pub enum AlterCollationAction<'input> {
 /// `ALTER COLLATION any_name action` — Postgres' `AlterCollationStmt`
 /// (REFRESH VERSION) plus the collation branches of `RenameStmt` /
 /// `AlterOwnerStmt` / `AlterObjectSchemaStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterCollationStmt<'input> {
-    pub alter: ALTER,
-    pub collation: COLLATION,
+    #[tok(ALTER, COLLATION, this)]
     pub name: QualifiedName<'input>,
     pub action: AlterCollationAction<'input>,
 }
@@ -114,43 +85,50 @@ mod tests {
 
     #[test]
     fn parse_alter_collation_rename() {
-        let mut input = crate::tokens::test_input("ALTER COLLATION test1 RENAME TO test11");
-        let _stmt = AlterCollationStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER COLLATION test1 RENAME TO test11");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterCollationStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_collation_refresh_version() {
-        let mut input = crate::tokens::test_input("ALTER COLLATION en_us REFRESH VERSION");
-        let _stmt = AlterCollationStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER COLLATION en_us REFRESH VERSION");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterCollationStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_collation_def_list() {
-        let mut input = crate::tokens::test_input(
-            "CREATE COLLATION mycoll (LC_COLLATE = \"POSIX\", LC_CTYPE = \"POSIX\")",
-        );
-        let stmt = CreateCollationStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE COLLATION mycoll (LC_COLLATE = \"POSIX\", LC_CTYPE = \"POSIX\")");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateCollationStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "mycoll");
         assert!(matches!(stmt.body, CreateCollationBody::Options(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_collation_from() {
-        let mut input = crate::tokens::test_input("CREATE COLLATION mycoll FROM \"C\"");
-        let stmt = CreateCollationStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE COLLATION mycoll FROM \"C\"");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateCollationStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt.body, CreateCollationBody::From(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_collation_if_not_exists() {
-        let mut input =
-            crate::tokens::test_input("CREATE COLLATION IF NOT EXISTS mycoll FROM \"C\"");
-        let stmt = CreateCollationStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE COLLATION IF NOT EXISTS mycoll FROM \"C\"");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateCollationStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_not_exists.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

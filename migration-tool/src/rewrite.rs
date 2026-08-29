@@ -74,6 +74,9 @@ pub enum RewriteError {
     NonUtf8RustSource {
         path: PathBuf,
     },
+    NonUtf8TextSource {
+        path: PathBuf,
+    },
     InvalidRewrittenRust {
         path: PathBuf,
         message: String,
@@ -153,6 +156,11 @@ impl fmt::Display for RewriteError {
                 "Rust source is not valid UTF-8: {}",
                 path.display()
             ),
+            Self::NonUtf8TextSource { path } => write!(
+                formatter,
+                "selected text source is not valid UTF-8: {}",
+                path.display()
+            ),
             Self::InvalidRewrittenRust { path, message } => write!(
                 formatter,
                 "rewrite pass produced invalid Rust for {}: {message}",
@@ -176,6 +184,12 @@ pub trait SourceRewritePass {
     /// every file, so edit-only passes need not implement this method.
     fn file_disposition(&self, _path: &Path) -> Result<FileDisposition, RewriteError> {
         Ok(FileDisposition::Keep)
+    }
+
+    /// Select UTF-8 text files this pass can edit. Rust is the conservative
+    /// default; repository-integration passes may opt into an exact path.
+    fn rewrites_text_file(&self, path: &Path) -> bool {
+        path.extension().and_then(|extension| extension.to_str()) == Some("rs")
     }
 
     fn edits(&self, path: &Path, source: &str) -> Result<Vec<SpanEdit>, RewriteError>;
@@ -388,17 +402,33 @@ fn plan_tree(
                 path: path.clone(),
                 source,
             })?;
-            if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
-                let mut source_text = String::from_utf8(bytes)
-                    .map_err(|_| RewriteError::NonUtf8RustSource { path: path.clone() })?;
-                for pass in passes {
-                    source_text = rewrite_source(*pass, &relative, &source_text)?;
-                    syn::parse_file(&source_text).map_err(|error| {
-                        RewriteError::InvalidRewrittenRust {
-                            path: relative.clone(),
-                            message: error.to_string(),
-                        }
-                    })?;
+            let text_passes = passes
+                .iter()
+                .copied()
+                .filter(|pass| pass.rewrites_text_file(&relative))
+                .collect::<Vec<_>>();
+            if !text_passes.is_empty() {
+                let is_rust = relative
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    == Some("rs");
+                let mut source_text = String::from_utf8(bytes).map_err(|_| {
+                    if is_rust {
+                        RewriteError::NonUtf8RustSource { path: path.clone() }
+                    } else {
+                        RewriteError::NonUtf8TextSource { path: path.clone() }
+                    }
+                })?;
+                for pass in text_passes {
+                    source_text = rewrite_source(pass, &relative, &source_text)?;
+                    if is_rust {
+                        syn::parse_file(&source_text).map_err(|error| {
+                            RewriteError::InvalidRewrittenRust {
+                                path: relative.clone(),
+                                message: error.to_string(),
+                            }
+                        })?;
+                    }
                 }
                 bytes = source_text.into_bytes();
             }

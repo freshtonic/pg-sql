@@ -1,7 +1,5 @@
 /// CREATE TABLESPACE / DROP TABLESPACE statement AST.
 use recursa::seq::Seq0;
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::ddl::index::{StorageParam, WithStorage};
 use crate::tokens::keyword::*;
@@ -9,33 +7,23 @@ use crate::tokens::{literal, punct};
 use recursa_diagram::railroad;
 
 /// `OWNER role` optional clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OwnerClause<'input> {
-    pub owner: OWNER,
+    #[tok(OWNER, this)]
     pub role: crate::tokens::NonReservedWord<'input>,
 }
 
 /// `LOCATION 'path'` clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LocationClause<'input> {
-    pub location: LOCATION,
+    #[tok(LOCATION, this)]
     pub path: literal::StringLit<'input>,
 }
 
 /// `CREATE TABLESPACE name [OWNER role] LOCATION 'path' [WITH (params)]`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateTablespaceStmt<'input> {
-    pub create: CREATE,
-    pub tablespace: TABLESPACE,
+    #[tok(CREATE, TABLESPACE, this)]
     pub name: crate::tokens::ColId<'input>,
     pub owner: Option<OwnerClause<'input>>,
     pub location: LocationClause<'input>,
@@ -43,35 +31,25 @@ pub struct CreateTablespaceStmt<'input> {
 }
 
 /// `RENAME TO new_name` action on ALTER TABLESPACE.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTablespaceRename<'input> {
-    pub rename: RENAME,
-    pub to: TO,
+    #[tok(RENAME, TO, this)]
     pub new_name: crate::tokens::ColId<'input>,
 }
 
 /// `OWNER TO new_owner` action on ALTER TABLESPACE.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTablespaceOwner<'input> {
-    pub owner: OWNER,
-    pub to: TO,
+    #[tok(OWNER, TO, this)]
     pub new_owner: crate::tokens::NonReservedWord<'input>,
 }
 
 /// `SET (param = value, ...)` action on ALTER TABLESPACE.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTablespaceSetAction<'input> {
-    pub set: SET,
-    pub params: Surrounded<punct::LParen, Seq0<StorageParam<'input>, punct::Comma>, punct::RParen>,
+    #[tok(SET, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub params:  Vec<StorageParam<'input> > ,
 }
 
 /// `RESET (param [= value] [, ...])` action on ALTER TABLESPACE.
@@ -79,23 +57,18 @@ pub struct AlterTablespaceSetAction<'input> {
 /// Postgres accepts the same `reloptions` payload here as for `SET`, even
 /// though the `= value` half is ignored: `gram.y`'s `AlterTblSpcStmt` uses
 /// the `reloptions` rule for both branches.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTablespaceResetAction<'input> {
-    pub reset: RESET,
-    pub params: Surrounded<punct::LParen, Seq0<StorageParam<'input>, punct::Comma>, punct::RParen>,
+    #[tok(RESET, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub params:  Vec<StorageParam<'input> > ,
 }
 
 /// One of the supported ALTER TABLESPACE actions.
 ///
 /// Variant ordering: all variants start with distinct keywords (SET, RESET,
 /// RENAME, OWNER), so order is for clarity only.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterTablespaceAction<'input> {
     Set(AlterTablespaceSetAction<'input>),
     Reset(AlterTablespaceResetAction<'input>),
@@ -105,26 +78,19 @@ pub enum AlterTablespaceAction<'input> {
 
 /// `ALTER TABLESPACE name { RENAME TO new_name | OWNER TO new_owner
 ///                         | SET (params) | RESET (params) }`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTablespaceStmt<'input> {
-    pub alter: ALTER,
-    pub tablespace: TABLESPACE,
+    #[tok(ALTER, TABLESPACE, this)]
     pub name: crate::tokens::ColId<'input>,
     pub action: AlterTablespaceAction<'input>,
 }
 
 /// `DROP TABLESPACE [IF EXISTS] name`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropTablespaceStmt<'input> {
-    pub drop: DROP,
-    pub tablespace: TABLESPACE,
-    pub if_exists: Option<(IF, EXISTS)>,
+    #[tok(DROP, TABLESPACE, this)]
+    #[presence(IF, EXISTS)]
+    pub if_exists: bool,
     pub name: crate::tokens::ColId<'input>,
 }
 
@@ -136,70 +102,82 @@ mod tests {
 
     #[test]
     fn parse_create_tablespace_basic() {
-        let mut input = crate::tokens::test_input("CREATE TABLESPACE ts1 LOCATION '/tmp'");
-        let _stmt = CreateTablespaceStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLESPACE ts1 LOCATION '/tmp'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_tablespace_with_options() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLESPACE ts1 LOCATION '' WITH (random_page_cost = 3.0)",
-        );
-        let _stmt = CreateTablespaceStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLESPACE ts1 LOCATION '' WITH (random_page_cost = 3.0)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_tablespace_owner() {
-        let mut input =
-            crate::tokens::test_input("CREATE TABLESPACE ts1 OWNER foo LOCATION '/tmp'");
-        let _stmt = CreateTablespaceStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLESPACE ts1 OWNER foo LOCATION '/tmp'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_tablespace() {
-        let mut input = crate::tokens::test_input("DROP TABLESPACE ts1");
-        let _stmt = DropTablespaceStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("DROP TABLESPACE ts1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = DropTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_tablespace_if_exists() {
-        let mut input = crate::tokens::test_input("DROP TABLESPACE IF EXISTS ts1");
-        let _stmt = DropTablespaceStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("DROP TABLESPACE IF EXISTS ts1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = DropTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_tablespace_set() {
-        let mut input =
-            crate::tokens::test_input("ALTER TABLESPACE ts SET (random_page_cost = 1.0)");
-        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLESPACE ts SET (random_page_cost = 1.0)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_tablespace_reset() {
-        let mut input = crate::tokens::test_input(
-            "ALTER TABLESPACE ts RESET (random_page_cost, effective_io_concurrency)",
-        );
-        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLESPACE ts RESET (random_page_cost, effective_io_concurrency)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_tablespace_rename() {
-        let mut input = crate::tokens::test_input("ALTER TABLESPACE ts RENAME TO ts2");
-        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLESPACE ts RENAME TO ts2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_tablespace_owner() {
-        let mut input = crate::tokens::test_input("ALTER TABLESPACE ts OWNER TO foo");
-        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLESPACE ts OWNER TO foo");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 }

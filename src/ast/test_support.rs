@@ -17,9 +17,11 @@ use crate::formatter::format_tokens_sql;
 /// `parse_stmt(src)` parses `src` as the given statement type and asserts
 /// that the whole input was consumed, returning the typed AST.
 pub fn parse_stmt<T: Parse<'static>>(src: &'static str) -> T {
-    let mut input = crate::tokens::test_input(src);
-    let stmt = T::parse(&mut input).unwrap();
-    assert!(input.is_empty(), "unconsumed input after parsing {src:?}");
+    let lexed = crate::tokens::lex(src);
+    assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+    let mut input = lexed.input();
+    let stmt = T::parse(&mut input).unwrap().into_ast();
+    assert!(input.is_eof(), "unconsumed input after parsing {src:?}");
     stmt
 }
 
@@ -31,15 +33,19 @@ pub fn reparse_stable<T>(src: &'static str)
 where
     T: Parse<'static> + FormatTokens,
 {
-    let mut input = crate::tokens::test_input(src);
-    let stmt = T::parse(&mut input).unwrap();
-    assert!(input.is_empty(), "unconsumed input after parsing {src:?}");
+    let lexed = crate::tokens::lex(src);
+    assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+    let mut input = lexed.input();
+    let stmt = T::parse(&mut input).unwrap().into_ast();
+    assert!(input.is_eof(), "unconsumed input after parsing {src:?}");
     let once = format_tokens_sql(&stmt, recursa::fmt::FormatStyle::default());
     let leaked: &'static str = Box::leak(once.clone().into_boxed_str());
-    let mut reinput = crate::tokens::test_input(leaked);
-    let restmt = T::parse(&mut reinput).unwrap();
+    let relexed = crate::tokens::lex(leaked);
+    assert_eq!(relexed.errors().count(), 0, "lex errors in reinput");
+    let mut reinput = relexed.input();
+    let restmt = T::parse(&mut reinput).unwrap().into_ast();
     assert!(
-        reinput.is_empty(),
+        reinput.is_eof(),
         "unconsumed input after re-parsing {once:?}"
     );
     let twice = format_tokens_sql(&restmt, recursa::fmt::FormatStyle::default());
@@ -52,8 +58,10 @@ pub fn roundtrip<T>(src: &'static str) -> String
 where
     T: Parse<'static> + FormatTokens,
 {
-    let mut input = crate::tokens::test_input(src);
-    let stmt = T::parse(&mut input).unwrap();
-    assert!(input.is_empty(), "unconsumed input after parsing {src:?}");
+    let lexed = crate::tokens::lex(src);
+    assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+    let mut input = lexed.input();
+    let stmt = T::parse(&mut input).unwrap().into_ast();
+    assert!(input.is_eof(), "unconsumed input after parsing {src:?}");
     format_tokens_sql(&stmt, recursa::fmt::FormatStyle::default())
 }

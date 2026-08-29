@@ -5,7 +5,6 @@
 //! role) is utility-shaped even though Postgres' `gram.y` files them as
 //! object-management statements.
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::flags::DropBehavior;
@@ -15,16 +14,11 @@ use crate::tokens::keyword::*;
 // --- REASSIGN ---
 
 /// REASSIGN OWNED BY role_list TO role
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReassignStmt<'input> {
-    pub reassign: REASSIGN,
-    pub owned: OWNED,
-    pub by: BY,
+    #[tok(REASSIGN, OWNED, BY, this)]
     pub roles: RoleList<'input>,
-    pub to: TO,
+    #[tok(TO, this)]
     pub new_role: RoleSpec<'input>,
 }
 
@@ -33,14 +27,9 @@ pub struct ReassignStmt<'input> {
 // -----------------------------------------------------------------------
 
 /// `DROP OWNED BY role [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropOwnedStmt<'input> {
-    pub drop: DROP,
-    pub owned: OWNED,
-    pub by: BY,
+    #[tok(DROP, OWNED, BY, this)]
     pub roles: RoleList<'input>,
     pub behavior: Option<DropBehavior>,
 }
@@ -54,11 +43,13 @@ mod tests {
 
     #[test]
     fn parse_drop_owned_by() {
-        let mut input = crate::tokens::test_input("DROP OWNED BY r1, r2 CASCADE");
-        let stmt = DropOwnedStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP OWNED BY r1, r2 CASCADE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropOwnedStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.roles.len(), 2);
         assert!(stmt.behavior.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]

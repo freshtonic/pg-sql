@@ -1,7 +1,6 @@
 //! REINDEX statement. The shared `VacuumOption`/`VacuumOptions` types live
 //! in `utility/vacuum.rs`.
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::names::QualifiedName;
@@ -9,57 +8,45 @@ use crate::ast::utility::vacuum::VacuumOptions;
 use crate::tokens::keyword::*;
 
 /// `REINDEX … { INDEX | TABLE } [CONCURRENTLY] qualified_name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReindexRelation<'input> {
     pub kind: ReindexRelationKind,
-    pub concurrently: Option<CONCURRENTLY>,
+    #[presence(CONCURRENTLY)]
+    pub concurrently: bool,
     pub name: QualifiedName<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ReindexRelationKind {
-    Index(INDEX),
-    Table(TABLE),
+    #[tok(INDEX)] Index,
+    #[tok(TABLE)] Table,
 }
 
 /// `REINDEX … SCHEMA [CONCURRENTLY] name` — Postgres' `reindex_target_relation`
 /// branch for `SCHEMA`, which always requires a name.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReindexSchemaTarget<'input> {
-    pub schema: SCHEMA,
-    pub concurrently: Option<CONCURRENTLY>,
+    #[tok(SCHEMA, this)]
+    #[presence(CONCURRENTLY)]
+    pub concurrently: bool,
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `REINDEX … { SYSTEM | DATABASE } [CONCURRENTLY] [name]` — Postgres'
 /// `reindex_target_all`, where the trailing name is optional
 /// (`opt_single_name`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReindexAllTarget<'input> {
     pub kind: ReindexAllKind,
-    pub concurrently: Option<CONCURRENTLY>,
+    #[presence(CONCURRENTLY)]
+    pub concurrently: bool,
     pub name: Option<crate::tokens::ColId<'input>>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ReindexAllKind {
-    System(SYSTEM),
-    Database(DATABASE),
+    #[tok(SYSTEM)] System,
+    #[tok(DATABASE)] Database,
 }
 
 /// The full target portion of a `REINDEX` statement.
@@ -67,10 +54,7 @@ pub enum ReindexAllKind {
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`INDEX` / `TABLE` / `SCHEMA` / `SYSTEM` / `DATABASE`) so first-set
 /// disambiguation is unambiguous.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ReindexTarget<'input> {
     Relation(ReindexRelation<'input>),
     Schema(ReindexSchemaTarget<'input>),
@@ -83,12 +67,9 @@ pub enum ReindexTarget<'input> {
 ///   | SCHEMA            [CONCURRENTLY] name
 ///   | { SYSTEM | DATABASE } [CONCURRENTLY] [name] }
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReindexStmt<'input> {
-    pub reindex: REINDEX,
+    #[tok(REINDEX, this)]
     pub options: Option<VacuumOptions<'input>>,
     pub target: ReindexTarget<'input>,
 }
@@ -102,16 +83,20 @@ mod tests {
 
     #[test]
     fn parse_reindex_tablespace_table() {
-        let mut input = crate::tokens::test_input("REINDEX (TABLESPACE ts) TABLE tbl");
-        let _stmt = ReindexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("REINDEX (TABLESPACE ts) TABLE tbl");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = ReindexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_reindex_verbose_index() {
-        let mut input = crate::tokens::test_input("REINDEX (VERBOSE) INDEX i");
-        let _stmt = ReindexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("REINDEX (VERBOSE) INDEX i");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = ReindexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]

@@ -3,6 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use pg_sql_migrate::migration_contract::{MIGRATION_SOURCE_COMMIT, OMITTED_PATHS};
+
 mod support;
 
 use support::assert_single_token_attachment;
@@ -11,16 +13,44 @@ fn fixture_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/rewrite/grammar")
 }
 
-fn copy_tree(source: &Path, destination: &Path) {
-    fs::create_dir_all(destination).unwrap();
-    for entry in fs::read_dir(source).unwrap() {
-        let entry = entry.unwrap();
-        let destination = destination.join(entry.file_name());
-        if entry.file_type().unwrap().is_dir() {
-            copy_tree(&entry.path(), &destination);
-        } else {
-            fs::copy(entry.path(), destination).unwrap();
-        }
+fn frozen_source(path: &str) -> Vec<u8> {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let output = Command::new("git")
+        .args([
+            "-C",
+            repository.to_str().unwrap(),
+            "show",
+            &format!("{MIGRATION_SOURCE_COMMIT}:{path}"),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "failed to materialize frozen {path}"
+    );
+    output.stdout
+}
+
+fn materialize_frozen_src(destination: &Path) {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let output = Command::new("git")
+        .args([
+            "-C",
+            repository.to_str().unwrap(),
+            "ls-tree",
+            "-r",
+            "--name-only",
+            MIGRATION_SOURCE_COMMIT,
+            "--",
+            "src",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    for relative in String::from_utf8(output.stdout).unwrap().lines() {
+        let target = destination.join(relative);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(target, frozen_source(relative)).unwrap();
     }
 }
 
@@ -45,13 +75,13 @@ fn snapshot_tree(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
 }
 
 #[test]
-fn cli_publishes_every_audited_optional_token_disposition_from_the_real_tree() {
-    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+fn cli_publishes_every_audited_optional_token_disposition_from_the_frozen_tree() {
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("legacy");
     let new_repository = temporary.path().join("new-repository");
     let destination = new_repository.join("migrated");
-    copy_tree(&repository.join("src"), &source.join("src"));
+    materialize_frozen_src(&source);
+    fs::write(source.join("Cargo.toml"), frozen_source("Cargo.toml")).unwrap();
     fs::create_dir_all(&new_repository).unwrap();
     let source_before = snapshot_tree(&source);
 
@@ -81,7 +111,37 @@ fn cli_publishes_every_audited_optional_token_disposition_from_the_real_tree() {
         .join("\n");
     for (path, bytes) in &migrated {
         if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
-            assert_single_token_attachment(path, std::str::from_utf8(bytes).unwrap());
+            let migrated_source = std::str::from_utf8(bytes).unwrap();
+            assert_single_token_attachment(path, migrated_source);
+            assert!(
+                migrated_source
+                    .lines()
+                    .all(|line| !line.ends_with([' ', '\t'])),
+                "published migration left trailing whitespace in {}",
+                path.display()
+            );
+        }
+    }
+    for omitted in OMITTED_PATHS {
+        assert!(
+            !destination.join(omitted).exists(),
+            "obsolete file survived publication: {omitted}"
+        );
+    }
+    let cargo_manifest = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
+    let mut explicit_bin = false;
+    for line in cargo_manifest.lines() {
+        if line.starts_with("[[") {
+            explicit_bin = line == "[[bin]]";
+        } else if explicit_bin
+            && let Some(path) = line
+                .strip_prefix("path = \"")
+                .and_then(|path| path.strip_suffix('"'))
+        {
+            assert!(
+                destination.join(path).is_file(),
+                "explicit bin path does not exist after migration: {path}"
+            );
         }
     }
     assert_eq!(authored.matches("#[presence(").count(), 83);
@@ -112,8 +172,7 @@ fn cli_publishes_every_audited_optional_token_disposition_from_the_real_tree() {
 }
 
 #[test]
-fn cli_rewrites_real_required_tokens_hooks_and_raw_line_omissions() {
-    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+fn cli_rewrites_frozen_required_tokens_hooks_and_raw_line_omissions() {
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("legacy");
     let new_repository = temporary.path().join("new-repository");
@@ -128,10 +187,10 @@ fn cli_rewrites_real_required_tokens_hooks_and_raw_line_omissions() {
     ] {
         let target = source.join(relative);
         fs::create_dir_all(target.parent().unwrap()).unwrap();
-        fs::copy(repository.join(relative), target).unwrap();
+        fs::write(target, frozen_source(relative)).unwrap();
     }
     fs::create_dir_all(&new_repository).unwrap();
-    let tokens_before = fs::read(source.join("src/tokens.rs")).unwrap();
+    let source_before = snapshot_tree(&source);
 
     let output = Command::new(env!("CARGO_BIN_EXE_pg-sql-migrate"))
         .args(["rewrite", "grammar"])
@@ -149,17 +208,15 @@ fn cli_rewrites_real_required_tokens_hooks_and_raw_line_omissions() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(
-        fs::read(source.join("src/tokens.rs")).unwrap(),
-        tokens_before
-    );
-    assert!(!destination.join("src/generated/first_set.rs").exists());
+    assert_eq!(snapshot_tree(&source), source_before);
+
     let crate_root = fs::read_to_string(destination.join("src/lib.rs")).unwrap();
     assert_eq!(crate_root.matches("recursa::grammar!").count(), 1);
     assert!(crate_root.contains(
         "recursa::grammar! {\n    module = crate,\n    keyword_matching = ascii_insensitive,\n    max_lookahead = 5,\n}"
     ));
     assert!(!crate_root.contains("__firstset"));
+    assert!(!crate_root.contains("Generated first-set dispatch helpers"));
     let file_surface = fs::read_to_string(destination.join("src/ast/file.rs")).unwrap();
     assert!(file_surface.contains("pub enum PsqlTerminator"));
     assert!(file_surface.contains("pub enum StatementTerminator"));
@@ -172,6 +229,8 @@ fn cli_rewrites_real_required_tokens_hooks_and_raw_line_omissions() {
     assert!(formatter.contains("pub fn format_tokens_sql"));
     assert!(!formatter.contains("pub fn format_file"));
     assert!(crate_root.contains("pub mod formatter;"));
+    assert!(!crate_root.contains("pub mod flame;"));
+    assert!(!crate_root.contains("pub mod flame_report;"));
     let ast_root = fs::read_to_string(destination.join("src/ast/mod.rs")).unwrap();
     assert!(ast_root.contains("pub mod file;"));
     assert!(ast_root.contains(

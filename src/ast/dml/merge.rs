@@ -9,8 +9,6 @@
 /// [RETURNING ...]
 /// ```
 use recursa::seq::{OptionalTrailing, Seq0};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::dml::select::{PlainTable, TableRef};
 use crate::ast::dml::update::{ReturningClause, SetAssignment};
@@ -20,34 +18,25 @@ use crate::tokens::{literal, punct};
 use recursa_diagram::railroad;
 
 /// `AND cond` qualifier on a WHEN clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AndCondition<'input> {
-    pub and: AND,
+    #[tok(AND, this)]
     pub condition: Expr<'input>,
 }
 
 /// `BY SOURCE` or `BY TARGET`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum NotMatchedBy {
-    Source((BY, SOURCE)),
-    Target((BY, TARGET)),
+    #[tok(BY, SOURCE)] Source,
+    #[tok(BY, TARGET)] Target,
 }
 
 /// `UPDATE SET col = expr, ...` action body (the part after THEN).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UpdateAction<'input> {
-    pub update: UPDATE,
-    pub set: SET,
-    pub assignments: Seq0<SetAssignment<'input>, punct::Comma>,
+    #[tok(UPDATE, SET, this)]
+    #[sep(COMMA)]
+    pub assignments: Vec<SetAssignment<'input> >,
 }
 
 /// Action allowed after `WHEN MATCHED ... THEN`.
@@ -55,68 +44,55 @@ pub struct UpdateAction<'input> {
 /// Variant ordering: `DoNothing` (`DO NOTHING`) and `Update` (`UPDATE`) and
 /// `Delete` (`DELETE`) all start with distinct keywords, so order is by
 /// declaration only.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum MatchedAction<'input> {
     Update(UpdateAction<'input>),
-    Delete(DELETE),
-    DoNothing((DO, NOTHING)),
+    #[tok(DELETE)] Delete,
+    #[tok(DO, NOTHING)] DoNothing,
 }
 
 /// A single row of values: `(expr, ...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ValueRow<'input>(
-    pub Surrounded<punct::LParen, Seq0<Expr<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub  Vec<Expr<'input> > ,
 );
 
 /// `VALUES (row), (row), ...` body.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InsertValuesBody<'input> {
-    pub values: VALUES,
-    pub rows: Seq0<ValueRow<'input>, punct::Comma>,
+    #[tok(VALUES, this)]
+    #[sep(COMMA)]
+    pub rows: Vec<ValueRow<'input> >,
 }
 
 /// Body of an INSERT inside MERGE: `VALUES ...` or `DEFAULT VALUES`.
 ///
 /// Variant ordering: `Default` (`DEFAULT VALUES`) is matched before
 /// `Values` (`VALUES`) since they begin with different keywords.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum InsertBody<'input> {
-    Default((DEFAULT, VALUES)),
+    #[tok(DEFAULT, VALUES)] Default,
     Values(InsertValuesBody<'input>),
 }
 
 /// Optional `INTO target_name` after `INSERT`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InsertInto<'input> {
-    pub into: INTO,
+    #[tok(INTO, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `INSERT [INTO target] [(cols)] { VALUES ... | DEFAULT VALUES }`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InsertAction<'input> {
-    pub insert: INSERT,
+    #[tok(INSERT, this)]
     pub into: Option<InsertInto<'input>>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns: Option<
-        Surrounded<punct::LParen, Seq0<literal::AliasName<'input>, punct::Comma>, punct::RParen>,
+         Vec<literal::AliasName<'input> > ,
     >,
     /// `OVERRIDING {SYSTEM|USER} VALUE` between the columns and the body.
     pub overriding: Option<crate::ast::dml::insert::OverridingClause>,
@@ -130,42 +106,30 @@ pub struct InsertAction<'input> {
 /// (the target row exists, the source row does not). Which `by` form
 /// permits which action is a semantic rule, so all four are accepted
 /// grammatically.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum NotMatchedAction<'input> {
     Insert(InsertAction<'input>),
     Update(UpdateAction<'input>),
-    Delete(DELETE),
-    DoNothing((DO, NOTHING)),
+    #[tok(DELETE)] Delete,
+    #[tok(DO, NOTHING)] DoNothing,
 }
 
 /// `WHEN NOT MATCHED [BY {SOURCE|TARGET}] [AND cond] THEN action`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WhenNotMatched<'input> {
-    pub when: WHEN,
-    pub not: NOT,
-    pub matched: MATCHED,
+    #[tok(WHEN, NOT, MATCHED, this)]
     pub by: Option<NotMatchedBy>,
     pub and: Option<AndCondition<'input>>,
-    pub then: THEN,
+    #[tok(THEN, this)]
     pub action: NotMatchedAction<'input>,
 }
 
 /// `WHEN MATCHED [AND cond] THEN action`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WhenMatched<'input> {
-    pub when: WHEN,
-    pub matched: MATCHED,
+    #[tok(WHEN, MATCHED, this)]
     pub and: Option<AndCondition<'input>>,
-    pub then: THEN,
+    #[tok(THEN, this)]
     pub action: MatchedAction<'input>,
 }
 
@@ -173,29 +137,22 @@ pub struct WhenMatched<'input> {
 ///
 /// Variant ordering: `NotMatched` (`WHEN NOT MATCHED`) is longer than
 /// `Matched` (`WHEN MATCHED`); list it first.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WhenClause<'input> {
     NotMatched(WhenNotMatched<'input>),
     Matched(WhenMatched<'input>),
 }
 
 /// MERGE statement.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["dml"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct MergeStmt<'input> {
-    pub merge: MERGE,
-    pub into: INTO,
+    #[tok(MERGE, INTO, this)]
     pub target: Box<PlainTable<'input>>,
-    pub using: USING,
+    #[tok(USING, this)]
     pub source: Box<TableRef<'input>>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub condition: Box<Expr<'input>>,
-    pub when_clauses: Seq0<WhenClause<'input>, (), OptionalTrailing>,
+    pub when_clauses: Vec<WhenClause<'input>  >,
     pub returning: Option<Box<ReturningClause<'input>>>,
 }
 
@@ -208,35 +165,43 @@ mod tests {
     #[test]
     fn parse_merge_basic() {
         let sql = "MERGE INTO m USING (select 0 k, 'v' v) o ON m.k = o.k WHEN MATCHED THEN UPDATE SET v = 'updated' WHEN NOT MATCHED THEN INSERT VALUES(o.k, o.v)";
-        let mut input = crate::tokens::test_input(sql);
-        let stmt = MergeStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex(sql);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.when_clauses.len(), 2);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_merge_target_alias() {
         let sql = "MERGE INTO target t USING source s ON t.tid = s.sid WHEN MATCHED THEN DELETE";
-        let mut input = crate::tokens::test_input(sql);
-        let _stmt = MergeStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(sql);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_merge_when_matched_and() {
         let sql =
             "MERGE INTO t USING s ON t.a = s.a WHEN MATCHED AND t.a = 2 THEN UPDATE SET b = s.b";
-        let mut input = crate::tokens::test_input(sql);
-        let _stmt = MergeStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(sql);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_merge_not_matched_by_source_default_values() {
         let sql = "MERGE INTO t USING s ON t.a = s.a WHEN NOT MATCHED BY SOURCE THEN INSERT DEFAULT VALUES";
-        let mut input = crate::tokens::test_input(sql);
-        let _stmt = MergeStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(sql);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// `WHEN NOT MATCHED BY SOURCE` accepts `UPDATE` / `DELETE` (PG17),
@@ -251,10 +216,12 @@ mod tests {
             "MERGE INTO t USING s ON t.a = s.a WHEN MATCHED THEN DELETE \
              RETURNING merge_action(), t.*",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            MergeStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            MergeStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -264,25 +231,31 @@ mod tests {
     #[test]
     fn parse_merge_do_nothing_both() {
         let sql = "MERGE INTO t USING s ON t.a = s.a WHEN MATCHED THEN DO NOTHING WHEN NOT MATCHED THEN DO NOTHING";
-        let mut input = crate::tokens::test_input(sql);
-        let _stmt = MergeStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(sql);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_merge_insert_multi_values() {
         let sql =
             "MERGE INTO t USING s ON t.a = s.a WHEN NOT MATCHED THEN INSERT VALUES (1,1), (2,2)";
-        let mut input = crate::tokens::test_input(sql);
-        let _stmt = MergeStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(sql);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_merge_insert_into_default_values() {
         let sql = "MERGE INTO target t USING source s ON t.tid = s.sid WHEN NOT MATCHED THEN INSERT INTO target DEFAULT VALUES";
-        let mut input = crate::tokens::test_input(sql);
-        let _stmt = MergeStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(sql);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 }

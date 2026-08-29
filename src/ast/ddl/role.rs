@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::ddl::foreign::AlterGenericOptions;
 use crate::ast::ddl::table::CreateGenericOptions;
@@ -23,13 +21,10 @@ use recursa_diagram::railroad;
 ///
 /// Variant ordering: `Temporary` (longer) before `Temp` so the longer keyword
 /// wins longest-match disambiguation.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TempModifier {
-    Temporary(TEMPORARY),
-    Temp(TEMP),
+    #[tok(TEMPORARY)] Temporary,
+    #[tok(TEMP)] Temp,
 }
 
 /// A single `def_arg` value — Postgres' grammar:
@@ -66,20 +61,17 @@ pub enum TempModifier {
 /// share `+`/`-` as a leading token — `Numeric` consumes `+1`/`-2`, and
 /// `QualOp` only wins on a lone operator token; `Type` last (it's the
 /// broadest, accepting any identifier or built-in type keyword).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DefArg<'input> {
-    Default(DEFAULT),
-    True(TRUE),
-    False(FALSE),
-    None(NONE),
-    /// Reserved keyword used as a `def_arg` value. The corpus uses this
+    #[tok(DEFAULT)] Default,
+    #[tok(TRUE)] True,
+    #[tok(FALSE)] False,
+    #[tok(NONE)] None,
+    #[tok(ANY)] /// Reserved keyword used as a `def_arg` value. The corpus uses this
     /// for `ALTER SUBSCRIPTION ... SET (origin = any)`. Per gram.y
     /// `def_arg` accepts `reserved_keyword` directly; pg-sql only adds
     /// keywords actually exercised by the corpus.
-    Any(ANY),
+    Any,
     String(CopySconst<'input>),
     Numeric(NumericOnly<'input>),
     /// A bare operator name on the RHS of a `def_elem`. Postgres' `def_arg`
@@ -107,34 +99,27 @@ pub enum DefArg<'input> {
 
 /// `name(typename_list)` — function-style def-arg value with type-name
 /// arguments, used by CREATE AGGREGATE's `SFUNC = balkifnull(int8, int4)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DefArgFuncWithArgs<'input> {
     pub name: crate::ast::shared::names::QualifiedName<'input>,
-    pub args: Surrounded<punct::LParen, Seq1<CastType<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:  recursa::Vec1<CastType<'input> > ,
 }
 
 /// `SETOF type` value in a `def_list` (PG: `func_type` form on `def_arg`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DefArgSetof<'input> {
-    pub setof: SETOF,
+    #[tok(SETOF, this)]
     pub type_name: CastType<'input>,
 }
 
 /// `value` separator on `def_elem` — Postgres uses `'='`.
 ///
 /// One-variant enum so the AST has a typed node where the literal sits.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DefElemValue<'input> {
-    pub eq: punct::Eq,
+    #[tok(EQ, this)]
     pub arg: DefArg<'input>,
 }
 
@@ -143,32 +128,25 @@ pub struct DefElemValue<'input> {
 /// The name is `AliasName` so any keyword or identifier is accepted (Postgres
 /// `ColLabel` permits every keyword class). The value is optional: some
 /// CREATE TYPE base-type forms use bare names like `passedbyvalue`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DefElem<'input> {
     pub name: literal::AliasName<'input>,
     pub value: Option<DefElemValue<'input>>,
 }
 
 /// A parenthesised `def_list`: `(name [= value], ...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DefList<'input> {
-    pub items: Surrounded<punct::LParen, Seq1<DefElem<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub items:  recursa::Vec1<DefElem<'input> > ,
 }
 
 /// Password value in `PASSWORD { sconst | NULL }` — Postgres'
 /// `AlterOptRoleElem` PASSWORD branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PasswordValue<'input> {
-    Null(NULL),
+    #[tok(NULL)] Null,
     /// Any string-constant form: plain, `E'…'`, `U&'…'`, `B'…'`, `X'…'`.
     String(CopySconst<'input>),
 }
@@ -178,114 +156,82 @@ pub enum PasswordValue<'input> {
 /// encrypted today). The `UNENCRYPTED PASSWORD` form is also recognised by
 /// PG's grammar but raises an immediate error, so we accept it and round-
 /// trip it byte-faithfully.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PasswordOption<'input> {
     /// Optional `ENCRYPTED` or `UNENCRYPTED` modifier.
     pub modifier: Option<PasswordModifier>,
-    pub password: crate::tokens::soft_keyword::PASSWORD,
+    #[tok(PASSWORD, this)]
     pub value: PasswordValue<'input>,
 }
 
 /// `ENCRYPTED | UNENCRYPTED` — the backward-compat password modifier.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PasswordModifier {
-    Encrypted(crate::tokens::soft_keyword::ENCRYPTED),
-    Unencrypted(crate::tokens::soft_keyword::UNENCRYPTED),
+    #[tok(ENCRYPTED)] Encrypted,
+    #[tok(UNENCRYPTED)] Unencrypted,
 }
 
 /// `CONNECTION LIMIT signed_iconst` — role-attribute connection limit.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ConnectionLimitOption<'input> {
-    pub connection: crate::tokens::soft_keyword::CONNECTION,
-    pub limit: LIMIT,
+    #[tok(CONNECTION, LIMIT, this)]
     pub value: SignedIconst<'input>,
 }
 
 /// `VALID UNTIL sconst` — role-attribute expiry.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ValidUntilOption<'input> {
-    pub valid: VALID,
-    pub until: crate::tokens::soft_keyword::UNTIL,
+    #[tok(VALID, UNTIL, this)]
     pub value: CopySconst<'input>,
 }
 
 /// `IN { ROLE | GROUP } role_list` — role membership target list.
 ///
 /// Variant ordering: keyword kind discriminates first; both are single-token.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum InRoleOrGroup {
-    Role(ROLE),
-    Group(GROUP),
+    #[tok(ROLE)] Role,
+    #[tok(GROUP)] Group,
 }
 
 /// `IN { ROLE | GROUP } role [, ...]` — Postgres' `CreateOptRoleElem`
 /// `IN_P ROLE`/`IN_P GROUP_P` branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InRoleOption<'input> {
-    pub r#in: IN,
+    #[tok(IN, this)]
     pub kind: InRoleOrGroup,
     pub roles: RoleList<'input>,
 }
 
 /// `SYSID iconst` — legacy noise option preserved for backward compat.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SysIdOption<'input> {
-    pub sysid: crate::tokens::soft_keyword::SYSID,
+    #[tok(SYSID, this)]
     pub value: literal::IntegerLit<'input>,
 }
 
 /// `ADMIN role_list` — `CreateOptRoleElem` ADMIN branch (creates role with
 /// admin members).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AdminOption<'input> {
-    pub admin: crate::tokens::soft_keyword::ADMIN,
+    #[tok(ADMIN, this)]
     pub roles: RoleList<'input>,
 }
 
 /// `ROLE role_list` — `CreateOptRoleElem` ROLE branch (creates role with
 /// child members).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RoleMembersOption<'input> {
-    pub role: ROLE,
+    #[tok(ROLE, this)]
     pub roles: RoleList<'input>,
 }
 
 /// `USER role_list` — legacy `CREATE GROUP name [WITH] USER u1, u2`
 /// (supported but undocumented for ALTER GROUP); also matches
 /// `AlterOptRoleElem`'s undocumented `USER role_list` branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UserMembersOption<'input> {
-    pub user: USER,
+    #[tok(USER, this)]
     pub roles: RoleList<'input>,
 }
 
@@ -297,10 +243,7 @@ pub struct UserMembersOption<'input> {
 /// single-keyword form they share a first-token with, so longest-match-wins
 /// disambiguates. `ROLE role_list` and `IN ROLE …` both start with `ROLE`/
 /// `IN` so the longer `IN ROLE` form wins on its leading `IN`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CreateRoleOption<'input> {
     // Multi-keyword forms first.
     InRole(InRoleOption<'input>),
@@ -312,90 +255,66 @@ pub enum CreateRoleOption<'input> {
     Role(RoleMembersOption<'input>),
     User(UserMembersOption<'input>),
     // Single-keyword forms — soft keywords for the role-attribute names.
-    Superuser(crate::tokens::soft_keyword::SUPERUSER),
-    NoSuperuser(crate::tokens::soft_keyword::NOSUPERUSER),
-    CreateDb(crate::tokens::soft_keyword::CREATEDB),
-    NoCreateDb(crate::tokens::soft_keyword::NOCREATEDB),
-    CreateRole(crate::tokens::soft_keyword::CREATEROLE),
-    NoCreateRole(crate::tokens::soft_keyword::NOCREATEROLE),
-    Inherit(INHERIT),
-    NoInherit(crate::tokens::soft_keyword::NOINHERIT),
-    Login(crate::tokens::soft_keyword::LOGIN),
-    NoLogin(crate::tokens::soft_keyword::NOLOGIN),
-    Replication(crate::tokens::soft_keyword::REPLICATION),
-    NoReplication(crate::tokens::soft_keyword::NOREPLICATION),
-    BypassRls(crate::tokens::soft_keyword::BYPASSRLS),
-    NoBypassRls(crate::tokens::soft_keyword::NOBYPASSRLS),
+    #[tok(SUPERUSER)] Superuser,
+    #[tok(NOSUPERUSER)] NoSuperuser,
+    #[tok(CREATEDB)] CreateDb,
+    #[tok(NOCREATEDB)] NoCreateDb,
+    #[tok(CREATEROLE)] CreateRole,
+    #[tok(NOCREATEROLE)] NoCreateRole,
+    #[tok(INHERIT)] Inherit,
+    #[tok(NOINHERIT)] NoInherit,
+    #[tok(LOGIN)] Login,
+    #[tok(NOLOGIN)] NoLogin,
+    #[tok(REPLICATION)] Replication,
+    #[tok(NOREPLICATION)] NoReplication,
+    #[tok(BYPASSRLS)] BypassRls,
+    #[tok(NOBYPASSRLS)] NoBypassRls,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateGroupStmt<'input> {
-    pub create: CREATE,
-    pub group: GROUP,
+    #[tok(CREATE, GROUP, this)]
     pub name: crate::tokens::NonReservedWord<'input>,
-    pub with: Option<WITH>,
+    #[tok(optional(WITH), this)]
     pub options: Vec<CreateRoleOption<'input>>,
 }
 
 /// `DROP GROUP [IF EXISTS] role [, ...]` — no `CASCADE`/`RESTRICT`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropGroupStmt<'input> {
-    pub drop: DROP,
-    pub group: GROUP,
+    #[tok(DROP, GROUP, this)]
     pub if_exists: Option<IfExists>,
     pub roles: RoleList<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateRoleStmt<'input> {
-    pub create: CREATE,
-    pub role: ROLE,
+    #[tok(CREATE, ROLE, this)]
     pub name: crate::tokens::NonReservedWord<'input>,
-    pub with: Option<WITH>,
+    #[tok(optional(WITH), this)]
     pub options: Vec<CreateRoleOption<'input>>,
 }
 
 /// `DROP ROLE [IF EXISTS] role [, ...]` — no `CASCADE`/`RESTRICT`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropRoleStmt<'input> {
-    pub drop: DROP,
-    pub role: ROLE,
+    #[tok(DROP, ROLE, this)]
     pub if_exists: Option<IfExists>,
     pub roles: RoleList<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateUserStmt<'input> {
-    pub create: CREATE,
-    pub user: USER,
+    #[tok(CREATE, USER, this)]
     pub name: crate::tokens::NonReservedWord<'input>,
-    pub with: Option<WITH>,
+    #[tok(optional(WITH), this)]
     pub options: Vec<CreateRoleOption<'input>>,
 }
 
 /// `DROP USER [IF EXISTS] role [, ...]` — no `CASCADE`/`RESTRICT`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropUserStmt<'input> {
-    pub drop: DROP,
-    pub user: USER,
+    #[tok(DROP, USER, this)]
     pub if_exists: Option<IfExists>,
     pub roles: RoleList<'input>,
 }
@@ -413,10 +332,7 @@ pub struct DropUserStmt<'input> {
 /// form they share a first-token with — though here they have disjoint
 /// first tokens, order is for clarity. The bare attribute keywords
 /// (`SUPERUSER` etc.) are all distinct soft keywords.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterRoleOption<'input> {
     // Multi-keyword forms first.
     ConnectionLimit(ConnectionLimitOption<'input>),
@@ -424,20 +340,20 @@ pub enum AlterRoleOption<'input> {
     Password(PasswordOption<'input>),
     User(UserMembersOption<'input>),
     // Single-keyword forms — soft keywords for the role-attribute names.
-    Superuser(crate::tokens::soft_keyword::SUPERUSER),
-    NoSuperuser(crate::tokens::soft_keyword::NOSUPERUSER),
-    CreateDb(crate::tokens::soft_keyword::CREATEDB),
-    NoCreateDb(crate::tokens::soft_keyword::NOCREATEDB),
-    CreateRole(crate::tokens::soft_keyword::CREATEROLE),
-    NoCreateRole(crate::tokens::soft_keyword::NOCREATEROLE),
-    Inherit(INHERIT),
-    NoInherit(crate::tokens::soft_keyword::NOINHERIT),
-    Login(crate::tokens::soft_keyword::LOGIN),
-    NoLogin(crate::tokens::soft_keyword::NOLOGIN),
-    Replication(crate::tokens::soft_keyword::REPLICATION),
-    NoReplication(crate::tokens::soft_keyword::NOREPLICATION),
-    BypassRls(crate::tokens::soft_keyword::BYPASSRLS),
-    NoBypassRls(crate::tokens::soft_keyword::NOBYPASSRLS),
+    #[tok(SUPERUSER)] Superuser,
+    #[tok(NOSUPERUSER)] NoSuperuser,
+    #[tok(CREATEDB)] CreateDb,
+    #[tok(NOCREATEDB)] NoCreateDb,
+    #[tok(CREATEROLE)] CreateRole,
+    #[tok(NOCREATEROLE)] NoCreateRole,
+    #[tok(INHERIT)] Inherit,
+    #[tok(NOINHERIT)] NoInherit,
+    #[tok(LOGIN)] Login,
+    #[tok(NOLOGIN)] NoLogin,
+    #[tok(REPLICATION)] Replication,
+    #[tok(NOREPLICATION)] NoReplication,
+    #[tok(BYPASSRLS)] BypassRls,
+    #[tok(NOBYPASSRLS)] NoBypassRls,
 }
 
 /// The role target on an `ALTER ROLE` / `ALTER USER` statement — either
@@ -446,24 +362,17 @@ pub enum AlterRoleOption<'input> {
 ///
 /// Variant ordering: `ALL` (hard keyword) is keyword-disjoint from
 /// `RoleSpec` (an `Ident` / non-reserved word), so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterRoleTarget<'input> {
-    All(ALL),
+    #[tok(ALL)] All,
     Role(RoleSpec<'input>),
 }
 
 /// `IN DATABASE name` — Postgres' `opt_in_database` clause on
 /// `AlterRoleSetStmt`. Scopes a SET/RESET to a particular database.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InDatabaseClause<'input> {
-    pub in_: IN,
-    pub database: DATABASE,
+    #[tok(IN, DATABASE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
@@ -472,20 +381,14 @@ pub struct InDatabaseClause<'input> {
 /// Reuses the top-level [`crate::ast::session::set_reset::SetStmt`] and
 /// [`crate::ast::session::set_reset::ResetStmt`]; both start with their own
 /// keyword (`SET` / `RESET`), so the two variants are keyword-disjoint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SetResetClause<'input> {
     Set(crate::ast::session::set_reset::SetStmt<'input>),
     Reset(crate::ast::session::set_reset::ResetStmt<'input>),
 }
 
 /// `[IN DATABASE name] SetResetClause` — the body of `AlterRoleSetStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterRoleSetReset<'input> {
     pub in_database: Option<InDatabaseClause<'input>>,
     pub clause: SetResetClause<'input>,
@@ -495,12 +398,9 @@ pub struct AlterRoleSetReset<'input> {
 /// when the explicit `WITH` keyword is present. The option list itself
 /// may be empty (gram.y's `AlterOptRoleList` is right-recursive with an
 /// `/* EMPTY */` base case).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterRoleWithOptions<'input> {
-    pub with: WITH,
+    #[tok(WITH, this)]
     pub options: Vec<AlterRoleOption<'input>>,
 }
 
@@ -508,10 +408,7 @@ pub struct AlterRoleWithOptions<'input> {
 /// option. The peek of [`AlterRoleOption`] gates this variant so the
 /// empty-list case never matches (it falls through to no action at all,
 /// which gram.y also allows but the corpus never uses).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterRoleOptionsOnly<'input> {
     pub options: Vec<AlterRoleOption<'input>>,
 }
@@ -527,10 +424,7 @@ pub struct AlterRoleOptionsOnly<'input> {
 /// [`AlterRoleOption`] first tokens (the soft attribute keywords and
 /// `PASSWORD`/`CONNECTION`/`VALID`/`ENCRYPTED`/`UNENCRYPTED`/`USER`),
 /// none of which collide with `RENAME`/`IN`/`SET`/`RESET`/`WITH`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterRoleAction<'input> {
     Rename(RenameTo<'input>),
     SetReset(AlterRoleSetReset<'input>),
@@ -542,23 +436,17 @@ pub enum AlterRoleAction<'input> {
 /// `AlterGroupStmt` add/drop form.
 ///
 /// Variant ordering: `ADD` and `DROP` are keyword-disjoint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AddDrop {
-    Add(ADD),
-    Drop(DROP),
+    #[tok(ADD)] Add,
+    #[tok(DROP)] Drop,
 }
 
 /// `{ ADD | DROP } USER role_list` — body of Postgres' `AlterGroupStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterGroupUsers<'input> {
     pub add_drop: AddDrop,
-    pub user: USER,
+    #[tok(USER, this)]
     pub roles: RoleList<'input>,
 }
 
@@ -566,10 +454,7 @@ pub struct AlterGroupUsers<'input> {
 /// `AlterGroupStmt` (`add_drop USER role_list`) and the `RENAME TO`
 /// branch from `RenameStmt`. Both have disjoint first tokens
 /// (`ADD`/`DROP` vs `RENAME`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterGroupAction<'input> {
     Rename(RenameTo<'input>),
     AddDropUsers(AlterGroupUsers<'input>),
@@ -578,26 +463,18 @@ pub enum AlterGroupAction<'input> {
 /// `ALTER GROUP role_spec action` — Postgres' `AlterGroupStmt`
 /// (`add_drop USER role_list`) plus the `RENAME TO` branch from
 /// `RenameStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterGroupStmt<'input> {
-    pub alter: ALTER,
-    pub group: GROUP,
+    #[tok(ALTER, GROUP, this)]
     pub name: RoleSpec<'input>,
     pub action: AlterGroupAction<'input>,
 }
 
 /// `ALTER ROLE { role_spec | ALL } action` — Postgres' `AlterRoleStmt`,
 /// `AlterRoleSetStmt`, and the `RENAME TO` branch from `RenameStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterRoleStmt<'input> {
-    pub alter: ALTER,
-    pub role: ROLE,
+    #[tok(ALTER, ROLE, this)]
     pub target: AlterRoleTarget<'input>,
     pub action: AlterRoleAction<'input>,
 }
@@ -613,29 +490,21 @@ pub struct AlterRoleStmt<'input> {
 ///
 /// Variant ordering: `User` is the `USER` hard keyword, `Role` is a
 /// plain `Ident` — keyword-disjoint, so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum UserMappingFor<'input> {
-    User(USER),
+    #[tok(USER)] User,
     Role(RoleSpec<'input>),
 }
 
 /// `CREATE USER MAPPING [IF NOT EXISTS] FOR auth_ident SERVER name
 /// [OPTIONS (...)]` — Postgres' `CreateUserMappingStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateUserMappingStmt<'input> {
-    pub create: CREATE,
-    pub user: USER,
-    pub mapping: MAPPING,
+    #[tok(CREATE, USER, MAPPING, this)]
     pub if_not_exists: Option<IfNotExists>,
-    pub for_: FOR,
+    #[tok(FOR, this)]
     pub auth_ident: UserMappingFor<'input>,
-    pub server: SERVER,
+    #[tok(SERVER, this)]
     pub server_name: crate::tokens::ColId<'input>,
     pub options: Option<CreateGenericOptions<'input>>,
 }
@@ -643,17 +512,11 @@ pub struct CreateUserMappingStmt<'input> {
 /// `ALTER USER MAPPING FOR auth_ident SERVER name OPTIONS (...)` —
 /// Postgres' `AlterUserMappingStmt`. The `OPTIONS` clause is mandatory
 /// in gram.y.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterUserMappingStmt<'input> {
-    pub alter: ALTER,
-    pub user: USER,
-    pub mapping: MAPPING,
-    pub for_: FOR,
+    #[tok(ALTER, USER, MAPPING, FOR, this)]
     pub auth_ident: UserMappingFor<'input>,
-    pub server: SERVER,
+    #[tok(SERVER, this)]
     pub server_name: crate::tokens::ColId<'input>,
     pub options: AlterGenericOptions<'input>,
 }
@@ -663,18 +526,13 @@ pub struct AlterUserMappingStmt<'input> {
 /// comment: "XXX you'd think this should have a CASCADE/RESTRICT
 /// option, even if it's only pro forma; but the SQL standard doesn't
 /// show one.").
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropUserMappingStmt<'input> {
-    pub drop: DROP,
-    pub user: USER,
-    pub mapping: MAPPING,
+    #[tok(DROP, USER, MAPPING, this)]
     pub if_exists: Option<IfExists>,
-    pub for_: FOR,
+    #[tok(FOR, this)]
     pub auth_ident: UserMappingFor<'input>,
-    pub server: SERVER,
+    #[tok(SERVER, this)]
     pub server_name: crate::tokens::ColId<'input>,
 }
 
@@ -686,13 +544,9 @@ pub struct DropUserMappingStmt<'input> {
 /// [`AlterUserMappingStmt`] / `Statement::AlterUserMapping`; the
 /// `Statement` enum dispatches on the three-keyword `ALTER USER
 /// MAPPING` lead before the bare `ALTER USER` variant.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterUserStmt<'input> {
-    pub alter: ALTER,
-    pub user: USER,
+    #[tok(ALTER, USER, this)]
     pub target: AlterRoleTarget<'input>,
     pub action: AlterRoleAction<'input>,
 }
@@ -706,212 +560,252 @@ mod tests {
 
     #[test]
     fn parse_create_group() {
-        let mut input = crate::tokens::test_input("CREATE GROUP g1");
-        let _stmt = CreateGroupStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE GROUP g1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateGroupStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_group_with_users() {
-        let mut input = crate::tokens::test_input("CREATE GROUP g1 WITH USER u1, u2");
-        let _stmt = CreateGroupStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE GROUP g1 WITH USER u1, u2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateGroupStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_group_add_user() {
-        let mut input = crate::tokens::test_input("ALTER GROUP g1 ADD USER u1");
-        let _stmt = AlterGroupStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER GROUP g1 ADD USER u1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterGroupStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_group_drop_user() {
-        let mut input = crate::tokens::test_input("ALTER GROUP g1 DROP USER u1");
-        let _stmt = AlterGroupStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER GROUP g1 DROP USER u1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterGroupStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_role_plain() {
-        let mut input = crate::tokens::test_input("CREATE ROLE alice");
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ROLE alice");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.text(), "alice");
         assert!(stmt.with.is_none());
         assert!(stmt.options.is_empty());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_role_with_attributes() {
-        let mut input = crate::tokens::test_input(
-            "CREATE ROLE alice WITH SUPERUSER CREATEDB CREATEROLE NOINHERIT \
-             REPLICATION BYPASSRLS LOGIN",
-        );
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ROLE alice WITH SUPERUSER CREATEDB CREATEROLE NOINHERIT \
+             REPLICATION BYPASSRLS LOGIN");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.options.len(), 7);
         assert!(stmt.with.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_role_negated_attributes() {
-        let mut input = crate::tokens::test_input(
-            "CREATE ROLE alice NOSUPERUSER NOCREATEDB NOCREATEROLE NOLOGIN \
-             NOREPLICATION NOBYPASSRLS",
-        );
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ROLE alice NOSUPERUSER NOCREATEDB NOCREATEROLE NOLOGIN \
+             NOREPLICATION NOBYPASSRLS");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.options.len(), 6);
         assert!(stmt.with.is_none());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_role_password() {
-        let mut input = crate::tokens::test_input("CREATE ROLE alice PASSWORD 'secret'");
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ROLE alice PASSWORD 'secret'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.options.len(), 1);
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::Password(_),
         ));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_role_encrypted_password_null() {
-        let mut input = crate::tokens::test_input("CREATE ROLE alice ENCRYPTED PASSWORD NULL");
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ROLE alice ENCRYPTED PASSWORD NULL");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.options.len(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_role_connection_limit() {
-        let mut input = crate::tokens::test_input("CREATE ROLE alice CONNECTION LIMIT 5");
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ROLE alice CONNECTION LIMIT 5");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.options.len(), 1);
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::ConnectionLimit(_),
         ));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_role_valid_until() {
-        let mut input = crate::tokens::test_input("CREATE ROLE alice VALID UNTIL '2030-01-01'");
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ROLE alice VALID UNTIL '2030-01-01'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::ValidUntil(_),
         ));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_role_in_role() {
-        let mut input = crate::tokens::test_input("CREATE ROLE bob IN ROLE alice, charlie");
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ROLE bob IN ROLE alice, charlie");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::InRole(_),
         ));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_role_admin() {
-        let mut input = crate::tokens::test_input("CREATE ROLE bob ADMIN alice, charlie");
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ROLE bob ADMIN alice, charlie");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::Admin(_),
         ));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_role_sysid() {
-        let mut input = crate::tokens::test_input("CREATE ROLE bob SYSID 12345");
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ROLE bob SYSID 12345");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::SysId(_),
         ));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_user_with_login() {
-        let mut input = crate::tokens::test_input("CREATE USER alice WITH NOLOGIN");
-        let stmt = CreateUserStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE USER alice WITH NOLOGIN");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateUserStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.text(), "alice");
         assert_eq!(stmt.options.len(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_group_role_members() {
-        let mut input = crate::tokens::test_input("CREATE GROUP g1 ROLE alice, bob");
-        let stmt = CreateGroupStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE GROUP g1 ROLE alice, bob");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateGroupStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::Role(_),
         ));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_group_user_members() {
-        let mut input = crate::tokens::test_input("CREATE GROUP g1 WITH USER u1, u2");
-        let stmt = CreateGroupStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE GROUP g1 WITH USER u1, u2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateGroupStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::User(_),
         ));
         assert!(stmt.with.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_group() {
-        let mut input = crate::tokens::test_input("DROP GROUP g1");
-        let stmt = DropGroupStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP GROUP g1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropGroupStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.roles.len(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_role_if_exists_multi() {
-        let mut input = crate::tokens::test_input("DROP ROLE IF EXISTS a, b, c");
-        let stmt = DropRoleStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP ROLE IF EXISTS a, b, c");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropRoleStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
         assert_eq!(stmt.roles.len(), 3);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_def_arg_custom_op() {
         // The smallest reproducer: a `def_arg` value that is a 3-char custom
         // operator. Used as the RHS of `COMMUTATOR =` etc.
-        let mut input = crate::tokens::test_input("===");
-        let _arg = DefArg::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("===");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _arg = DefArg::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_def_arg_at_eq() {
-        let mut input = crate::tokens::test_input("@=");
-        let _arg = DefArg::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("@=");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _arg = DefArg::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_def_arg_bang_eq_eq() {
-        let mut input = crate::tokens::test_input("!==");
-        let _arg = DefArg::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("!==");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _arg = DefArg::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
@@ -920,20 +814,24 @@ mod tests {
         // token. `Numeric` is declared first so a signed integer must still
         // win — `+1` and `-2` are common `def_arg` values (`default = -1`,
         // `internallength = +24`) and must not silently demote to QualOp.
-        let mut input = crate::tokens::test_input("+1");
-        let arg = DefArg::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("+1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let arg = DefArg::parse(&mut input).unwrap().into_ast();
         assert!(
             matches!(arg, DefArg::Numeric(_)),
             "expected Numeric for `+1`, got {arg:?}"
         );
-        assert!(input.is_empty());
+        assert!(input.is_eof());
 
-        let mut input = crate::tokens::test_input("-2");
-        let arg = DefArg::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("-2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let arg = DefArg::parse(&mut input).unwrap().into_ast();
         assert!(
             matches!(arg, DefArg::Numeric(_)),
             "expected Numeric for `-2`, got {arg:?}"
         );
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

@@ -16,6 +16,9 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 
 use crate::Mapping;
+use crate::migration_contract::{
+    OBSOLETE_EXPLICIT_BIN_PATHS, OBSOLETE_ROOT_MODULES, is_omitted_path,
+};
 use crate::rewrite::{
     FileDisposition, RewriteError, SourceRewritePass, SpanEdit, apply_span_edits,
 };
@@ -202,6 +205,20 @@ impl GrammarRewritePass {
         path: &Path,
         source: &str,
     ) -> Result<Vec<SpanEdit>, GrammarRewriteError> {
+        if let Some(offset) = trailing_horizontal_whitespace(source) {
+            return Err(GrammarRewriteError::new(
+                "source.trailing-whitespace",
+                Some(offset),
+                "reviewed migration inputs must not contain trailing horizontal whitespace",
+            ));
+        }
+        if source.ends_with("\n\n") || source.ends_with("\r\n\r\n") {
+            return Err(GrammarRewriteError::new(
+                "source.trailing-blank-line",
+                Some(source.len() - 1),
+                "reviewed migration inputs must end with at most one line break",
+            ));
+        }
         let parsed = syn::parse_file(source).map_err(|error| {
             GrammarRewriteError::new("source.invalid-rust", None, error.to_string())
         })?;
@@ -310,6 +327,7 @@ impl GrammarRewritePass {
             }
             edits.push(obsolete);
         }
+        normalize_deletion_spans(source, &mut edits);
         merge_insertions(&mut edits);
         edits.sort_by_key(|edit| (edit.start, edit.end));
         edits.dedup();
@@ -380,6 +398,63 @@ impl GrammarRewritePass {
         }
         Ok(())
     }
+}
+
+fn normalize_deletion_spans(source: &str, edits: &mut [SpanEdit]) {
+    for edit in edits {
+        if !edit.replacement.is_empty() || edit.start == edit.end {
+            continue;
+        }
+        let line_start = source[..edit.start]
+            .rfind('\n')
+            .map_or(0, |newline| newline + 1);
+        if !source[line_start..edit.start]
+            .chars()
+            .all(|character| matches!(character, ' ' | '\t'))
+        {
+            continue;
+        }
+
+        if source[..edit.end].ends_with('\n') {
+            edit.start = line_start;
+            continue;
+        }
+        let newline = source[edit.end..]
+            .find('\n')
+            .map(|relative| edit.end + relative);
+        let line_end = newline.unwrap_or(source.len());
+        let content_end = line_end
+            .checked_sub(1)
+            .filter(|end| source.as_bytes()[*end] == b'\r')
+            .unwrap_or(line_end);
+        if source[edit.end..content_end]
+            .chars()
+            .all(|character| matches!(character, ' ' | '\t'))
+        {
+            edit.start = line_start;
+            edit.end = newline.map_or(line_end, |end| end + 1);
+        }
+    }
+}
+
+fn trailing_horizontal_whitespace(source: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut line_start = 0;
+    while line_start < bytes.len() {
+        let line_end = bytes[line_start..]
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(bytes.len(), |relative| line_start + relative);
+        let content_end = line_end
+            .checked_sub(1)
+            .filter(|end| bytes[*end] == b'\r')
+            .unwrap_or(line_end);
+        if content_end > line_start && matches!(bytes[content_end - 1], b' ' | b'\t') {
+            return Some(content_end - 1);
+        }
+        line_start = line_end.saturating_add(1);
+    }
+    None
 }
 
 fn merge_insertions(edits: &mut Vec<SpanEdit>) {
@@ -3193,12 +3268,45 @@ fn plan_crate_grammar_declaration(source: &str) -> Result<Vec<SpanEdit>, Grammar
             "the reviewed crate-root grammar insertion anchor changed",
         ));
     }
-    Ok(vec![SpanEdit {
+    let mut edits = vec![SpanEdit {
         start: anchor,
         end: anchor,
         replacement: "recursa::grammar! {\n    module = crate,\n    keyword_matching = ascii_insensitive,\n    max_lookahead = 5,\n}\n\n"
             .into(),
-    }])
+    }];
+    for module in OBSOLETE_ROOT_MODULES {
+        let declaration = format!("pub mod {module};\n");
+        let matches = source.match_indices(&declaration).collect::<Vec<_>>();
+        if matches.len() != 1 {
+            return Err(GrammarRewriteError::new(
+                "unsupported.obsolete-crate-module",
+                matches.first().map(|(offset, _)| *offset),
+                format!("reviewed obsolete crate module declaration {declaration:?} changed"),
+            ));
+        }
+        let start = matches[0].0;
+        edits.push(SpanEdit {
+            start,
+            end: start + declaration.len(),
+            replacement: String::new(),
+        });
+    }
+    const FIRST_SET_COMMENT: &str = "// Generated first-set dispatch helpers and parse_with_prefix impls.\n// Included inside a private module so that the generated code can reference\n// types by simple name (via the glob imports below) rather than requiring\n// every type to be fully qualified. The helper *functions* are re-exported\n// to the crate root so they are callable from any module in this crate.\n";
+    let matches = source.match_indices(FIRST_SET_COMMENT).collect::<Vec<_>>();
+    if matches.len() != 1 {
+        return Err(GrammarRewriteError::new(
+            "unsupported.obsolete-first-set-comment",
+            matches.first().map(|(offset, _)| *offset),
+            "reviewed generated FIRST-set comment changed",
+        ));
+    }
+    let start = matches[0].0;
+    edits.push(SpanEdit {
+        start,
+        end: start + FIRST_SET_COMMENT.len(),
+        replacement: String::new(),
+    });
+    Ok(edits)
 }
 
 fn is_reviewed_real_handwritten_parser(item: &syn::ItemImpl, self_name: &str) -> bool {
@@ -3709,19 +3817,119 @@ fn plan_obsolete_file_surface(
 
 impl SourceRewritePass for GrammarRewritePass {
     fn file_disposition(&self, path: &Path) -> Result<FileDisposition, RewriteError> {
-        Ok(if is_generated_first_set(path) {
+        Ok(if is_omitted_path(path) {
             FileDisposition::Omit
         } else {
             FileDisposition::Keep
         })
     }
 
+    fn rewrites_text_file(&self, path: &Path) -> bool {
+        path == Path::new("Cargo.toml")
+            || path.extension().and_then(|extension| extension.to_str()) == Some("rs")
+    }
+
     fn edits(&self, path: &Path, source: &str) -> Result<Vec<SpanEdit>, RewriteError> {
-        self.plan_edits(path, source)
-            .map_err(|error| RewriteError::Pass {
-                path: path.to_owned(),
-                message: error.to_string(),
-            })
+        let edits = if path == Path::new("Cargo.toml") {
+            plan_cargo_manifest_edits(source)
+        } else {
+            self.plan_edits(path, source)
+        };
+        edits.map_err(|error| RewriteError::Pass {
+            path: path.to_owned(),
+            message: error.to_string(),
+        })
+    }
+}
+
+fn plan_cargo_manifest_edits(source: &str) -> Result<Vec<SpanEdit>, GrammarRewriteError> {
+    let mut edits = Vec::new();
+    for path in OBSOLETE_EXPLICIT_BIN_PATHS {
+        let name = Path::new(path)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .expect("reviewed explicit binary path has a UTF-8 file stem");
+        let block = format!("[[bin]]\nname = \"{name}\"\npath = \"{path}\"\n\n");
+        let matches = source.match_indices(&block).collect::<Vec<_>>();
+        if matches.len() != 1 {
+            return Err(GrammarRewriteError::new(
+                "unsupported.obsolete-bin-manifest",
+                matches.first().map(|(offset, _)| *offset),
+                "reviewed obsolete explicit binary declaration changed",
+            ));
+        }
+        let start = matches[0].0;
+        edits.push(SpanEdit {
+            start,
+            end: start + block.len(),
+            replacement: String::new(),
+        });
+    }
+    Ok(edits)
+}
+
+/// Deletes only horizontal whitespace exposed at line ends by an earlier
+/// grammar span deletion. `GrammarRewritePass` rejects such whitespace in the
+/// immutable input, so every edit here is migration-generated.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GeneratedWhitespaceCleanupPass;
+
+impl SourceRewritePass for GeneratedWhitespaceCleanupPass {
+    fn file_disposition(&self, _path: &Path) -> Result<FileDisposition, RewriteError> {
+        Ok(FileDisposition::Keep)
+    }
+
+    fn edits(&self, _path: &Path, source: &str) -> Result<Vec<SpanEdit>, RewriteError> {
+        let bytes = source.as_bytes();
+        let mut edits = Vec::new();
+        let trailing_start = bytes
+            .iter()
+            .rposition(|byte| !byte.is_ascii_whitespace())
+            .map_or(0, |position| position + 1);
+        let trailing = &source[trailing_start..];
+        let retained_line_break = if trailing.starts_with("\r\n") {
+            "\r\n"
+        } else if trailing.starts_with('\n') {
+            "\n"
+        } else {
+            ""
+        };
+        let scan_end = if trailing != retained_line_break {
+            edits.push(SpanEdit {
+                start: trailing_start,
+                end: source.len(),
+                replacement: retained_line_break.into(),
+            });
+            trailing_start
+        } else {
+            source.len()
+        };
+        let mut line_start = 0;
+        while line_start < scan_end {
+            let line_end = bytes[line_start..scan_end]
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(scan_end, |relative| line_start + relative);
+            let content_end = line_end
+                .checked_sub(1)
+                .filter(|end| bytes[*end] == b'\r')
+                .unwrap_or(line_end);
+            let mut whitespace_start = content_end;
+            while whitespace_start > line_start
+                && matches!(bytes[whitespace_start - 1], b' ' | b'\t')
+            {
+                whitespace_start -= 1;
+            }
+            if whitespace_start < content_end {
+                edits.push(SpanEdit {
+                    start: whitespace_start,
+                    end: content_end,
+                    replacement: String::new(),
+                });
+            }
+            line_start = line_end.saturating_add(1);
+        }
+        Ok(edits)
     }
 }
 
@@ -3815,10 +4023,6 @@ fn validate_manifest(manifest: &GrammarRewriteManifest) -> Result<(), GrammarRew
         ));
     }
     Ok(())
-}
-
-fn is_generated_first_set(path: &Path) -> bool {
-    path.ends_with(Path::new("src/generated/first_set.rs"))
 }
 
 const UNSUPPORTED: &[(&str, &str)] = &[

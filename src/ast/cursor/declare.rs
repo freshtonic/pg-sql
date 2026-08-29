@@ -1,6 +1,5 @@
 //! DECLARE cursor — see `cursor/fetch.rs` for FETCH/MOVE/CLOSE.
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::tokens::keyword::*;
@@ -13,26 +12,20 @@ use crate::tokens::literal;
 /// Postgres' `cursor_options` is a repeatable, order-free list. `NO SCROLL`
 /// (2 tokens) is declared before bare `SCROLL` so longest-match-wins picks
 /// it; the rest have disjoint first-sets.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CursorOption {
-    NoScroll((NO, SCROLL)),
-    Scroll(SCROLL),
-    Binary(BINARY),
-    Asensitive(ASENSITIVE),
-    Insensitive(INSENSITIVE),
+    #[tok(NO, SCROLL)] NoScroll,
+    #[tok(SCROLL)] Scroll,
+    #[tok(BINARY)] Binary,
+    #[tok(ASENSITIVE)] Asensitive,
+    #[tok(INSENSITIVE)] Insensitive,
 }
 
 /// `{ WITH | WITHOUT } HOLD` cursor-hold clause (`opt_hold` in `gram.y`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CursorHold {
-    With((WITH, HOLD)),
-    Without((WITHOUT, HOLD)),
+    #[tok(WITH, HOLD)] With,
+    #[tok(WITHOUT, HOLD)] Without,
 }
 
 /// ```sql
@@ -42,17 +35,14 @@ pub enum CursorHold {
 ///
 /// `query` is `Subquery` — Postgres' `SelectStmt`, which already covers
 /// `SELECT`, set operations, `VALUES`, `TABLE`, and `WITH`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DeclareStmt<'input> {
-    pub declare: DECLARE,
+    #[tok(DECLARE, this)]
     pub name: literal::AliasName<'input>,
     pub options: Vec<CursorOption>,
-    pub cursor: CURSOR,
+    #[tok(CURSOR, this)]
     pub hold: Option<CursorHold>,
-    pub r#for: FOR,
+    #[tok(FOR, this)]
     pub query: Box<crate::ast::dml::values::Subquery<'input>>,
 }
 

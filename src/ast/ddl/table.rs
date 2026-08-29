@@ -1,7 +1,5 @@
 /// CREATE TABLE statement AST.
 use recursa::seq::{OptionalTrailing, Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::expr::{Expr, TypeName};
@@ -35,37 +33,25 @@ use crate::tokens::soft_keyword::*;
 // ---------------------------------------------------------------------------
 /// `USING INDEX TABLESPACE name` — tablespace for the index backing a PRIMARY
 /// KEY or UNIQUE column constraint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UsingIndexTablespace<'input> {
-    pub using: USING,
-    pub index: INDEX,
-    pub tablespace: TABLESPACE,
+    #[tok(USING, INDEX, TABLESPACE, this)]
     pub name: literal::Ident<'input>,
 }
 
 /// PRIMARY KEY column constraint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PrimaryKeyConstraint<'input> {
-    pub primary: PRIMARY,
-    pub key: KEY,
+    #[tok(PRIMARY, KEY, this)]
     pub index_tablespace: Option<UsingIndexTablespace<'input>>,
     /// Optional `[NOT] DEFERRABLE [INITIALLY {DEFERRED|IMMEDIATE}]` suffix.
     pub attrs: ConstraintAttrs,
 }
 
 /// UNIQUE column constraint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UniqueConstraint<'input> {
-    pub unique: UNIQUE,
+    #[tok(UNIQUE, this)]
     /// Optional `NULLS [NOT] DISTINCT` qualifier (Postgres 15+).
     pub nulls: Option<NullsDistinctQualifier>,
     pub index_tablespace: Option<UsingIndexTablespace<'input>>,
@@ -74,128 +60,93 @@ pub struct UniqueConstraint<'input> {
 }
 
 /// `NULLS DISTINCT` or `NULLS NOT DISTINCT` for UNIQUE constraints.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct NullsDistinctQualifier {
-    pub nulls: NULLS,
-    pub not: Option<NOT>,
-    pub distinct: DISTINCT,
+    #[tok(NULLS, this, DISTINCT)]
+    #[presence(NOT)]
+    pub not: bool,
 }
 
 /// Referential action for `ON DELETE` / `ON UPDATE`.
 ///
 /// Variant ordering: multi-word variants (`NO ACTION`, `SET NULL`, `SET DEFAULT`)
 /// come before single-word ones to satisfy longest-match.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ReferentialAction<'input> {
-    NoAction((NO, ACTION)),
+    #[tok(NO, ACTION)] NoAction,
     SetNull(SetNullKw<'input>),
     SetDefault(SetDefaultKw<'input>),
-    Cascade(CASCADE),
-    Restrict(RESTRICT),
+    #[tok(CASCADE)] Cascade,
+    #[tok(RESTRICT)] Restrict,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetNullKw<'input> {
-    pub set: SET,
-    pub null: NULL,
+    #[tok(SET, NULL, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub cols: Option<
-        Surrounded<punct::LParen, Seq0<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         Vec<crate::tokens::ColId<'input> > ,
     >,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetDefaultKw<'input> {
-    pub set: SET,
-    pub default: DEFAULT,
+    #[tok(SET, DEFAULT, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub cols: Option<
-        Surrounded<punct::LParen, Seq0<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         Vec<crate::tokens::ColId<'input> > ,
     >,
 }
 
 /// `ON DELETE action`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OnDeleteAction<'input> {
-    pub on: ON,
-    pub delete: DELETE,
+    #[tok(ON, DELETE, this)]
     pub action: ReferentialAction<'input>,
 }
 
 /// `ON UPDATE action`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OnUpdateAction<'input> {
-    pub on: ON,
-    pub update: UPDATE,
+    #[tok(ON, UPDATE, this)]
     pub action: ReferentialAction<'input>,
 }
 
 /// Match type for a foreign key: `MATCH FULL | PARTIAL | SIMPLE`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum MatchKind {
-    Full(FULL),
-    Partial(PARTIAL),
-    Simple(SIMPLE),
+    #[tok(FULL)] Full,
+    #[tok(PARTIAL)] Partial,
+    #[tok(SIMPLE)] Simple,
 }
 
 /// `MATCH FULL | MATCH PARTIAL | MATCH SIMPLE`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct MatchClause {
-    pub r#match: MATCH,
+    #[tok(MATCH, this)]
     pub kind: MatchKind,
 }
 
 /// `DEFERRABLE | NOT DEFERRABLE`.
 ///
 /// Variant ordering: `NotDeferrable` (two keywords) before `Deferrable`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DeferrableKind {
-    NotDeferrable((NOT, DEFERRABLE)),
-    Deferrable(DEFERRABLE),
+    #[tok(NOT, DEFERRABLE)] NotDeferrable,
+    #[tok(DEFERRABLE)] Deferrable,
 }
 
 /// `INITIALLY DEFERRED | INITIALLY IMMEDIATE`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InitiallyClause {
-    pub initially: INITIALLY,
+    #[tok(INITIALLY, this)]
     pub mode: InitiallyMode,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum InitiallyMode {
-    Deferred(DEFERRED),
-    Immediate(IMMEDIATE),
+    #[tok(DEFERRED)] Deferred,
+    #[tok(IMMEDIATE)] Immediate,
 }
 
 /// `ON DELETE ...` or `ON UPDATE ...` trailing action on a REFERENCES
@@ -203,10 +154,7 @@ pub enum InitiallyMode {
 /// are accepted via a [`Vec`]`<`[`OnAction`]`>`.
 ///
 /// Variant ordering: both start with `ON`; they diverge at the next keyword.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum OnAction<'input> {
     OnDelete(OnDeleteAction<'input>),
     OnUpdate(OnUpdateAction<'input>),
@@ -214,161 +162,123 @@ pub enum OnAction<'input> {
 
 /// REFERENCES constraint:
 /// `REFERENCES table [(col, ...)] [MATCH ...] [ON DELETE|UPDATE ...]* [DEFERRABLE | NOT DEFERRABLE] [INITIALLY ...]`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReferencesConstraint<'input> {
-    pub references: REFERENCES,
+    #[tok(REFERENCES, this)]
     pub table: crate::ast::shared::names::QualifiedName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns: Option<
-        Surrounded<punct::LParen, Seq0<literal::AliasName<'input>, punct::Comma>, punct::RParen>,
+         Vec<literal::AliasName<'input> > ,
     >,
     pub match_clause: Option<MatchClause>,
     pub actions: Vec<OnAction<'input>>,
     pub deferrable: Option<DeferrableKind>,
     pub initially: Option<InitiallyClause>,
-    pub not_valid: Option<(NOT, VALID)>,
+    #[presence(NOT, VALID)]
+    pub not_valid: bool,
 }
 
 /// `CHECK (expr) [NO INHERIT] [NOT VALID]`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CheckConstraint<'input> {
-    pub check: CHECK,
-    pub expr: Surrounded<punct::LParen, crate::ast::shared::expr::Expr<'input>, punct::RParen>,
-    pub no_inherit: Option<(NO, INHERIT)>,
-    pub not_valid: Option<(NOT, VALID)>,
+    #[tok(CHECK, LPAREN, this, RPAREN)]
+    pub expr:  crate::ast::shared::expr::Expr<'input> ,
+    #[presence(NO, INHERIT)]
+    pub no_inherit: bool,
+    #[presence(NOT, VALID)]
+    pub not_valid: bool,
 }
 
 /// `GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY` modifier.
 ///
 /// Variant ordering: both start with a distinct keyword after `GENERATED`
 /// (`ALWAYS` vs `BY`), so order is cosmetic.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum GeneratedIdentityMode {
-    Always(ALWAYS),
-    ByDefault((BY, DEFAULT)),
+    #[tok(ALWAYS)] Always,
+    #[tok(BY, DEFAULT)] ByDefault,
 }
 
 /// GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY column constraint, with
 /// optional `(sequence_option ...)` parenthesized list (e.g. `START WITH 44`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GeneratedIdentityConstraint<'input> {
-    pub generated: GENERATED,
+    #[tok(GENERATED, this)]
     pub mode: GeneratedIdentityMode,
-    pub r#as: AS,
-    pub identity: IDENTITY,
+    #[tok(AS, IDENTITY, LPAREN, this, RPAREN)]
     pub seq_options:
-        Option<Surrounded<punct::LParen, Vec<IdentitySeqOption<'input>>, punct::RParen>>,
+        Option< Vec<IdentitySeqOption<'input>> >,
 }
 
 /// One option inside an `IDENTITY ( ... )` sequence option list.
 ///
 /// Variant ordering: longer multi-word forms first so longest-match-wins
 /// picks them.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum IdentitySeqOption<'input> {
     StartWith(SeqOptStartWith<'input>),
     IncrementBy(SeqOptIncrementBy<'input>),
     MinValue(SeqOptMinValue<'input>),
-    NoMinValue((NO, MINVALUE)),
+    #[tok(NO, MINVALUE)] NoMinValue,
     MaxValue(SeqOptMaxValue<'input>),
-    NoMaxValue((NO, MAXVALUE)),
+    #[tok(NO, MAXVALUE)] NoMaxValue,
     Cache(SeqOptCache<'input>),
-    Cycle(CYCLE),
-    NoCycle((NO, CYCLE)),
+    #[tok(CYCLE)] Cycle,
+    #[tok(NO, CYCLE)] NoCycle,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptStartWith<'input> {
-    pub start: START,
-    pub with: Option<WITH>,
+    #[tok(START, optional(WITH), this)]
     pub value: crate::ast::shared::expr::Expr<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptIncrementBy<'input> {
-    pub increment: INCREMENT,
-    pub by: Option<BY>,
+    #[tok(INCREMENT, optional(BY), this)]
     pub value: crate::ast::shared::expr::Expr<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptMinValue<'input> {
-    pub minvalue: MINVALUE,
+    #[tok(MINVALUE, this)]
     pub value: crate::ast::shared::expr::Expr<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptMaxValue<'input> {
-    pub maxvalue: MAXVALUE,
+    #[tok(MAXVALUE, this)]
     pub value: crate::ast::shared::expr::Expr<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptCache<'input> {
-    pub cache: CACHE,
+    #[tok(CACHE, this)]
     pub value: crate::ast::shared::expr::Expr<'input>,
 }
 
 /// `GENERATED {ALWAYS | BY DEFAULT} AS (expr) STORED` column constraint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GeneratedStoredConstraint<'input> {
-    pub generated: GENERATED,
+    #[tok(GENERATED, this)]
     pub mode: GeneratedIdentityMode,
-    pub r#as: AS,
-    pub expr: Surrounded<punct::LParen, crate::ast::shared::expr::Expr<'input>, punct::RParen>,
-    pub stored: STORED,
+    #[tok(AS, LPAREN, this, RPAREN, STORED)]
+    pub expr:  crate::ast::shared::expr::Expr<'input> ,
 }
 
 /// `COMPRESSION method` column clause. Sets the compression method
 /// (e.g. `pglz`, `lz4`) for a toastable column.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CompressionConstraint<'input> {
-    pub compression: COMPRESSION,
+    #[tok(COMPRESSION, this)]
     pub method: literal::Ident<'input>,
 }
 
 /// DEFAULT expr column constraint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DefaultConstraint<'input> {
-    pub default: DEFAULT,
+    #[tok(DEFAULT, this)]
     pub expr: crate::ast::shared::expr::Expr<'input>,
 }
 
@@ -379,18 +289,15 @@ pub struct DefaultConstraint<'input> {
 /// - PrimaryKey (`PRIMARY KEY`) before others (unique keyword)
 /// - NotNull (`NOT NULL`) before others
 /// - References, Unique, Default, Check all start with distinct keywords
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ColumnConstraintKind<'input> {
     GeneratedStored(GeneratedStoredConstraint<'input>),
     GeneratedIdentity(GeneratedIdentityConstraint<'input>),
     PrimaryKey(PrimaryKeyConstraint<'input>),
-    NotNull((NOT, NULL)),
-    /// Bare `NULL` — redundant (columns are nullable by default) but
+    #[tok(NOT, NULL)] NotNull,
+    #[tok(NULL)] /// Bare `NULL` — redundant (columns are nullable by default) but
     /// syntactically accepted.
-    Null(NULL),
+    Null,
     Unique(UniqueConstraint<'input>),
     References(ReferencesConstraint<'input>),
     Default(DefaultConstraint<'input>),
@@ -400,57 +307,42 @@ pub enum ColumnConstraintKind<'input> {
 }
 
 /// Column STORAGE mode: `STORAGE { PLAIN | EXTERNAL | EXTENDED | MAIN | DEFAULT }`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ColumnStorageMode {
-    Plain(PLAIN),
-    External(EXTERNAL),
-    Extended(EXTENDED),
-    Main(MAIN),
-    Default(DEFAULT),
+    #[tok(PLAIN)] Plain,
+    #[tok(EXTERNAL)] External,
+    #[tok(EXTENDED)] Extended,
+    #[tok(MAIN)] Main,
+    #[tok(DEFAULT)] Default,
 }
 
 /// `STORAGE mode` column-level storage specifier (used inline in CREATE
 /// TABLE column definitions).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct StorageConstraint {
-    pub storage: STORAGE,
+    #[tok(STORAGE, this)]
     pub mode: ColumnStorageMode,
 }
 
 /// Optional `CONSTRAINT name` prefix shared by column-level and
 /// table-level constraints.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ConstraintNamePrefix<'input> {
-    pub constraint: CONSTRAINT,
+    #[tok(CONSTRAINT, this)]
     pub name: literal::Ident<'input>,
 }
 
 /// A column constraint with its optional `CONSTRAINT name` prefix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ColumnConstraint<'input> {
     pub name: Option<ConstraintNamePrefix<'input>>,
     pub kind: ColumnConstraintKind<'input>,
 }
 
 /// `COLLATE "name"` clause used after a column's type.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CollateClause<'input> {
-    pub collate: COLLATE,
+    #[tok(COLLATE, this)]
     pub name: literal::Ident<'input>,
 }
 
@@ -459,10 +351,7 @@ pub struct CollateClause<'input> {
 ///
 /// The name is a `ColLabel` (any identifier-or-keyword), and the argument is
 /// a single-quoted string constant (`Sconst`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GenericOption<'input> {
     pub name: literal::AliasName<'input>,
     pub value: crate::ast::utility::copy::CopySconst<'input>,
@@ -472,29 +361,24 @@ pub struct GenericOption<'input> {
 /// Used by CREATE FOREIGN DATA WRAPPER, CREATE SERVER, CREATE FOREIGN TABLE,
 /// CREATE USER MAPPING, IMPORT FOREIGN SCHEMA, and column-level options on
 /// foreign-table columns.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateGenericOptions<'input> {
-    pub options: OPTIONS,
-    pub list: Surrounded<punct::LParen, Seq1<GenericOption<'input>, punct::Comma>, punct::RParen>,
+    #[tok(OPTIONS, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub list:  recursa::Vec1<GenericOption<'input> > ,
 }
 
 /// A column definition: `name type [COLLATE "..."] [OPTIONS (...)] [constraints...]`.
 ///
 /// The `column_options` slot models Postgres' `create_generic_options` on
 /// `columnDef` — used in CREATE FOREIGN TABLE column lists.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ColumnDef<'input> {
     pub name: literal::Ident<'input>,
     pub type_name: crate::ast::shared::expr::CastType<'input>,
     pub collate: Option<CollateClause<'input>>,
     pub column_options: Option<CreateGenericOptions<'input>>,
-    pub constraints: Seq0<ColumnConstraint<'input>, (), OptionalTrailing>,
+    pub constraints: Vec<ColumnConstraint<'input>  >,
 }
 
 impl<'input> ColumnDef<'input> {
@@ -509,10 +393,7 @@ impl<'input> ColumnDef<'input> {
 // --- Table-level constraints ---
 
 /// Optional trailing deferrable/initially pair shared by PK/UNIQUE/FK.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ConstraintAttrs {
     pub deferrable: Option<DeferrableKind>,
     pub initially: Option<InitiallyClause>,
@@ -521,13 +402,9 @@ pub struct ConstraintAttrs {
 /// `USING INDEX name` — gram.y `ExistingIndex`. The named index must
 /// already exist on the table; used by `PRIMARY KEY USING INDEX name` and
 /// `UNIQUE USING INDEX name` table constraint forms.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExistingIndex<'input> {
-    pub using: USING,
-    pub index: INDEX,
+    #[tok(USING, INDEX, this)]
     pub name: literal::Ident<'input>,
 }
 
@@ -538,10 +415,7 @@ pub struct ExistingIndex<'input> {
 ///
 /// Variant ordering: `UsingIndex` first because its first token (`USING`)
 /// is disjoint from `(`; declaration order is then for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum IndexedConstraintBody<'input> {
     /// `USING INDEX name` — bind constraint to an existing index.
     UsingIndex(ExistingIndex<'input>),
@@ -553,13 +427,12 @@ pub enum IndexedConstraintBody<'input> {
 /// column-list branch of a PK/UNIQUE constraint body. Per gram.y
 /// `ConstraintElem`'s `UNIQUE … '(' columnList ')' opt_c_include
 /// opt_definition OptConsTableSpace ConstraintAttributeSpec` rule.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IndexedConstraintColumns<'input> {
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns:
-        Surrounded<punct::LParen, Seq0<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         Vec<crate::tokens::ColId<'input> > ,
     pub include: Option<IncludeColumns<'input>>,
     /// `WITH (storage_param = value, ...)` — gram.y's `opt_definition`.
     pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
@@ -571,27 +444,21 @@ pub struct IndexedConstraintColumns<'input> {
 /// constraint. Per gram.y `ConstraintElem`:
 /// `PRIMARY KEY '(' columnList ')' opt_c_include … ConstraintAttributeSpec`
 /// or `PRIMARY KEY ExistingIndex ConstraintAttributeSpec`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TablePrimaryKey<'input> {
-    pub primary: PRIMARY,
-    pub key: KEY,
+    #[tok(PRIMARY, KEY, this)]
     pub body: IndexedConstraintBody<'input>,
     pub attrs: ConstraintAttrs,
 }
 
 /// `INCLUDE (col, ...)` covering-index clause used on PRIMARY KEY / UNIQUE
 /// table constraints and on CREATE INDEX.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IncludeColumns<'input> {
-    pub include: INCLUDE,
+    #[tok(INCLUDE, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns:
-        Surrounded<punct::LParen, Seq0<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         Vec<crate::tokens::ColId<'input> > ,
 }
 
 /// `UNIQUE {(cols) [INCLUDE (…)] | USING INDEX name}` — table-level
@@ -600,12 +467,9 @@ pub struct IncludeColumns<'input> {
 /// or `UNIQUE ExistingIndex ConstraintAttributeSpec`. The `USING INDEX`
 /// branch has no `NULLS [NOT] DISTINCT` qualifier (PG infers it from the
 /// existing index definition).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableUnique<'input> {
-    pub unique: UNIQUE,
+    #[tok(UNIQUE, this)]
     /// `NULLS [NOT] DISTINCT` qualifier — only meaningful for the
     /// `(cols)` branch but accepted before either body for parsing
     /// simplicity. If present alongside `USING INDEX`, PG rejects at
@@ -616,15 +480,12 @@ pub struct TableUnique<'input> {
 }
 
 /// `FOREIGN KEY (col, ...) REFERENCES table [(col, ...)] [MATCH ...] [ON ...] [DEFERRABLE ...] [INITIALLY ...]`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableForeignKey<'input> {
-    pub foreign: FOREIGN,
-    pub key: KEY,
+    #[tok(FOREIGN, KEY, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns:
-        Surrounded<punct::LParen, Seq0<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         Vec<crate::tokens::ColId<'input> > ,
     pub references: ReferencesConstraint<'input>,
 }
 
@@ -633,13 +494,10 @@ pub struct TableForeignKey<'input> {
 /// Postgres' `ExclusionConstraintElem`. The operator may also appear wrapped
 /// in `OPERATOR(...)` for the benefit of `ruleutils.c`; we accept both forms
 /// via [`ExclusionOperator`].
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExclusionConstraintElem<'input> {
     pub elem: crate::ast::ddl::index::IndexElem<'input>,
-    pub with: WITH,
+    #[tok(WITH, this)]
     pub op: ExclusionOperator<'input>,
 }
 
@@ -651,39 +509,30 @@ pub struct ExclusionConstraintElem<'input> {
 ///
 /// Variant ordering: `Decorated` starts with the `OPERATOR` keyword; `Plain`
 /// starts with an operator-name token. Their first sets are disjoint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ExclusionOperator<'input> {
     Decorated(ExclusionOperatorDecorated<'input>),
     Plain(crate::ast::shared::names::QualifiedOperatorName<'input>),
 }
 
 /// `OPERATOR ( any_operator )` decorated form of an exclusion operator.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExclusionOperatorDecorated<'input> {
-    pub operator: OPERATOR,
-    pub name: Surrounded<
-        punct::LParen,
-        crate::ast::shared::names::QualifiedOperatorName<'input>,
-        punct::RParen,
-    >,
+    #[tok(OPERATOR, LPAREN, this, RPAREN)]
+    pub name:
+
+        crate::ast::shared::names::QualifiedOperatorName<'input>
+
+    ,
 }
 
 /// `WHERE (predicate)` clause on an EXCLUDE constraint — Postgres'
 /// `OptWhereClause` in `gram.y`. The parens are mandatory (unlike the regular
 /// `WHERE expr` form used by SELECT).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExclusionWhereClause<'input> {
-    pub r#where: WHERE,
-    pub expr: Surrounded<punct::LParen, crate::ast::shared::expr::Expr<'input>, punct::RParen>,
+    #[tok(WHERE, LPAREN, this, RPAREN)]
+    pub expr:  crate::ast::shared::expr::Expr<'input> ,
 }
 
 /// `EXCLUDE [USING method] (index_elem WITH op [, ...]) [INCLUDE (...)]
@@ -696,19 +545,18 @@ pub struct ExclusionWhereClause<'input> {
 ///     opt_c_include opt_definition OptConsTableSpace OptWhereClause
 ///     ConstraintAttributeSpec
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableExclude<'input> {
-    pub exclude: EXCLUDE,
+    #[tok(EXCLUDE, this)]
     /// `access_method_clause` — `USING method` is optional (defaults to gist).
     pub using: Option<crate::ast::ddl::index::UsingMethod<'input>>,
-    pub exclusions: Surrounded<
-        punct::LParen,
-        Seq1<ExclusionConstraintElem<'input>, punct::Comma>,
-        punct::RParen,
-    >,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub exclusions:
+
+        recursa::Vec1<ExclusionConstraintElem<'input> >
+
+    ,
     /// `INCLUDE (col, ...)` covering-index clause.
     pub include: Option<IncludeColumns<'input>>,
     /// `WITH (param = value, ...)` storage parameters (`opt_definition`).
@@ -725,10 +573,7 @@ pub struct TableExclude<'input> {
 /// Variant ordering: `PRIMARY KEY` (PRIMARY), `FOREIGN KEY` (FOREIGN),
 /// `UNIQUE`, `CHECK`, `EXCLUDE` — all start with distinct unique keywords
 /// so order is not strictly required for disambiguation.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TableConstraintKind<'input> {
     PrimaryKey(TablePrimaryKey<'input>),
     ForeignKey(TableForeignKey<'input>),
@@ -738,58 +583,43 @@ pub enum TableConstraintKind<'input> {
 }
 
 /// A table-level constraint with optional `CONSTRAINT name` prefix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableConstraint<'input> {
     pub name: Option<ConstraintNamePrefix<'input>>,
     pub kind: TableConstraintKind<'input>,
 }
 
 /// A single `INCLUDING` / `EXCLUDING` option on a `LIKE` source table clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum LikeOptionKind {
-    All(ALL),
-    Defaults(DEFAULTS),
-    Constraints(CONSTRAINTS),
-    Indexes(INDEXES),
-    Storage(STORAGE),
-    Comments(COMMENTS),
-    Statistics(STATISTICS),
-    Generated(GENERATED),
-    Identity(IDENTITY),
-    Compression(COMPRESSION),
+    #[tok(ALL)] All,
+    #[tok(DEFAULTS)] Defaults,
+    #[tok(CONSTRAINTS)] Constraints,
+    #[tok(INDEXES)] Indexes,
+    #[tok(STORAGE)] Storage,
+    #[tok(COMMENTS)] Comments,
+    #[tok(STATISTICS)] Statistics,
+    #[tok(GENERATED)] Generated,
+    #[tok(IDENTITY)] Identity,
+    #[tok(COMPRESSION)] Compression,
 }
 
 /// `INCLUDING what`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IncludingOption {
-    pub including: INCLUDING,
+    #[tok(INCLUDING, this)]
     pub what: LikeOptionKind,
 }
 
 /// `EXCLUDING what`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExcludingOption {
-    pub excluding: EXCLUDING,
+    #[tok(EXCLUDING, this)]
     pub what: LikeOptionKind,
 }
 
 /// One option on a `LIKE table` clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum LikeOption {
     Including(IncludingOption),
     Excluding(ExcludingOption),
@@ -798,12 +628,9 @@ pub enum LikeOption {
 /// `LIKE source_table [INCLUDING/EXCLUDING option ...]` clause in a column
 /// list body. Copies column definitions (and optionally other properties)
 /// from an existing table.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LikeClause<'input> {
-    pub like: LIKE,
+    #[tok(LIKE, this)]
     pub source: crate::ast::shared::names::QualifiedName<'input>,
     pub options: Vec<LikeOption>,
 }
@@ -817,10 +644,7 @@ pub struct LikeClause<'input> {
 /// ident). `Constraint` must come before `Column` because its leading
 /// tokens (`CONSTRAINT`, `PRIMARY`, `UNIQUE`, `FOREIGN`, `CHECK`) are
 /// keywords, while a `Column` starts with an identifier.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ColumnOrConstraint<'input> {
     Like(LikeClause<'input>),
     Constraint(TableConstraint<'input>),
@@ -828,34 +652,26 @@ pub enum ColumnOrConstraint<'input> {
 }
 
 /// Optional TEMP or TEMPORARY keyword.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TempKw {
-    Temp(TEMP),
-    Temporary(TEMPORARY),
+    #[tok(TEMP)] Temp,
+    #[tok(TEMPORARY)] Temporary,
 }
 
 /// INHERITS clause: `INHERITS (parent, ...)`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InheritsClause<'input> {
-    pub inherits: INHERITS,
+    #[tok(INHERITS, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub parents:
-        Surrounded<punct::LParen, Seq0<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         Vec<crate::tokens::ColId<'input> > ,
 }
 
 /// `TABLESPACE name` clause on CREATE TABLE / CREATE INDEX, placing the
 /// relation into a non-default tablespace.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TablespaceClause<'input> {
-    pub tablespace: TABLESPACE,
+    #[tok(TABLESPACE, this)]
     pub name: literal::Ident<'input>,
 }
 
@@ -865,34 +681,27 @@ pub struct TablespaceClause<'input> {
 ///
 /// Variant ordering: `WithoutOids` (WITHOUT token) is disjoint from `WithOids`
 /// (WITH OIDS) — distinct first tokens, listed in declaration order.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WithOidsClause {
-    WithOids((WITH, OIDS)),
-    WithoutOids((WITHOUT, OIDS)),
+    #[tok(WITH, OIDS)] WithOids,
+    #[tok(WITHOUT, OIDS)] WithoutOids,
 }
 
 /// `USING access_method` clause on CREATE TABLE, selecting a non-default
 /// table access method (e.g. `heap`, `heap2`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UsingAccessMethodClause<'input> {
-    pub using: USING,
+    #[tok(USING, this)]
     pub method: literal::Ident<'input>,
 }
 
 /// Column-based table body: `(cols_and_constraints) [INHERITS (...)] [PARTITION BY ...]`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ColumnsBody<'input> {
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns:
-        Surrounded<punct::LParen, Seq0<ColumnOrConstraint<'input>, punct::Comma>, punct::RParen>,
+         Vec<ColumnOrConstraint<'input> > ,
     pub inherits: Option<InheritsClause<'input>>,
     pub partition_by: Option<PartitionByClause<'input>>,
     pub using: Option<UsingAccessMethodClause<'input>>,
@@ -906,24 +715,17 @@ pub struct ColumnsBody<'input> {
 ///
 /// Variant ordering: distinct first tokens (`PRESERVE` / `DELETE` / `DROP`),
 /// so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OnCommitClause {
-    pub on: ON,
-    pub commit: COMMIT,
+    #[tok(ON, COMMIT, this)]
     pub action: OnCommitAction,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum OnCommitAction {
-    PreserveRows((PRESERVE, ROWS)),
-    DeleteRows((DELETE, ROWS)),
-    Drop(DROP),
+    #[tok(PRESERVE, ROWS)] PreserveRows,
+    #[tok(DELETE, ROWS)] DeleteRows,
+    #[tok(DROP)] Drop,
 }
 
 /// One entry inside a `PARTITION OF parent (...)` column-option list.
@@ -936,10 +738,7 @@ pub enum OnCommitAction {
 /// Variant ordering: `Constraint` (leading `CONSTRAINT` / `CHECK` /
 /// `PRIMARY` / `UNIQUE` / `FOREIGN` keywords) comes before `Column` (a
 /// bare identifier), so keyword-leading forms win.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum PartitionColumnOption<'input> {
     Constraint(TableConstraint<'input>),
@@ -949,15 +748,13 @@ pub enum PartitionColumnOption<'input> {
 /// Per-partition column option: `name [WITH OPTIONS] [COLLATE "..."]
 /// [constraints...]`. Overrides constraints/collation for a column
 /// inherited from the partitioned parent table.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PartitionColumnOptionDef<'input> {
     pub name: literal::Ident<'input>,
-    pub with_options: Option<(WITH, OPTIONS)>,
+    #[presence(WITH, OPTIONS)]
+    pub with_options: bool,
     pub collate: Option<CollateClause<'input>>,
-    pub constraints: Seq0<ColumnConstraint<'input>, (), OptionalTrailing>,
+    pub constraints: Vec<ColumnConstraint<'input>  >,
 }
 
 /// Partition-of table body: `PARTITION OF parent [(col_options, ...)] FOR VALUES IN (...) [PARTITION BY ...]`
@@ -966,19 +763,18 @@ pub struct PartitionColumnOptionDef<'input> {
 /// column constraints (e.g. `b NOT NULL`, `b DEFAULT 1`, `CONSTRAINT c CHECK
 /// (...)`), reusing the same `ColumnOrConstraint` grammar as a columns-based
 /// table body.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PartitionOfBody<'input> {
-    pub partition: PARTITION,
-    pub of: OF,
+    #[tok(PARTITION, OF, this)]
     pub parent: crate::ast::shared::names::QualifiedName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub column_options: Option<
-        Surrounded<punct::LParen, Seq0<PartitionColumnOption<'input>, punct::Comma>, punct::RParen>,
+         Vec<PartitionColumnOption<'input> > ,
     >,
     pub for_values: Option<ForValuesClause<'input>>,
-    pub default: Option<DEFAULT>,
+    #[presence(DEFAULT)]
+    pub default: bool,
     pub partition_by: Option<PartitionByClause<'input>>,
     pub using: Option<UsingAccessMethodClause<'input>>,
     pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
@@ -990,29 +786,25 @@ pub struct PartitionOfBody<'input> {
 ///
 /// Creates a table whose columns are derived from a composite type.
 /// Optional column options override constraints/defaults from the type.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OfTypeBody<'input> {
-    pub of: OF,
+    #[tok(OF, this)]
     pub type_name: crate::ast::shared::names::QualifiedName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub column_options: Option<
-        Surrounded<punct::LParen, Seq0<PartitionColumnOption<'input>, punct::Comma>, punct::RParen>,
+         Vec<PartitionColumnOption<'input> > ,
     >,
 }
 
 /// AS-query table body: `AS SELECT ... [WITH [NO] DATA]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AsQueryBody<'input> {
     /// Optional `WITH (param = value, ...)` storage parameters before `AS`.
     pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
     /// Optional `TABLESPACE name` before `AS`.
     pub tablespace: Option<TablespaceClause<'input>>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub query: Box<crate::ast::Statement<'input>>,
     pub with_data: Option<WithDataClause>,
 }
@@ -1020,25 +812,21 @@ pub struct AsQueryBody<'input> {
 /// `WITH DATA` or `WITH NO DATA` modifier on a CTAS query.
 ///
 /// Variant ordering: `NoData` (`WITH NO DATA`, longer) before `Data`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WithDataClause {
-    NoData((WITH, NO, DATA)),
-    Data((WITH, DATA)),
+    #[tok(WITH, NO, DATA)] NoData,
+    #[tok(WITH, DATA)] Data,
 }
 
 /// `(col, col, ...) [ON COMMIT ...] AS query [WITH [NO] DATA]` — CTAS with column list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ColumnsAsQueryBody<'input> {
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns:
-        Surrounded<punct::LParen, Seq0<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         Vec<crate::tokens::ColId<'input> > ,
     pub on_commit: Option<OnCommitClause>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub query: Box<crate::ast::Statement<'input>>,
     pub with_data: Option<WithDataClause>,
 }
@@ -1047,10 +835,7 @@ pub struct ColumnsAsQueryBody<'input> {
 ///
 /// Variant ordering: AsQuery (`AS`) and PartitionOf (`PARTITION`) start with
 /// keywords; Columns starts with `(`. Longest-match-wins disambiguates.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CreateTableBody<'input> {
     AsQuery(AsQueryBody<'input>),
     PartitionOf(PartitionOfBody<'input>),
@@ -1067,16 +852,15 @@ pub enum CreateTableBody<'input> {
 /// ```sql
 /// CREATE [TEMP] TABLE statement.
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateTableStmt<'input> {
-    pub create: CREATE,
+    #[tok(CREATE, this)]
     pub temp: Option<TempKw>,
-    pub unlogged: Option<UNLOGGED>,
-    pub table: TABLE,
-    pub if_not_exists: Option<(IF, NOT, EXISTS)>,
+    #[tok(this, TABLE)]
+    #[presence(UNLOGGED)]
+    pub unlogged: bool,
+    #[presence(IF, NOT, EXISTS)]
+    pub if_not_exists: bool,
     pub name: crate::ast::shared::names::QualifiedName<'input>,
     /// `USING am` between the table name and an `AS query` body, e.g.
     /// `CREATE TABLE t USING heap2 AS SELECT ...`. When the body starts
@@ -1091,9 +875,7 @@ impl<'input> CreateTableStmt<'input> {
     /// columns-based CREATE TABLE.
     pub fn items(
         &self,
-    ) -> Option<
-        &Surrounded<punct::LParen, Seq0<ColumnOrConstraint<'input>, punct::Comma>, punct::RParen>,
-    > {
+    ) -> Option<&Vec<ColumnOrConstraint<'input>>> {
         match &self.body {
             CreateTableBody::Columns(b) => Some(&b.columns),
             CreateTableBody::PartitionOf(_)
@@ -1128,113 +910,88 @@ impl<'input> CreateTableStmt<'input> {
 /// The `opclass` operator class name is a trailing identifier (e.g.
 /// `point_ops`, `int4_ops`) that binds the column/expression to a specific
 /// operator class for the partition strategy.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PartitionKeyItem<'input> {
     pub expr: Expr<'input>,
-    pub collate: Option<(COLLATE, literal::AliasName<'input>)>,
+    #[tok(COLLATE, this)]
+    pub collate: Option<literal::AliasName<'input>>,
     pub opclass: Option<literal::AliasName<'input>>,
 }
 
 /// PARTITION BY LIST (col) clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PartitionByClause<'input> {
-    pub partition: PARTITION,
-    pub by: BY,
+    #[tok(PARTITION, BY, this)]
     pub strategy: literal::AliasName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     /// Partition key items — may be plain column names or expressions like
     /// `((a+b)/2)`, optionally followed by a trailing opclass name.
     pub columns:
-        Surrounded<punct::LParen, Seq0<PartitionKeyItem<'input>, punct::Comma>, punct::RParen>,
+         Vec<PartitionKeyItem<'input> > ,
 }
 
 /// FOR VALUES IN (val, ...) clause — legacy name kept for backward compat
 /// with partition.rs own tests; the general form lives in `ForValuesClause`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForValuesInClause<'input> {
-    pub r#for: FOR,
-    pub values_kw: VALUES,
-    pub r#in: IN,
-    pub values: Surrounded<punct::LParen, Seq0<Expr<'input>, punct::Comma>, punct::RParen>,
+    #[tok(FOR, VALUES, IN, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub values:  Vec<Expr<'input> > ,
 }
 
 /// `FROM (...) TO (...)` range partition spec.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FromToSpec<'input> {
-    pub from: FROM,
-    pub from_values: Surrounded<punct::LParen, Seq0<Expr<'input>, punct::Comma>, punct::RParen>,
-    pub to: TO,
-    pub to_values: Surrounded<punct::LParen, Seq0<Expr<'input>, punct::Comma>, punct::RParen>,
+    #[tok(FROM, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub from_values:  Vec<Expr<'input> > ,
+    #[tok(TO, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub to_values:  Vec<Expr<'input> > ,
 }
 
 /// `IN (val, ...)` list partition spec.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InListSpec<'input> {
-    pub r#in: IN,
-    pub values: Surrounded<punct::LParen, Seq0<Expr<'input>, punct::Comma>, punct::RParen>,
+    #[tok(IN, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub values:  Vec<Expr<'input> > ,
 }
 
 /// `MODULUS n` entry.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ModulusEntry<'input> {
-    pub modulus: MODULUS,
+    #[tok(MODULUS, this)]
     pub value: Expr<'input>,
 }
 
 /// `REMAINDER n` entry.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RemainderEntry<'input> {
-    pub remainder: REMAINDER,
+    #[tok(REMAINDER, this)]
     pub value: Expr<'input>,
 }
 
 /// One item in `WITH (...)` for hash partitioning: MODULUS n or REMAINDER n.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum HashPartItem<'input> {
     Modulus(ModulusEntry<'input>),
     Remainder(RemainderEntry<'input>),
 }
 
 /// `WITH (MODULUS n, REMAINDER m)` hash partition spec.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WithModulusSpec<'input> {
-    pub with: WITH,
-    pub items: Surrounded<punct::LParen, Seq0<HashPartItem<'input>, punct::Comma>, punct::RParen>,
+    #[tok(WITH, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub items:  Vec<HashPartItem<'input> > ,
 }
 
 /// Body after `FOR VALUES` in a PARTITION OF clause. Variant ordering:
 /// `From` starts with `FROM`, `In` starts with `IN`, `With` starts with `WITH` —
 /// all distinct keywords, so peek disambiguation is trivial.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ForValuesSpec<'input> {
     From(FromToSpec<'input>),
     In(InListSpec<'input>),
@@ -1242,51 +999,37 @@ pub enum ForValuesSpec<'input> {
 }
 
 /// Full `FOR VALUES ...` clause in a `PARTITION OF ...` body.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForValuesClause<'input> {
-    pub r#for: FOR,
-    pub values: VALUES,
+    #[tok(FOR, VALUES, this)]
     pub spec: ForValuesSpec<'input>,
 }
 
 /// Column definition in partition table: `name type`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PartitionColumnDef<'input> {
     pub name: literal::Ident<'input>,
     pub type_name: TypeName<'input>,
 }
 
 /// CREATE TABLE with PARTITION BY: `CREATE TABLE name (cols) PARTITION BY strategy (cols)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreatePartitionedTableStmt<'input> {
-    pub create: CREATE,
-    pub table: TABLE,
+    #[tok(CREATE, TABLE, this)]
     pub name: literal::Ident<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns:
-        Surrounded<punct::LParen, Seq0<PartitionColumnDef<'input>, punct::Comma>, punct::RParen>,
+         Vec<PartitionColumnDef<'input> > ,
     pub partition_by: PartitionByClause<'input>,
 }
 
 /// CREATE TABLE ... PARTITION OF parent FOR VALUES IN (...) [PARTITION BY ...].
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreatePartitionOfStmt<'input> {
-    pub create: CREATE,
-    pub table: TABLE,
+    #[tok(CREATE, TABLE, this)]
     pub name: literal::Ident<'input>,
-    pub partition: PARTITION,
-    pub of: OF,
+    #[tok(PARTITION, OF, this)]
     pub parent: literal::Ident<'input>,
     pub for_values: ForValuesInClause<'input>,
     pub partition_by: Option<PartitionByClause<'input>>,
@@ -1299,15 +1042,13 @@ pub struct CreatePartitionOfStmt<'input> {
 /// ```sql
 /// DROP TABLE [IF EXISTS] name [, name ...] [CASCADE | RESTRICT]
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropTableStmt<'input> {
-    pub drop: DROP,
-    pub table: TABLE,
-    pub if_exists: Option<(IF, EXISTS)>,
-    pub names: Seq0<QualifiedName<'input>, punct::Comma>,
+    #[tok(DROP, TABLE, this)]
+    #[presence(IF, EXISTS)]
+    pub if_exists: bool,
+    #[sep(COMMA)]
+    pub names: Vec<QualifiedName<'input> >,
     pub behavior: Option<DropBehavior>,
 }
 
@@ -1319,11 +1060,11 @@ mod tests {
 
     #[test]
     fn parse_create_table_identity_seq_options() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (id int GENERATED ALWAYS AS IDENTITY (START WITH 44))",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (id int GENERATED ALWAYS AS IDENTITY (START WITH 44))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
@@ -1333,330 +1074,375 @@ mod tests {
             "CREATE TEMP TABLE t (a int) ON COMMIT DELETE ROWS",
             "CREATE TEMP TABLE t (a int) ON COMMIT DROP",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-            assert!(input.is_empty(), "leftover for {src:?}");
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+            assert!(input.is_eof(), "leftover for {src:?}");
         }
     }
 
     #[test]
     fn parse_create_table_single_column() {
-        let mut input = crate::tokens::test_input("CREATE TABLE BOOLTBL1 (f1 bool)");
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TABLE BOOLTBL1 (f1 bool)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "BOOLTBL1");
         assert_eq!(stmt.items().unwrap().len(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_multiple_columns() {
-        let mut input = crate::tokens::test_input("CREATE TABLE BOOLTBL3 (d text, b bool, o int)");
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TABLE BOOLTBL3 (d text, b bool, o int)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "BOOLTBL3");
         assert_eq!(stmt.items().unwrap().len(), 3);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_ctas_with_column_list() {
         // Regression: matview.sql uses `CREATE TABLE foo(a, b) AS VALUES(1, 10)`.
-        let mut input = crate::tokens::test_input("CREATE TABLE mvtest_foo(a, b) AS VALUES(1, 10)");
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TABLE mvtest_foo(a, b) AS VALUES(1, 10)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(
             stmt.body,
             super::CreateTableBody::ColumnsAsQuery(_)
         ));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_time_zone_types() {
         // Regression: brin.sql brintest table uses `time without time zone`,
         // `timestamp with time zone`, `bit varying(16)` as column types.
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a time without time zone, b timestamp with time zone, c time with time zone, d timestamp without time zone, e bit varying(16), f bit(10), g character)",
-        );
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TABLE t (a time without time zone, b timestamp with time zone, c time with time zone, d timestamp without time zone, e bit varying(16), f bit(10), g character)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.items().unwrap().len(), 7);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_array_column_types() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a int2[], b int4[][][], c varchar(5)[], d text[])",
-        );
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int2[], b int4[][][], c varchar(5)[], d text[])");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.items().unwrap().len(), 4);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_boolean_type() {
-        let mut input = crate::tokens::test_input("CREATE TABLE t (f1 boolean)");
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TABLE t (f1 boolean)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.items().unwrap().len(), 1);
     }
 
     #[test]
     fn parse_create_temp_table() {
-        let mut input = crate::tokens::test_input("CREATE TEMP TABLE foo (f1 int)");
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TEMP TABLE foo (f1 int)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.temp.is_some());
         assert_eq!(stmt.name.object(), "foo");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_partitioned_table() {
-        let mut input = crate::tokens::test_input(
-            "create table list_parted_tbl (a int,b int) partition by list (a)",
-        );
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("create table list_parted_tbl (a int,b int) partition by list (a)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "list_parted_tbl");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_partition_of() {
-        let mut input = crate::tokens::test_input(
-            "create table list_parted_tbl1 partition of list_parted_tbl for values in (1) partition by list(b)",
-        );
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("create table list_parted_tbl1 partition of list_parted_tbl for values in (1) partition by list(b)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "list_parted_tbl1");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_column_check_constraint() {
-        let mut input = crate::tokens::test_input("CREATE TABLE t (a int CHECK (a > 0))");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int CHECK (a > 0))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_column_references_full() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a int REFERENCES other(id) MATCH FULL ON DELETE CASCADE ON UPDATE NO ACTION DEFERRABLE INITIALLY DEFERRED)",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int REFERENCES other(id) MATCH FULL ON DELETE CASCADE ON UPDATE NO ACTION DEFERRABLE INITIALLY DEFERRED)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_column_named_constraint() {
-        let mut input =
-            crate::tokens::test_input("CREATE TABLE t (a int CONSTRAINT pos CHECK (a > 0))");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int CONSTRAINT pos CHECK (a > 0))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_column_default_constraint() {
-        let mut input = crate::tokens::test_input("CREATE TABLE t (a int DEFAULT 0)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int DEFAULT 0)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_primary_key() {
-        let mut input =
-            crate::tokens::test_input("CREATE TABLE t (a int, b int, PRIMARY KEY (a, b))");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int, b int, PRIMARY KEY (a, b))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_unique() {
-        let mut input = crate::tokens::test_input("CREATE TABLE t (a int, UNIQUE (a))");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int, UNIQUE (a))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_foreign_key() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES other(id) ON DELETE SET NULL)",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES other(id) ON DELETE SET NULL)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_foreign_key_set_null_columns() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a int, b int, FOREIGN KEY (a, b) REFERENCES p ON DELETE SET NULL (b))",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int, b int, FOREIGN KEY (a, b) REFERENCES p ON DELETE SET NULL (b))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_foreign_key_set_default_columns() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES p ON UPDATE SET DEFAULT (a))",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES p ON UPDATE SET DEFAULT (a))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_check() {
-        let mut input = crate::tokens::test_input("CREATE TABLE t (a int, CHECK (a > 0))");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int, CHECK (a > 0))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_named_constraint() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a int, b int, CONSTRAINT pk PRIMARY KEY (a, b) DEFERRABLE INITIALLY IMMEDIATE)",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int, b int, CONSTRAINT pk PRIMARY KEY (a, b) DEFERRABLE INITIALLY IMMEDIATE)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_check_no_inherit() {
-        let mut input =
-            crate::tokens::test_input("CREATE TABLE t (a int, CHECK (a > 0) NO INHERIT)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int, CHECK (a > 0) NO INHERIT)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_like_bare() {
-        let mut input = crate::tokens::test_input("CREATE TABLE foo (LIKE bar)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE foo (LIKE bar)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_like_including_all() {
-        let mut input = crate::tokens::test_input("CREATE TABLE foo (LIKE bar INCLUDING ALL)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE foo (LIKE bar INCLUDING ALL)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_like_including_excluding() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE foo (LIKE bar INCLUDING DEFAULTS EXCLUDING CONSTRAINTS)",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE foo (LIKE bar INCLUDING DEFAULTS EXCLUDING CONSTRAINTS)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_like_mixed_with_columns() {
-        let mut input =
-            crate::tokens::test_input("CREATE TABLE foo (a int, LIKE bar INCLUDING ALL, b text)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE foo (a int, LIKE bar INCLUDING ALL, b text)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_check_no_inherit_not_valid() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (d date, CHECK (false) NO INHERIT NOT VALID)",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (d date, CHECK (false) NO INHERIT NOT VALID)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_check_not_valid() {
-        let mut input =
-            crate::tokens::test_input("CREATE TABLE t (a int, CHECK (a > 0) NOT VALID)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int, CHECK (a > 0) NOT VALID)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_with_storage_params() {
-        let mut input = crate::tokens::test_input("CREATE TABLE t (a int) WITH (fillfactor = 70)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int) WITH (fillfactor = 70)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_temp_table_empty_columns() {
-        let mut input = crate::tokens::test_input("CREATE TEMP TABLE nocols()");
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TEMP TABLE nocols()");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.items().unwrap().len(), 0);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_unlogged_table() {
-        let mut input = crate::tokens::test_input("CREATE UNLOGGED TABLE t (a int)");
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE UNLOGGED TABLE t (a int)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.unlogged.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_unlogged_table_qualified() {
-        let mut input = crate::tokens::test_input("CREATE UNLOGGED TABLE public.t (a int)");
+        let lexed = crate::tokens::lex("CREATE UNLOGGED TABLE public.t (a int)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         // This uses unqualified Ident only; restrict to the unqualified form.
         let _stmt = CreateTableStmt::parse(&mut input);
     }
 
     #[test]
     fn parse_column_with_collate() {
-        let mut input = crate::tokens::test_input("CREATE TABLE foo (a text COLLATE \"C\")");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE foo (a text COLLATE \"C\")");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_partition_of_range_from_to() {
-        let mut input =
-            crate::tokens::test_input("CREATE TABLE p1 PARTITION OF p FOR VALUES FROM (0) TO (10)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE p1 PARTITION OF p FOR VALUES FROM (0) TO (10)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_partition_of_list_in() {
-        let mut input =
-            crate::tokens::test_input("CREATE TABLE p2 PARTITION OF p FOR VALUES IN (1, 2, 3)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE p2 PARTITION OF p FOR VALUES IN (1, 2, 3)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_partition_of_hash_with_modulus() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE p3 PARTITION OF p FOR VALUES WITH (MODULUS 4, REMAINDER 0)",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE p3 PARTITION OF p FOR VALUES WITH (MODULUS 4, REMAINDER 0)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_partition_of_default() {
-        let mut input = crate::tokens::test_input("CREATE TABLE p4 PARTITION OF p DEFAULT");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE p4 PARTITION OF p DEFAULT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_primary_key_using_index_tablespace() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a int PRIMARY KEY USING INDEX TABLESPACE pg_default) PARTITION BY LIST (a)",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int PRIMARY KEY USING INDEX TABLESPACE pg_default) PARTITION BY LIST (a)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// Sanity check: ALTER TABLE ... ADD CONSTRAINT ... PRIMARY KEY (col)
     /// must parse (existing functionality).
     #[test]
     fn parse_alter_table_add_pk_cols_sanity() {
-        let mut input = crate::tokens::test_input("ALTER TABLE t ADD PRIMARY KEY (a)");
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLE t ADD PRIMARY KEY (a)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// Table-level `PRIMARY KEY USING INDEX existing_idx` constraint form
@@ -1664,47 +1450,51 @@ mod tests {
     /// from the `PRIMARY KEY (cols)` form modelled by `TablePrimaryKey`.
     #[test]
     fn parse_table_constraint_primary_key_using_index() {
-        let mut input =
-            crate::tokens::test_input("ALTER TABLE t ADD PRIMARY KEY USING INDEX my_idx");
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLE t ADD PRIMARY KEY USING INDEX my_idx");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// Table-level `UNIQUE USING INDEX existing_idx` form (gram.y
     /// `ConstraintElem: UNIQUE ExistingIndex …`).
     #[test]
     fn parse_table_constraint_unique_using_index() {
-        let mut input = crate::tokens::test_input("ALTER TABLE t ADD UNIQUE USING INDEX my_idx");
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLE t ADD UNIQUE USING INDEX my_idx");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// `ADD CONSTRAINT name PRIMARY KEY USING INDEX existing_idx` — the
     /// named-constraint form.
     #[test]
     fn parse_table_constraint_named_primary_key_using_index() {
-        let mut input = crate::tokens::test_input(
-            "ALTER TABLE t ADD CONSTRAINT my_pkey PRIMARY KEY USING INDEX my_idx",
-        );
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLE t ADD CONSTRAINT my_pkey PRIMARY KEY USING INDEX my_idx");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_ctas_on_commit_delete_rows() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TEMP TABLE temptest(col) ON COMMIT DELETE ROWS AS SELECT 1",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TEMP TABLE temptest(col) ON COMMIT DELETE ROWS AS SELECT 1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_ctas_on_commit_drop() {
-        let mut input =
-            crate::tokens::test_input("CREATE TEMP TABLE temptest(col) ON COMMIT DROP AS SELECT 1");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TEMP TABLE temptest(col) ON COMMIT DROP AS SELECT 1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
@@ -1714,103 +1504,108 @@ mod tests {
             "CREATE TEMP TABLE t2 PARTITION OF p FOR VALUES IN (2) ON COMMIT DROP",
             "CREATE TEMP TABLE t3 PARTITION OF p FOR VALUES IN (1) ON COMMIT PRESERVE ROWS",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-            assert!(input.is_empty(), "leftover for {src:?}");
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+            assert!(input.is_eof(), "leftover for {src:?}");
         }
     }
 
     #[test]
     fn parse_create_table_of_type() {
-        let mut input = crate::tokens::test_input("CREATE TABLE persons OF person_type");
-        let stmt = CreateTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TABLE persons OF person_type");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(stmt.body, super::CreateTableBody::OfType(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_of_type_with_options() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE personsx OF person_type (myname WITH OPTIONS NOT NULL)",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE personsx OF person_type (myname WITH OPTIONS NOT NULL)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_of_type_constraints() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE persons2 OF person_type (id WITH OPTIONS PRIMARY KEY, UNIQUE (name))",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE persons2 OF person_type (id WITH OPTIONS PRIMARY KEY, UNIQUE (name))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_of_type_default() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE persons3 OF person_type (PRIMARY KEY (id), name WITH OPTIONS DEFAULT '')",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE persons3 OF person_type (PRIMARY KEY (id), name WITH OPTIONS DEFAULT '')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_of_type_not_null_default() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE persons3 OF person_type (PRIMARY KEY (id), name NOT NULL DEFAULT '')",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE persons3 OF person_type (PRIMARY KEY (id), name NOT NULL DEFAULT '')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// EXCLUDE table constraint, simplest form: `EXCLUDE (col WITH op)`.
     #[test]
     fn parse_table_exclude_bare() {
-        let mut input =
-            crate::tokens::test_input("CREATE TABLE deferred_excl (f1 int, EXCLUDE (f1 WITH =))");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE deferred_excl (f1 int, EXCLUDE (f1 WITH =))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// EXCLUDE table constraint with explicit access method: `EXCLUDE USING gist (col WITH op)`.
     #[test]
     fn parse_table_exclude_using_gist() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a int4range, EXCLUDE USING GIST (a WITH =))",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int4range, EXCLUDE USING GIST (a WITH =))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// EXCLUDE constraint with multiple index elements: `EXCLUDE USING GIST (a WITH =, b WITH =)`.
     #[test]
     fn parse_table_exclude_multi_elements() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a int4range, b int4range, EXCLUDE USING GIST (a WITH =, b WITH =))",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int4range, b int4range, EXCLUDE USING GIST (a WITH =, b WITH =))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// EXCLUDE constraint with a custom operator like `&&` or `-|-`.
     #[test]
     fn parse_table_exclude_custom_op() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (a int4range, EXCLUDE USING GIST (a WITH -|-))",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int4range, EXCLUDE USING GIST (a WITH -|-))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// EXCLUDE constraint with `WHERE (predicate)` partial-index clause.
     #[test]
     fn parse_table_exclude_with_where() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE t (f4 int, EXCLUDE USING btree (f4 WITH =) WHERE (f4 IS NOT NULL))",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (f4 int, EXCLUDE USING btree (f4 WITH =) WHERE (f4 IS NOT NULL))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     // -------------------------------------------------------------------
@@ -1820,25 +1615,25 @@ mod tests {
     #[test]
     fn parse_partitioned_table_standalone() {
         use crate::ast::ddl::table::CreatePartitionedTableStmt;
-        let mut input = crate::tokens::test_input(
-            "create table list_parted_tbl (a int,b int) partition by list (a)",
-        );
-        let stmt = CreatePartitionedTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("create table list_parted_tbl (a int,b int) partition by list (a)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreatePartitionedTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.text(), "list_parted_tbl");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_partition_of_standalone() {
         use crate::ast::ddl::table::CreatePartitionOfStmt;
-        let mut input = crate::tokens::test_input(
-            "create table list_parted_tbl1 partition of list_parted_tbl for values in (1) partition by list(b)",
-        );
-        let stmt = CreatePartitionOfStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("create table list_parted_tbl1 partition of list_parted_tbl for values in (1) partition by list(b)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreatePartitionOfStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.text(), "list_parted_tbl1");
         assert_eq!(stmt.parent.text(), "list_parted_tbl");
         assert!(stmt.partition_by.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // -------------------------------------------------------------------
@@ -1848,46 +1643,56 @@ mod tests {
     #[test]
     fn parse_drop_table() {
         use crate::ast::ddl::table::DropTableStmt;
-        let mut input = crate::tokens::test_input("DROP TABLE BOOLTBL1");
-        let stmt = DropTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP TABLE BOOLTBL1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.names.len(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_table_lowercase() {
         use crate::ast::ddl::table::DropTableStmt;
-        let mut input = crate::tokens::test_input("drop table my_table");
-        let stmt = DropTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("drop table my_table");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.names.len(), 1);
     }
 
     #[test]
     fn parse_drop_table_if_exists() {
         use crate::ast::ddl::table::DropTableStmt;
-        let mut input = crate::tokens::test_input("DROP TABLE IF EXISTS foo");
-        let stmt = DropTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP TABLE IF EXISTS foo");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
     }
 
     #[test]
     fn parse_drop_table_multi_cascade() {
         use crate::ast::ddl::table::DropTableStmt;
-        let mut input = crate::tokens::test_input("DROP TABLE IF EXISTS a, b, c CASCADE");
-        let stmt = DropTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP TABLE IF EXISTS a, b, c CASCADE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
         assert_eq!(stmt.names.len(), 3);
         assert!(stmt.behavior.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_table_qualified() {
         use crate::ast::ddl::table::DropTableStmt;
-        let mut input = crate::tokens::test_input("DROP TABLE schema1.foo RESTRICT");
-        let stmt = DropTableStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP TABLE schema1.foo RESTRICT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.behavior.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
     /// Multi-element `alter_identity_column_option_list` (gram.y) — the
     /// `SET GENERATED …`, `SET seq_option`, and `RESTART …` clauses can
@@ -1895,34 +1700,38 @@ mod tests {
     /// this.
     #[test]
     fn parse_alter_table_set_generated_set_increment_restart() {
-        let mut input = crate::tokens::test_input(
-            "ALTER TABLE pitest2 ALTER COLUMN f3 SET GENERATED BY DEFAULT SET INCREMENT BY 2 RESTART",
-        );
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLE pitest2 ALTER COLUMN f3 SET GENERATED BY DEFAULT SET INCREMENT BY 2 RESTART");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_table_identity_single_set_generated_still_works() {
-        let mut input =
-            crate::tokens::test_input("ALTER TABLE t ALTER COLUMN c SET GENERATED ALWAYS");
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLE t ALTER COLUMN c SET GENERATED ALWAYS");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_table_identity_set_seq_option_alone() {
-        let mut input =
-            crate::tokens::test_input("ALTER TABLE t ALTER COLUMN c SET INCREMENT BY 2");
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLE t ALTER COLUMN c SET INCREMENT BY 2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_table_identity_restart_alone() {
-        let mut input = crate::tokens::test_input("ALTER TABLE t ALTER COLUMN c RESTART");
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLE t ALTER COLUMN c RESTART");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// gram.y `reloption_elem` includes `ColLabel '=' def_arg`. PG accepts
@@ -1931,10 +1740,11 @@ mod tests {
     /// surface as a [`crate::ast::FileItem::ParseError`].
     #[test]
     fn parse_alter_table_reset_reloptions_with_value() {
-        let mut input =
-            crate::tokens::test_input("ALTER TABLE reloptions_test RESET (fillfactor=12)");
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER TABLE reloptions_test RESET (fillfactor=12)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// gram.y `Typename` accepts `expr_list` typmods, including negative
@@ -1942,10 +1752,11 @@ mod tests {
     #[test]
     fn parse_create_table_numeric_negative_typmod() {
         use crate::ast::ddl::table::CreateTableStmt;
-        let mut input =
-            crate::tokens::test_input("CREATE TABLE num_typemod_test (millions numeric(3, -6))");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE num_typemod_test (millions numeric(3, -6))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 }
 
@@ -1970,13 +1781,9 @@ mod tests {
 ///
 /// The two top-level shapes — the bulk `ALL IN TABLESPACE …` form and the
 /// per-relation form — are split into an enum body.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTableStmt<'input> {
-    pub alter: ALTER,
-    pub table: TABLE,
+    #[tok(ALTER, TABLE, this)]
     pub body: AlterTableBody<'input>,
 }
 
@@ -1985,10 +1792,7 @@ pub struct AlterTableStmt<'input> {
 ///
 /// Variant ordering: `All` (starts with `ALL`) before `Single` (starts with
 /// `IF` / `ONLY` / `qualified_name`, never `ALL`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterTableBody<'input> {
     All(AllInTablespaceBody<'input>),
     Single(AlterTableSingle<'input>),
@@ -2000,15 +1804,14 @@ pub enum AlterTableBody<'input> {
 /// optionally prefixed by `ONLY` and/or suffixed by `*`. The `ONLY (name)`
 /// parenthesised form is not exercised by any corpus statement, so it is
 /// not modelled.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTableSingle<'input> {
     pub if_exists: Option<IfExists>,
-    pub only: Option<ONLY>,
+    #[presence(ONLY)]
+    pub only: bool,
     pub name: QualifiedName<'input>,
-    pub star: Option<punct::Star>,
+    #[presence(STAR)]
+    pub star: bool,
     pub action: AlterTableSingleAction<'input>,
 }
 
@@ -2029,10 +1832,7 @@ pub struct AlterTableSingle<'input> {
 ///   `alter_table_cmd` does not begin with `ATTACH`/`DETACH`, but listing
 ///   the partition cmd first is clearer.
 /// - `Cmds` last — the catch-all for the comma-separated `alter_table_cmds`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterTableSingleAction<'input> {
     RenameConstraint(AlterTableRenameConstraint<'input>),
     RenameColumn(RenameColumnClause<'input>),
@@ -2044,25 +1844,19 @@ pub enum AlterTableSingleAction<'input> {
 
 /// `RENAME CONSTRAINT old TO new` — Postgres' `RenameStmt` branch for table
 /// constraints.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTableRenameConstraint<'input> {
-    pub rename: RENAME,
-    pub constraint: CONSTRAINT,
+    #[tok(RENAME, CONSTRAINT, this)]
     pub old_name: literal::Ident<'input>,
-    pub to: TO,
+    #[tok(TO, this)]
     pub new_name: literal::Ident<'input>,
 }
 
 /// Comma-separated `alter_table_cmds` on ALTER TABLE.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTableCmds<'input> {
-    pub cmds: Seq1<AlterTableCmd<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub cmds: recursa::Vec1<AlterTableCmd<'input> >,
 }
 
 /// Postgres' `partition_cmd`: a single `ATTACH PARTITION` or `DETACH
@@ -2070,10 +1864,7 @@ pub struct AlterTableCmds<'input> {
 ///
 /// Variant ordering: `Attach` (ATTACH) and `Detach` (DETACH) have disjoint
 /// first tokens, so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PartitionCmd<'input> {
     Attach(AttachPartitionCmd<'input>),
     Detach(DetachPartitionCmd<'input>),
@@ -2081,26 +1872,18 @@ pub enum PartitionCmd<'input> {
 
 /// `ATTACH PARTITION qualified_name partition_bound_spec` — adds an existing
 /// table as a partition of the target partitioned table.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AttachPartitionCmd<'input> {
-    pub attach: ATTACH,
-    pub partition: PARTITION,
+    #[tok(ATTACH, PARTITION, this)]
     pub name: QualifiedName<'input>,
     pub bound: PartitionBoundSpec<'input>,
 }
 
 /// `DETACH PARTITION qualified_name [CONCURRENTLY | FINALIZE]` — removes a
 /// partition from its parent.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DetachPartitionCmd<'input> {
-    pub detach: crate::tokens::soft_keyword::DETACH,
-    pub partition: PARTITION,
+    #[tok(DETACH, PARTITION, this)]
     pub name: QualifiedName<'input>,
     pub mode: Option<DetachPartitionMode>,
 }
@@ -2108,13 +1891,10 @@ pub struct DetachPartitionCmd<'input> {
 /// Trailing mode keyword on `DETACH PARTITION`: `CONCURRENTLY` (the default
 /// nonblocking detach) or `FINALIZE` (completes a previously-CONCURRENTLY
 /// detached partition).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DetachPartitionMode {
-    Concurrently(CONCURRENTLY),
-    Finalize(crate::tokens::soft_keyword::FINALIZE),
+    #[tok(CONCURRENTLY)] Concurrently,
+    #[tok(FINALIZE)] Finalize,
 }
 
 /// Postgres' `PartitionBoundSpec` — the partition bound used by `ATTACH
@@ -2127,12 +1907,9 @@ pub enum DetachPartitionMode {
 ///
 /// Variant ordering: `Default` (one keyword, distinct first token) before
 /// `ForValues` (begins with `FOR`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PartitionBoundSpec<'input> {
-    Default(DEFAULT),
+    #[tok(DEFAULT)] Default,
     ForValues(crate::ast::ddl::table::ForValuesClause<'input>),
 }
 
@@ -2165,10 +1942,7 @@ pub enum PartitionBoundSpec<'input> {
 ///   placed against single-keyword variants).
 /// - `GenericOptions` (FOREIGN-TABLE OPTIONS clause) last — `OPTIONS` is a
 ///   unique leading keyword.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterTableCmd<'input> {
     // ADD ... — longer prefixes first.
     AddColumnIfNotExists(AddColumnIfNotExistsCmd<'input>),
@@ -2230,36 +2004,25 @@ pub enum AlterTableCmd<'input> {
 }
 
 /// `ADD COLUMN IF NOT EXISTS columnDef`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AddColumnIfNotExistsCmd<'input> {
-    pub add: ADD,
-    pub column: COLUMN,
+    #[tok(ADD, COLUMN, this)]
     pub if_not_exists: IfNotExists,
     pub column_def: crate::ast::ddl::table::ColumnDef<'input>,
 }
 
 /// `ADD IF NOT EXISTS columnDef`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AddIfNotExistsCmd<'input> {
-    pub add: ADD,
+    #[tok(ADD, this)]
     pub if_not_exists: IfNotExists,
     pub column_def: crate::ast::ddl::table::ColumnDef<'input>,
 }
 
 /// `ADD COLUMN columnDef`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AddColumnCmd<'input> {
-    pub add: ADD,
-    pub column: COLUMN,
+    #[tok(ADD, COLUMN, this)]
     pub column_def: crate::ast::ddl::table::ColumnDef<'input>,
 }
 
@@ -2270,49 +2033,33 @@ pub struct AddColumnCmd<'input> {
 /// The `NOT VALID` modifier is part of the constraint's attribute list in
 /// gram.y; pg-sql models it as a trailing `Option` on this `AlterTableCmd`
 /// variant for symmetry with the corpus' usage (it only ever sits at the end).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AddTableConstraintCmd<'input> {
-    pub add: ADD,
+    #[tok(ADD, this)]
     pub constraint: crate::ast::ddl::table::TableConstraint<'input>,
     pub not_valid: Option<NotValid>,
 }
 
 /// `NOT VALID` — the unverified-constraint marker.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct NotValid {
-    pub not: NOT,
-    pub valid: VALID,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum NotValid { #[tok(NOT, VALID)] Value, }
 
 /// `ADD columnDef` (no `COLUMN` keyword, no `IF NOT EXISTS`).
 ///
 /// Listed last in the ADD family because every column definition begins with
 /// a bareword (the column name), which would otherwise greedily swallow
 /// `COLUMN`, `IF`, `CONSTRAINT`, etc.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AddColumnBareCmd<'input> {
-    pub add: ADD,
+    #[tok(ADD, this)]
     pub column_def: crate::ast::ddl::table::ColumnDef<'input>,
 }
 
 /// `ALTER CONSTRAINT name [DEFERRABLE | NOT DEFERRABLE] [INITIALLY {DEFERRED
 /// | IMMEDIATE}]` — Postgres' `AT_AlterConstraint` action.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterConstraintCmd<'input> {
-    pub alter: ALTER,
-    pub constraint: CONSTRAINT,
+    #[tok(ALTER, CONSTRAINT, this)]
     pub name: literal::Ident<'input>,
     pub attrs: crate::ast::ddl::table::ConstraintAttrs,
 }
@@ -2320,13 +2067,9 @@ pub struct AlterConstraintCmd<'input> {
 /// `ALTER [COLUMN] colname …` — the big `ALTER COLUMN` cmd. The `colname`
 /// can also be a numeric column index for `SET STATISTICS` (used on indexes,
 /// not on tables — but accepted here for symmetry).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColumnCmd<'input> {
-    pub alter: ALTER,
-    pub column: Option<COLUMN>,
+    #[tok(ALTER, optional(COLUMN), this)]
     pub col_ref: ColumnRef<'input>,
     pub action: AlterColumnAction<'input>,
 }
@@ -2356,10 +2099,7 @@ pub struct AlterColumnCmd<'input> {
 ///   SET variants commit first; the bare `RESTART` keyword is unique and
 ///   only matched here.
 /// - `GenericOptions` (`OPTIONS (...)`) — foreign-table column options.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterColumnAction<'input> {
     // SET ... — longest prefixes first.
     SetExpressionAs(AlterColSetExpression<'input>),
@@ -2395,10 +2135,7 @@ pub enum AlterColumnAction<'input> {
 /// `SetSeqOption` (`SET …seq_option`) so the more specific `SET GENERATED`
 /// 2-token peek commits first; both share the leading `SET`. `Restart`
 /// has a disjoint leading `RESTART` token.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterIdentityOption<'input> {
     SetGenerated(AlterColSetGenerated),
     SetSeqOption(AlterColSetSeqOption<'input>),
@@ -2407,37 +2144,24 @@ pub enum AlterIdentityOption<'input> {
 
 /// `alter_identity_column_option_list` — one or more
 /// [`AlterIdentityOption`] items in sequence, no separator.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterIdentityOpts<'input> {
-    pub items: Seq1<AlterIdentityOption<'input>, (), recursa::seq::OptionalTrailing>,
+    pub items: recursa::Vec1<AlterIdentityOption<'input>  >,
 }
 
 /// `SET EXPRESSION AS (expr)` — adjust a generated column's expression.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColSetExpression<'input> {
-    pub set: SET,
-    pub expression: crate::tokens::soft_keyword::EXPRESSION,
-    pub r#as: AS,
-    pub expr: Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>,
+    #[tok(SET, EXPRESSION, AS, LPAREN, this, RPAREN)]
+    pub expr:  Box<Expr<'input>> ,
 }
 
 /// `[SET DATA] TYPE Typename [COLLATE name] [USING expr]` — change a column's
 /// type. The `SET DATA` is mandatory in this variant (the leading-`SET` form);
 /// the bare `TYPE …` form is `AlterColTypeBare`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColSetDataType<'input> {
-    pub set: SET,
-    pub data: DATA,
-    pub r#type: TYPE,
+    #[tok(SET, DATA, TYPE, this)]
     pub type_name: CastType<'input>,
     pub collate: Option<crate::ast::ddl::table::CollateClause<'input>>,
     pub using: Option<AlterColUsing<'input>>,
@@ -2445,67 +2169,43 @@ pub struct AlterColSetDataType<'input> {
 
 /// `SET STATISTICS { SignedIconst | DEFAULT }` — adjust per-column statistics
 /// target.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColSetStatistics<'input> {
-    pub set: SET,
-    pub statistics: STATISTICS,
+    #[tok(SET, STATISTICS, this)]
     pub value: SetStatisticsValue<'input>,
 }
 
 /// `SET COMPRESSION { name | DEFAULT }` — change a column's compression
 /// method.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColSetCompression<'input> {
-    pub set: SET,
-    pub compression: COMPRESSION,
+    #[tok(SET, COMPRESSION, this)]
     pub target: ColumnCompressionTarget<'input>,
 }
 
 /// `SET DEFAULT expr` — set a column's default expression.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColSetDefault<'input> {
-    pub set: SET,
-    pub default: DEFAULT,
+    #[tok(SET, DEFAULT, this)]
     pub expr: Box<Expr<'input>>,
 }
 
 /// `DROP DEFAULT` — drop a column's default expression.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct AlterColDropDefault {
-    pub drop: DROP,
-    pub default: DEFAULT,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum AlterColDropDefault { #[tok(DROP, DEFAULT)] Value, }
 
 /// `USING expr` clause on `ALTER COLUMN … TYPE …`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColUsing<'input> {
-    pub using: USING,
+    #[tok(USING, this)]
     pub expr: Box<Expr<'input>>,
 }
 
 /// `TYPE Typename [COLLATE name] [USING expr]` — change a column's type
 /// without the leading `SET DATA`. Postgres accepts both spellings.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColTypeBare<'input> {
-    pub r#type: TYPE,
+    #[tok(TYPE, this)]
     pub type_name: CastType<'input>,
     pub collate: Option<crate::ast::ddl::table::CollateClause<'input>>,
     pub using: Option<AlterColUsing<'input>>,
@@ -2513,38 +2213,23 @@ pub struct AlterColTypeBare<'input> {
 
 /// `SET GENERATED { ALWAYS | BY DEFAULT }` — change the identity column
 /// generation mode.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColSetGenerated {
-    pub set: SET,
-    pub generated: GENERATED,
+    #[tok(SET, GENERATED, this)]
     pub mode: crate::ast::ddl::table::GeneratedIdentityMode,
 }
 
 /// `SET STORAGE { PLAIN | EXTERNAL | EXTENDED | MAIN | DEFAULT }` — adjust a
 /// column's TOAST storage strategy.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColSetStorage {
-    pub set: SET,
-    pub storage: STORAGE,
+    #[tok(SET, STORAGE, this)]
     pub mode: crate::ast::ddl::table::ColumnStorageMode,
 }
 
 /// `SET NOT NULL` — add a NOT NULL marker on the column.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct AlterColSetNotNull {
-    pub set: SET,
-    pub not: NOT,
-    pub null: NULL,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum AlterColSetNotNull { #[tok(SET, NOT, NULL)] Value, }
 
 /// One `SET seqOpt` action on an identity column —
 /// `SET { START WITH | INCREMENT BY | MINVALUE | MAXVALUE | CACHE | CYCLE |
@@ -2552,219 +2237,140 @@ pub struct AlterColSetNotNull {
 ///
 /// Reuses `IdentitySeqOption` from `create_table.rs` so the full sequence-
 /// option set is supported (and the formatter is shared).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColSetSeqOption<'input> {
-    pub set: SET,
+    #[tok(SET, this)]
     pub option: crate::ast::ddl::table::IdentitySeqOption<'input>,
 }
 
 /// `DROP EXPRESSION [IF EXISTS]` — remove a generated column's expression,
 /// turning it into a regular column.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColDropExpression {
-    pub drop: DROP,
-    pub expression: crate::tokens::soft_keyword::EXPRESSION,
+    #[tok(DROP, EXPRESSION, this)]
     pub if_exists: Option<IfExists>,
 }
 
 /// `DROP IDENTITY [IF EXISTS]` — remove an identity-column property.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColDropIdentity {
-    pub drop: DROP,
-    pub identity: IDENTITY,
+    #[tok(DROP, IDENTITY, this)]
     pub if_exists: Option<IfExists>,
 }
 
 /// `DROP NOT NULL` — remove a NOT NULL marker.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct AlterColDropNotNull {
-    pub drop: DROP,
-    pub not: NOT,
-    pub null: NULL,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum AlterColDropNotNull { #[tok(DROP, NOT, NULL)] Value, }
 
 /// `ADD GENERATED { ALWAYS | BY DEFAULT } AS IDENTITY [(seq_options)]` —
 /// add an identity property to an existing column.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColAddIdentity<'input> {
-    pub add: ADD,
+    #[tok(ADD, this)]
     pub identity: crate::ast::ddl::table::GeneratedIdentityConstraint<'input>,
 }
 
 /// `RESTART [WITH NumericOnly]` — restart an identity column's sequence.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColRestart<'input> {
-    pub restart: crate::tokens::soft_keyword::RESTART,
+    #[tok(RESTART, this)]
     pub value: Option<RestartWith<'input>>,
 }
 
 /// `[WITH] NumericOnly` — the value portion of `RESTART`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RestartWith<'input> {
-    pub with: Option<WITH>,
+    #[tok(optional(WITH), this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `DROP CONSTRAINT IF EXISTS name [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropConstraintIfExistsCmd<'input> {
-    pub drop: DROP,
-    pub constraint: CONSTRAINT,
+    #[tok(DROP, CONSTRAINT, this)]
     pub if_exists: IfExists,
     pub name: literal::Ident<'input>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// `DROP CONSTRAINT name [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropConstraintCmd<'input> {
-    pub drop: DROP,
-    pub constraint: CONSTRAINT,
+    #[tok(DROP, CONSTRAINT, this)]
     pub name: literal::Ident<'input>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// `DROP [COLUMN] IF EXISTS colname [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropColumnIfExistsCmd<'input> {
-    pub drop: DROP,
-    pub column: Option<COLUMN>,
+    #[tok(DROP, optional(COLUMN), this)]
     pub if_exists: IfExists,
     pub name: literal::Ident<'input>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// `DROP [COLUMN] colname [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropColumnCmd<'input> {
-    pub drop: DROP,
-    pub column: Option<COLUMN>,
+    #[tok(DROP, optional(COLUMN), this)]
     pub name: literal::Ident<'input>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// `ENABLE TRIGGER { name | ALL | USER }`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct EnableTriggerCmd<'input> {
-    pub enable: crate::tokens::soft_keyword::ENABLE,
-    pub trigger: TRIGGER,
+    #[tok(ENABLE, TRIGGER, this)]
     pub target: TriggerOrRuleTarget<'input>,
 }
 
 /// `ENABLE ALWAYS TRIGGER name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct EnableAlwaysTriggerCmd<'input> {
-    pub enable: crate::tokens::soft_keyword::ENABLE,
-    pub always: ALWAYS,
-    pub trigger: TRIGGER,
+    #[tok(ENABLE, ALWAYS, TRIGGER, this)]
     pub name: literal::Ident<'input>,
 }
 
 /// `ENABLE REPLICA TRIGGER name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct EnableReplicaTriggerCmd<'input> {
-    pub enable: crate::tokens::soft_keyword::ENABLE,
-    pub replica: crate::tokens::soft_keyword::REPLICA,
-    pub trigger: TRIGGER,
+    #[tok(ENABLE, REPLICA, TRIGGER, this)]
     pub name: literal::Ident<'input>,
 }
 
 /// `DISABLE TRIGGER { name | ALL | USER }`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DisableTriggerCmd<'input> {
-    pub disable: crate::tokens::soft_keyword::DISABLE,
-    pub trigger: TRIGGER,
+    #[tok(DISABLE, TRIGGER, this)]
     pub target: TriggerOrRuleTarget<'input>,
 }
 
 /// `ENABLE RULE name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct EnableRuleCmd<'input> {
-    pub enable: crate::tokens::soft_keyword::ENABLE,
-    pub rule: RULE,
+    #[tok(ENABLE, RULE, this)]
     pub name: literal::Ident<'input>,
 }
 
 /// `ENABLE ALWAYS RULE name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct EnableAlwaysRuleCmd<'input> {
-    pub enable: crate::tokens::soft_keyword::ENABLE,
-    pub always: ALWAYS,
-    pub rule: RULE,
+    #[tok(ENABLE, ALWAYS, RULE, this)]
     pub name: literal::Ident<'input>,
 }
 
 /// `ENABLE REPLICA RULE name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct EnableReplicaRuleCmd<'input> {
-    pub enable: crate::tokens::soft_keyword::ENABLE,
-    pub replica: crate::tokens::soft_keyword::REPLICA,
-    pub rule: RULE,
+    #[tok(ENABLE, REPLICA, RULE, this)]
     pub name: literal::Ident<'input>,
 }
 
 /// `DISABLE RULE name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DisableRuleCmd<'input> {
-    pub disable: crate::tokens::soft_keyword::DISABLE,
-    pub rule: RULE,
+    #[tok(DISABLE, RULE, this)]
     pub name: literal::Ident<'input>,
 }
 
@@ -2774,126 +2380,56 @@ pub struct DisableRuleCmd<'input> {
 ///
 /// Variant ordering: keyword variants (`All` / `User`) before `Name` (ident),
 /// since `ALL` and `USER` are hard keywords that won't lex as `Ident`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TriggerOrRuleTarget<'input> {
-    All(ALL),
-    User(USER),
+    #[tok(ALL)] All,
+    #[tok(USER)] User,
     Name(literal::Ident<'input>),
 }
 
 /// `ENABLE ROW LEVEL SECURITY`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct EnableRowSecurityCmd {
-    pub enable: crate::tokens::soft_keyword::ENABLE,
-    pub row: ROW,
-    pub level: LEVEL,
-    pub security: SECURITY,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum EnableRowSecurityCmd { #[tok(ENABLE, ROW, LEVEL, SECURITY)] Value, }
 
 /// `DISABLE ROW LEVEL SECURITY`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct DisableRowSecurityCmd {
-    pub disable: crate::tokens::soft_keyword::DISABLE,
-    pub row: ROW,
-    pub level: LEVEL,
-    pub security: SECURITY,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum DisableRowSecurityCmd { #[tok(DISABLE, ROW, LEVEL, SECURITY)] Value, }
 
 /// `FORCE ROW LEVEL SECURITY`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct ForceRowSecurityCmd {
-    pub force: crate::tokens::soft_keyword::FORCE,
-    pub row: ROW,
-    pub level: LEVEL,
-    pub security: SECURITY,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum ForceRowSecurityCmd { #[tok(FORCE, ROW, LEVEL, SECURITY)] Value, }
 
 /// `NO FORCE ROW LEVEL SECURITY`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct NoForceRowSecurityCmd {
-    pub no: NO,
-    pub force: crate::tokens::soft_keyword::FORCE,
-    pub row: ROW,
-    pub level: LEVEL,
-    pub security: SECURITY,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum NoForceRowSecurityCmd { #[tok(NO, FORCE, ROW, LEVEL, SECURITY)] Value, }
 
 /// `CLUSTER ON indexname`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ClusterOnCmd<'input> {
-    pub cluster: CLUSTER,
-    pub on: ON,
+    #[tok(CLUSTER, ON, this)]
     pub name: literal::Ident<'input>,
 }
 
 /// `SET WITHOUT CLUSTER`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct SetWithoutClusterCmd {
-    pub set: SET,
-    pub without: WITHOUT,
-    pub cluster: CLUSTER,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum SetWithoutClusterCmd { #[tok(SET, WITHOUT, CLUSTER)] Value, }
 
 /// `SET WITHOUT OIDS`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct SetWithoutOidsCmd {
-    pub set: SET,
-    pub without: WITHOUT,
-    pub oids: OIDS,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum SetWithoutOidsCmd { #[tok(SET, WITHOUT, OIDS)] Value, }
 
 /// `SET LOGGED`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct SetLoggedCmd {
-    pub set: SET,
-    pub logged: crate::tokens::soft_keyword::LOGGED,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum SetLoggedCmd { #[tok(SET, LOGGED)] Value, }
 
 /// `SET UNLOGGED`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct SetUnloggedCmd {
-    pub set: SET,
-    pub unlogged: UNLOGGED,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum SetUnloggedCmd { #[tok(SET, UNLOGGED)] Value, }
 
 /// `REPLICA IDENTITY { DEFAULT | NOTHING | FULL | USING INDEX name }`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReplicaIdentityCmd<'input> {
-    pub replica: crate::tokens::soft_keyword::REPLICA,
-    pub identity: IDENTITY,
+    #[tok(REPLICA, IDENTITY, this)]
     pub kind: ReplicaIdentityKind<'input>,
 }
 
@@ -2901,76 +2437,49 @@ pub struct ReplicaIdentityCmd<'input> {
 ///
 /// Variant ordering: keyword-only variants (single tokens, disjoint) first;
 /// `UsingIndex` (`USING INDEX`) last — it has a unique `USING` prefix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ReplicaIdentityKind<'input> {
-    Default(DEFAULT),
-    Nothing(NOTHING),
-    Full(FULL),
+    #[tok(DEFAULT)] Default,
+    #[tok(NOTHING)] Nothing,
+    #[tok(FULL)] Full,
     UsingIndex(ReplicaIdentityUsingIndex<'input>),
 }
 
 /// `USING INDEX name` — the index-backed REPLICA IDENTITY.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReplicaIdentityUsingIndex<'input> {
-    pub using: USING,
-    pub index: INDEX,
+    #[tok(USING, INDEX, this)]
     pub name: literal::Ident<'input>,
 }
 
 /// `INHERIT parent`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InheritCmd<'input> {
-    pub inherit: INHERIT,
+    #[tok(INHERIT, this)]
     pub parent: QualifiedName<'input>,
 }
 
 /// `NO INHERIT parent`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct NoInheritCmd<'input> {
-    pub no: NO,
-    pub inherit: INHERIT,
+    #[tok(NO, INHERIT, this)]
     pub parent: QualifiedName<'input>,
 }
 
 /// `OF type_name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OfCmd<'input> {
-    pub of: OF,
+    #[tok(OF, this)]
     pub type_name: QualifiedName<'input>,
 }
 
 /// `NOT OF` — drop the typed-table relationship.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct NotOfCmd {
-    pub not: NOT,
-    pub of: OF,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum NotOfCmd { #[tok(NOT, OF)] Value, }
 
 /// `VALIDATE CONSTRAINT name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ValidateConstraintCmd<'input> {
-    pub validate: crate::tokens::soft_keyword::VALIDATE,
-    pub constraint: CONSTRAINT,
+    #[tok(VALIDATE, CONSTRAINT, this)]
     pub name: literal::Ident<'input>,
 }

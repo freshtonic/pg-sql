@@ -36,14 +36,6 @@ serde_json = "1"
 name = "gen-stress"
 path = "src/bin/gen_stress.rs"
 
-[[bin]]
-name = "flame_target"
-path = "src/bin/flame_target.rs"
-
-[[bin]]
-name = "flame_report"
-path = "src/bin/flame_report.rs"
-
 [[bench]]
 name = "parse"
 harness = false

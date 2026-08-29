@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -20,16 +18,13 @@ use recursa_diagram::railroad;
 /// are soft.
 ///
 /// Variant ordering: all distinct first tokens, so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum RowSecurityCmd {
-    All(ALL),
-    Select(SELECT),
-    Insert(INSERT),
-    Update(UPDATE),
-    Delete(DELETE),
+    #[tok(ALL)] All,
+    #[tok(SELECT)] Select,
+    #[tok(INSERT)] Insert,
+    #[tok(UPDATE)] Update,
+    #[tok(DELETE)] Delete,
 }
 
 /// `AS ident` permissive/restrictive selector on CREATE POLICY —
@@ -39,70 +34,50 @@ pub enum RowSecurityCmd {
 /// `"restrictive"` via `strcmp`; the bogus `AS UGLY` form in the corpus
 /// is intentionally syntactically valid but semantically rejected.
 /// Modelling the identifier as `literal::Ident` preserves both cases.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PolicyPermissiveClause<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub kind: crate::tokens::NonReservedWord<'input>,
 }
 
 /// `FOR row_security_cmd` clause on CREATE/ALTER POLICY.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PolicyForClause {
-    pub r#for: FOR,
+    #[tok(FOR, this)]
     pub cmd: RowSecurityCmd,
 }
 
 /// `TO role_list` clause on CREATE/ALTER POLICY — Postgres'
 /// `RowSecurityDefaultToRole`. `PUBLIC`/`CURRENT_USER`/etc. are not
 /// keywords in pg-sql; they pass through as `RoleSpec` identifiers.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PolicyToClause<'input> {
-    pub to: TO,
+    #[tok(TO, this)]
     pub roles: RoleList<'input>,
 }
 
 /// `USING (a_expr)` clause on CREATE/ALTER POLICY.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PolicyUsingClause<'input> {
-    pub using: USING,
-    pub expr: Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>,
+    #[tok(USING, LPAREN, this, RPAREN)]
+    pub expr:  Box<Expr<'input>> ,
 }
 
 /// `WITH CHECK (a_expr)` clause on CREATE/ALTER POLICY.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PolicyWithCheckClause<'input> {
-    pub with: WITH,
-    pub check: CHECK,
-    pub expr: Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>,
+    #[tok(WITH, CHECK, LPAREN, this, RPAREN)]
+    pub expr:  Box<Expr<'input>> ,
 }
 
 /// `CREATE POLICY name ON table [AS PERMISSIVE|RESTRICTIVE]
 /// [FOR cmd] [TO role_list] [USING (expr)] [WITH CHECK (expr)]` —
 /// Postgres' `CreatePolicyStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreatePolicyStmt<'input> {
-    pub create: CREATE,
-    pub policy: POLICY,
+    #[tok(CREATE, POLICY, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub permissive: Option<PolicyPermissiveClause<'input>>,
     pub for_cmd: Option<PolicyForClause>,
@@ -112,16 +87,12 @@ pub struct CreatePolicyStmt<'input> {
 }
 
 /// `DROP POLICY [IF EXISTS] name ON table [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropPolicyStmt<'input> {
-    pub drop: DROP,
-    pub policy: POLICY,
+    #[tok(DROP, POLICY, this)]
     pub if_exists: Option<IfExists>,
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub behavior: Option<DropBehavior>,
 }
@@ -135,10 +106,7 @@ pub struct DropPolicyStmt<'input> {
 /// Variant ordering: `Rename` (single-keyword `RENAME`) is listed before
 /// `Modify` (which can start with `TO`, `USING`, `WITH`, or be empty);
 /// the two have disjoint first-token sets.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterPolicyAction<'input> {
     Rename(RenameTo<'input>),
     Modify(AlterPolicyModify<'input>),
@@ -148,10 +116,7 @@ pub enum AlterPolicyAction<'input> {
 /// action on `ALTER POLICY`. All three clauses are optional but at least
 /// one must be present at the semantic level; pg-sql accepts the
 /// all-empty form too because gram.y's `AlterPolicyStmt` does.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterPolicyModify<'input> {
     pub to_roles: Option<PolicyToClause<'input>>,
     pub using: Option<PolicyUsingClause<'input>>,
@@ -162,15 +127,11 @@ pub struct AlterPolicyModify<'input> {
 /// `AlterPolicyStmt` plus the `ALTER POLICY ... RENAME TO ...` branch
 /// from `RenameStmt`. Both share the same prefix; the action enum
 /// dispatches.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterPolicyStmt<'input> {
-    pub alter: ALTER,
-    pub policy: POLICY,
+    #[tok(ALTER, POLICY, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub action: AlterPolicyAction<'input>,
 }
@@ -184,11 +145,13 @@ mod tests {
 
     #[test]
     fn parse_drop_policy_on_table() {
-        let mut input = crate::tokens::test_input("DROP POLICY p1 ON document");
-        let stmt = DropPolicyStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP POLICY p1 ON document");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropPolicyStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.text(), "p1");
         assert_eq!(stmt.table.object(), "document");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]

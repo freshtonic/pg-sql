@@ -1,7 +1,5 @@
 /// CREATE INDEX / DROP INDEX statement AST.
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 pub use crate::ast::shared::flags::{DropBehavior, IfExists, IfNotExists};
@@ -36,50 +34,37 @@ use crate::tokens::soft_keyword::*;
 /// The method name can be an identifier or one of the built-in method
 /// keywords (`btree`, `gin`, ...). We accept `literal::AliasName` so both
 /// identifiers and keywords are allowed in this position.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UsingMethod<'input> {
-    pub using: USING,
+    #[tok(USING, this)]
     pub method: literal::AliasName<'input>,
 }
 
 /// A single opclass option: `name = value`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OpclassOption<'input> {
     pub name: literal::AliasName<'input>,
-    pub eq: punct::Eq,
+    #[tok(EQ, this)]
     pub value: Expr<'input>,
 }
 
 /// Parenthesized opclass option list: `(name = value, ...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, FormatTokens, Visit, Transform, derive_more::Deref)]
-#[recursa::parser(rules = SqlRules)]
 pub struct OpclassOptions<'input>(
-    #[deref] pub Surrounded<punct::LParen, Seq0<OpclassOption<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    #[deref] pub  Vec<OpclassOption<'input> > ,
 );
 
 /// Opclass name plus optional options: `int4_ops [(opt = val, ...)]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OpclassSpec<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub options: Option<OpclassOptions<'input>>,
 }
 
 /// A storage parameter entry: `name [= value]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct StorageParam<'input> {
     pub name: StorageParamName<'input>,
     pub value: Option<StorageParamValue<'input>>,
@@ -90,23 +75,17 @@ pub struct StorageParam<'input> {
 /// `some_ns.fillfactor`). Modeled as a dedicated type so existing grammar
 /// that depends on `StorageParam::name` being a single token is unaffected
 /// beyond the inner shape.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct StorageParamName<'input> {
     pub namespace: Option<StorageParamNamespace<'input>>,
     pub name: literal::AliasName<'input>,
 }
 
 /// `namespace.` prefix on a storage parameter name.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct StorageParamNamespace<'input> {
+    #[tok(this, DOT)]
     pub namespace: literal::AliasName<'input>,
-    pub dot: punct::Dot,
 }
 
 /// `= value` suffix for a storage parameter.
@@ -114,34 +93,27 @@ pub struct StorageParamNamespace<'input> {
 /// The value is a permissive SetValue (keywords like `off`, `on`, string/numeric
 /// literals, identifiers) rather than a full `Expr` — storage param values are
 /// simple literals and `Expr::ColumnRef` rejects keywords like `off`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct StorageParamValue<'input> {
-    pub eq: punct::Eq,
+    #[tok(EQ, this)]
     pub value: SetValue<'input>,
 }
 
 /// `WITH (name = value, ...)` storage parameters clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WithStorage<'input> {
-    pub with: WITH,
-    pub params: Surrounded<punct::LParen, Seq0<StorageParam<'input>, punct::Comma>, punct::RParen>,
+    #[tok(WITH, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub params:  Vec<StorageParam<'input> > ,
 }
 
 /// `INCLUDE (col, ...)` covering-index clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IncludeClause<'input> {
-    pub include: INCLUDE,
+    #[tok(INCLUDE, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns:
-        Surrounded<punct::LParen, Seq0<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         Vec<crate::tokens::ColId<'input> > ,
 }
 
 /// Index column target: a parenthesized expression, a bare SQL/JSON
@@ -155,33 +127,24 @@ pub struct IncludeClause<'input> {
 ///   would otherwise reclaim it as an ordinary function name.
 /// - `Func` (`ident(`) must come before `Col` (`ident`) so longest-match
 ///   prefers the function call form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum IndexTarget<'input> {
-    Expr(Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>),
+    Expr(#[tok(LPAREN, this, RPAREN)]  Box<Expr<'input>> ),
     Json(Box<JsonFuncExpr<'input>>),
     Func(Box<FuncCall<'input>>),
     Col(crate::tokens::ColId<'input>),
 }
 
 /// `COLLATE "name"` on an index element.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IndexCollate<'input> {
-    pub collate: COLLATE,
+    #[tok(COLLATE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// An index element:
 /// `column_or_expr [COLLATE "name"] [opclass [(options)]] [ASC|DESC] [NULLS FIRST|LAST]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IndexElem<'input> {
     pub target: IndexTarget<'input>,
     pub collate: Option<IndexCollate<'input>>,
@@ -201,24 +164,25 @@ pub struct IndexElem<'input> {
 /// ```
 ///
 /// The index name is optional (Postgres allows it to be omitted).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateIndexStmt<'input> {
-    pub create: CREATE,
-    pub unique: Option<UNIQUE>,
-    pub index: INDEX,
-    pub concurrently: Option<CONCURRENTLY>,
+    #[tok(CREATE, this, INDEX)]
+    #[presence(UNIQUE)]
+    pub unique: bool,
+    #[presence(CONCURRENTLY)]
+    pub concurrently: bool,
     pub if_not_exists: Option<IfNotExists>,
     pub name: Option<crate::tokens::ColId<'input>>,
-    pub on: ON,
+    #[tok(ON, this)]
+    #[presence(ONLY)]
     /// Optional `ONLY` modifier — restricts the index to the named table
     /// without descending into inheritance children (partitioned tables).
-    pub only: Option<ONLY>,
+    pub only: bool,
     pub table_name: crate::ast::shared::names::QualifiedName<'input>,
     pub using: Option<Box<UsingMethod<'input>>>,
-    pub columns: Surrounded<punct::LParen, Seq0<IndexElem<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub columns:  Vec<IndexElem<'input> > ,
     pub include: Option<Box<IncludeClause<'input>>>,
     pub nulls_distinct: Option<NullsDistinctClause>,
     pub with_storage: Option<Box<WithStorage<'input>>>,
@@ -230,13 +194,10 @@ pub struct CreateIndexStmt<'input> {
 ///
 /// Variant ordering: `NotDistinct` (`NULLS NOT DISTINCT`, longer) before
 /// `Distinct` (`NULLS DISTINCT`, shorter).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum NullsDistinctClause {
-    NotDistinct((NULLS, NOT, DISTINCT)),
-    Distinct((NULLS, DISTINCT)),
+    #[tok(NULLS, NOT, DISTINCT)] NotDistinct,
+    #[tok(NULLS, DISTINCT)] Distinct,
 }
 
 /// DROP INDEX statement:
@@ -244,16 +205,14 @@ pub enum NullsDistinctClause {
 /// ```sql
 /// DROP INDEX [CONCURRENTLY] [IF EXISTS] name [, name ...] [CASCADE | RESTRICT]
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropIndexStmt<'input> {
-    pub drop: DROP,
-    pub index: INDEX,
-    pub concurrently: Option<CONCURRENTLY>,
+    #[tok(DROP, INDEX, this)]
+    #[presence(CONCURRENTLY)]
+    pub concurrently: bool,
     pub if_exists: Option<IfExists>,
-    pub names: Seq0<crate::ast::shared::names::QualifiedName<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub names: Vec<crate::ast::shared::names::QualifiedName<'input> >,
     pub behavior: Option<DropBehavior>,
 }
 
@@ -265,105 +224,131 @@ mod tests {
 
     #[test]
     fn parse_create_unique_index_nulls_distinct() {
-        let mut input =
-            crate::tokens::test_input("CREATE UNIQUE INDEX i ON t (i) NULLS NOT DISTINCT");
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
-        let mut input = crate::tokens::test_input("CREATE UNIQUE INDEX i ON t (i) NULLS DISTINCT");
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE UNIQUE INDEX i ON t (i) NULLS NOT DISTINCT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
+        let lexed = crate::tokens::lex("CREATE UNIQUE INDEX i ON t (i) NULLS DISTINCT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index() {
-        let mut input = crate::tokens::test_input("CREATE INDEX fooi ON foo (f1)");
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE INDEX fooi ON foo (f1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.as_ref().unwrap().text(), "fooi");
         assert_eq!(stmt.table_name.object(), "foo");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_with_desc() {
-        let mut input = crate::tokens::test_input("CREATE INDEX fooi ON foo (f1 DESC)");
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE INDEX fooi ON foo (f1 DESC)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_desc_nulls_last() {
-        let mut input = crate::tokens::test_input("CREATE INDEX fooi ON foo (f1 DESC NULLS LAST)");
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE INDEX fooi ON foo (f1 DESC NULLS LAST)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_if_not_exists() {
-        let mut input = crate::tokens::test_input("CREATE INDEX IF NOT EXISTS fooi ON foo (f1)");
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE INDEX IF NOT EXISTS fooi ON foo (f1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_not_exists.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_concurrently() {
-        let mut input = crate::tokens::test_input("CREATE INDEX CONCURRENTLY fooi ON foo (f1)");
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE INDEX CONCURRENTLY fooi ON foo (f1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.concurrently.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_on_only() {
-        let mut input = crate::tokens::test_input("CREATE INDEX idx ON ONLY ptif_test (a)");
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE INDEX idx ON ONLY ptif_test (a)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_unnamed() {
-        let mut input = crate::tokens::test_input("CREATE INDEX ON foo (f1)");
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE INDEX ON foo (f1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.name.is_none());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_using_btree() {
-        let mut input = crate::tokens::test_input("CREATE INDEX fooi ON foo USING btree (f1)");
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE INDEX fooi ON foo USING btree (f1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.using.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_using_gin() {
-        let mut input = crate::tokens::test_input("CREATE INDEX fooi ON foo USING gin (f1)");
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE INDEX fooi ON foo USING gin (f1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_opclass() {
-        let mut input = crate::tokens::test_input("CREATE INDEX fooi ON foo (f1 int4_ops)");
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE INDEX fooi ON foo (f1 int4_ops)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
         let _ = stmt;
     }
 
     #[test]
     fn parse_create_index_opclass_desc() {
-        let mut input =
-            crate::tokens::test_input("CREATE INDEX fooi ON foo (f1 text_pattern_ops DESC)");
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE INDEX fooi ON foo (f1 text_pattern_ops DESC)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_expr_column() {
-        let mut input = crate::tokens::test_input("CREATE INDEX i ON t ((lower(name)))");
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE INDEX i ON t ((lower(name)))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// A bare SQL/JSON function is a valid index element (Postgres allows
@@ -371,11 +356,13 @@ mod tests {
     #[test]
     fn parse_create_index_bare_json_expr() {
         let sql = "CREATE INDEX ON t (JSON_QUERY(js, '$' PASSING 1 AS x))";
-        let mut input = crate::tokens::test_input(sql);
+        let lexed = crate::tokens::lex(sql);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
         let _stmt =
-            CreateIndexStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {sql:?}: {e}"));
+            CreateIndexStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {sql:?}: {e}")).into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -383,61 +370,72 @@ mod tests {
 
     #[test]
     fn parse_create_index_include() {
-        let mut input = crate::tokens::test_input("CREATE INDEX i ON t (a) INCLUDE (b, c)");
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE INDEX i ON t (a) INCLUDE (b, c)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.include.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_where_predicate() {
-        let mut input = crate::tokens::test_input("CREATE INDEX i ON t (a) WHERE a > 0");
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE INDEX i ON t (a) WHERE a > 0");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.where_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_with_storage() {
-        let mut input = crate::tokens::test_input("CREATE INDEX i ON t (a) WITH (fillfactor = 70)");
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE INDEX i ON t (a) WITH (fillfactor = 70)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.with_storage.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_with_storage_keyword_value_off() {
         use crate::ast::ddl::table::CreateTableStmt;
-        let mut input = crate::tokens::test_input(
-            "CREATE TABLE target (tid integer, balance integer) WITH (autovacuum_enabled=off)",
-        );
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE target (tid integer, balance integer) WITH (autovacuum_enabled=off)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_with_storage_string_value() {
         use crate::ast::ddl::table::CreateTableStmt;
-        let mut input = crate::tokens::test_input("CREATE TABLE t (a int) WITH (foo = 'bar')");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int) WITH (foo = 'bar')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_with_storage_signed_numeric_value() {
         use crate::ast::ddl::table::CreateTableStmt;
-        let mut input =
-            crate::tokens::test_input("CREATE TABLE t (a int) WITH (fillfactor = -30.1)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int) WITH (fillfactor = -30.1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_with_storage_signed_integer_value() {
         use crate::ast::ddl::table::CreateTableStmt;
-        let mut input = crate::tokens::test_input("CREATE TABLE t (a int) WITH (fillfactor = +30)");
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE TABLE t (a int) WITH (fillfactor = +30)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// Corpus regression for `reloptions.sql`: `(i INT) WITH (fillfactor=-30.1)`.
@@ -451,10 +449,12 @@ mod tests {
             "CREATE TABLE t (i INT) WITH (fillfactor=-30.1)",
             "CREATE TABLE reloptions_test2(i INT) WITH (fillfactor=-30.1)",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            let _stmt = CreateTableStmt::parse(&mut input).unwrap();
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "{src:?}: leftover at offset {}: {:?}",
                 input.byte_offset(),
                 &src[input.byte_offset()..]
@@ -464,18 +464,20 @@ mod tests {
 
     #[test]
     fn parse_create_unique_index() {
-        let mut input = crate::tokens::test_input("CREATE UNIQUE INDEX i ON t (a)");
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE UNIQUE INDEX i ON t (a)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.unique.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_full_kitchen_sink() {
-        let mut input = crate::tokens::test_input(
-            "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx ON t USING btree (a int4_ops ASC, (lower(b))) INCLUDE (c) WITH (fillfactor = 70) WHERE c > 0",
-        );
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx ON t USING btree (a int4_ops ASC, (lower(b))) INCLUDE (c) WITH (fillfactor = 70) WHERE c > 0");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.unique.is_some());
         assert!(stmt.concurrently.is_some());
         assert!(stmt.if_not_exists.is_some());
@@ -483,83 +485,93 @@ mod tests {
         assert!(stmt.include.is_some());
         assert!(stmt.with_storage.is_some());
         assert!(stmt.where_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_opclass_on_second_col() {
-        let mut input = crate::tokens::test_input(
-            "create unique index op_index_key on insertconflicttest(key, fruit text_pattern_ops)",
-        );
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create unique index op_index_key on insertconflicttest(key, fruit text_pattern_ops)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_collate() {
-        let mut input = crate::tokens::test_input(
-            "create unique index collation_index_key on insertconflicttest(key, fruit collate \"C\")",
-        );
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create unique index collation_index_key on insertconflicttest(key, fruit collate \"C\")");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_collate_and_opclass() {
-        let mut input = crate::tokens::test_input(
-            "create unique index both_index_key on insertconflicttest(key, fruit collate \"C\" text_pattern_ops)",
-        );
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create unique index both_index_key on insertconflicttest(key, fruit collate \"C\" text_pattern_ops)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_index_func_target_collate_opclass() {
-        let mut input = crate::tokens::test_input(
-            "create unique index both_index_expr_key on insertconflicttest(key, lower(fruit) collate \"C\" text_pattern_ops)",
-        );
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create unique index both_index_expr_key on insertconflicttest(key, lower(fruit) collate \"C\" text_pattern_ops)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_index() {
-        let mut input = crate::tokens::test_input("DROP INDEX fooi");
-        let stmt = DropIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP INDEX fooi");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropIndexStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.names.len(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_index_if_exists() {
-        let mut input = crate::tokens::test_input("DROP INDEX IF EXISTS fooi");
-        let stmt = DropIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP INDEX IF EXISTS fooi");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_index_concurrently() {
-        let mut input = crate::tokens::test_input("DROP INDEX CONCURRENTLY fooi");
-        let stmt = DropIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP INDEX CONCURRENTLY fooi");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.concurrently.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_index_multiple() {
-        let mut input = crate::tokens::test_input("DROP INDEX a, b, c");
-        let stmt = DropIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP INDEX a, b, c");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropIndexStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.names.len(), 3);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_index_cascade() {
-        let mut input = crate::tokens::test_input("DROP INDEX fooi CASCADE");
-        let stmt = DropIndexStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP INDEX fooi CASCADE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropIndexStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.behavior.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }
 
@@ -571,17 +583,15 @@ mod tests {
 /// ALTER VIEW / ALTER MATERIALIZED VIEW / ALTER TABLE — modifies storage
 /// parameters. Differs from `WithStorage` (`WITH (...)` on CREATE) only in
 /// the leading keyword.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetReloptions<'input> {
-    pub set: SET,
-    pub params: Surrounded<
-        punct::LParen,
-        Seq1<crate::ast::ddl::index::StorageParam<'input>, punct::Comma>,
-        punct::RParen,
-    >,
+    #[tok(SET, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub params:
+
+        recursa::Vec1<crate::ast::ddl::index::StorageParam<'input> >
+
+    ,
 }
 
 /// `RESET (param_name [= value], ...)` action shared by ALTER INDEX /
@@ -590,28 +600,22 @@ pub struct SetReloptions<'input> {
 /// `ColLabel [. ColLabel] [= def_arg]`, so the syntax accepts `name = value`
 /// in RESET too (PG ignores the value semantically). Modeled via the same
 /// `StorageParam` type used by `WITH (...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ResetReloptions<'input> {
-    pub reset: RESET,
-    pub params: Surrounded<
-        punct::LParen,
-        Seq1<crate::ast::ddl::index::StorageParam<'input>, punct::Comma>,
-        punct::RParen,
-    >,
+    #[tok(RESET, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub params:
+
+        recursa::Vec1<crate::ast::ddl::index::StorageParam<'input> >
+
+    ,
 }
 
 /// `ATTACH PARTITION qualified_name` — Postgres' `index_partition_cmd` (the
 /// single ALTER INDEX form that takes a partition operation).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AttachPartitionClause<'input> {
-    pub attach: ATTACH,
-    pub partition: PARTITION,
+    #[tok(ATTACH, PARTITION, this)]
     pub name: QualifiedName<'input>,
 }
 
@@ -622,10 +626,7 @@ pub struct AttachPartitionClause<'input> {
 ///
 /// Variant ordering: `Number` first (lex token kind disjoint from
 /// `Ident`), then `Name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ColumnRef<'input> {
     Number(SignedIconst<'input>),
     Name(crate::tokens::ColId<'input>),
@@ -634,29 +635,20 @@ pub enum ColumnRef<'input> {
 /// `ALTER [COLUMN] col_ref SET STATISTICS …` — Postgres' alter_table_cmd
 /// for adjusting per-column statistics targets. Used in ALTER INDEX / ALTER
 /// TABLE / ALTER MATERIALIZED VIEW.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColumnSetStatistics<'input> {
-    pub alter: ALTER,
-    pub column: Option<COLUMN>,
+    #[tok(ALTER, optional(COLUMN), this)]
     pub col_ref: ColumnRef<'input>,
-    pub set: SET,
-    pub statistics: STATISTICS,
+    #[tok(SET, STATISTICS, this)]
     pub value: SetStatisticsValue<'input>,
 }
 
 /// `ALTER [COLUMN] col_ref SET (param = value, ...)` — Postgres'
 /// alter_table_cmd for adjusting per-column reloptions. Used in ALTER
 /// INDEX (`n_distinct`, etc.).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColumnSetReloptions<'input> {
-    pub alter: ALTER,
-    pub column: Option<COLUMN>,
+    #[tok(ALTER, optional(COLUMN), this)]
     pub col_ref: ColumnRef<'input>,
     pub set: SetReloptions<'input>,
 }
@@ -668,10 +660,7 @@ pub struct AlterColumnSetReloptions<'input> {
 /// Variant ordering: `Stats` (the keyword `STATISTICS`) before
 /// `Reloptions` (the `(` start) is for clarity only — they peek on
 /// distinct tokens after `SET`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterColumnIndexCmd<'input> {
     Stats(AlterColumnSetStatistics<'input>),
     Reloptions(AlterColumnSetReloptions<'input>),
@@ -690,10 +679,7 @@ pub enum AlterColumnIndexCmd<'input> {
 /// - `Depends` allows a bare `DEPENDS …` (without `NO`), and `NoDepends`
 ///   is reached via the `Depends` arm since both share the
 ///   `DependsOnExtension` type (with `NO` as an `Option`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterIndexAction<'input> {
     SetTablespace(SetTablespaceClause<'input>),
     SetReloptions(SetReloptions<'input>),
@@ -708,29 +694,21 @@ pub enum AlterIndexAction<'input> {
 /// [NOWAIT]` — Postgres' bulk-relocate action on ALTER INDEX (and ALTER
 /// MATERIALIZED VIEW). Moves every index in the named tablespace to a new
 /// tablespace, optionally filtered by owner role(s).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AllInTablespaceBody<'input> {
-    pub all: ALL,
-    pub r#in: IN,
-    pub tablespace: TABLESPACE,
+    #[tok(ALL, IN, TABLESPACE, this)]
     pub source: crate::tokens::ColId<'input>,
     pub owned_by: Option<OwnedByRoles<'input>>,
     pub set_tablespace: SetTablespaceClause<'input>,
-    pub nowait: Option<NOWAIT>,
+    #[presence(NOWAIT)]
+    pub nowait: bool,
 }
 
 /// `OWNED BY role_list` — owner filter on the bulk `ALL IN TABLESPACE`
 /// action.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OwnedByRoles<'input> {
-    pub owned: OWNED,
-    pub by: BY,
+    #[tok(OWNED, BY, this)]
     pub roles: RoleList<'input>,
 }
 
@@ -741,20 +719,14 @@ pub struct OwnedByRoles<'input> {
 ///
 /// Variant ordering: `All` (starts with `ALL`) before `Single`
 /// (starts with `[IF EXISTS] qualified_name` — never `ALL`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterIndexBody<'input> {
     All(AllInTablespaceBody<'input>),
     Single(AlterIndexSingle<'input>),
 }
 
 /// `[IF EXISTS] name action` — the per-index branch of ALTER INDEX.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterIndexSingle<'input> {
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
@@ -766,12 +738,8 @@ pub struct AlterIndexSingle<'input> {
 ///   new [NOWAIT]` — the two top-level shapes of Postgres' `AlterTableStmt`
 /// branches that begin with `ALTER INDEX …`, plus the index branches of
 /// `RenameStmt` / `AlterObjectDependsStmt` (single form).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterIndexStmt<'input> {
-    pub alter: ALTER,
-    pub index: INDEX,
+    #[tok(ALTER, INDEX, this)]
     pub body: AlterIndexBody<'input>,
 }

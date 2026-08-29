@@ -1,5 +1,4 @@
 /// DELETE FROM statement AST.
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::dml::select::WhereClause;
@@ -8,9 +7,9 @@ use crate::ast::shared::names::QualifiedName;
 
 use crate::tokens::keyword::*;
 /// Table alias with explicit AS keyword: `AS alias`.
-#[recursa::ast]
+#[derive(recursa::Node)]
 pub struct DeleteAsAlias<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
@@ -18,10 +17,10 @@ pub struct DeleteAsAlias<'input> {
 ///
 /// Variant ordering: WithAs (`AS ident`) has a longer first_pattern than
 /// Bare (`ident`), so longest-match-wins picks it when AS is present.
-#[recursa::ast]
+#[derive(recursa::Node)]
 pub enum DeleteTableAlias<'input> {
     WithAs(DeleteAsAlias<'input>),
-    Bare(crate::tokens::BareColLabel<'input>),
+    Bare(#[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#, admits(BareColLabel))] crate::tokens::BareColLabel<'input>),
 }
 
 impl<'input> DeleteTableAlias<'input> {
@@ -35,11 +34,12 @@ impl<'input> DeleteTableAlias<'input> {
 }
 
 /// `USING table, ...` clause in DELETE statements.
-#[recursa::ast]
+#[derive(recursa::Node)]
 pub struct DeleteUsingClause<'input> {
-    pub using: USING,
+    #[tok(USING, this)]
+    #[sep(COMMA)]
     pub tables:
-        recursa::seq::Seq0<crate::ast::dml::select::TableRef<'input>, crate::tokens::punct::Comma>,
+        recursa::seq::Vec<crate::ast::dml::select::TableRef<'input> >,
 }
 
 /// DELETE FROM statement: `DELETE FROM [ONLY] table [alias] [USING ...] [WHERE expr] [RETURNING ...]`.
@@ -48,12 +48,12 @@ pub struct DeleteUsingClause<'input> {
 /// `relation_expr` in `gram.y`. The legacy `ONLY (name)` parenthesised form is
 /// not exercised by any DELETE corpus statement, so it is not modelled (matches
 /// the `TruncateRelation` / `LockRelation` shape).
-#[recursa::ast(meta_tags = ["dml"])]
+#[derive(recursa::Node)]
 #[format_tokens(group(consistent))]
 pub struct DeleteStmt<'input> {
-    pub delete: DELETE,
-    pub from: FROM,
-    pub only: Option<ONLY>,
+    #[tok(DELETE, FROM, this)]
+    #[presence(ONLY)]
+    pub only: bool,
     pub table_name: QualifiedName<'input>,
     pub alias: Option<Box<DeleteTableAlias<'input>>>,
     #[format_tokens(break(flat = " ", broken = "\n"))]
@@ -72,26 +72,32 @@ mod tests {
 
     #[test]
     fn parse_delete_qualified_table() {
-        let mut input = crate::tokens::test_input("DELETE FROM pg_catalog.pg_class");
-        let stmt = DeleteStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DELETE FROM pg_catalog.pg_class");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DeleteStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.table_name.object(), "pg_class");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_delete_simple() {
-        let mut input = crate::tokens::test_input("DELETE FROM delete_test WHERE a > 25");
-        let stmt = DeleteStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DELETE FROM delete_test WHERE a > 25");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DeleteStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.table_name.object(), "delete_test");
         assert!(stmt.alias.is_none());
         assert!(stmt.where_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_delete_with_as_alias() {
-        let mut input = crate::tokens::test_input("DELETE FROM delete_test AS dt WHERE dt.a > 75");
-        let stmt = DeleteStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DELETE FROM delete_test AS dt WHERE dt.a > 75");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DeleteStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.table_name.object(), "delete_test");
         assert!(matches!(
             stmt.alias.as_deref(),
@@ -99,14 +105,15 @@ mod tests {
         ));
         assert_eq!(stmt.alias.as_ref().unwrap().name(), "dt");
         assert!(stmt.where_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_delete_with_bare_alias() {
-        let mut input =
-            crate::tokens::test_input("DELETE FROM delete_test dt WHERE delete_test.a > 25");
-        let stmt = DeleteStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DELETE FROM delete_test dt WHERE delete_test.a > 25");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DeleteStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.table_name.object(), "delete_test");
         assert!(matches!(
             stmt.alias.as_deref(),
@@ -114,17 +121,19 @@ mod tests {
         ));
         assert_eq!(stmt.alias.as_ref().unwrap().name(), "dt");
         assert!(stmt.where_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_delete_no_where() {
-        let mut input = crate::tokens::test_input("DELETE FROM t");
-        let stmt = DeleteStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DELETE FROM t");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DeleteStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.table_name.object(), "t");
         assert!(stmt.alias.is_none());
         assert!(stmt.where_clause.is_none());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     /// `DELETE FROM ONLY tab` excludes inheritance children — `relation_expr`
@@ -132,10 +141,12 @@ mod tests {
     /// target table name.
     #[test]
     fn parse_delete_from_only() {
-        let mut input = crate::tokens::test_input("DELETE FROM ONLY c WHERE aa = 'new'");
-        let stmt = DeleteStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DELETE FROM ONLY c WHERE aa = 'new'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DeleteStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.only.is_some(), "ONLY qualifier should be parsed");
         assert_eq!(stmt.table_name.object(), "c");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

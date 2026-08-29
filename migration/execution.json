@@ -1,0 +1,61 @@
+{
+  "schema_version": 2,
+  "immutable_inputs": {
+    "migration_source_commit": "b61ff1b85e566950a0675a4d26758430cebb6a92",
+    "migration_source_tree": "0ae4e5c2abbbbb33c0f1937a182d679f4f8c255a",
+    "legacy_commit": "1e71421d66baac15c8c5264e8f29b5f80122f50e",
+    "legacy_tree": "f3191ab707c8a957d1bb5fe142e74fc624fe6661",
+    "pg_sql_tree": "50e1376d16796e5f05db88d99dab42252a9f78a4",
+    "pg_oracle_tree": "0780d057e4d54db150d0f388c45a720a825bcbcf",
+    "postgres_gitlink": "6d396980fc5aed4f1a525e0bd75cb16b25ed40ca",
+    "source_checkpoint": "e97d3c3570c2a04ca9a233334b46d3f443800a5a",
+    "import_manifest_sha256": "f70b352ac7642c873dfa7bc92b5894e459e3e40d8b8f69e744ca05ca13c21c23",
+    "inventory_sha256": "823091d9e06bfd915ddd254874b6a678b4c1a3ef9fa0e5c324f4456365797cd7",
+    "grammar_manifest_sha256": "a6518b5b30decfd4437c8b85bbdc6b8eb77d4f7ac016c96d9dd77701c780d1f0"
+  },
+  "recursa_revision": "8ae631142147919eeb3197cb87fe2f4aa0e9a8e3",
+  "commands": {
+    "verify_imports": "scripts/verify-import-provenance",
+    "verify_recursa": "scripts/verify-recursa-revision ../recursa",
+    "check_inventory": "cargo test -p pg-sql-migrate --test inventory checked_in_legacy_contract_remains_fully_reviewed_after_publication -- --exact",
+    "materialize_input": "git archive b61ff1b85e566950a0675a4d26758430cebb6a92 .gitattributes CLAUDE.md Cargo.toml README.md benches fixtures pg-oracle src tests vendor | tar -x -C $RUN_ROOT/input",
+    "grammar_pass": "cargo run -p pg-sql-migrate -- rewrite grammar $RUN_ROOT/input $RUN_ROOT/outputs/grammar --new-repository-root $RUN_ROOT/outputs --manifest migration-tool/fixtures/rewrite/grammar/manifest.json",
+    "test_call_pass": "cargo run -p pg-sql-migrate -- rewrite test-calls $RUN_ROOT/input $RUN_ROOT/outputs/test-calls --new-repository-root $RUN_ROOT/outputs",
+    "combined_pass": "cargo run -p pg-sql-migrate -- rewrite test-calls $RUN_ROOT/outputs/grammar $RUN_ROOT/outputs/combined --new-repository-root $RUN_ROOT/outputs",
+    "repeated_combined_pass": "cargo run -p pg-sql-migrate -- rewrite grammar $RUN_ROOT/input $RUN_ROOT/outputs/grammar-repeat --new-repository-root $RUN_ROOT/outputs --manifest migration-tool/fixtures/rewrite/grammar/manifest.json && cargo run -p pg-sql-migrate -- rewrite test-calls $RUN_ROOT/outputs/grammar-repeat $RUN_ROOT/outputs/combined-repeat --new-repository-root $RUN_ROOT/outputs",
+    "compile_checkpoint": "cargo check -p pg-sql --lib"
+  },
+  "output": {
+    "source_input_tree_sha256": "41c8138346779f1bc93c2971634eaf7007081e3a5855606a57049f723645366b",
+    "grammar_tree_sha256": "8883e34b1227410fb7b45f2a63ebdbbc69900ec2f5b2d4fbd00c669343a0c84a",
+    "test_call_tree_sha256": "0bb8eeb3d207227a498e6b9535f008751e91cbe69fc9e2bd7e19eff1e223e2ab",
+    "combined_tree_sha256": "bb71971012f8f17b1068882885fb473556fd6ca6d98da5d0336ea191cb01e039",
+    "repeated_combined_tree_sha256": "bb71971012f8f17b1068882885fb473556fd6ca6d98da5d0336ea191cb01e039",
+    "published_payload_tree_sha256": "bb71971012f8f17b1068882885fb473556fd6ca6d98da5d0336ea191cb01e039",
+    "publication_tree_sha256": "fd1391ba25965635564f6de54b205ac3f18e1f68ab2ade3f7c699ca2a79e8cc6",
+    "omitted_paths": [
+      "src/bin/depth_probe.rs",
+      "src/bin/flame_report.rs",
+      "src/bin/flame_target.rs",
+      "src/flame.rs",
+      "src/flame_report.rs",
+      "src/flame_report/git.rs",
+      "src/flame_report/host.rs",
+      "src/flame_report/orchestrator.rs",
+      "src/flame_report/profiler.rs",
+      "src/flame_report/render.rs",
+      "src/generated/first_set.rs",
+      "src/main.rs"
+    ]
+  },
+  "review": {
+    "semantic_inventory_rows": 8040,
+    "mapped_semantic_inventory_rows": 8040,
+    "compile_checkpoint": {
+      "outcome": "expected_failure",
+      "diagnostic_code": "RCA1013",
+      "diagnostic_count": 64,
+      "next_issue": 9
+    }
+  }
+}

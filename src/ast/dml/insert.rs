@@ -3,8 +3,6 @@
 /// Supports: `INSERT INTO table [(cols)] source [ON CONFLICT ...] [RETURNING ...]`
 /// where source is DEFAULT VALUES, VALUES rows, or SELECT query.
 use recursa::seq::Seq0;
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::dml::select::WhereClause;
@@ -17,12 +15,9 @@ use crate::tokens::punct;
 use crate::tokens::keyword::*;
 
 /// `[AS] alias` on INSERT target table, e.g. `INSERT INTO t AS x`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InsertTableAlias<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
@@ -30,59 +25,43 @@ pub struct InsertTableAlias<'input> {
 ///
 /// Variant ordering: distinct first tokens (`SYSTEM` vs `USER`), so
 /// declaration order is cosmetic.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OverridingClause {
-    pub overriding: OVERRIDING,
+    #[tok(OVERRIDING, this, VALUE)]
     pub which: OverridingKind,
-    pub value: VALUE,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum OverridingKind {
-    System(SYSTEM),
-    User(USER),
+    #[tok(SYSTEM)] System,
+    #[tok(USER)] User,
 }
 
 /// Multiple value rows: `VALUES (row1), (row2), ...`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InsertValueRows<'input> {
-    pub values: VALUES,
-    pub rows: Seq0<ValueList<'input>, punct::Comma>,
+    #[tok(VALUES, this)]
+    #[sep(COMMA)]
+    pub rows: Vec<ValueList<'input> >,
 }
 
 /// Insert source: DEFAULT VALUES, VALUES (row), ..., or SELECT query.
 ///
 /// Variant ordering: Default (`DEFAULT VALUES`) is longer than Rows (`VALUES`),
 /// so longest-match-wins picks it when DEFAULT is present.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum InsertSource<'input> {
-    Default((DEFAULT, VALUES)),
+    #[tok(DEFAULT, VALUES)] Default,
     Rows(InsertValueRows<'input>),
     Select(Box<Subquery<'input>>),
 }
 
 /// DO UPDATE SET ... [WHERE ...] action.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DoUpdateAction<'input> {
-    pub r#do: DO,
-    pub update: UPDATE,
-    pub set: SET,
-    pub assignments: Seq0<SetAssignment<'input>, punct::Comma>,
+    #[tok(DO, UPDATE, SET, this)]
+    #[sep(COMMA)]
+    pub assignments: Vec<SetAssignment<'input> >,
     pub where_clause: Option<WhereClause<'input>>,
 }
 
@@ -91,13 +70,10 @@ pub struct DoUpdateAction<'input> {
 /// Variant ordering: DoUpdate (`DO UPDATE SET`) is longer than
 /// DoNothing (`DO NOTHING`), but both start with `DO` and diverge
 /// at the next keyword, so the regex disambiguates.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ConflictAction<'input> {
     DoUpdate(Box<DoUpdateAction<'input>>),
-    DoNothing((DO, NOTHING)),
+    #[tok(DO, NOTHING)] DoNothing,
 }
 
 /// One entry in an `ON CONFLICT (...)` target list.
@@ -105,10 +81,7 @@ pub enum ConflictAction<'input> {
 /// Matches the index-element grammar: an expression (plain column name,
 /// qualified name, parenthesized expression, or function call) optionally
 /// followed by a `COLLATE "name"` clause and an optional opclass ident.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ConflictTargetItem<'input> {
     pub expr: Expr<'input>,
     pub collate: Option<crate::ast::ddl::table::CollateClause<'input>>,
@@ -118,13 +91,9 @@ pub struct ConflictTargetItem<'input> {
 /// `ON CONSTRAINT name` arbiter form of `opt_conf_expr` — names a unique
 /// or exclusion constraint directly instead of inferring from column list.
 /// Per gram.y `opt_conf_expr: ON CONSTRAINT name`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OnConflictConstraint<'input> {
-    pub on: ON,
-    pub constraint: CONSTRAINT,
+    #[tok(ON, CONSTRAINT, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
@@ -132,26 +101,19 @@ pub struct OnConflictConstraint<'input> {
 ///
 /// Variant ordering: each variant has a distinct first token (`(` vs `ON`),
 /// so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ConflictTarget<'input> {
     /// `( index_params )` — the inferring-by-columns form.
-    Index(Surrounded<punct::LParen, Seq0<ConflictTargetItem<'input>, punct::Comma>, punct::RParen>),
+    Index(#[tok(LPAREN, this, RPAREN)] #[sep(COMMA)]  Vec<ConflictTargetItem<'input> > ),
     /// `ON CONSTRAINT name` — the named-constraint form.
     Constraint(OnConflictConstraint<'input>),
 }
 
 /// ON CONFLICT clause: `ON CONFLICT [(col, ...) | ON CONSTRAINT name]
 /// DO UPDATE SET ... | DO NOTHING`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OnConflictClause<'input> {
-    pub on: ON,
-    pub conflict: CONFLICT,
+    #[tok(ON, CONFLICT, this)]
     pub target: Option<ConflictTarget<'input>>,
     /// `WHERE predicate` after the arbiter target list, restricting the
     /// partial-index arbiter to matching rows. Only valid for the
@@ -162,14 +124,10 @@ pub struct OnConflictClause<'input> {
 }
 
 /// INSERT INTO statement with optional ON CONFLICT and RETURNING.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["dml"])]
+#[derive(recursa::Node, Debug, Clone)]
 #[format_tokens(group(consistent))]
 pub struct InsertStmt<'input> {
-    pub insert: INSERT,
-    pub into: INTO,
+    #[tok(INSERT, INTO, this)]
     pub table_name: QualifiedName<'input>,
     /// Optional `[AS] alias` after the target table, used to rebind the
     /// target in ON CONFLICT DO UPDATE expressions.
@@ -190,32 +148,27 @@ pub struct InsertStmt<'input> {
 /// One target column of an INSERT column list: a column name plus an
 /// optional indirection chain — `f2[1]`, `f3.if1`, `a[1:5]` (Postgres
 /// `insert_column_item: ColId opt_indirection`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InsertColumnItem<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub indirection: Vec<crate::ast::shared::expr::IndirectionEl<'input>>,
 }
 
 /// Column list: `(col1, col2[1], col3.field, ...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, FormatTokens, Visit, Transform, derive_more::Deref)]
-#[recursa::parser(rules = SqlRules)]
 pub struct ColumnList<'input>(
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     #[deref]
-    pub  Surrounded<punct::LParen, Seq0<InsertColumnItem<'input>, punct::Comma>, punct::RParen>,
+    pub   Vec<InsertColumnItem<'input> > ,
 );
 
 /// Value list: `(col1, col2, ...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, FormatTokens, Visit, Transform, derive_more::Deref)]
-#[recursa::parser(rules = SqlRules)]
 pub struct ValueList<'input>(
-    #[deref] pub Surrounded<punct::LParen, Seq0<Expr<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    #[deref] pub  Vec<Expr<'input> > ,
 );
 
 #[cfg(test)]
@@ -226,20 +179,24 @@ mod tests {
 
     #[test]
     fn parse_insert_qualified_table() {
-        let mut input = crate::tokens::test_input("INSERT INTO pg_catalog.foo VALUES (1)");
-        let stmt = InsertStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO pg_catalog.foo VALUES (1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.table_name.object(), "foo");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_insert_with_columns() {
-        let mut input = crate::tokens::test_input("INSERT INTO BOOLTBL1 (f1) VALUES (bool 't')");
-        let stmt = InsertStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO BOOLTBL1 (f1) VALUES (bool 't')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.table_name.object(), "BOOLTBL1");
         assert!(stmt.columns.is_some());
         assert_eq!(stmt.columns.as_ref().unwrap().inner.len(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     /// An INSERT column-list target may carry an indirection chain —
@@ -251,10 +208,12 @@ mod tests {
             "INSERT INTO t (f3.if1, f3.if2) VALUES (1, '{foo}')",
             "INSERT INTO t (a[1:5], b[1:1][1:2]) VALUES ('{1}', '{2}')",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            InsertStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            InsertStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -263,54 +222,61 @@ mod tests {
 
     #[test]
     fn parse_insert_multiple_columns() {
-        let mut input =
-            crate::tokens::test_input("INSERT INTO BOOLTBL3 (d, b, o) VALUES ('true', true, 1)");
-        let stmt = InsertStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO BOOLTBL3 (d, b, o) VALUES ('true', true, 1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.columns.as_ref().unwrap().inner.len(), 3);
     }
 
     #[test]
     fn parse_insert_without_columns() {
-        let mut input =
-            crate::tokens::test_input("INSERT INTO booltbl4 VALUES (false, true, null)");
-        let stmt = InsertStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO booltbl4 VALUES (false, true, null)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.columns.is_none());
     }
 
     #[test]
     fn parse_insert_default_values_returning() {
-        let mut input = crate::tokens::test_input("INSERT INTO t DEFAULT VALUES RETURNING *");
-        let stmt = InsertStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO t DEFAULT VALUES RETURNING *");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(*stmt.source, super::InsertSource::Default(_)));
         assert!(stmt.returning.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_insert_select() {
-        let mut input = crate::tokens::test_input("INSERT INTO y SELECT generate_series(1, 10)");
-        let stmt = InsertStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO y SELECT generate_series(1, 10)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(*stmt.source, super::InsertSource::Select(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_insert_on_conflict_do_nothing() {
-        let mut input =
-            crate::tokens::test_input("INSERT INTO t VALUES (1) ON CONFLICT (k) DO NOTHING");
-        let stmt = InsertStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO t VALUES (1) ON CONFLICT (k) DO NOTHING");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.on_conflict.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_insert_on_conflict_do_update() {
-        let mut input = crate::tokens::test_input(
-            "INSERT INTO t VALUES (1) ON CONFLICT (k) DO UPDATE SET v = 'updated'",
-        );
-        let stmt = InsertStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO t VALUES (1) ON CONFLICT (k) DO UPDATE SET v = 'updated'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.on_conflict.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     /// `ON CONFLICT ON CONSTRAINT name DO …` — the arbiter-by-constraint form
@@ -318,21 +284,21 @@ mod tests {
     /// `( index_params )` form.
     #[test]
     fn parse_insert_on_conflict_on_constraint_do_nothing() {
-        let mut input = crate::tokens::test_input(
-            "INSERT INTO t VALUES (1) ON CONFLICT ON CONSTRAINT t_pkey DO NOTHING",
-        );
-        let stmt = InsertStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO t VALUES (1) ON CONFLICT ON CONSTRAINT t_pkey DO NOTHING");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.on_conflict.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_insert_on_conflict_on_constraint_do_update() {
-        let mut input = crate::tokens::test_input(
-            "INSERT INTO t VALUES (1) ON CONFLICT ON CONSTRAINT t_pkey DO UPDATE SET v = 'x'",
-        );
-        let stmt = InsertStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INSERT INTO t VALUES (1) ON CONFLICT ON CONSTRAINT t_pkey DO UPDATE SET v = 'x'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.on_conflict.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

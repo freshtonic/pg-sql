@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::ddl::role::{DefElem, DefList};
 use crate::ast::shared::expr::*;
@@ -17,37 +15,32 @@ use recursa_diagram::railroad;
 
 /// Optional `(col, ...)` column-list on a publication table object —
 /// Postgres' `opt_column_list`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PublicationColumnList<'input> {
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub cols:
-        Surrounded<punct::LParen, Seq1<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         recursa::Vec1<crate::tokens::ColId<'input> > ,
 }
 
 /// `WHERE (a_expr)` row-filter on a publication table object —
 /// Postgres' `OptWhereClause`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PublicationWhereClause<'input> {
-    pub r#where: WHERE,
-    pub expr: Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>,
+    #[tok(WHERE, LPAREN, this, RPAREN)]
+    pub expr:  Box<Expr<'input>> ,
 }
 
 /// `TABLE [ONLY] name [*] [(cols)] [WHERE (expr)]` — the `TABLE`-prefixed
 /// publication object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PublicationObjTable<'input> {
-    pub table: TABLE,
-    pub only: Option<ONLY>,
+    #[tok(TABLE, this)]
+    #[presence(ONLY)]
+    pub only: bool,
     pub name: QualifiedName<'input>,
-    pub star: Option<punct::Star>,
+    #[presence(STAR)]
+    pub star: bool,
     pub columns: Option<PublicationColumnList<'input>>,
     pub r#where: Option<PublicationWhereClause<'input>>,
 }
@@ -64,14 +57,9 @@ pub struct PublicationObjTable<'input> {
 /// statement is modelled instead of surfacing as a
 /// [`crate::ast::FileItem::ParseError`]. The round-tripped output is still
 /// PG-rejected, so the differential oracle stays valid.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PublicationObjTablesInSchema<'input> {
-    pub tables: crate::tokens::soft_keyword::TABLES,
-    pub r#in: IN,
-    pub schema: SCHEMA,
+    #[tok(TABLES, IN, SCHEMA, this)]
     pub name: crate::tokens::ColId<'input>,
     pub columns: Option<PublicationColumnList<'input>>,
 }
@@ -80,14 +68,12 @@ pub struct PublicationObjTablesInSchema<'input> {
 /// `extended_relation_expr`-with-ONLY branch). Used after a `TABLE` or
 /// `TABLES IN SCHEMA` prefix; PG's `preprocess_pubobj_list` infers the
 /// object kind from the previous prefixed item at semantic time.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PublicationObjOnly<'input> {
-    pub only: ONLY,
+    #[tok(ONLY, this)]
     pub name: QualifiedName<'input>,
-    pub star: Option<punct::Star>,
+    #[presence(STAR)]
+    pub star: bool,
     pub columns: Option<PublicationColumnList<'input>>,
     pub r#where: Option<PublicationWhereClause<'input>>,
 }
@@ -97,13 +83,11 @@ pub struct PublicationObjOnly<'input> {
 /// `TABLE` / `TABLES IN SCHEMA` prefix; PG's `preprocess_pubobj_list`
 /// infers the object kind from the previous prefixed item at semantic
 /// time.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PublicationObjBare<'input> {
     pub name: QualifiedName<'input>,
-    pub star: Option<punct::Star>,
+    #[presence(STAR)]
+    pub star: bool,
     pub columns: Option<PublicationColumnList<'input>>,
     pub r#where: Option<PublicationWhereClause<'input>>,
 }
@@ -113,10 +97,7 @@ pub struct PublicationObjBare<'input> {
 /// Variant ordering: keyword-prefixed forms first (`Table` reserved,
 /// `TablesInSchema` soft, `Only` reserved), then the catch-all `Bare`
 /// (starts with an ident) so the keyword-prefixed forms win on peek.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PublicationObjSpec<'input> {
     Table(PublicationObjTable<'input>),
     TablesInSchema(PublicationObjTablesInSchema<'input>),
@@ -125,24 +106,15 @@ pub enum PublicationObjSpec<'input> {
 }
 
 /// `FOR ALL TABLES` — Postgres' `CREATE PUBLICATION ... FOR ALL TABLES`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct PublicationForAllTables {
-    pub r#for: FOR,
-    pub all: ALL,
-    pub tables: crate::tokens::soft_keyword::TABLES,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum PublicationForAllTables { #[tok(FOR, ALL, TABLES)] Value, }
 
 /// `FOR pub_obj_list` — Postgres' `CREATE PUBLICATION ... FOR pub_obj_list`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PublicationForObjects<'input> {
-    pub r#for: FOR,
-    pub objects: Seq1<PublicationObjSpec<'input>, punct::Comma>,
+    #[tok(FOR, this)]
+    #[sep(COMMA)]
+    pub objects: recursa::Vec1<PublicationObjSpec<'input> >,
 }
 
 /// The `FOR ...` clause on CREATE PUBLICATION.
@@ -150,10 +122,7 @@ pub struct PublicationForObjects<'input> {
 /// Variant ordering: `AllTables` (`FOR ALL TABLES`, 3 tokens) before
 /// `Objects` (`FOR pub_obj_list`, starts with `TABLE`/`TABLES`/ident)
 /// — longest match wins on the `FOR ALL TABLES` prefix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PublicationForClause<'input> {
     AllTables(PublicationForAllTables),
     Objects(PublicationForObjects<'input>),
@@ -161,37 +130,26 @@ pub enum PublicationForClause<'input> {
 
 /// `WITH (def_list)` — Postgres' `opt_definition`. Reuses the shared
 /// `DefList` and prefixes it with the `WITH` keyword.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WithDefinition<'input> {
-    pub with: WITH,
+    #[tok(WITH, this)]
     pub list: DefList<'input>,
 }
 
 /// `CREATE PUBLICATION name [FOR ALL TABLES | FOR pub_obj_list]
 /// [WITH (def_list)]` — Postgres' `CreatePublicationStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreatePublicationStmt<'input> {
-    pub create: CREATE,
-    pub publication: PUBLICATION,
+    #[tok(CREATE, PUBLICATION, this)]
     pub name: crate::tokens::ColId<'input>,
     pub r#for: Option<PublicationForClause<'input>>,
     pub with: Option<WithDefinition<'input>>,
 }
 
 /// `DROP PUBLICATION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropPublicationStmt<'input> {
-    pub drop: DROP,
-    pub publication: PUBLICATION,
+    #[tok(DROP, PUBLICATION, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -202,45 +160,37 @@ pub struct DropPublicationStmt<'input> {
 /// { SET | SKIP } ...`. Distinct from `WithDefinition` (which carries a
 /// leading `WITH` keyword) and from `SetSchemaClause` (which carries a
 /// `SCHEMA` keyword).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetDefinitionClause<'input> {
-    pub set: SET,
-    pub items: Surrounded<punct::LParen, Seq1<DefElem<'input>, punct::Comma>, punct::RParen>,
+    #[tok(SET, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub items:  recursa::Vec1<DefElem<'input> > ,
 }
 
 /// `SET pub_obj_list` — Postgres' `ALTER PUBLICATION ... SET pub_obj_list`.
 /// Distinct from `SetDefinitionClause` because the body is a publication
 /// object list (TABLE / TABLES IN SCHEMA / bare name), not a def_list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterPublicationSetObjects<'input> {
-    pub set: SET,
-    pub objects: Seq1<PublicationObjSpec<'input>, punct::Comma>,
+    #[tok(SET, this)]
+    #[sep(COMMA)]
+    pub objects: recursa::Vec1<PublicationObjSpec<'input> >,
 }
 
 /// `ADD pub_obj_list` — Postgres' `ALTER PUBLICATION ... ADD pub_obj_list`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterPublicationAddObjects<'input> {
-    pub add: ADD,
-    pub objects: Seq1<PublicationObjSpec<'input>, punct::Comma>,
+    #[tok(ADD, this)]
+    #[sep(COMMA)]
+    pub objects: recursa::Vec1<PublicationObjSpec<'input> >,
 }
 
 /// `DROP pub_obj_list` — Postgres' `ALTER PUBLICATION ... DROP pub_obj_list`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterPublicationDropObjects<'input> {
-    pub drop: DROP,
-    pub objects: Seq1<PublicationObjSpec<'input>, punct::Comma>,
+    #[tok(DROP, this)]
+    #[sep(COMMA)]
+    pub objects: recursa::Vec1<PublicationObjSpec<'input> >,
 }
 
 /// One action on `ALTER PUBLICATION name action` — covers Postgres'
@@ -254,10 +204,7 @@ pub struct AlterPublicationDropObjects<'input> {
 /// both start with `SET` and disambiguate by the next token (`(` →
 /// def_list, anything else → pub_obj_list). Lists `SetDef` before
 /// `SetObjs` so the `SET (` longer-prefix peek wins.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterPublicationAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -269,13 +216,9 @@ pub enum AlterPublicationAction<'input> {
 
 /// `ALTER PUBLICATION name action` — Postgres' `AlterPublicationStmt`
 /// plus the publication branches of `RenameStmt` / `AlterOwnerStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterPublicationStmt<'input> {
-    pub alter: ALTER,
-    pub publication: PUBLICATION,
+    #[tok(ALTER, PUBLICATION, this)]
     pub name: crate::tokens::ColId<'input>,
     pub action: AlterPublicationAction<'input>,
 }
@@ -293,20 +236,22 @@ mod tests {
     /// statement parses into a structured AST.
     #[test]
     fn parse_alter_publication_add_tables_in_schema_with_columns() {
-        let mut input = crate::tokens::test_input(
-            "ALTER PUBLICATION testpub1_forschema ADD TABLES IN SCHEMA foo (a, b)",
-        );
-        let _stmt = AlterPublicationStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER PUBLICATION testpub1_forschema ADD TABLES IN SCHEMA foo (a, b)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterPublicationStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// Sanity: `ALTER PUBLICATION ... ADD TABLES IN SCHEMA name` (bare,
     /// PG-accepted form) still parses.
     #[test]
     fn parse_alter_publication_add_tables_in_schema_bare() {
-        let mut input = crate::tokens::test_input("ALTER PUBLICATION p ADD TABLES IN SCHEMA foo");
-        let _stmt = AlterPublicationStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER PUBLICATION p ADD TABLES IN SCHEMA foo");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterPublicationStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]

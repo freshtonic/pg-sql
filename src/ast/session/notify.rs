@@ -1,6 +1,5 @@
 //! NOTIFY / LISTEN / UNLISTEN.
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::tokens::keyword::*;
@@ -9,55 +8,40 @@ use crate::tokens::{literal, punct};
 // --- NOTIFY / LISTEN / UNLISTEN ---
 
 /// The `, payload` clause on a `NOTIFY` statement (Postgres `notify_payload`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct NotifyPayload<'input> {
-    pub comma: punct::Comma,
+    #[tok(COMMA, this)]
     pub payload: literal::StringLit<'input>,
 }
 
 /// NOTIFY channel [, payload]
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct NotifyStmt<'input> {
-    pub notify: NOTIFY,
+    #[tok(NOTIFY, this)]
     pub channel: crate::tokens::ColId<'input>,
     pub payload: Option<NotifyPayload<'input>>,
 }
 
 /// LISTEN channel
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ListenStmt<'input> {
-    pub listen: LISTEN,
+    #[tok(LISTEN, this)]
     pub channel: crate::tokens::ColId<'input>,
 }
 
 /// Target of an UNLISTEN statement: a channel name or `*` (all channels).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum UnlistenTarget<'input> {
-    /// `*` — unlisten from every channel.
-    All(punct::Star),
+    #[tok(STAR)] /// `*` — unlisten from every channel.
+    All,
     /// A specific channel name.
     Channel(crate::tokens::ColId<'input>),
 }
 
 /// UNLISTEN channel | *
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UnlistenStmt<'input> {
-    pub unlisten: UNLISTEN,
+    #[tok(UNLISTEN, this)]
     pub target: UnlistenTarget<'input>,
 }
 

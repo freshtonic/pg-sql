@@ -1,70 +1,51 @@
 //! FETCH / MOVE / CLOSE cursor statements.
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::tokens::keyword::*;
 use crate::tokens::literal;
 
 /// `FROM` or `IN` cursor-source keyword in FETCH/MOVE.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FetchSource {
-    From(FROM),
-    In(IN),
+    #[tok(FROM)] From,
+    #[tok(IN)] In,
 }
 
 /// `ABSOLUTE n` form. `n` is a `SignedIconst` per gram.y's
 /// `fetch_args: ABSOLUTE_P SignedIconst opt_from_in cursor_name` — so a
 /// leading sign (e.g. `ABSOLUTE -1`) is accepted.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FetchAbsolute<'input> {
-    pub absolute: ABSOLUTE,
+    #[tok(ABSOLUTE, this)]
     pub count: crate::ast::shared::numbers::SignedIconst<'input>,
 }
 
 /// `RELATIVE n` form. `n` is a `SignedIconst` (see [`FetchAbsolute`]).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FetchRelative<'input> {
-    pub relative: RELATIVE,
+    #[tok(RELATIVE, this)]
     pub count: crate::ast::shared::numbers::SignedIconst<'input>,
 }
 
 /// `FORWARD [n|ALL]` form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FetchForward<'input> {
-    pub forward: FORWARD,
+    #[tok(FORWARD, this)]
     pub count: Option<FetchCountOrAll<'input>>,
 }
 
 /// `BACKWARD [n|ALL]` form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FetchBackward<'input> {
-    pub backward: BACKWARD,
+    #[tok(BACKWARD, this)]
     pub count: Option<FetchCountOrAll<'input>>,
 }
 
 /// A count or `ALL` marker following `FORWARD`/`BACKWARD`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FetchCountOrAll<'input> {
-    All(ALL),
+    #[tok(ALL)] All,
     Count(literal::IntegerLit<'input>),
 }
 
@@ -73,32 +54,26 @@ pub enum FetchCountOrAll<'input> {
 /// Variant ordering: multi-token forms (`ABSOLUTE n`, `RELATIVE n`,
 /// `FORWARD [...]`, `BACKWARD [...]`) before single-keyword directions.
 /// `Count` (bare integer) listed last since it has no keyword prefix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FetchDirection<'input> {
     Absolute(FetchAbsolute<'input>),
     Relative(FetchRelative<'input>),
     Forward(FetchForward<'input>),
     Backward(FetchBackward<'input>),
-    Next(NEXT),
-    Prior(PRIOR),
-    First(FIRST),
-    Last(LAST),
-    All(ALL),
+    #[tok(NEXT)] Next,
+    #[tok(PRIOR)] Prior,
+    #[tok(FIRST)] First,
+    #[tok(LAST)] Last,
+    #[tok(ALL)] All,
     Count(literal::IntegerLit<'input>),
 }
 
 /// ```sql
 /// FETCH [direction] [FROM|IN] cursor_name
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FetchStmt<'input> {
-    pub fetch: FETCH,
+    #[tok(FETCH, this)]
     pub direction: Option<FetchDirection<'input>>,
     pub source: Option<FetchSource>,
     pub cursor: literal::AliasName<'input>,
@@ -108,36 +83,27 @@ pub struct FetchStmt<'input> {
 ///
 /// Variant ordering: `All` (the `ALL` keyword) before `Cursor` so the
 /// reserved word is not swallowed as a cursor name.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CloseTarget<'input> {
-    All(ALL),
+    #[tok(ALL)] All,
     Cursor(literal::AliasName<'input>),
 }
 
 /// ```sql
 /// CLOSE { cursor_name | ALL }
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CloseStmt<'input> {
-    pub close: CLOSE,
+    #[tok(CLOSE, this)]
     pub target: CloseTarget<'input>,
 }
 
 /// ```sql
 /// MOVE [direction] [FROM|IN] cursor_name
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct MoveStmt<'input> {
-    pub r#move: MOVE,
+    #[tok(MOVE, this)]
     pub direction: Option<FetchDirection<'input>>,
     pub source: Option<FetchSource>,
     pub cursor: literal::AliasName<'input>,

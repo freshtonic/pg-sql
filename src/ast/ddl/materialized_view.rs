@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::ddl::database::SetTablespaceClause;
 use crate::ast::ddl::index::{AllInTablespaceBody, ResetReloptions, SetReloptions};
@@ -24,14 +22,13 @@ use recursa_diagram::railroad;
 /// Field order matches gram.y. Each trailer is optional and re-uses the
 /// shared CREATE TABLE machinery (`UsingAccessMethodClause`, `WithStorage`,
 /// `TablespaceClause`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateMatViewTarget<'input> {
     pub name: QualifiedName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub column_list: Option<
-        Surrounded<punct::LParen, Seq1<crate::tokens::ColId<'input>, punct::Comma>, punct::RParen>,
+         recursa::Vec1<crate::tokens::ColId<'input> > ,
     >,
     pub using: Option<crate::ast::ddl::table::UsingAccessMethodClause<'input>>,
     pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
@@ -41,31 +38,22 @@ pub struct CreateMatViewTarget<'input> {
 /// `CREATE [UNLOGGED] MATERIALIZED VIEW [IF NOT EXISTS] target AS query
 /// [WITH [NO] DATA]` — Postgres' `CreateMatViewStmt`. `target` carries the
 /// optional column list, access method, storage options, and tablespace.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateMaterializedViewStmt<'input> {
-    pub create: CREATE,
-    pub unlogged: Option<UNLOGGED>,
-    pub materialized: MATERIALIZED,
-    pub view: VIEW,
+    #[tok(CREATE, this, MATERIALIZED, VIEW)]
+    #[presence(UNLOGGED)]
+    pub unlogged: bool,
     pub if_not_exists: Option<IfNotExists>,
     pub target: CreateMatViewTarget<'input>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub query: Box<crate::ast::dml::values::Subquery<'input>>,
     pub with_data: Option<crate::ast::ddl::table::WithDataClause>,
 }
 
 /// `DROP MATERIALIZED VIEW [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropMaterializedViewStmt<'input> {
-    pub drop: DROP,
-    pub materialized: MATERIALIZED,
-    pub view: VIEW,
+    #[tok(DROP, MATERIALIZED, VIEW, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -76,53 +64,37 @@ pub struct DropMaterializedViewStmt<'input> {
 /// MATERIALIZED VIEW (and ALTER TABLE).
 ///
 /// Variant ordering: `Default` (keyword) before `Name` (`Ident`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SetAccessMethodTarget<'input> {
-    Default(DEFAULT),
+    #[tok(DEFAULT)] Default,
     Name(literal::AliasName<'input>),
 }
 
 /// `SET ACCESS METHOD { name | DEFAULT }` — Postgres' alter_table_cmd
 /// branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetAccessMethodClause<'input> {
-    pub set: SET,
-    pub access: ACCESS,
-    pub method: METHOD,
+    #[tok(SET, ACCESS, METHOD, this)]
     pub target: SetAccessMethodTarget<'input>,
 }
 
 /// `COMPRESSION { name | DEFAULT }` — Postgres' `column_compression`.
 ///
 /// Variant ordering: `Default` (keyword) before `Name` (`AliasName`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ColumnCompressionTarget<'input> {
-    Default(DEFAULT),
+    #[tok(DEFAULT)] Default,
     Name(literal::AliasName<'input>),
 }
 
 /// `ALTER [COLUMN] name SET COMPRESSION cm` — Postgres' alter_table_cmd
 /// branch for changing a column's compression method. Used by ALTER
 /// MATERIALIZED VIEW (and ALTER TABLE).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColumnSetCompression<'input> {
-    pub alter: ALTER,
-    pub column: Option<COLUMN>,
+    #[tok(ALTER, optional(COLUMN), this)]
     pub name: crate::tokens::ColId<'input>,
-    pub set: SET,
-    pub compression: COMPRESSION,
+    #[tok(SET, COMPRESSION, this)]
     pub target: ColumnCompressionTarget<'input>,
 }
 
@@ -136,10 +108,7 @@ pub struct AlterColumnSetCompression<'input> {
 /// tokens are distinct (`TABLESPACE` / `ACCESS` / `SCHEMA`); `Owner` /
 /// `Rename` / `AlterColumn` start with distinct keywords. The
 /// `RenameColumn` form precedes `Rename` because both start with `RENAME`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterMatViewCmd<'input> {
     SetTablespace(SetTablespaceClause<'input>),
     SetAccessMethod(SetAccessMethodClause<'input>),
@@ -154,20 +123,15 @@ pub enum AlterMatViewCmd<'input> {
 }
 
 /// Comma-separated `alter_table_cmds` on ALTER MATERIALIZED VIEW.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterMatViewCmds<'input> {
-    pub cmds: Seq1<AlterMatViewCmd<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub cmds: recursa::Vec1<AlterMatViewCmd<'input> >,
 }
 
 /// `[IF EXISTS] name action` — the per-matview branch of ALTER
 /// MATERIALIZED VIEW.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterMaterializedViewSingle<'input> {
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
@@ -180,10 +144,7 @@ pub struct AlterMaterializedViewSingle<'input> {
 /// `AlterTableStmt` branches that begin with `ALTER MATERIALIZED VIEW …`.
 ///
 /// Variant ordering: `All` (`ALL`) before `Single` (`[IF EXISTS] name`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterMatViewBody<'input> {
     All(AllInTablespaceBody<'input>),
     Single(AlterMaterializedViewSingle<'input>),
@@ -191,14 +152,9 @@ pub enum AlterMatViewBody<'input> {
 
 /// `ALTER MATERIALIZED VIEW [IF EXISTS] name action` — corpus-exercised
 /// subset of `alter_table_cmds` plus the bulk `ALL IN TABLESPACE` form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterMaterializedViewStmt<'input> {
-    pub alter: ALTER,
-    pub materialized: MATERIALIZED,
-    pub view: VIEW,
+    #[tok(ALTER, MATERIALIZED, VIEW, this)]
     pub body: AlterMatViewBody<'input>,
 }
 

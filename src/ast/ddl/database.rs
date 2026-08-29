@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -28,12 +26,9 @@ use recursa_diagram::railroad;
 ///
 /// Variant ordering: the two-token `CONNECTION LIMIT` form before the
 /// general `AliasName` so the longer match wins.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CreateDbOptName<'input> {
-    ConnectionLimit((crate::tokens::soft_keyword::CONNECTION, LIMIT)),
+    #[tok(CONNECTION, LIMIT)] ConnectionLimit,
     /// Any bareword — covers IDENT and all the keyword-spelled option names
     /// (`OWNER`, `TABLESPACE`, `TEMPLATE`, `ENCODING`, `LOCATION`, plus the
     /// IDENT-only names like `is_template`, `allow_connections`, `strategy`,
@@ -48,16 +43,13 @@ pub enum CreateDbOptName<'input> {
 /// Variant ordering: `Default` (keyword) first, then `Numeric` (digits or
 /// `+`/`-`), then `Boolean` (`TRUE`/`FALSE`/`ON`), then `String` (quoted),
 /// then the catch-all `Word` (bareword incl. `off`, identifier-like values).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CreateDbOptValue<'input> {
-    Default(DEFAULT),
+    #[tok(DEFAULT)] Default,
     Numeric(crate::ast::shared::numbers::NumericOnly<'input>),
-    True(TRUE),
-    False(FALSE),
-    On(ON),
+    #[tok(TRUE)] True,
+    #[tok(FALSE)] False,
+    #[tok(ON)] On,
     String(CopySconst<'input>),
     /// `NonReservedWord` — bareword including soft keywords.
     Word(literal::AliasName<'input>),
@@ -65,56 +57,40 @@ pub enum CreateDbOptValue<'input> {
 
 /// A single CREATE DATABASE option — Postgres' `createdb_opt_item`. Options
 /// are unordered and repeatable, with an optional `=` between name and value.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateDbOption<'input> {
     pub name: CreateDbOptName<'input>,
-    pub eq: Option<punct::Eq>,
+    #[tok(optional(EQ), this)]
     pub value: CreateDbOptValue<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateDatabaseStmt<'input> {
-    pub create: CREATE,
-    pub database: DATABASE,
+    #[tok(CREATE, DATABASE, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub with: Option<WITH>,
+    #[tok(optional(WITH), this)]
     pub options: Vec<CreateDbOption<'input>>,
 }
 
 /// A single `DROP DATABASE` option. Postgres currently defines only `FORCE`,
 /// but the grammar is comma-separated and extensible.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DropDatabaseOption {
-    Force(crate::tokens::soft_keyword::FORCE),
+    #[tok(FORCE)] Force,
 }
 
 /// `[WITH] (option [, ...])` option list on `DROP DATABASE`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropDatabaseOptions {
-    pub with: Option<WITH>,
-    pub options: Surrounded<punct::LParen, Seq0<DropDatabaseOption, punct::Comma>, punct::RParen>,
+    #[tok(optional(WITH), LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub options:  Vec<DropDatabaseOption > ,
 }
 
 /// `DROP DATABASE [IF EXISTS] name [[WITH] (FORCE)]` — no `CASCADE`/`RESTRICT`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropDatabaseStmt<'input> {
-    pub drop: DROP,
-    pub database: DATABASE,
+    #[tok(DROP, DATABASE, this)]
     pub if_exists: Option<IfExists>,
     pub name: crate::tokens::ColId<'input>,
     pub options: Option<DropDatabaseOptions>,
@@ -123,13 +99,9 @@ pub struct DropDatabaseStmt<'input> {
 /// `SET TABLESPACE name` — Postgres' dedicated `ALTER DATABASE name
 /// SET TABLESPACE name` branch (also used by ALTER INDEX, ALTER MATVIEW,
 /// ALTER TABLE). The value is a tablespace name (an `Ident`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetTablespaceClause<'input> {
-    pub set: SET,
-    pub tablespace: TABLESPACE,
+    #[tok(SET, TABLESPACE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
@@ -139,26 +111,13 @@ pub struct SetTablespaceClause<'input> {
 /// keeps `TABLESPACE` as a hard keyword, so we model this dedicated form
 /// rather than allowing arbitrary `var_name` here. Only the `TABLESPACE`
 /// case is exercised by the corpus.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct ResetTablespaceClause {
-    pub reset: RESET,
-    pub tablespace: TABLESPACE,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum ResetTablespaceClause { #[tok(RESET, TABLESPACE)] Value, }
 
 /// `REFRESH COLLATION VERSION` — Postgres'
 /// `AlterDatabaseRefreshCollStmt`. Three fixed keywords with no operands.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct RefreshCollVersion {
-    pub refresh: REFRESH,
-    pub collation: COLLATION,
-    pub version: VERSION,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum RefreshCollVersion { #[tok(REFRESH, COLLATION, VERSION)] Value, }
 
 /// One action on `ALTER DATABASE name action` — covers Postgres'
 /// `AlterDatabaseStmt`, `AlterDatabaseRefreshCollStmt`, `RenameStmt` and
@@ -174,10 +133,7 @@ pub struct RefreshCollVersion {
 /// not a `[WITH] (list)`. When a corpus statement uses more than one
 /// option or a leading `WITH`, extend this to a struct that wraps a
 /// `Vec<CreateDbOption>` plus an optional `WITH` keyword.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterDatabaseAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -195,13 +151,9 @@ pub enum AlterDatabaseAction<'input> {
 /// `ALTER DATABASE name action` — Postgres' `AlterDatabaseStmt`,
 /// `AlterDatabaseRefreshCollStmt`, `AlterDatabaseSetStmt`, `RenameStmt`,
 /// and `AlterOwnerStmt` branches for databases.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDatabaseStmt<'input> {
-    pub alter: ALTER,
-    pub database: DATABASE,
+    #[tok(ALTER, DATABASE, this)]
     pub name: crate::tokens::ColId<'input>,
     pub action: AlterDatabaseAction<'input>,
 }
@@ -215,40 +167,44 @@ mod tests {
 
     #[test]
     fn parse_create_database_plain() {
-        let mut input = crate::tokens::test_input("CREATE DATABASE mydb");
-        let stmt = CreateDatabaseStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE DATABASE mydb");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateDatabaseStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.text(), "mydb");
         assert!(stmt.options.is_empty());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_database_with_options() {
-        let mut input = crate::tokens::test_input(
-            "CREATE DATABASE mydb ENCODING utf8 LC_COLLATE \"C\" LC_CTYPE \"C\" TEMPLATE template0",
-        );
-        let stmt = CreateDatabaseStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE DATABASE mydb ENCODING utf8 LC_COLLATE \"C\" LC_CTYPE \"C\" TEMPLATE template0");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateDatabaseStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.options.len(), 4);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_database_with_equals_and_connection_limit() {
-        let mut input = crate::tokens::test_input(
-            "CREATE DATABASE mydb WITH OWNER = alice CONNECTION LIMIT = 5 IS_TEMPLATE = TRUE",
-        );
-        let stmt = CreateDatabaseStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE DATABASE mydb WITH OWNER = alice CONNECTION LIMIT = 5 IS_TEMPLATE = TRUE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateDatabaseStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.with.is_some());
         assert_eq!(stmt.options.len(), 3);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_database_force() {
-        let mut input = crate::tokens::test_input("DROP DATABASE IF EXISTS db1 WITH (FORCE)");
-        let stmt = DropDatabaseStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP DATABASE IF EXISTS db1 WITH (FORCE)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropDatabaseStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
         assert!(stmt.options.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

@@ -3,8 +3,6 @@
 /// `CREATE [OR REPLACE] [TEMP|TEMPORARY] [RECURSIVE] VIEW name [(cols)] AS query`
 /// `DROP VIEW [IF EXISTS] name`
 use recursa::seq::Seq0;
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::ddl::table::TempKw;
 use crate::ast::dml::values::Subquery;
@@ -32,19 +30,20 @@ use crate::tokens::soft_keyword::*;
 // ---------------------------------------------------------------------------
 
 /// CREATE VIEW statement.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateViewStmt<'input> {
-    pub create: CREATE,
-    pub or_replace: Option<(OR, REPLACE)>,
+    #[tok(CREATE, this)]
+    #[presence(OR, REPLACE)]
+    pub or_replace: bool,
     pub temp: Option<TempKw>,
-    pub recursive: Option<RECURSIVE>,
-    pub view: VIEW,
+    #[tok(this, VIEW)]
+    #[presence(RECURSIVE)]
+    pub recursive: bool,
     pub name: QualifiedName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns: Option<
-        Surrounded<punct::LParen, Seq0<literal::AliasName<'input>, punct::Comma>, punct::RParen>,
+         Vec<literal::AliasName<'input> > ,
     >,
     /// Optional `USING access_method` (accepted by PG parser though rejected
     /// semantically for plain VIEW; tests include it).
@@ -52,7 +51,7 @@ pub struct CreateViewStmt<'input> {
     /// Optional `WITH (option [= value], ...)` view options such as
     /// `security_invoker`, `security_barrier`, `check_option`.
     pub with_options: Option<crate::ast::ddl::index::WithStorage<'input>>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub query: Subquery<'input>,
     /// Optional `WITH [CASCADED|LOCAL] CHECK OPTION` trailer, used with
     /// updatable views to cascade predicate checks to underlying rows.
@@ -60,34 +59,23 @@ pub struct CreateViewStmt<'input> {
 }
 
 /// `USING access_method` trailer on CREATE VIEW.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ViewUsing<'input> {
-    pub using: USING,
+    #[tok(USING, this)]
     pub method: literal::AliasName<'input>,
 }
 
 /// `WITH [CASCADED | LOCAL] CHECK OPTION` trailer on CREATE VIEW.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ViewCheckOption {
-    pub with: WITH,
+    #[tok(WITH, this, CHECK, OPTION)]
     pub mode: Option<ViewCheckMode>,
-    pub check: CHECK,
-    pub option: OPTION,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ViewCheckMode {
-    Cascaded(CASCADED),
-    Local(LOCAL),
+    #[tok(CASCADED)] Cascaded,
+    #[tok(LOCAL)] Local,
 }
 
 /// DROP VIEW statement:
@@ -95,15 +83,13 @@ pub enum ViewCheckMode {
 /// ```sql
 /// DROP VIEW [IF EXISTS] name [, name ...] [CASCADE | RESTRICT]
 /// ```
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropViewStmt<'input> {
-    pub drop: DROP,
-    pub view: VIEW,
-    pub if_exists: Option<(IF, EXISTS)>,
-    pub names: Seq0<QualifiedName<'input>, punct::Comma>,
+    #[tok(DROP, VIEW, this)]
+    #[presence(IF, EXISTS)]
+    pub if_exists: bool,
+    #[sep(COMMA)]
+    pub names: Vec<QualifiedName<'input> >,
     pub behavior: Option<DropBehavior>,
 }
 
@@ -115,62 +101,70 @@ mod tests {
 
     #[test]
     fn parse_create_view() {
-        let mut input = crate::tokens::test_input("CREATE VIEW v AS SELECT 1");
-        let stmt = CreateViewStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE VIEW v AS SELECT 1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "v");
         assert!(stmt.or_replace.is_none());
         assert!(stmt.temp.is_none());
         assert!(stmt.recursive.is_none());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_temp_view() {
-        let mut input = crate::tokens::test_input("CREATE TEMPORARY VIEW v AS SELECT 1");
-        let stmt = CreateViewStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TEMPORARY VIEW v AS SELECT 1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.temp.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_recursive_view() {
-        let mut input = crate::tokens::test_input(
-            "CREATE RECURSIVE VIEW nums (n) AS VALUES (1) UNION ALL SELECT n+1 FROM nums WHERE n < 5",
-        );
-        let stmt = CreateViewStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE RECURSIVE VIEW nums (n) AS VALUES (1) UNION ALL SELECT n+1 FROM nums WHERE n < 5");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.recursive.is_some());
         assert!(stmt.columns.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_or_replace_recursive_view() {
-        let mut input = crate::tokens::test_input(
-            "CREATE OR REPLACE RECURSIVE VIEW nums (n) AS VALUES (1) UNION ALL SELECT n+1 FROM nums WHERE n < 6",
-        );
-        let stmt = CreateViewStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE OR REPLACE RECURSIVE VIEW nums (n) AS VALUES (1) UNION ALL SELECT n+1 FROM nums WHERE n < 6");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.or_replace.is_some());
         assert!(stmt.recursive.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_view() {
-        let mut input = crate::tokens::test_input("DROP VIEW v");
-        let stmt = DropViewStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP VIEW v");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropViewStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.names.len(), 1);
         assert!(stmt.if_exists.is_none());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_view_if_exists_multi_cascade() {
-        let mut input = crate::tokens::test_input("DROP VIEW IF EXISTS a, b CASCADE");
-        let stmt = DropViewStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP VIEW IF EXISTS a, b CASCADE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropViewStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
         assert_eq!(stmt.names.len(), 2);
         assert!(stmt.behavior.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }
 
@@ -181,41 +175,27 @@ mod tests {
 /// `ALTER [COLUMN] name SET DEFAULT expr` — Postgres' alter_table_cmd
 /// branch for setting a column default. Used by ALTER VIEW (the only
 /// alter-table-cmd subset exercised by the corpus for views).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColumnSetDefault<'input> {
-    pub alter: ALTER,
-    pub column: Option<COLUMN>,
+    #[tok(ALTER, optional(COLUMN), this)]
     pub name: literal::Ident<'input>,
-    pub set: SET,
-    pub default: DEFAULT,
+    #[tok(SET, DEFAULT, this)]
     pub expr: Box<Expr<'input>>,
 }
 
 /// `ALTER [COLUMN] name DROP DEFAULT` — Postgres' alter_table_cmd branch
 /// for dropping a column default. Used by ALTER VIEW (sister of
 /// `AlterColumnSetDefault`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColumnDropDefault<'input> {
-    pub alter: ALTER,
-    pub column: Option<COLUMN>,
+    #[tok(ALTER, optional(COLUMN), this, DROP, DEFAULT)]
     pub name: literal::Ident<'input>,
-    pub drop: DROP,
-    pub default: DEFAULT,
 }
 
 /// One `ALTER COLUMN …` cmd on ALTER VIEW. Both forms start with `ALTER
 /// [COLUMN] name`; the disambiguation token after the column name is
 /// `SET`/`DROP`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterColumnViewCmd<'input> {
     SetDefault(AlterColumnSetDefault<'input>),
     DropDefault(AlterColumnDropDefault<'input>),
@@ -223,15 +203,11 @@ pub enum AlterColumnViewCmd<'input> {
 
 /// `RENAME [COLUMN] old TO new` — Postgres' RenameStmt branch for renaming
 /// a view column. Used by ALTER VIEW / ALTER MATERIALIZED VIEW.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RenameColumnClause<'input> {
-    pub rename: RENAME,
-    pub column: Option<COLUMN>,
+    #[tok(RENAME, optional(COLUMN), this)]
     pub old_name: literal::Ident<'input>,
-    pub to: TO,
+    #[tok(TO, this)]
     pub new_name: literal::Ident<'input>,
 }
 
@@ -247,10 +223,7 @@ pub struct RenameColumnClause<'input> {
 ///   second tokens.
 /// - `AlterColumn` (`ALTER`) keyword-disjoint from `SET`/`RESET`/`RENAME`/
 ///   `OWNER`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterViewAction<'input> {
     SetSchema(SetSchemaClause<'input>),
     SetReloptions(SetReloptions<'input>),
@@ -264,13 +237,9 @@ pub enum AlterViewAction<'input> {
 /// `ALTER VIEW [IF EXISTS] name action` — Postgres' `AlterTableStmt`
 /// branches that begin with `ALTER VIEW …`, plus the view branches of
 /// `RenameStmt` / `AlterObjectSchemaStmt` / `AlterOwnerStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterViewStmt<'input> {
-    pub alter: ALTER,
-    pub view: VIEW,
+    #[tok(ALTER, VIEW, this)]
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
     pub action: AlterViewAction<'input>,

@@ -1,6 +1,5 @@
 //! DISCARD statement.
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::tokens::keyword::*;
@@ -11,25 +10,19 @@ use crate::tokens::keyword::*;
 ///
 /// Variant ordering: `TEMPORARY` (longer) before `TEMP` so the longer keyword
 /// wins longest-match disambiguation; the rest have disjoint first-sets.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum DiscardTarget {
-    All(ALL),
-    Plans(PLANS),
-    Sequences(SEQUENCES),
-    Temporary(TEMPORARY),
-    Temp(TEMP),
+    #[tok(ALL)] All,
+    #[tok(PLANS)] Plans,
+    #[tok(SEQUENCES)] Sequences,
+    #[tok(TEMPORARY)] Temporary,
+    #[tok(TEMP)] Temp,
 }
 
 /// DISCARD { ALL | PLANS | SEQUENCES | TEMP | TEMPORARY }
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DiscardStmt {
-    pub discard: DISCARD,
+    #[tok(DISCARD, this)]
     pub target: DiscardTarget,
 }
 

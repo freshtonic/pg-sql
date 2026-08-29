@@ -4,8 +4,6 @@
 /// arithmetic), and postfix operators (::type cast, IS [NOT] TRUE/FALSE/UNKNOWN/NULL,
 /// IN (list)).
 use recursa::seq::{OptionalTrailing, Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::dml::values::Subquery;
@@ -23,88 +21,11 @@ use crate::tokens::soft_keyword::*;
 /// `FormatTokens` / `Visit` are still derived — the field is an ordinary
 /// `Seq1`, so the printer emits a break between parts exactly as for any
 /// other separated list. Only `Parse` is hand-rolled (see below).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct StringLitSeq0<'input> {
-    pub parts: Seq1<literal::StringLit<'input>, (), OptionalTrailing>,
+    pub parts: recursa::Vec1<literal::StringLit<'input>  >,
 }
 
-/// **Manual `Parse` impl — recursa-side limitation.** PostgreSQL stops
-/// concatenating adjacent string literals when a comment sits between two
-/// parts, but recursa's `Seq` machinery cannot express that: the inter-element
-/// gap of ignored tokens (whitespace/comments) is skipped *before* any
-/// separator or element type is consulted, so no derived combinator can
-/// inspect the raw gap.
-///
-/// This impl parses each part itself and inspects the raw source slice between
-/// one part's end and the next part's start, then hands the collected parts to
-/// `Seq1::from_pairs` so `FormatTokens` / `Visit` stay derived. Filed as a
-/// recursa-side limitation: the framework needs a way to surface the
-/// inter-element gap to a separator type (e.g. a separator hook that runs
-/// before the ignored-token skip).
-impl<'input> ::recursa_core::Parse<'input> for StringLitSeq0<'input> {
-    type Prefix = ();
-
-    fn meta() -> &'static ::recursa_core::Meta {
-        static META: ::recursa_core::Meta = ::recursa_core::Meta {
-            name: "string_lit_seq0",
-            tags: &[],
-        };
-        &META
-    }
-
-    fn peek(input: &mut ::recursa_core::Input<'input>) -> bool {
-        let mut fork = input.fork();
-        literal::StringLit::peek(&mut fork)
-    }
-
-    fn parse(
-        input: &mut ::recursa_core::Input<'input>,
-    ) -> ::std::result::Result<Self, ::recursa_core::ParseError> {
-        // `byte_offset()` is the source byte position of the token under the
-        // cursor — the inter-token gap inspection below slices raw `source`.
-        let part_start = input.byte_offset();
-        let first = literal::StringLit::parse(input)?;
-        // The literal text includes the surrounding quotes, so its byte
-        // length is the token's exact span in the source.
-        let mut prev_end = part_start + first.0.len();
-
-        // `(elem, Some(()))` for every non-final part and `(elem, None)` for
-        // the last — the pair shape `Seq1<_, (), OptionalTrailing>` expects.
-        // The final element's separator is patched to `None` after the loop.
-        let mut pairs: ::vec1::Vec1<(literal::StringLit<'input>, Option<()>)> =
-            ::vec1::Vec1::new((first, None));
-        loop {
-            let next_start = input.byte_offset();
-
-            // The gap between the previous part and the next token consists
-            // only of ignored content (whitespace and comments). A comment in
-            // that gap breaks the continuation — PostgreSQL would reject it.
-            // The lexer strips comments from the token array, but the raw
-            // `source` slice between the two byte offsets still contains them.
-            let gap = &input.source()[prev_end..next_start];
-            if gap.contains("/*") || gap.contains("--") {
-                break;
-            }
-            if !literal::StringLit::peek(input) {
-                break;
-            }
-
-            // The previous part is no longer final: give it a separator.
-            pairs.last_mut().1 = Some(());
-
-            let part_start = input.byte_offset();
-            let part = literal::StringLit::parse(input)?;
-            prev_end = part_start + part.0.len();
-            pairs.push((part, None));
-        }
-
-        Ok(Self {
-            parts: Seq1::from_pairs(pairs),
-        })
-    }
-}
 
 /// Content inside IN parentheses: either a subquery or expression list.
 ///
@@ -126,88 +47,74 @@ impl<'input> ::recursa_core::Parse<'input> for StringLitSeq0<'input> {
 /// `(<...>) AS alias`), so the trade is worth the partition_prune Skip
 /// fix. If a real workload needs it, model `(subquery)<setop><subquery>`
 /// as a dedicated `InContent` variant declared before `Exprs`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum InContent<'input> {
-    Exprs(Seq0<Expr<'input>, punct::Comma>),
+    Exprs(#[sep(COMMA)] Vec<Expr<'input> >),
     Subquery(Box<Subquery<'input>>),
 }
 
 /// `IN (expr, ...)` or `IN (subquery)` postfix suffix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, FormatTokens, Visit, Transform, derive_more::Deref)]
-#[recursa::parser(rules = SqlRules)]
-pub struct InList<'input>(#[deref] pub Surrounded<punct::LParen, InContent<'input>, punct::RParen>);
+pub struct InList<'input>(#[tok(LPAREN, this, RPAREN)] #[deref] pub  InContent<'input> );
 
 /// A single typmod argument: an optionally-signed integer literal. Postgres'
 /// gram.y allows `expr_list` here, but the corpus only exercises signed
 /// integers (e.g. `numeric(3, -6)` in numeric.sql), so we model only that
 /// shape. A leading `+` or `-` is permitted to mirror PG's behavior.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, FormatTokens, PartialEq, Eq, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
 pub struct TypeModifierArg<'input> {
     pub sign: Option<TypeModifierSign>,
     pub value: literal::IntegerLit<'input>,
 }
 
 /// Leading sign of a typmod argument.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, FormatTokens, PartialEq, Eq, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
 pub enum TypeModifierSign {
-    Neg(punct::Minus),
-    Pos(punct::Plus),
+    #[tok(MINUS)] Neg,
+    #[tok(PLUS)] Pos,
 }
 
 /// Parenthesized precision/scale for type names: `(10,2)`, `(3)`, `(3,-6)`.
 #[railroad(label = "<Precision>")]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, FormatTokens, PartialEq, Eq, Visit, Transform, derive_more::Deref)]
-#[recursa::parser(rules = SqlRules)]
 pub struct TypePrecision<'input>(
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     #[deref]
-    pub  Surrounded<punct::LParen, Seq0<TypeModifierArg<'input>, punct::Comma>, punct::RParen>,
+    pub   Vec<TypeModifierArg<'input> > ,
 );
 
 /// Type name for casts.
 #[railroad(label = "<Type Name>")]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, FormatTokens, PartialEq, Eq, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
 pub enum TypeName<'input> {
-    Bool(BOOL),
-    Boolean(BOOLEAN),
-    Text(TEXT),
-    Integer(INTEGER),
-    Int(INT),
-    Serial(SERIAL),
-    Numeric(NUMERIC),
-    Varchar(VARCHAR),
-    /// `DOUBLE PRECISION` — two-keyword type. Listed before `Ident` so the
+    #[tok(BOOL)] Bool,
+    #[tok(BOOLEAN)] Boolean,
+    #[tok(TEXT)] Text,
+    #[tok(INTEGER)] Integer,
+    #[tok(INT)] Int,
+    #[tok(SERIAL)] Serial,
+    #[tok(NUMERIC)] Numeric,
+    #[tok(VARCHAR)] Varchar,
+    #[tok(DOUBLE, PRECISION)] /// `DOUBLE PRECISION` — two-keyword type. Listed before `Ident` so the
     /// DOUBLE match isn't accidentally consumed as a plain identifier.
-    DoublePrecision((DOUBLE, PRECISION)),
-    /// `TIMESTAMP` (optional `WITH/WITHOUT TIME ZONE` qualifier handled
+    DoublePrecision,
+    #[tok(TIMESTAMP)] /// `TIMESTAMP` (optional `WITH/WITHOUT TIME ZONE` qualifier handled
     /// at the `CastType` level so precision can sit between).
-    Timestamp(TIMESTAMP),
-    /// `TIME` — same shape as `TIMESTAMP`.
-    Time(TIME),
-    /// `INTERVAL` — qualifier (`YEAR TO MONTH` etc.) is currently not
+    Timestamp,
+    #[tok(TIME)] /// `TIME` — same shape as `TIMESTAMP`.
+    Time,
+    #[tok(INTERVAL)] /// `INTERVAL` — qualifier (`YEAR TO MONTH` etc.) is currently not
     /// modeled at the type level; only the bare keyword is consumed.
-    Interval(INTERVAL),
-    /// `BIT` and `BIT VARYING` (the optional `VARYING` modifier is handled
+    Interval,
+    #[tok(BIT)] /// `BIT` and `BIT VARYING` (the optional `VARYING` modifier is handled
     /// at the `CastType` level).
-    Bit(BIT),
-    /// `CHARACTER` and `CHARACTER VARYING` — same shape as `BIT`.
-    Character(CHARACTER),
-    /// `UNKNOWN` — pseudo-type used for untyped literals; reserved keyword so
+    Bit,
+    #[tok(CHARACTER)] /// `CHARACTER` and `CHARACTER VARYING` — same shape as `BIT`.
+    Character,
+    #[tok(UNKNOWN)] /// `UNKNOWN` — pseudo-type used for untyped literals; reserved keyword so
     /// it must be matched explicitly rather than falling through to `Ident`.
-    Unknown(UNKNOWN),
+    Unknown,
     /// Qualified type name (`schema.type`) or a bare identifier.
     Ident(crate::ast::shared::names::QualifiedName<'input>),
 }
@@ -216,32 +123,26 @@ pub enum TypeName<'input> {
 ///
 /// NOT variants are listed first so the combined peek regex disambiguates
 /// via longest match (e.g., `NOT TRUE` is longer than `TRUE`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum BoolTestKind {
-    IsNotTrue((NOT, TRUE)),
-    IsNotFalse((NOT, FALSE)),
-    IsNotUnknown((NOT, UNKNOWN)),
-    IsNotNull((NOT, NULL)),
-    IsTrue(TRUE),
-    IsFalse(FALSE),
-    IsUnknown(UNKNOWN),
-    IsNull(NULL),
+    #[tok(NOT, TRUE)] IsNotTrue,
+    #[tok(NOT, FALSE)] IsNotFalse,
+    #[tok(NOT, UNKNOWN)] IsNotUnknown,
+    #[tok(NOT, NULL)] IsNotNull,
+    #[tok(TRUE)] IsTrue,
+    #[tok(FALSE)] IsFalse,
+    #[tok(UNKNOWN)] IsUnknown,
+    #[tok(NULL)] IsNull,
 }
 
 /// Unicode normalisation form keyword — gram.y `unicode_normal_form`.
 /// Used by `expr IS [NOT] [NFx] NORMALIZED` and `NORMALIZE(expr, NFx)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum UnicodeNormalForm {
-    Nfkc(NFKC),
-    Nfkd(NFKD),
-    Nfc(NFC),
-    Nfd(NFD),
+    #[tok(NFKC)] Nfkc,
+    #[tok(NFKD)] Nfkd,
+    #[tok(NFC)] Nfc,
+    #[tok(NFD)] Nfd,
 }
 
 /// Tail of `expr IS [NOT] [NFx] NORMALIZED` — the `[NOT] [NFx] NORMALIZED`
@@ -251,34 +152,24 @@ pub enum UnicodeNormalForm {
 /// Variant ordering: NOT-leading forms first (longer prefix), and within
 /// each NOT/non-NOT bucket the form-prefixed variants come before the bare
 /// `NORMALIZED` so the peek regex prefers the longer match.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum IsNormalizedTail {
     NotForm(IsNotFormNormalizedTail),
-    Not((NOT, NORMALIZED)),
+    #[tok(NOT, NORMALIZED)] Not,
     Form(IsFormNormalizedTail),
-    Plain(NORMALIZED),
+    #[tok(NORMALIZED)] Plain,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IsFormNormalizedTail {
+    #[tok(this, NORMALIZED)]
     pub form: UnicodeNormalForm,
-    pub normalized: NORMALIZED,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IsNotFormNormalizedTail {
-    pub not: NOT,
+    #[tok(NOT, this, NORMALIZED)]
     pub form: UnicodeNormalForm,
-    pub normalized: NORMALIZED,
 }
 
 // --- Atom wrapper structs ---
@@ -286,34 +177,24 @@ pub struct IsNotFormNormalizedTail {
 /// Qualified column reference: `table.column`
 ///
 /// Uses AliasName for the table part to allow keywords like EXCLUDED, NEW, OLD.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct QualifiedRef<'input> {
     pub table: literal::AliasName<'input>,
-    pub dot: punct::Dot,
+    #[tok(DOT, this)]
     pub column: literal::AliasName<'input>,
 }
 
 /// Qualified wildcard: `table.*`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct QualifiedWildcard<'input> {
+    #[tok(this, DOT, STAR)]
     pub table: literal::AliasName<'input>,
-    pub dot: punct::Dot,
-    pub star: punct::Star,
 }
 
 /// Window specification: `OVER window_name` or `OVER (inline_spec)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WindowSpec<'input> {
-    pub over: OVER,
+    #[tok(OVER, this)]
     pub body: WindowSpecBody<'input>,
 }
 
@@ -322,12 +203,9 @@ pub struct WindowSpec<'input> {
 /// Variant ordering: Inline (starts with `(`) before Named (starts with an
 /// identifier). They start with different tokens so peek disambiguation is
 /// trivial.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WindowSpecBody<'input> {
-    Inline(Surrounded<punct::LParen, InlineWindowSpec<'input>, punct::RParen>),
+    Inline(#[tok(LPAREN, this, RPAREN)]  InlineWindowSpec<'input> ),
     Named(crate::tokens::ColId<'input>),
 }
 
@@ -337,10 +215,7 @@ pub enum WindowSpecBody<'input> {
 /// `WINDOW w2 AS (w1 ORDER BY x)`). It relies on `Option<literal::Ident>`
 /// peek-disambiguating cleanly against `PARTITION`/`ORDER`/`ROWS`/etc.
 /// because keywords are rejected by `literal::Ident`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InlineWindowSpec<'input> {
     pub ref_name: Option<literal::WindowRefNameIdent<'input>>,
     pub partition_by: Option<WindowPartitionBy<'input>>,
@@ -349,25 +224,19 @@ pub struct InlineWindowSpec<'input> {
 }
 
 /// PARTITION BY in window: `PARTITION BY expr, ...`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WindowPartitionBy<'input> {
-    pub partition: PARTITION,
-    pub by: BY,
-    pub exprs: Seq0<Expr<'input>, punct::Comma>,
+    #[tok(PARTITION, BY, this)]
+    #[sep(COMMA)]
+    pub exprs: Vec<Expr<'input> >,
 }
 
 /// Frame unit: `ROWS | RANGE | GROUPS`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WindowFrameUnit {
-    Rows(ROWS),
-    Range(RANGE),
-    Groups(GROUPS),
+    #[tok(ROWS)] Rows,
+    #[tok(RANGE)] Range,
+    #[tok(GROUPS)] Groups,
 }
 
 /// `WINDOW` frame clause: `unit BETWEEN start AND end [EXCLUDE ...]`
@@ -375,34 +244,25 @@ pub enum WindowFrameUnit {
 ///
 /// Variant ordering: `Between` (starts with `unit BETWEEN`) before `Single`
 /// (starts with `unit <bound>`). Longest-match-wins.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WindowFrameClause<'input> {
     Between(WindowFrameBetween<'input>),
     Single(WindowFrameSingle<'input>),
 }
 
 /// `unit BETWEEN start AND end [EXCLUDE ...]`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WindowFrameBetween<'input> {
     pub unit: WindowFrameUnit,
-    pub between: BETWEEN,
+    #[tok(BETWEEN, this)]
     pub start: WindowFrameBound<'input>,
-    pub and: AND,
+    #[tok(AND, this)]
     pub end: WindowFrameBound<'input>,
     pub exclude: Option<WindowFrameExclude>,
 }
 
 /// `unit start [EXCLUDE ...]`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WindowFrameSingle<'input> {
     pub unit: WindowFrameUnit,
     pub bound: WindowFrameBound<'input>,
@@ -415,55 +275,40 @@ pub struct WindowFrameSingle<'input> {
 /// `CURRENT ROW`, `UNBOUNDED FOLLOWING`), then the expr-prefixed forms
 /// (`expr PRECEDING` / `expr FOLLOWING`). The expr forms start with an
 /// expression and can't be confused with keyword-prefixed forms.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WindowFrameBound<'input> {
-    UnboundedPreceding((UNBOUNDED, PRECEDING)),
-    UnboundedFollowing((UNBOUNDED, FOLLOWING)),
-    CurrentRow((CURRENT, ROW)),
+    #[tok(UNBOUNDED, PRECEDING)] UnboundedPreceding,
+    #[tok(UNBOUNDED, FOLLOWING)] UnboundedFollowing,
+    #[tok(CURRENT, ROW)] CurrentRow,
     ExprPreceding(ExprPreceding<'input>),
     ExprFollowing(ExprFollowing<'input>),
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExprPreceding<'input> {
+    #[tok(this, PRECEDING)]
     pub expr: Box<Expr<'input>>,
-    pub preceding: PRECEDING,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExprFollowing<'input> {
+    #[tok(this, FOLLOWING)]
     pub expr: Box<Expr<'input>>,
-    pub following: FOLLOWING,
 }
 
 /// `EXCLUDE { CURRENT ROW | GROUP | TIES | NO OTHERS }` frame exclusion.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WindowFrameExclude {
-    pub exclude: EXCLUDE,
+    #[tok(EXCLUDE, this)]
     pub target: WindowFrameExcludeTarget,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WindowFrameExcludeTarget {
-    CurrentRow((CURRENT, ROW)),
-    Group(GROUP),
-    Ties(TIES),
-    NoOthers((NO, OTHERS)),
+    #[tok(CURRENT, ROW)] CurrentRow,
+    #[tok(GROUP)] Group,
+    #[tok(TIES)] Ties,
+    #[tok(NO, OTHERS)] NoOthers,
 }
 
 /// Function call: `name(arg1, arg2, ...)`
@@ -477,22 +322,16 @@ pub enum WindowFrameExcludeTarget {
 ///
 /// Variant ordering: `Variadic` before `Plain` since `VARIADIC` keyword is
 /// longer than starting an expression.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FuncArg<'input> {
     Named(NamedFuncArg<'input>),
     Variadic(VariadicArg<'input>),
     Plain(Box<Expr<'input>>),
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct VariadicArg<'input> {
-    pub variadic: VARIADIC,
+    #[tok(VARIADIC, this)]
     pub value: Box<Expr<'input>>,
 }
 
@@ -500,20 +339,14 @@ pub struct VariadicArg<'input> {
 ///
 /// Variant ordering: both are distinct two-character punctuation tokens,
 /// no ambiguity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum NamedArgOp {
-    FatArrow(punct::FatArrow),
-    ColonEquals(punct::ColonEquals),
+    #[tok(FATARROW)] FatArrow,
+    #[tok(COLONEQUALS)] ColonEquals,
 }
 
 /// Named function argument: `name => value` or `name := value` (Postgres).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct NamedFuncArg<'input> {
     pub name: literal::AliasName<'input>,
     pub arrow: NamedArgOp,
@@ -521,29 +354,22 @@ pub struct NamedFuncArg<'input> {
 }
 
 /// `WITHIN GROUP (ORDER BY ...)` clause for ordered-set aggregate functions.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WithinGroupClause<'input> {
-    pub within: WITHIN,
-    pub group: GROUP,
-    pub order_by: Surrounded<
-        punct::LParen,
-        Box<crate::ast::dml::select::OrderByClause<'input>>,
-        punct::RParen,
-    >,
+    #[tok(WITHIN, GROUP, LPAREN, this, RPAREN)]
+    pub order_by:
+
+        Box<crate::ast::dml::select::OrderByClause<'input>>
+
+    ,
 }
 
 /// `FILTER (WHERE condition)` clause for filtered aggregates.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FilterClause<'input> {
-    pub filter: FILTER,
+    #[tok(FILTER, LPAREN, this, RPAREN)]
     pub body:
-        Surrounded<punct::LParen, Box<crate::ast::dml::select::WhereClause<'input>>, punct::RParen>,
+         Box<crate::ast::dml::select::WhereClause<'input>> ,
 }
 
 /// Function-name token: a regular qualified name OR one of the reserved
@@ -564,30 +390,27 @@ pub struct FilterClause<'input> {
 /// `SET(` form is matched before the generic `Ident(` fallback consumes
 /// the parens as the start of a function call against a now-quoted
 /// identifier.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FuncCallName<'input> {
-    Left(LEFT),
-    Right(RIGHT),
-    Set(SET),
+    #[tok(LEFT)] Left,
+    #[tok(RIGHT)] Right,
+    #[tok(SET)] Set,
     Name(crate::ast::shared::names::QualifiedName<'input>),
 }
 
 /// Function call: `name([*] [DISTINCT] args [ORDER BY ...]) [WITHIN GROUP (...)] [FILTER (...)] [OVER (...)]`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FuncCall<'input> {
     pub name: FuncCallName<'input>,
-    pub lparen: punct::LParen,
-    pub star_arg: Option<punct::Star>,
-    pub distinct: Option<DISTINCT>,
-    pub args: Seq0<FuncArg<'input>, punct::Comma>,
+    #[tok(LPAREN, this)]
+    #[presence(STAR)]
+    pub star_arg: bool,
+    #[presence(DISTINCT)]
+    pub distinct: bool,
+    #[sep(COMMA)]
+    pub args: Vec<FuncArg<'input> >,
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
-    pub rparen: punct::RParen,
+    #[tok(RPAREN, this)]
     pub within_group: Option<WithinGroupClause<'input>>,
     pub filter: Option<FilterClause<'input>>,
     pub window: Option<WindowSpec<'input>>,
@@ -605,10 +428,7 @@ pub struct FuncCall<'input> {
 /// `QuotedIdent` and `UnicodeQuotedIdent` in `Ident`'s tree, so `Ident`
 /// is "not fully covered" and any struct field of type `Ident` ends up
 /// `Opaque` for the parent's first-set walk.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum QuotedFuncName<'input> {
     UnicodeQuoted(crate::tokens::UnicodeQuotedIdent<'input>),
     Quoted(crate::tokens::literal::QuotedIdent<'input>),
@@ -624,18 +444,18 @@ pub enum QuotedFuncName<'input> {
 /// to the sequential `Expr::Func` arm. Quoted-ident function calls cannot
 /// have a `schema.func` form (the dot-qualified case still routes through
 /// `FuncCallName::Name` via the sequential `Expr::Func` fallback).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct QuotedFuncCall<'input> {
     pub name: QuotedFuncName<'input>,
-    pub lparen: punct::LParen,
-    pub star_arg: Option<punct::Star>,
-    pub distinct: Option<DISTINCT>,
-    pub args: Seq0<FuncArg<'input>, punct::Comma>,
+    #[tok(LPAREN, this)]
+    #[presence(STAR)]
+    pub star_arg: bool,
+    #[presence(DISTINCT)]
+    pub distinct: bool,
+    #[sep(COMMA)]
+    pub args: Vec<FuncArg<'input> >,
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
-    pub rparen: punct::RParen,
+    #[tok(RPAREN, this)]
     pub within_group: Option<WithinGroupClause<'input>>,
     pub filter: Option<FilterClause<'input>>,
     pub window: Option<WindowSpec<'input>>,
@@ -646,12 +466,9 @@ pub struct QuotedFuncCall<'input> {
 /// where the cast belongs structurally to the parenthesised value but cannot
 /// be reached via the ordinary `Subquery` variant of `ParenContent` (which
 /// stops at the close paren and would strand `::cast`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CastTail<'input> {
-    pub cast: punct::ColonColon,
+    #[tok(COLONCOLON, this)]
     pub ty: Box<CastType<'input>>,
 }
 
@@ -665,12 +482,10 @@ pub struct CastTail<'input> {
 /// (`(SubSelect)::int::text`) are captured in `extra_casts`, modelled
 /// directly as a `Vec`-like loop via `OptionalTrailing` over `CastTail` so the
 /// recursa derive can detect each subsequent `::`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CastedSubquery<'input> {
-    pub subquery: Surrounded<punct::LParen, Box<Subquery<'input>>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    pub subquery:  Box<Subquery<'input>> ,
     /// At least one cast is required — without it parsing falls through to
     /// bare `Subquery` (the variant declared after `CastedSubquery`).
     pub cast: CastTail<'input>,
@@ -688,45 +503,34 @@ pub struct CastedSubquery<'input> {
 ///   bare `SELECT ...`, `VALUES ...`, `TABLE ...`, `WITH ...` when no
 ///   trailing cast follows.
 /// - `Exprs` last — anything else parses as a Pratt expression list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ParenContent<'input> {
     CastedSubquery(CastedSubquery<'input>),
     Subquery(Box<Subquery<'input>>),
-    Exprs(Seq0<Expr<'input>, punct::Comma>),
+    Exprs(#[sep(COMMA)] Vec<Expr<'input> >),
 }
 
 /// Parenthesized expression: `(expr)`, `(expr, expr, ...)`, or `(SELECT/VALUES ...)`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, FormatTokens, Visit, Transform, derive_more::Deref)]
-#[recursa::parser(rules = SqlRules)]
 pub struct ParenExpr<'input>(
-    #[deref] pub Surrounded<punct::LParen, ParenContent<'input>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[deref] pub  ParenContent<'input> ,
 );
 
 /// Array slice content: `lower : upper`, `: upper`, `lower :`, or `:`.
 ///
 /// Both bounds are optional; the colon is required.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SubscriptSlice<'input> {
     pub lower: Option<Box<Expr<'input>>>,
-    pub colon: punct::Colon,
+    #[tok(COLON, this)]
     pub upper: Option<Box<Expr<'input>>>,
 }
 
 /// `.field` accessor in an indirection chain.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IndirectionField<'input> {
-    pub dot: punct::Dot,
+    #[tok(DOT, this)]
     pub name: literal::AliasName<'input>,
 }
 
@@ -735,13 +539,10 @@ pub struct IndirectionField<'input> {
 ///
 /// Variant ordering: `Slice` before `Index` — both open with `[`, the
 /// colon-containing slice form is tried first.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum IndirectionEl<'input> {
-    Slice(Surrounded<punct::LBracket, SubscriptSlice<'input>, punct::RBracket>),
-    Index(Surrounded<punct::LBracket, Box<Expr<'input>>, punct::RBracket>),
+    Slice(#[tok(LBRACKET, this, RBRACKET)]  SubscriptSlice<'input> ),
+    Index(#[tok(LBRACKET, this, RBRACKET)]  Box<Expr<'input>> ),
     Field(IndirectionField<'input>),
 }
 
@@ -749,43 +550,31 @@ pub enum IndirectionEl<'input> {
 ///
 /// Used on the right side of a comparison operator: `x = ANY(array_expr)`
 /// or `x = ANY(SELECT ...)`. Also valid as a standalone expression atom.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AnyExpr<'input> {
-    pub any: ANY,
-    pub content: Surrounded<punct::LParen, ParenContent<'input>, punct::RParen>,
+    #[tok(ANY, LPAREN, this, RPAREN)]
+    pub content:  ParenContent<'input> ,
 }
 
 /// `ALL(expr)` or `ALL(subquery)` — quantified comparison operand.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AllExpr<'input> {
-    pub all: ALL,
-    pub content: Surrounded<punct::LParen, ParenContent<'input>, punct::RParen>,
+    #[tok(ALL, LPAREN, this, RPAREN)]
+    pub content:  ParenContent<'input> ,
 }
 
 /// `SOME(expr)` or `SOME(subquery)` — synonym for ANY.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SomeExpr<'input> {
-    pub some: SOME,
-    pub content: Surrounded<punct::LParen, ParenContent<'input>, punct::RParen>,
+    #[tok(SOME, LPAREN, this, RPAREN)]
+    pub content:  ParenContent<'input> ,
 }
 
 /// EXISTS subquery: `EXISTS (SELECT ...)`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExistsExpr<'input> {
-    pub exists: EXISTS,
-    pub subquery: Surrounded<punct::LParen, Box<Subquery<'input>>, punct::RParen>,
+    #[tok(EXISTS, LPAREN, this, RPAREN)]
+    pub subquery:  Box<Subquery<'input>> ,
 }
 
 /// One element of an `ARRAY[...]` constructor: either an ordinary
@@ -794,116 +583,86 @@ pub struct ExistsExpr<'input> {
 ///
 /// Variant ordering: `Nested` leads with `[`, which no expression atom
 /// does, so dispatch is unambiguous.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ArrayElement<'input> {
-    Nested(Surrounded<punct::LBracket, Seq0<ArrayElement<'input>, punct::Comma>, punct::RBracket>),
+    Nested(#[tok(LBRACKET, this, RBRACKET)] #[sep(COMMA)]  Vec<ArrayElement<'input> > ),
     Expr(Box<Expr<'input>>),
 }
 
 /// ARRAY bracket constructor: `ARRAY[expr, ...]`, including the
 /// multi-dimensional form `ARRAY[[1,2],[3,4]]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ArrayBracket<'input> {
-    pub array: ARRAY,
-    pub lbracket: punct::LBracket,
-    pub elements: Seq0<ArrayElement<'input>, punct::Comma>,
-    pub rbracket: punct::RBracket,
+    #[tok(ARRAY, LBRACKET, this, RBRACKET)]
+    #[sep(COMMA)]
+    pub elements: Vec<ArrayElement<'input> >,
 }
 
 /// ARRAY subquery constructor: `ARRAY(subquery)`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ArraySubquery<'input> {
-    pub array: ARRAY,
-    pub subquery: Surrounded<punct::LParen, Box<Subquery<'input>>, punct::RParen>,
+    #[tok(ARRAY, LPAREN, this, RPAREN)]
+    pub subquery:  Box<Subquery<'input>> ,
 }
 
 /// ARRAY constructor: `ARRAY[expr, ...]` or `ARRAY(subquery)`
 ///
 /// Variant ordering: Bracket (`ARRAY[`) has a longer first_pattern than
 /// Subquery (`ARRAY(`) because `[` is a different token than `(`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ArrayExpr<'input> {
     Bracket(ArrayBracket<'input>),
     Subquery(ArraySubquery<'input>),
 }
 
 /// ROW constructor: `ROW(expr, ...)`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RowExpr<'input> {
-    pub row: ROW,
-    pub values: Surrounded<punct::LParen, Seq0<Expr<'input>, punct::Comma>, punct::RParen>,
+    #[tok(ROW, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub values:  Vec<Expr<'input> > ,
 }
 
 /// `WHEN cond THEN result` arm of a CASE expression.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CaseWhenArm<'input> {
-    pub when: WHEN,
+    #[tok(WHEN, this)]
     pub condition: Box<Expr<'input>>,
-    pub then: THEN,
+    #[tok(THEN, this)]
     pub result: Box<Expr<'input>>,
 }
 
 /// `ELSE result` clause of a CASE expression.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CaseElse<'input> {
-    pub r#else: ELSE,
+    #[tok(ELSE, this)]
     pub result: Box<Expr<'input>>,
 }
 
 /// Searched CASE: `CASE WHEN cond THEN result [...] [ELSE result] END`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CaseSearched<'input> {
-    pub case: CASE,
+    #[tok(CASE, this)]
     pub first_arm: CaseWhenArm<'input>,
     pub rest_arms: Vec<CaseWhenArm<'input>>,
+    #[tok(this, END)]
     pub else_clause: Option<CaseElse<'input>>,
-    pub end: END,
 }
 
 /// Simple CASE: `CASE operand WHEN val THEN result [...] [ELSE result] END`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CaseSimple<'input> {
-    pub case: CASE,
+    #[tok(CASE, this)]
     pub operand: Box<Expr<'input>>,
     pub first_arm: CaseWhenArm<'input>,
     pub rest_arms: Vec<CaseWhenArm<'input>>,
+    #[tok(this, END)]
     pub else_clause: Option<CaseElse<'input>>,
-    pub end: END,
 }
 
 /// CASE expression: searched form (first, since `CASE WHEN` is a longer
 /// specific prefix than `CASE` followed by any expression) or simple form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CaseExpr<'input> {
     Searched(CaseSearched<'input>),
     Simple(CaseSimple<'input>),
@@ -916,44 +675,32 @@ pub enum CaseExpr<'input> {
 /// ordering: `Sized` (`[N]`, 3 tokens) before `Empty` (`[]`, 2 tokens) so
 /// longest-match-wins picks the longer form when an integer literal is
 /// present between the brackets.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(FormatTokens, Visit, Transform, Debug, Clone, PartialEq, Eq)]
-#[recursa::parser(rules = SqlRules)]
 pub enum ArraySuffix<'input> {
     Sized(ArraySuffixSized<'input>),
     Empty(ArraySuffixEmpty),
 }
 
 /// `[N]` array bound.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(FormatTokens, Visit, Transform, Debug, Clone, PartialEq, Eq)]
-#[recursa::parser(rules = SqlRules)]
 pub struct ArraySuffixSized<'input> {
-    pub bounds: Surrounded<punct::LBracket, literal::IntegerLit<'input>, punct::RBracket>,
+    #[tok(LBRACKET, this, RBRACKET)]
+    pub bounds:  literal::IntegerLit<'input> ,
 }
 
 /// `[]` array suffix (unbounded).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(FormatTokens, Visit, Transform, Debug, Clone, PartialEq, Eq)]
-#[recursa::parser(rules = SqlRules)]
-pub struct ArraySuffixEmpty {
-    pub bounds: Surrounded<punct::LBracket, (), punct::RBracket>,
-}
+pub enum ArraySuffixEmpty { #[tok(LBRACKET, RBRACKET)] Value, }
 
 /// Cast type with optional precision and zero-or-more array suffixes:
 /// `numeric(10,0)`, `integer[]`, `int4[][][]`, `varchar(4)[2][3]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(FormatTokens, Visit, Transform, Debug, Clone, PartialEq, Eq)]
-#[recursa::parser(rules = SqlRules)]
 pub struct CastType<'input> {
     pub base: TypeName<'input>,
+    #[presence(VARYING)]
     /// `VARYING` modifier (e.g., `BIT VARYING`, `CHARACTER VARYING`).
     /// Always precedes the precision parens.
-    pub varying: Option<VARYING>,
+    pub varying: bool,
     pub precision: Option<TypePrecision<'input>>,
     /// `WITH/WITHOUT TIME ZONE` qualifier on `TIME`/`TIMESTAMP` types.
     /// Always follows the precision parens.
@@ -973,66 +720,47 @@ pub struct CastType<'input> {
 
 /// `ARRAY` or `ARRAY[N]` post-type-name array suffix
 /// (PG gram.y: `SimpleTypename ARRAY | SimpleTypename ARRAY '[' Iconst ']'`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(FormatTokens, Visit, Transform, Debug, Clone, PartialEq, Eq)]
-#[recursa::parser(rules = SqlRules)]
 pub struct ArrayKwSuffix<'input> {
-    pub array: ARRAY,
+    #[tok(ARRAY, this)]
     pub bound: Option<ArraySuffixSized<'input>>,
 }
 
 /// NOT IN list: `expr NOT IN (val, ...)` suffix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct NotInSuffix<'input> {
-    pub not: NOT,
-    pub r#in: IN,
+    #[tok(NOT, IN, this)]
     pub list: InList<'input>,
 }
 
 /// Payload for function-style type cast: either a string literal (common
 /// case `bool 'value'`) or a psql client variable substitution
 /// (`bigint :'txid_current'`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TypeCastValue<'input> {
     String(literal::StringLit<'input>),
-    PsqlVar(literal::PsqlVar<'input>),
+    PsqlVar(literal::PsqlVariable<'input>),
 }
 
 /// Function-style type cast: `bool 'value'`, `text 'hello'`, `char(20) 'text'`,
 /// `bigint :'var'`. Uses `CastType` (not bare `TypeName`) to support precision.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TypeCastFunc<'input> {
     pub type_name: CastType<'input>,
     pub value: TypeCastValue<'input>,
 }
 
 /// `WITH TIME ZONE` or `WITHOUT TIME ZONE` suffix for `TIMESTAMP`/`TIME`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(FormatTokens, Visit, Transform, Debug, Clone, PartialEq, Eq)]
-#[recursa::parser(rules = SqlRules)]
 pub enum TimeZoneQualifier {
-    With((WITH, TIME, ZONE)),
-    Without((WITHOUT, TIME, ZONE)),
+    #[tok(WITH, TIME, ZONE)] With,
+    #[tok(WITHOUT, TIME, ZONE)] Without,
 }
 
 /// `TIMESTAMP [WITH|WITHOUT TIME ZONE] 'string'`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TimestampLit<'input> {
-    pub timestamp: TIMESTAMP,
+    #[tok(TIMESTAMP, this)]
     /// Optional precision, e.g., `timestamp(6)`.
     pub precision: Option<TypePrecision<'input>>,
     pub tz: Option<TimeZoneQualifier>,
@@ -1040,12 +768,9 @@ pub struct TimestampLit<'input> {
 }
 
 /// `TIME [WITH|WITHOUT TIME ZONE] 'string'`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TimeLit<'input> {
-    pub time: TIME,
+    #[tok(TIME, this)]
     /// Optional precision, e.g., `time(2)`.
     pub precision: Option<TypePrecision<'input>>,
     pub tz: Option<TimeZoneQualifier>,
@@ -1055,12 +780,9 @@ pub struct TimeLit<'input> {
 /// `SECOND [(p)]` — the SECOND keyword with optional fractional-second
 /// precision. Used in interval qualifiers like `SECOND(2)` or
 /// `DAY TO SECOND(2)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(FormatTokens, Visit, Transform, Debug, Clone, PartialEq, Eq)]
-#[recursa::parser(rules = SqlRules)]
 pub struct SecondWithPrecision<'input> {
-    pub second: SECOND,
+    #[tok(SECOND, this)]
     pub precision: Option<TypePrecision<'input>>,
 }
 
@@ -1070,33 +792,27 @@ pub struct SecondWithPrecision<'input> {
 /// single-keyword forms so longest-match-wins picks the fuller qualifier
 /// when available. `*ToSecond` variants use `SecondWithPrecision` which
 /// allows optional `(p)` precision.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(FormatTokens, Visit, Transform, Debug, Clone, PartialEq, Eq)]
-#[recursa::parser(rules = SqlRules)]
 pub enum IntervalQualifier<'input> {
-    YearToMonth((YEAR, TO, MONTH)),
-    DayToHour((DAY, TO, HOUR)),
-    DayToMinute((DAY, TO, MINUTE)),
-    DayToSecond((DAY, TO, SecondWithPrecision<'input>)),
-    HourToMinute((HOUR, TO, MINUTE)),
-    HourToSecond((HOUR, TO, SecondWithPrecision<'input>)),
-    MinuteToSecond((MINUTE, TO, SecondWithPrecision<'input>)),
-    Year(YEAR),
-    Month(MONTH),
-    Day(DAY),
-    Hour(HOUR),
-    Minute(MINUTE),
+    #[tok(YEAR, TO, MONTH)] YearToMonth,
+    #[tok(DAY, TO, HOUR)] DayToHour,
+    #[tok(DAY, TO, MINUTE)] DayToMinute,
+    DayToSecond(#[tok(DAY, TO, this)] SecondWithPrecision<'input>),
+    #[tok(HOUR, TO, MINUTE)] HourToMinute,
+    HourToSecond(#[tok(HOUR, TO, this)] SecondWithPrecision<'input>),
+    MinuteToSecond(#[tok(MINUTE, TO, this)] SecondWithPrecision<'input>),
+    #[tok(YEAR)] Year,
+    #[tok(MONTH)] Month,
+    #[tok(DAY)] Day,
+    #[tok(HOUR)] Hour,
+    #[tok(MINUTE)] Minute,
     Second(SecondWithPrecision<'input>),
 }
 
 /// `INTERVAL 'str' [qualifier]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(FormatTokens, Visit, Transform, Debug, Clone)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IntervalLit<'input> {
-    pub interval: INTERVAL,
+    #[tok(INTERVAL, this)]
     /// Optional precision, e.g. `interval(2)` or `interval(0)`.
     pub precision: Option<TypePrecision<'input>>,
     pub value: literal::StringLit<'input>,
@@ -1115,55 +831,42 @@ pub struct IntervalLit<'input> {
 // They are modeled here as dedicated atoms declared before `FuncCall`.
 
 /// A `name [AS alias]` argument to `xmlattributes` / `xmlforest`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlNamedArg<'input> {
     pub value: Box<Expr<'input>>,
     pub alias: Option<XmlNamedArgAlias<'input>>,
 }
 
 /// `AS alias` suffix on an XML named argument.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlNamedArgAlias<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
 }
 
 /// `xmlattributes(expr [AS alias], ...)` — used as a positional argument
 /// to `xmlelement`, but also can be parsed standalone.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlAttributes<'input> {
-    pub kw: XMLATTRIBUTES,
-    pub args: Surrounded<punct::LParen, Seq0<XmlNamedArg<'input>, punct::Comma>, punct::RParen>,
+    #[tok(XMLATTRIBUTES, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:  Vec<XmlNamedArg<'input> > ,
 }
 
 /// Optional `, xmlattributes(...) [, content_exprs]` tail of `xmlelement`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlElementAttrsTail<'input> {
-    pub comma: punct::Comma,
+    #[tok(COMMA, this)]
     pub attrs: XmlAttributes<'input>,
     pub content: Option<XmlElementContentTail<'input>>,
 }
 
 /// Optional `, content_exprs` tail of `xmlelement`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlElementContentTail<'input> {
-    pub comma: punct::Comma,
-    pub exprs: Seq0<Expr<'input>, punct::Comma>,
+    #[tok(COMMA, this)]
+    #[sep(COMMA)]
+    pub exprs: Vec<Expr<'input> >,
 }
 
 /// Body of `xmlelement(NAME ident [, xmlattributes(...)] [, content_exprs])`.
@@ -1171,74 +874,54 @@ pub struct XmlElementContentTail<'input> {
 /// Variant ordering: the `WithAttrs` form starts with `, xmlattributes(`
 /// (longer match) and must be tried before `WithContent` which starts with
 /// just `,`. Both trail an `xmlelement(NAME ident` head.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum XmlElementTail<'input> {
     WithAttrs(XmlElementAttrsTail<'input>),
     WithContent(XmlElementContentTail<'input>),
 }
 
 /// Inner contents of an `xmlelement(...)` call.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlElementInner<'input> {
-    pub name: NAME,
+    #[tok(NAME, this)]
     pub element_name: literal::AliasName<'input>,
     pub tail: Option<XmlElementTail<'input>>,
 }
 
 /// `xmlelement(NAME ident [, xmlattributes(...)] [, content_exprs])`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlElement<'input> {
-    pub kw: XMLELEMENT,
-    pub inner: Surrounded<punct::LParen, XmlElementInner<'input>, punct::RParen>,
+    #[tok(XMLELEMENT, LPAREN, this, RPAREN)]
+    pub inner:  XmlElementInner<'input> ,
 }
 
 /// `xmlforest(expr [AS alias], ...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlForest<'input> {
-    pub kw: XMLFOREST,
-    pub args: Surrounded<punct::LParen, Seq0<XmlNamedArg<'input>, punct::Comma>, punct::RParen>,
+    #[tok(XMLFOREST, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:  Vec<XmlNamedArg<'input> > ,
 }
 
 /// `xmlpi(NAME ident [, content])`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlPi<'input> {
-    pub kw: XMLPI,
-    pub inner: Surrounded<punct::LParen, XmlPiInner<'input>, punct::RParen>,
+    #[tok(XMLPI, LPAREN, this, RPAREN)]
+    pub inner:  XmlPiInner<'input> ,
 }
 
 /// Inner contents of an `xmlpi(...)` call.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlPiInner<'input> {
-    pub name: NAME,
+    #[tok(NAME, this)]
     pub target: literal::AliasName<'input>,
     pub content: Option<XmlPiContentTail<'input>>,
 }
 
 /// Optional `, content_expr` tail of `xmlpi`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlPiContentTail<'input> {
-    pub comma: punct::Comma,
+    #[tok(COMMA, this)]
     pub expr: Box<Expr<'input>>,
 }
 
@@ -1248,189 +931,138 @@ pub struct XmlPiContentTail<'input> {
 // `VERSION`, `PASSING BY REF`, …) that a plain `FuncCall` cannot express.
 
 /// `DOCUMENT` / `CONTENT` — the XML value category in `XMLSERIALIZE` / `XMLPARSE`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum XmlDocOrContent {
-    Document(DOCUMENT),
-    Content(CONTENT),
+    #[tok(DOCUMENT)] Document,
+    #[tok(CONTENT)] Content,
 }
 
 /// `INDENT` / `NO INDENT` — output indentation option of `XMLSERIALIZE`.
 ///
 /// Variant ordering: `NoIndent` (`NO INDENT`, two tokens) before `Indent`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum XmlIndentOption {
-    NoIndent((NO, INDENT)),
-    Indent(INDENT),
+    #[tok(NO, INDENT)] NoIndent,
+    #[tok(INDENT)] Indent,
 }
 
 /// Inner of `XMLSERIALIZE ( {DOCUMENT|CONTENT} ‹expr› AS ‹type› [[NO] INDENT] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlSerializeInner<'input> {
     pub which: XmlDocOrContent,
     pub value: Box<Expr<'input>>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub ty: CastType<'input>,
     pub indent: Option<XmlIndentOption>,
 }
 
 /// `XMLSERIALIZE ( {DOCUMENT|CONTENT} ‹expr› AS ‹type› [[NO] INDENT] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlSerialize<'input> {
-    pub kw: XMLSERIALIZE,
-    pub inner: Surrounded<punct::LParen, XmlSerializeInner<'input>, punct::RParen>,
+    #[tok(XMLSERIALIZE, LPAREN, this, RPAREN)]
+    pub inner:  XmlSerializeInner<'input> ,
 }
 
 /// Inner of `XMLPARSE ( {DOCUMENT|CONTENT} ‹expr› )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlParseInner<'input> {
     pub which: XmlDocOrContent,
     pub value: Box<Expr<'input>>,
 }
 
 /// `XMLPARSE ( {DOCUMENT|CONTENT} ‹expr› )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlParse<'input> {
-    pub kw: XMLPARSE,
-    pub inner: Surrounded<punct::LParen, XmlParseInner<'input>, punct::RParen>,
+    #[tok(XMLPARSE, LPAREN, this, RPAREN)]
+    pub inner:  XmlParseInner<'input> ,
 }
 
 /// `VERSION {‹expr› | NO VALUE}` — the version argument of `XMLROOT`.
 ///
 /// Variant ordering: `NoValue` (`NO VALUE`) before the catch-all `Expr`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum XmlVersionValue<'input> {
-    NoValue((NO, VALUE)),
+    #[tok(NO, VALUE)] NoValue,
     Expr(Box<Expr<'input>>),
 }
 
 /// `VERSION {…}` clause of `XMLROOT`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlRootVersion<'input> {
-    pub version: VERSION,
+    #[tok(VERSION, this)]
     pub value: XmlVersionValue<'input>,
 }
 
 /// `STANDALONE {YES | NO [VALUE]}`.
 ///
 /// Variant ordering: `NoValue` (`NO VALUE`) before bare `No`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum XmlStandaloneValue {
-    Yes(YES),
-    NoValue((NO, VALUE)),
-    No(NO),
+    #[tok(YES)] Yes,
+    #[tok(NO, VALUE)] NoValue,
+    #[tok(NO)] No,
 }
 
 /// `, STANDALONE {…}` clause of `XMLROOT`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlRootStandalone {
-    pub comma: punct::Comma,
-    pub standalone: STANDALONE,
+    #[tok(COMMA, STANDALONE, this)]
     pub value: XmlStandaloneValue,
 }
 
 /// Inner of `XMLROOT ( ‹xml› , VERSION {…} [, STANDALONE {…}] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlRootInner<'input> {
     pub value: Box<Expr<'input>>,
-    pub comma: punct::Comma,
+    #[tok(COMMA, this)]
     pub version: XmlRootVersion<'input>,
     pub standalone: Option<XmlRootStandalone>,
 }
 
 /// `XMLROOT ( ‹xml› , VERSION {…} [, STANDALONE {…}] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlRoot<'input> {
-    pub kw: XMLROOT,
-    pub inner: Surrounded<punct::LParen, XmlRootInner<'input>, punct::RParen>,
+    #[tok(XMLROOT, LPAREN, this, RPAREN)]
+    pub inner:  XmlRootInner<'input> ,
 }
 
 /// `BY REF` / `BY VALUE` qualifier of an `XMLEXISTS` / `XMLTABLE` PASSING clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum XmlRefOrValue {
-    Ref(REF),
-    Value(VALUE),
+    #[tok(REF)] Ref,
+    #[tok(VALUE)] Value,
 }
 
 /// `BY {REF|VALUE}` qualifier.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlPassingBy {
-    pub by: BY,
+    #[tok(BY, this)]
     pub which: XmlRefOrValue,
 }
 
 /// Inner of `XMLEXISTS ( ‹xpath› PASSING [BY {REF|VALUE}] ‹doc› [BY {REF|VALUE}] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlExistsInner<'input> {
     pub xpath: Box<Expr<'input>>,
-    pub passing: PASSING,
+    #[tok(PASSING, this)]
     pub by_before: Option<XmlPassingBy>,
     pub doc: Box<Expr<'input>>,
     pub by_after: Option<XmlPassingBy>,
 }
 
 /// `XMLEXISTS ( ‹xpath› PASSING [BY {REF|VALUE}] ‹doc› [BY {REF|VALUE}] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlExists<'input> {
-    pub kw: XMLEXISTS,
-    pub inner: Surrounded<punct::LParen, XmlExistsInner<'input>, punct::RParen>,
+    #[tok(XMLEXISTS, LPAREN, this, RPAREN)]
+    pub inner:  XmlExistsInner<'input> ,
 }
 
 /// The tail of an `IS DOCUMENT` predicate: `[NOT] DOCUMENT`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IsDocumentTail {
-    pub not: Option<NOT>,
-    pub document: DOCUMENT,
+    #[tok(this, DOCUMENT)]
+    #[presence(NOT)]
+    pub not: bool,
 }
 
 // --- SQL-standard string function atoms ---
@@ -1439,14 +1071,11 @@ pub struct IsDocumentTail {
 // separators inside parens that don't fit a comma-separated FuncCall.
 
 /// Trim direction: `LEADING | TRAILING | BOTH`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TrimDir {
-    Leading(LEADING),
-    Trailing(TRAILING),
-    Both(BOTH),
+    #[tok(LEADING)] Leading,
+    #[tok(TRAILING)] Trailing,
+    #[tok(BOTH)] Both,
 }
 
 /// Inside of `TRIM(...)`. Forms per gram.y `trim_list`:
@@ -1460,10 +1089,7 @@ pub enum TrimDir {
 /// `from_args` carries the explicit-FROM tail when present; otherwise
 /// `bare_args` carries the bare expression list (single expr in PG's
 /// regression corpus, but PG admits multiple).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TrimInner<'input> {
     pub dir: Option<TrimDir>,
     pub tail: TrimTail<'input>,
@@ -1475,80 +1101,61 @@ pub struct TrimInner<'input> {
 /// distinct from any `Expr` atom; `WithChars` second because the `[chars]
 /// FROM source` form starts with an Expr; `BareArgs` last as the catch-all
 /// `[expr, ...]` (no `FROM`) form for `trim(LEADING ' foo ')` shapes.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TrimTail<'input> {
     /// `FROM expr_list` — explicit-FROM, no leading chars.
     FromArgs(TrimFromArgs<'input>),
     /// `chars FROM source` — explicit-FROM with leading chars.
     WithChars(TrimWithChars<'input>),
     /// `expr_list` — no `FROM`, just the source-and-chars expression list.
-    BareArgs(Seq1<Expr<'input>, punct::Comma>),
+    BareArgs(#[sep(COMMA)] recursa::Vec1<Expr<'input> >),
 }
 
 /// `FROM expr_list` tail of `TRIM(...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TrimFromArgs<'input> {
-    pub from: FROM,
-    pub args: Seq1<Expr<'input>, punct::Comma>,
+    #[tok(FROM, this)]
+    #[sep(COMMA)]
+    pub args: recursa::Vec1<Expr<'input> >,
 }
 
 /// `chars FROM source` tail of `TRIM(...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TrimWithChars<'input> {
     pub chars: Box<Expr<'input>>,
-    pub from: FROM,
-    pub args: Seq1<Expr<'input>, punct::Comma>,
+    #[tok(FROM, this)]
+    #[sep(COMMA)]
+    pub args: recursa::Vec1<Expr<'input> >,
 }
 
 /// `TRIM([LEADING|TRAILING|BOTH] [chars] FROM source)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TrimCall<'input> {
-    pub kw: TRIM,
-    pub inner: Surrounded<punct::LParen, TrimInner<'input>, punct::RParen>,
+    #[tok(TRIM, LPAREN, this, RPAREN)]
+    pub inner:  TrimInner<'input> ,
 }
 
 /// `FOR len` suffix in `SUBSTRING(... FROM ... FOR ...)` / `OVERLAY(...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForCount<'input> {
-    pub r#for: FOR,
+    #[tok(FOR, this)]
     pub count: Box<Expr<'input>>,
 }
 
 /// `FROM start [FOR len]` form for SUBSTRING.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SubstringFromFor<'input> {
-    pub from: FROM,
+    #[tok(FROM, this)]
     pub start: Box<Expr<'input>>,
     pub for_count: Option<ForCount<'input>>,
 }
 
 /// `SIMILAR pattern ESCAPE escape` form for SUBSTRING.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SubstringSimilar<'input> {
-    pub similar: SIMILAR,
+    #[tok(SIMILAR, this)]
     pub pattern: Box<Expr<'input>>,
-    pub escape_kw: ESCAPE,
+    #[tok(ESCAPE, this)]
     pub escape: Box<Expr<'input>>,
 }
 
@@ -1556,10 +1163,7 @@ pub struct SubstringSimilar<'input> {
 ///
 /// Variant ordering: `Similar` (`SIMILAR`) before `FromFor` (`FROM`) — distinct
 /// first tokens, so order is not strictly required, but listed by length.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SubstringTail<'input> {
     Similar(SubstringSimilar<'input>),
     FromFor(SubstringFromFor<'input>),
@@ -1567,112 +1171,81 @@ pub enum SubstringTail<'input> {
 }
 
 /// Inner of `SUBSTRING(...)`: `source` followed by FROM/SIMILAR tail.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SubstringInner<'input> {
     pub source: Box<Expr<'input>>,
     pub tail: SubstringTail<'input>,
 }
 
 /// `COLLATION FOR (expr)` — SQL-standard collation introspection.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CollationForCall<'input> {
-    pub collation: COLLATION,
-    pub r#for: FOR,
-    pub arg: Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>,
+    #[tok(COLLATION, FOR, LPAREN, this, RPAREN)]
+    pub arg:  Box<Expr<'input>> ,
 }
 
 /// `expr AS cast_type [COLLATE "c"]` — inner of `CAST(...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CastAsInner<'input> {
     pub value: Box<Expr<'input>>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub target: CastType<'input>,
     pub collate: Option<CollateSuffix<'input>>,
 }
 
 /// `COLLATE "name"` suffix appearing after a cast target type.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CollateSuffix<'input> {
-    pub collate: COLLATE,
+    #[tok(COLLATE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `CAST(expr AS type [COLLATE "c"])` — SQL-standard cast form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CastCall<'input> {
-    pub kw: CAST,
-    pub inner: Surrounded<punct::LParen, CastAsInner<'input>, punct::RParen>,
+    #[tok(CAST, LPAREN, this, RPAREN)]
+    pub inner:  CastAsInner<'input> ,
 }
 
 /// `SUBSTRING(source FROM start [FOR len])` /
 /// `SUBSTRING(source SIMILAR pattern ESCAPE escape)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SubstringCall<'input> {
-    pub kw: SUBSTRING,
-    pub inner: Surrounded<punct::LParen, SubstringInner<'input>, punct::RParen>,
+    #[tok(SUBSTRING, LPAREN, this, RPAREN)]
+    pub inner:  SubstringInner<'input> ,
 }
 
 /// Inner of `POSITION(needle IN haystack)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PositionInner<'input> {
     pub needle: Box<Expr<'input>>,
-    pub r#in: IN,
+    #[tok(IN, this)]
     pub haystack: Box<Expr<'input>>,
 }
 
 /// `POSITION(needle IN haystack)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PositionCall<'input> {
-    pub kw: POSITION,
-    pub inner: Surrounded<punct::LParen, PositionInner<'input>, punct::RParen>,
+    #[tok(POSITION, LPAREN, this, RPAREN)]
+    pub inner:  PositionInner<'input> ,
 }
 
 /// Inner of `OVERLAY(source PLACING new FROM start [FOR len])`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OverlayInner<'input> {
     pub source: Box<Expr<'input>>,
-    pub placing: PLACING,
+    #[tok(PLACING, this)]
     pub new: Box<Expr<'input>>,
-    pub from: FROM,
+    #[tok(FROM, this)]
     pub start: Box<Expr<'input>>,
     pub for_count: Option<ForCount<'input>>,
 }
 
 /// `OVERLAY(source PLACING new FROM start [FOR len])`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OverlayCall<'input> {
-    pub kw: OVERLAY,
-    pub inner: Surrounded<punct::LParen, OverlayInner<'input>, punct::RParen>,
+    #[tok(OVERLAY, LPAREN, this, RPAREN)]
+    pub inner:  OverlayInner<'input> ,
 }
 
 /// Field argument of `EXTRACT(field FROM source)`.
@@ -1680,63 +1253,46 @@ pub struct OverlayCall<'input> {
 /// Variant ordering: `StringLit` before `Ident` — string literal has a
 /// distinct first token (`'`) so order is not strictly required; listed
 /// first to match the Postgres docs ordering.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ExtractField<'input> {
     StringLit(StringLitSeq0<'input>),
     Ident(literal::AliasName<'input>),
 }
 
 /// Inner of `EXTRACT(field FROM source)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExtractInner<'input> {
     pub field: ExtractField<'input>,
-    pub from: FROM,
+    #[tok(FROM, this)]
     pub source: Box<Expr<'input>>,
 }
 
 /// `EXTRACT(field FROM source)` — Postgres-specific function syntax.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExtractCall<'input> {
-    pub kw: EXTRACT,
-    pub inner: Surrounded<punct::LParen, ExtractInner<'input>, punct::RParen>,
+    #[tok(EXTRACT, LPAREN, this, RPAREN)]
+    pub inner:  ExtractInner<'input> ,
 }
 
 /// `UESCAPE 'c'` suffix that may follow a `U&'...'` literal.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UescapeSuffix<'input> {
-    pub uescape: UESCAPE,
+    #[tok(UESCAPE, this)]
     pub escape_char: literal::StringLit<'input>,
 }
 
 /// `U&'...'` unicode string literal with optional `UESCAPE 'c'` suffix.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UnicodeStringLitWithEscape<'input> {
+    #[lex(pattern = r"(?i:U)&'(?:[^']|'')*'")]
     pub lit: literal::UnicodeStringLit<'input>,
     pub uescape: Option<UescapeSuffix<'input>>,
 }
 
 /// `ESCAPE expr` clause on LIKE / SIMILAR TO / ILIKE operators.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct EscapeClause<'input> {
-    pub escape: ESCAPE,
+    #[tok(ESCAPE, this)]
     pub char: Box<Expr<'input>>,
 }
 
@@ -1756,86 +1312,59 @@ pub struct EscapeClause<'input> {
 // comma-separated call falls through to the ordinary `Func` atom.
 
 /// `ENCODING ‹name›` suffix of a `FORMAT JSON` clause (e.g. `ENCODING UTF8`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonEncoding<'input> {
-    pub encoding: ENCODING,
+    #[tok(ENCODING, this)]
     pub name: literal::AliasName<'input>,
 }
 
 /// `FORMAT JSON [ENCODING ‹name›]` — SQL/JSON input/output format specifier.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonFormat<'input> {
-    pub format: FORMAT,
-    pub json: JSON,
+    #[tok(FORMAT, JSON, this)]
     pub encoding: Option<JsonEncoding<'input>>,
 }
 
 /// `RETURNING ‹data_type› [FORMAT JSON [ENCODING ...]]` — output type clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonReturning<'input> {
-    pub returning: RETURNING,
+    #[tok(RETURNING, this)]
     pub ty: CastType<'input>,
     pub format: Option<JsonFormat<'input>>,
 }
 
 /// `WITH` / `WITHOUT` lead-in of a `UNIQUE KEYS` constraint.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WithOrWithout {
-    With(WITH),
-    Without(WITHOUT),
+    #[tok(WITH)] With,
+    #[tok(WITHOUT)] Without,
 }
 
 /// `{WITH|WITHOUT} UNIQUE [KEYS]` — duplicate-key handling for `JSON()` /
 /// `JSON_OBJECT()`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonUniqueKeys {
+    #[tok(this, UNIQUE, optional(KEYS))]
     pub with_or_without: WithOrWithout,
-    pub unique: UNIQUE,
-    pub keys: Option<KEYS>,
 }
 
 /// `NULL` / `ABSENT` lead-in of an `ON NULL` clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum NullOrAbsent {
-    Null(NULL),
-    Absent(ABSENT),
+    #[tok(NULL)] Null,
+    #[tok(ABSENT)] Absent,
 }
 
 /// `{NULL|ABSENT} ON NULL` — null-input handling for `JSON_OBJECT()` /
 /// `JSON_ARRAY()`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonOnNull {
+    #[tok(this, ON, NULL)]
     pub which: NullOrAbsent,
-    pub on: ON,
-    pub null: NULL,
 }
 
 /// Inner contents of `JSON ( ‹expr› [FORMAT JSON ...] [{WITH|WITHOUT} UNIQUE [KEYS]] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonConstructorInner<'input> {
     pub value: Box<Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
@@ -1843,30 +1372,21 @@ pub struct JsonConstructorInner<'input> {
 }
 
 /// `JSON ( ‹expr› [FORMAT JSON ...] [{WITH|WITHOUT} UNIQUE [KEYS]] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonConstructor<'input> {
-    pub kw: JSON,
-    pub inner: Surrounded<punct::LParen, JsonConstructorInner<'input>, punct::RParen>,
+    #[tok(JSON, LPAREN, this, RPAREN)]
+    pub inner:  JsonConstructorInner<'input> ,
 }
 
 /// `JSON_SCALAR ( ‹expr› )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonScalar<'input> {
-    pub kw: JSON_SCALAR,
-    pub inner: Surrounded<punct::LParen, Box<Expr<'input>>, punct::RParen>,
+    #[tok(JSON_SCALAR, LPAREN, this, RPAREN)]
+    pub inner:  Box<Expr<'input>> ,
 }
 
 /// Inner contents of `JSON_SERIALIZE ( ‹expr› [FORMAT JSON ...] [RETURNING ...] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonSerializeInner<'input> {
     pub value: Box<Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
@@ -1874,32 +1394,23 @@ pub struct JsonSerializeInner<'input> {
 }
 
 /// `JSON_SERIALIZE ( ‹expr› [FORMAT JSON ...] [RETURNING ‹type› ...] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonSerialize<'input> {
-    pub kw: JSON_SERIALIZE,
-    pub inner: Surrounded<punct::LParen, JsonSerializeInner<'input>, punct::RParen>,
+    #[tok(JSON_SERIALIZE, LPAREN, this, RPAREN)]
+    pub inner:  JsonSerializeInner<'input> ,
 }
 
 /// Key/value separator inside a `JSON_OBJECT` entry: `:` or the `VALUE` keyword.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum JsonKeyValueSep {
-    Colon(punct::Colon),
-    Value(VALUE),
+    #[tok(COLON)] Colon,
+    #[tok(VALUE)] Value,
 }
 
 /// One `[KEY] ‹key› {: | VALUE} ‹value› [FORMAT JSON ...]` entry of `JSON_OBJECT`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonObjectEntry<'input> {
-    pub key_kw: Option<KEY>,
+    #[tok(optional(KEY), this)]
     pub key: Box<Expr<'input>>,
     pub sep: JsonKeyValueSep,
     pub value: Box<Expr<'input>>,
@@ -1910,37 +1421,29 @@ pub struct JsonObjectEntry<'input> {
 /// optional `ON NULL`, `UNIQUE` and `RETURNING` clauses. The empty form
 /// (`JSON_OBJECT()`) and the returning-only form (`JSON_OBJECT(RETURNING ...)`)
 /// both fall out of `Seq0` accepting zero entries.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonObjectArgs<'input> {
     // `Option<Seq1<…>>` (not `Seq0`) so the entry list is fork-and-tried:
     // `Expr::peek` is keyword-permissive (the `QualRef` atom leads with a
     // keyword-accepting `AliasName`), so a `Seq0` element gate would
     // over-commit on a trailing `RETURNING`/`)` and then hard-fail. The
     // `Option` swallows that, leaving the cursor for the clauses below.
-    pub entries: Option<Seq1<JsonObjectEntry<'input>, punct::Comma>>,
+    #[sep(COMMA)]
+    pub entries: Option<recursa::Vec1<JsonObjectEntry<'input> >>,
     pub on_null: Option<JsonOnNull>,
     pub unique: Option<JsonUniqueKeys>,
     pub returning: Option<JsonReturning<'input>>,
 }
 
 /// `JSON_OBJECT ( [entries] [{NULL|ABSENT} ON NULL] [{WITH|WITHOUT} UNIQUE [KEYS]] [RETURNING ...] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonObject<'input> {
-    pub kw: JSON_OBJECT,
-    pub args: Surrounded<punct::LParen, JsonObjectArgs<'input>, punct::RParen>,
+    #[tok(JSON_OBJECT, LPAREN, this, RPAREN)]
+    pub args:  JsonObjectArgs<'input> ,
 }
 
 /// One `‹expr› [FORMAT JSON ...]` element of a `JSON_ARRAY` element list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonArrayElement<'input> {
     pub value: Box<Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
@@ -1955,21 +1458,15 @@ pub struct JsonArrayElement<'input> {
 ///
 /// Variant ordering: `Query` (leads with `SELECT`/`WITH`/`VALUES`/`TABLE`/`(`)
 /// before `Elements` so a subquery is not mis-parsed as a single element.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum JsonArrayBody<'input> {
     Query(Box<Subquery<'input>>),
-    Elements(Seq1<JsonArrayElement<'input>, punct::Comma>),
+    Elements(#[sep(COMMA)] recursa::Vec1<JsonArrayElement<'input> >),
 }
 
 /// Inner contents of `JSON_ARRAY`: an optional value part (subquery or
 /// element list) followed by the optional `ON NULL` and `RETURNING` clauses.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonArrayArgs<'input> {
     pub body: Option<JsonArrayBody<'input>>,
     pub on_null: Option<JsonOnNull>,
@@ -1977,13 +1474,10 @@ pub struct JsonArrayArgs<'input> {
 }
 
 /// `JSON_ARRAY ( ... )` — element-list or query form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonArray<'input> {
-    pub kw: JSON_ARRAY,
-    pub args: Surrounded<punct::LParen, JsonArrayArgs<'input>, punct::RParen>,
+    #[tok(JSON_ARRAY, LPAREN, this, RPAREN)]
+    pub args:  JsonArrayArgs<'input> ,
 }
 
 // --- SQL/JSON query function atoms ---
@@ -1995,33 +1489,25 @@ pub struct JsonArray<'input> {
 // express. Modeled as dedicated atoms before `Func`.
 
 /// One `‹value› AS ‹name›` binding of a `PASSING` clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonPassingArg<'input> {
     pub value: Box<Expr<'input>>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
 }
 
 /// `PASSING ‹value› AS ‹name› [, ...]` — jsonpath variable bindings.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonPassing<'input> {
-    pub passing: PASSING,
-    pub args: Seq1<JsonPassingArg<'input>, punct::Comma>,
+    #[tok(PASSING, this)]
+    #[sep(COMMA)]
+    pub args: recursa::Vec1<JsonPassingArg<'input> >,
 }
 
 /// `DEFAULT ‹expr›` — the default-value form of an `ON EMPTY`/`ON ERROR` behavior.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonDefault<'input> {
-    pub default: DEFAULT,
+    #[tok(DEFAULT, this)]
     pub value: Box<Expr<'input>>,
 }
 
@@ -2032,131 +1518,95 @@ pub struct JsonDefault<'input> {
 ///
 /// Variant ordering: the two-keyword `EMPTY ARRAY`/`EMPTY OBJECT` forms
 /// before bare `Empty` so longest-match-wins picks them.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum JsonBehavior<'input> {
-    EmptyArray((EMPTY, ARRAY)),
-    EmptyObject((EMPTY, OBJECT)),
-    Empty(EMPTY),
-    Error(ERROR),
-    Null(NULL),
-    True(TRUE),
-    False(FALSE),
-    Unknown(UNKNOWN),
+    #[tok(EMPTY, ARRAY)] EmptyArray,
+    #[tok(EMPTY, OBJECT)] EmptyObject,
+    #[tok(EMPTY)] Empty,
+    #[tok(ERROR)] Error,
+    #[tok(NULL)] Null,
+    #[tok(TRUE)] True,
+    #[tok(FALSE)] False,
+    #[tok(UNKNOWN)] Unknown,
     Default(JsonDefault<'input>),
 }
 
 /// `EMPTY` or `ERROR` — the trigger of an `ON` behavior clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum EmptyOrError {
-    Empty(EMPTY),
-    Error(ERROR),
+    #[tok(EMPTY)] Empty,
+    #[tok(ERROR)] Error,
 }
 
 /// `‹behavior› ON {EMPTY|ERROR}` clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonOnBehavior<'input> {
     pub behavior: JsonBehavior<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub trigger: EmptyOrError,
 }
 
 /// `CONDITIONAL` / `UNCONDITIONAL` modifier of a `WITH ... WRAPPER` clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WrapperBehavior {
-    Conditional(CONDITIONAL),
-    Unconditional(UNCONDITIONAL),
+    #[tok(CONDITIONAL)] Conditional,
+    #[tok(UNCONDITIONAL)] Unconditional,
 }
 
 /// `{WITH [CONDITIONAL|UNCONDITIONAL] | WITHOUT} [ARRAY] WRAPPER` — the
 /// `JSON_QUERY` array-wrapper clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonWrapper {
     pub with_or_without: WithOrWithout,
     pub behavior: Option<WrapperBehavior>,
-    pub array: Option<ARRAY>,
-    pub wrapper: WRAPPER,
+    #[tok(this, WRAPPER)]
+    #[presence(ARRAY)]
+    pub array: bool,
 }
 
 /// `ON SCALAR STRING` suffix of a `JSON_QUERY` quotes clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct JsonQuotesOnScalar {
-    pub on: ON,
-    pub scalar: SCALAR,
-    pub string: STRING,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum JsonQuotesOnScalar { #[tok(ON, SCALAR, STRING)] Value, }
 
 /// `KEEP` / `OMIT` lead-in of a `JSON_QUERY` quotes clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum KeepOrOmit {
-    Keep(KEEP),
-    Omit(OMIT),
+    #[tok(KEEP)] Keep,
+    #[tok(OMIT)] Omit,
 }
 
 /// `{KEEP|OMIT} QUOTES [ON SCALAR STRING]` — the `JSON_QUERY` quotes clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonQuotes {
     pub keep_or_omit: KeepOrOmit,
-    pub quotes: QUOTES,
+    #[tok(QUOTES, this)]
     pub on_scalar: Option<JsonQuotesOnScalar>,
 }
 
 /// Inner contents of `JSON_EXISTS ( ‹context› , ‹path› [PASSING ...] [‹behavior› ON ERROR] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonExistsInner<'input> {
     pub context: Box<Expr<'input>>,
     pub context_format: Option<JsonFormat<'input>>,
-    pub comma: punct::Comma,
+    #[tok(COMMA, this)]
     pub path: Box<Expr<'input>>,
     pub passing: Option<JsonPassing<'input>>,
     pub on_error: Option<JsonOnBehavior<'input>>,
 }
 
 /// `JSON_EXISTS ( ... )` — tests whether a jsonpath matches.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonExists<'input> {
-    pub kw: JSON_EXISTS,
-    pub inner: Surrounded<punct::LParen, JsonExistsInner<'input>, punct::RParen>,
+    #[tok(JSON_EXISTS, LPAREN, this, RPAREN)]
+    pub inner:  JsonExistsInner<'input> ,
 }
 
 /// Inner contents of `JSON_VALUE`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonValueInner<'input> {
     pub context: Box<Expr<'input>>,
     pub context_format: Option<JsonFormat<'input>>,
-    pub comma: punct::Comma,
+    #[tok(COMMA, this)]
     pub path: Box<Expr<'input>>,
     pub passing: Option<JsonPassing<'input>>,
     pub returning: Option<JsonReturning<'input>>,
@@ -2167,24 +1617,18 @@ pub struct JsonValueInner<'input> {
 }
 
 /// `JSON_VALUE ( ... )` — extracts a scalar SQL value via a jsonpath.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonValue<'input> {
-    pub kw: JSON_VALUE,
-    pub inner: Surrounded<punct::LParen, JsonValueInner<'input>, punct::RParen>,
+    #[tok(JSON_VALUE, LPAREN, this, RPAREN)]
+    pub inner:  JsonValueInner<'input> ,
 }
 
 /// Inner contents of `JSON_QUERY`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonQueryInner<'input> {
     pub context: Box<Expr<'input>>,
     pub context_format: Option<JsonFormat<'input>>,
-    pub comma: punct::Comma,
+    #[tok(COMMA, this)]
     pub path: Box<Expr<'input>>,
     pub passing: Option<JsonPassing<'input>>,
     pub returning: Option<JsonReturning<'input>>,
@@ -2195,13 +1639,10 @@ pub struct JsonQueryInner<'input> {
 }
 
 /// `JSON_QUERY ( ... )` — extracts a JSON value via a jsonpath.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonQuery<'input> {
-    pub kw: JSON_QUERY,
-    pub inner: Surrounded<punct::LParen, JsonQueryInner<'input>, punct::RParen>,
+    #[tok(JSON_QUERY, LPAREN, this, RPAREN)]
+    pub inner:  JsonQueryInner<'input> ,
 }
 
 // --- SQL/JSON aggregate atoms ---
@@ -2212,10 +1653,7 @@ pub struct JsonQuery<'input> {
 // the ordinary `FILTER (WHERE ...)` and `OVER (...)` suffixes.
 
 /// Inner contents of `JSON_OBJECTAGG`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonObjectAggInner<'input> {
     pub entry: JsonObjectEntry<'input>,
     pub on_null: Option<JsonOnNull>,
@@ -2224,22 +1662,16 @@ pub struct JsonObjectAggInner<'input> {
 }
 
 /// `JSON_OBJECTAGG ( ‹key› {: | VALUE} ‹value› ... ) [FILTER (...)] [OVER (...)]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonObjectAgg<'input> {
-    pub kw: JSON_OBJECTAGG,
-    pub inner: Surrounded<punct::LParen, JsonObjectAggInner<'input>, punct::RParen>,
+    #[tok(JSON_OBJECTAGG, LPAREN, this, RPAREN)]
+    pub inner:  JsonObjectAggInner<'input> ,
     pub filter: Option<FilterClause<'input>>,
     pub window: Option<WindowSpec<'input>>,
 }
 
 /// Inner contents of `JSON_ARRAYAGG`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonArrayAggInner<'input> {
     pub value: Box<Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
@@ -2249,13 +1681,10 @@ pub struct JsonArrayAggInner<'input> {
 }
 
 /// `JSON_ARRAYAGG ( ‹value› [ORDER BY ...] ... ) [FILTER (...)] [OVER (...)]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonArrayAgg<'input> {
-    pub kw: JSON_ARRAYAGG,
-    pub inner: Surrounded<punct::LParen, JsonArrayAggInner<'input>, punct::RParen>,
+    #[tok(JSON_ARRAYAGG, LPAREN, this, RPAREN)]
+    pub inner:  JsonArrayAggInner<'input> ,
     pub filter: Option<FilterClause<'input>>,
     pub window: Option<WindowSpec<'input>>,
 }
@@ -2263,26 +1692,21 @@ pub struct JsonArrayAgg<'input> {
 // --- `IS JSON` predicate ---
 
 /// The JSON item type tested by an `IS JSON` predicate.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum JsonTypeKind {
-    Value(VALUE),
-    Scalar(SCALAR),
-    Array(ARRAY),
-    Object(OBJECT),
+    #[tok(VALUE)] Value,
+    #[tok(SCALAR)] Scalar,
+    #[tok(ARRAY)] Array,
+    #[tok(OBJECT)] Object,
 }
 
 /// The tail of an `IS JSON` predicate: `[NOT] JSON [{VALUE|SCALAR|ARRAY|OBJECT}]
 /// [{WITH|WITHOUT} UNIQUE [KEYS]]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct IsJsonTail {
-    pub not: Option<NOT>,
-    pub json: JSON,
+    #[tok(this, JSON)]
+    #[presence(NOT)]
+    pub not: bool,
     pub type_kind: Option<JsonTypeKind>,
     pub unique: Option<JsonUniqueKeys>,
 }
@@ -2293,10 +1717,7 @@ pub struct IsJsonTail {
 /// Lets non-Pratt contexts (e.g. a `CREATE INDEX` expression element)
 /// accept the whole family. Aggregates and `JSON_TABLE` are excluded:
 /// neither is a plain value expression usable as an index element.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum JsonFuncExpr<'input> {
     Ctor(Box<JsonConstructor<'input>>),
     Scalar(Box<JsonScalar<'input>>),
@@ -2311,51 +1732,49 @@ pub enum JsonFuncExpr<'input> {
 // --- Pratt expression enum ---
 
 /// SQL expression with Pratt-derived parsing.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(FormatTokens, Debug, Clone, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, pratt)]
+#[pratt]
 pub enum Expr<'input> {
     // --- Prefix ---
     #[parse(prefix, bp = 15)]
-    Not(NOT, Box<Expr<'input>>),
+    Not( #[tok(NOT, this)] Box<Expr<'input>>),
     #[parse(prefix, bp = 12)]
-    Neg(punct::Minus, Box<Expr<'input>>),
+    Neg( #[tok(MINUS, this)] Box<Expr<'input>>),
     /// Unary plus: `+expr` — identity operator on numeric types.
     #[parse(prefix, bp = 12)]
-    Pos(punct::Plus, Box<Expr<'input>>),
+    Pos( #[tok(PLUS, this)] Box<Expr<'input>>),
     /// Unary geometric "center point": `@@ expr`. Postgres uses `@@` as
     /// a prefix operator on box / polygon / etc. (in addition to the
     /// text-search infix form).
     #[parse(prefix, bp = 12)]
-    GeomCenter(punct::AtAt, Box<Expr<'input>>),
+    GeomCenter( #[tok(ATAT, this)] Box<Expr<'input>>),
     /// Bitwise NOT: `~ expr` (e.g. inet / bit / int bitwise complement).
     /// Must come before any infix `~` variant so the prefix form wins when
     /// `~` appears at the start of an operand.
     #[parse(prefix, bp = 12)]
-    BitNot(punct::Tilde, Box<Expr<'input>>),
+    BitNot( #[tok(TILDE, this)] Box<Expr<'input>>),
     /// Geometric path/lseg length: `@-@ expr`. Must come before `Abs` (`@`)
     /// since `@-@` is longer.
     #[parse(prefix, bp = 12)]
-    PathLength(punct::AtMinusAt, Box<Expr<'input>>),
+    PathLength( #[tok(ATMINUSAT, this)] Box<Expr<'input>>),
     /// User-defined prefix: `@#@ expr` (e.g. factorial).
     #[parse(prefix, bp = 12)]
-    AtHashAtPrefix(punct::AtHashAt, Box<Expr<'input>>),
+    AtHashAtPrefix( #[tok(ATHASHAT, this)] Box<Expr<'input>>),
     /// Geometric point-count: `# path` — number of points in a path.
     #[parse(prefix, bp = 12)]
-    PointCount(punct::Pound, Box<Expr<'input>>),
+    PointCount( #[tok(POUND, this)] Box<Expr<'input>>),
     /// Absolute value: `@ expr` (Postgres unary `@` operator).
     #[parse(prefix, bp = 12)]
-    Abs(punct::At, Box<Expr<'input>>),
+    Abs( #[tok(AT, this)] Box<Expr<'input>>),
     /// User-defined prefix: `!=- expr`.
     #[parse(prefix, bp = 12)]
-    BangEqMinusPrefix(punct::BangEqMinus, Box<Expr<'input>>),
+    BangEqMinusPrefix( #[tok(BANGEQMINUS, this)] Box<Expr<'input>>),
     /// Square root: `|/ expr` (Postgres unary `|/` operator).
     #[parse(prefix, bp = 12)]
-    Sqrt(punct::PipeSlash, Box<Expr<'input>>),
+    Sqrt( #[tok(PIPESLASH, this)] Box<Expr<'input>>),
     /// Cube root: `||/ expr` (Postgres unary `||/` operator).
     #[parse(prefix, bp = 12)]
-    Cbrt(punct::PipePipeSlash, Box<Expr<'input>>),
+    Cbrt( #[tok(PIPEPIPESLASH, this)] Box<Expr<'input>>),
 
     /// Catch-all prefix: any user-defined prefix operator not matched by a
     /// specific token. Declared LAST among prefixes.
@@ -2365,83 +1784,78 @@ pub enum Expr<'input> {
     // --- Postfix ---
     /// Postgres-style cast: `expr::type`
     #[parse(postfix, bp = 20)]
-    Cast(Box<Expr<'input>>, punct::ColonColon, Box<CastType<'input>>),
+    Cast(Box<Expr<'input>>,  #[tok(COLONCOLON, this)] Box<CastType<'input>>),
     /// Composite field-star access: `(expr).*` — expand a composite/record
     /// value into its columns. Declared before `FieldAccess` so the longer
     /// `.*` form wins.
     #[parse(postfix, bp = 20)]
-    FieldStar(Box<Expr<'input>>, punct::Dot, punct::Star),
+    FieldStar(#[tok(this, DOT, STAR)] Box<Expr<'input>>),
     /// Composite field access: `(expr).field` — project one column from a
     /// composite/record value.
     #[parse(postfix, bp = 20)]
-    FieldAccess(Box<Expr<'input>>, punct::Dot, literal::AliasName<'input>),
+    FieldAccess(Box<Expr<'input>>,  #[tok(DOT, this)] literal::AliasName<'input>),
     /// Array slice: `expr[low:high]`, `expr[:high]`, `expr[low:]`, `expr[:]`.
     /// Declared before `Subscript` so the colon-containing form is tried first
     /// when both peek `[`.
     #[parse(postfix, bp = 20)]
     Slice(
         Box<Expr<'input>>,
-        punct::LBracket,
+        #[tok(LBRACKET, this, RBRACKET)]
         SubscriptSlice<'input>,
-        punct::RBracket,
     ),
     /// Array subscript: `expr[idx]`
     #[parse(postfix, bp = 20)]
     Subscript(
         Box<Expr<'input>>,
-        punct::LBracket,
+        #[tok(LBRACKET, this, RBRACKET)]
         Box<Expr<'input>>,
-        punct::RBracket,
     ),
     /// `expr COLLATE "collation"` — collation specifier. Binds tighter than
     /// comparisons (bp 5) but looser than `::` cast (bp 20).
     #[parse(postfix, bp = 18)]
-    Collate(Box<Expr<'input>>, COLLATE, crate::tokens::ColId<'input>),
+    Collate(Box<Expr<'input>>,  #[tok(COLLATE, this)] crate::tokens::ColId<'input>),
     /// `expr IS NOT DISTINCT FROM expr`. Declared before `IsDistinctFrom` so
     /// the longer `NOT` prefix wins disambiguation.
     #[parse(postfix, bp = 5, inner_bp = 6)]
     IsNotDistinctFrom(
         Box<Expr<'input>>,
-        IS,
-        NOT,
-        DISTINCT,
-        FROM,
+        #[tok(IS, NOT, DISTINCT, FROM, this)]
         Box<Expr<'input>>,
     ),
     /// `expr IS DISTINCT FROM expr`.
     #[parse(postfix, bp = 5, inner_bp = 6)]
-    IsDistinctFrom(Box<Expr<'input>>, (IS, DISTINCT, FROM), Box<Expr<'input>>),
+    IsDistinctFrom(Box<Expr<'input>>,  #[tok(IS, DISTINCT, FROM, this)] Box<Expr<'input>>),
     /// `expr IS [NOT] JSON [{VALUE|SCALAR|ARRAY|OBJECT}] [{WITH|WITHOUT}
     /// UNIQUE [KEYS]]` — the SQL/JSON type predicate. Declared before
     /// `BoolTest` (both lead with `IS`); `BoolTest` rejects `JSON` as a
     /// `BoolTestKind`, so order is not load-bearing, only tidy.
     #[parse(postfix, bp = 8)]
-    IsJson(Box<Expr<'input>>, IS, IsJsonTail),
+    IsJson(Box<Expr<'input>>,  #[tok(IS, this)] IsJsonTail),
     /// `expr IS [NOT] [NFC|NFD|NFKC|NFKD] NORMALIZED` — the Unicode
     /// normalisation predicate (gram.y rules 15198/15205/15212/15220).
     /// Declared before `BoolTest` (both lead with `IS`); `BoolTest` rejects
     /// `NORMALIZED`/`NFx` as a `BoolTestKind`, so order is not load-bearing.
     #[parse(postfix, bp = 8)]
-    IsNormalized(Box<Expr<'input>>, IS, IsNormalizedTail),
+    IsNormalized(Box<Expr<'input>>,  #[tok(IS, this)] IsNormalizedTail),
     /// `expr IS [NOT] DOCUMENT` — the XML document predicate.
     #[parse(postfix, bp = 8)]
-    IsDocument(Box<Expr<'input>>, IS, IsDocumentTail),
+    IsDocument(Box<Expr<'input>>,  #[tok(IS, this)] IsDocumentTail),
     /// Boolean test: `expr IS [NOT] TRUE/FALSE/UNKNOWN/NULL`
     #[parse(postfix, bp = 8)]
-    BoolTest(Box<Expr<'input>>, IS, BoolTestKind),
+    BoolTest(Box<Expr<'input>>,  #[tok(IS, this)] BoolTestKind),
     /// Postgres `expr NOTNULL` postfix null test (synonym for `IS NOT NULL`).
     #[parse(postfix, bp = 8)]
-    Notnull(Box<Expr<'input>>, NOTNULL),
+    Notnull(#[tok(this, NOTNULL)] Box<Expr<'input>>),
     /// Postgres `expr ISNULL` postfix null test (synonym for `IS NULL`).
     #[parse(postfix, bp = 8)]
-    Isnull(Box<Expr<'input>>, ISNULL),
+    Isnull(#[tok(this, ISNULL)] Box<Expr<'input>>),
     /// `expr AT LOCAL` — convert to session timezone. Listed before
     /// `AtTimeZone` so `AT LOCAL` wins (distinct second token `LOCAL` vs `TIME`).
     #[parse(postfix, bp = 9)]
-    AtLocal(Box<Expr<'input>>, AT, LOCAL),
+    AtLocal(#[tok(this, AT, LOCAL)] Box<Expr<'input>>),
     /// `expr AT TIME ZONE zone_expr` — convert to specified timezone.
     #[parse(postfix, bp = 9, inner_bp = 10)]
-    AtTimeZone(Box<Expr<'input>>, AT, TIME, ZONE, Box<Expr<'input>>),
+    AtTimeZone(Box<Expr<'input>>,    #[tok(AT, TIME, ZONE, this)] Box<Expr<'input>>),
     /// NOT IN list: `expr NOT IN (val, ...)`
     #[parse(postfix, bp = 6)]
     NotInExpr(Box<Expr<'input>>, NotInSuffix<'input>),
@@ -2451,8 +1865,7 @@ pub enum Expr<'input> {
     #[parse(postfix, bp = 5, inner_bp = 6)]
     NotIlike(
         Box<Expr<'input>>,
-        NOT,
-        ILIKE,
+        #[tok(NOT, ILIKE, this)]
         Box<Expr<'input>>,
         Option<EscapeClause<'input>>,
     ),
@@ -2461,9 +1874,7 @@ pub enum Expr<'input> {
     #[parse(postfix, bp = 5, inner_bp = 6)]
     NotSimilarTo(
         Box<Expr<'input>>,
-        NOT,
-        SIMILAR,
-        TO,
+        #[tok(NOT, SIMILAR, TO, this)]
         Box<Expr<'input>>,
         Option<EscapeClause<'input>>,
     ),
@@ -2472,8 +1883,7 @@ pub enum Expr<'input> {
     #[parse(postfix, bp = 5, inner_bp = 6)]
     NotLike(
         Box<Expr<'input>>,
-        NOT,
-        LIKE,
+        #[tok(NOT, LIKE, this)]
         Box<Expr<'input>>,
         Option<EscapeClause<'input>>,
     ),
@@ -2481,8 +1891,7 @@ pub enum Expr<'input> {
     #[parse(postfix, bp = 5, inner_bp = 6)]
     SimilarTo(
         Box<Expr<'input>>,
-        SIMILAR,
-        TO,
+        #[tok(SIMILAR, TO, this)]
         Box<Expr<'input>>,
         Option<EscapeClause<'input>>,
     ),
@@ -2490,7 +1899,7 @@ pub enum Expr<'input> {
     #[parse(postfix, bp = 5, inner_bp = 6)]
     Ilike(
         Box<Expr<'input>>,
-        ILIKE,
+        #[tok(ILIKE, this)]
         Box<Expr<'input>>,
         Option<EscapeClause<'input>>,
     ),
@@ -2498,78 +1907,78 @@ pub enum Expr<'input> {
     #[parse(postfix, bp = 5, inner_bp = 6)]
     Like(
         Box<Expr<'input>>,
-        LIKE,
+        #[tok(LIKE, this)]
         Box<Expr<'input>>,
         Option<EscapeClause<'input>>,
     ),
     // --- Locale-aware text comparison operators (4-char before 3-char) ---
     /// `expr ~<=~ expr` — locale-aware less-or-equal.
     #[parse(infix, bp = 5)]
-    TildeLeqTilde(Box<Expr<'input>>, punct::TildeLeqTilde, Box<Expr<'input>>),
+    TildeLeqTilde(Box<Expr<'input>>,  #[tok(TILDELEQTILDE, this)] Box<Expr<'input>>),
     /// `expr ~>=~ expr` — locale-aware greater-or-equal.
     #[parse(infix, bp = 5)]
-    TildeGeqTilde(Box<Expr<'input>>, punct::TildeGeqTilde, Box<Expr<'input>>),
+    TildeGeqTilde(Box<Expr<'input>>,  #[tok(TILDEGEQTILDE, this)] Box<Expr<'input>>),
     /// `expr ~<~ expr` — locale-aware less-than.
     #[parse(infix, bp = 5)]
-    TildeLtTilde(Box<Expr<'input>>, punct::TildeLtTilde, Box<Expr<'input>>),
+    TildeLtTilde(Box<Expr<'input>>,  #[tok(TILDELTTILDE, this)] Box<Expr<'input>>),
     /// `expr ~>~ expr` — locale-aware greater-than.
     #[parse(infix, bp = 5)]
-    TildeGtTilde(Box<Expr<'input>>, punct::TildeGtTilde, Box<Expr<'input>>),
+    TildeGtTilde(Box<Expr<'input>>,  #[tok(TILDEGTTILDE, this)] Box<Expr<'input>>),
     /// `expr !~* pattern` — POSIX case-insensitive negated regex match.
     #[parse(infix, bp = 5)]
-    RegexNotIMatch(Box<Expr<'input>>, punct::BangTildeStar, Box<Expr<'input>>),
+    RegexNotIMatch(Box<Expr<'input>>,  #[tok(BANGTILDESTAR, this)] Box<Expr<'input>>),
     /// `expr ~* pattern` — POSIX case-insensitive regex match.
     #[parse(infix, bp = 5)]
-    RegexIMatch(Box<Expr<'input>>, punct::TildeStar, Box<Expr<'input>>),
+    RegexIMatch(Box<Expr<'input>>,  #[tok(TILDESTAR, this)] Box<Expr<'input>>),
     /// `expr !~ pattern` — POSIX negated regex match.
     #[parse(infix, bp = 5)]
-    RegexNotMatch(Box<Expr<'input>>, punct::BangTilde, Box<Expr<'input>>),
+    RegexNotMatch(Box<Expr<'input>>,  #[tok(BANGTILDE, this)] Box<Expr<'input>>),
     /// `expr ~= expr` — geometric "same as" operator. Declared before `RegexMatch`
     /// so the longer `~=` wins longest-match.
     #[parse(infix, bp = 5)]
-    GeomSame(Box<Expr<'input>>, punct::TildeEq, Box<Expr<'input>>),
+    GeomSame(Box<Expr<'input>>,  #[tok(TILDEEQ, this)] Box<Expr<'input>>),
     /// `expr ~ pattern` — POSIX regex match.
     #[parse(infix, bp = 5)]
-    RegexMatch(Box<Expr<'input>>, punct::Tilde, Box<Expr<'input>>),
+    RegexMatch(Box<Expr<'input>>,  #[tok(TILDE, this)] Box<Expr<'input>>),
     /// `expr !~~* pattern` — operator-form `NOT ILIKE` (gram.y 14897).
     /// Declared before `LikeOpINeg` (`!~~`) so the longer `!~~*` wins.
     #[parse(infix, bp = 5)]
     LikeOpINeg(
         Box<Expr<'input>>,
-        punct::BangTildeTildeStar,
+        #[tok(BANGTILDETILDESTAR, this)]
         Box<Expr<'input>>,
     ),
     /// `expr ~~* pattern` — operator-form `ILIKE` (gram.y 14888).
     /// Declared before `LikeOpI` would be (no `~~*` longer prefix).
     #[parse(infix, bp = 5)]
-    LikeOpI(Box<Expr<'input>>, punct::TildeTildeStar, Box<Expr<'input>>),
+    LikeOpI(Box<Expr<'input>>,  #[tok(TILDETILDESTAR, this)] Box<Expr<'input>>),
     /// `expr !~~ pattern` — operator-form `NOT LIKE` (gram.y 14874).
     #[parse(infix, bp = 5)]
-    LikeOpNeg(Box<Expr<'input>>, punct::BangTildeTilde, Box<Expr<'input>>),
+    LikeOpNeg(Box<Expr<'input>>,  #[tok(BANGTILDETILDE, this)] Box<Expr<'input>>),
     /// `expr ~~ pattern` — operator-form `LIKE` (gram.y 14860).
     #[parse(infix, bp = 5)]
-    LikeOp(Box<Expr<'input>>, punct::TildeTilde, Box<Expr<'input>>),
+    LikeOp(Box<Expr<'input>>,  #[tok(TILDETILDE, this)] Box<Expr<'input>>),
     /// `(start, end) OVERLAPS (start, end)` — SQL time-period overlap test.
     /// Each operand is an ordinary parenthesized expression to the parser.
     #[parse(infix, bp = 5)]
-    Overlaps(Box<Expr<'input>>, OVERLAPS, Box<Expr<'input>>),
+    Overlaps(Box<Expr<'input>>,  #[tok(OVERLAPS, this)] Box<Expr<'input>>),
     /// Record comparison operators: `expr *= expr`, `*<>`, `*<`, `*<=`,
     /// `*>`, `*>=` — compare ROW/composite values field by field.
     #[parse(infix, bp = 5)]
-    RecordLte(Box<Expr<'input>>, punct::StarLte, Box<Expr<'input>>),
+    RecordLte(Box<Expr<'input>>,  #[tok(STARLTE, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    RecordGte(Box<Expr<'input>>, punct::StarGte, Box<Expr<'input>>),
+    RecordGte(Box<Expr<'input>>,  #[tok(STARGTE, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    RecordNeq(Box<Expr<'input>>, punct::StarNeq, Box<Expr<'input>>),
+    RecordNeq(Box<Expr<'input>>,  #[tok(STARNEQ, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    RecordLt(Box<Expr<'input>>, punct::StarLt, Box<Expr<'input>>),
+    RecordLt(Box<Expr<'input>>,  #[tok(STARLT, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    RecordGt(Box<Expr<'input>>, punct::StarGt, Box<Expr<'input>>),
+    RecordGt(Box<Expr<'input>>,  #[tok(STARGT, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    RecordEq(Box<Expr<'input>>, punct::StarEq, Box<Expr<'input>>),
+    RecordEq(Box<Expr<'input>>,  #[tok(STAREQ, this)] Box<Expr<'input>>),
     /// IN list: `expr IN (val, ...)`
     #[parse(postfix, bp = 6)]
-    InExpr(Box<Expr<'input>>, IN, InList<'input>),
+    InExpr(Box<Expr<'input>>,  #[tok(IN, this)] InList<'input>),
     /// `expr NOT BETWEEN low AND high`. Declared before `BetweenExpr` so
     /// the longer `NOT BETWEEN` prefix wins disambiguation. `inner_bp = 3`
     /// keeps the low/high operands from swallowing the literal `AND` that
@@ -2577,10 +1986,9 @@ pub enum Expr<'input> {
     #[parse(postfix, bp = 6, inner_bp = 3)]
     NotBetweenExpr(
         Box<Expr<'input>>,
-        NOT,
-        BETWEEN,
+        #[tok(NOT, BETWEEN, this)]
         Box<Expr<'input>>,
-        AND,
+        #[tok(AND, this)]
         Box<Expr<'input>>,
     ),
     /// `expr BETWEEN low AND high`. See `NotBetweenExpr` for the
@@ -2588,9 +1996,9 @@ pub enum Expr<'input> {
     #[parse(postfix, bp = 6, inner_bp = 3)]
     BetweenExpr(
         Box<Expr<'input>>,
-        BETWEEN,
+        #[tok(BETWEEN, this)]
         Box<Expr<'input>>,
-        AND,
+        #[tok(AND, this)]
         Box<Expr<'input>>,
     ),
 
@@ -2603,66 +2011,66 @@ pub enum Expr<'input> {
     // as Concat/Add/Sub (which is Postgres's convention for these ops).
     /// JSON path as text: `expr #>> path`
     #[parse(infix, bp = 10)]
-    JsonPathText(Box<Expr<'input>>, punct::HashArrowArrow, Box<Expr<'input>>),
+    JsonPathText(Box<Expr<'input>>,  #[tok(HASHARROWARROW, this)] Box<Expr<'input>>),
     /// JSON path: `expr #> path`
     #[parse(infix, bp = 10)]
-    JsonPath(Box<Expr<'input>>, punct::HashArrow, Box<Expr<'input>>),
+    JsonPath(Box<Expr<'input>>,  #[tok(HASHARROW, this)] Box<Expr<'input>>),
     /// JSON field as text: `expr ->> field`
     #[parse(infix, bp = 10)]
-    JsonFieldText(Box<Expr<'input>>, punct::ArrowArrow, Box<Expr<'input>>),
+    JsonFieldText(Box<Expr<'input>>,  #[tok(ARROWARROW, this)] Box<Expr<'input>>),
     /// JSON field: `expr -> field`
     #[parse(infix, bp = 10)]
-    JsonField(Box<Expr<'input>>, punct::Arrow, Box<Expr<'input>>),
+    JsonField(Box<Expr<'input>>,  #[tok(ARROW, this)] Box<Expr<'input>>),
     /// Geometric parallel: `a ?|| b`. Must precede `JsonAnyKey` (`?|`)
     /// so the 3-char token wins over the 2-char token.
     #[parse(infix, bp = 5)]
     Parallel(
         Box<Expr<'input>>,
-        punct::QuestionPipePipe,
+        #[tok(QUESTIONPIPEPIPE, this)]
         Box<Expr<'input>>,
     ),
     /// JSON any-key-exists: `expr ?| keys`
     #[parse(infix, bp = 10)]
-    JsonAnyKey(Box<Expr<'input>>, punct::QuestionPipe, Box<Expr<'input>>),
+    JsonAnyKey(Box<Expr<'input>>,  #[tok(QUESTIONPIPE, this)] Box<Expr<'input>>),
     /// JSON all-keys-exist: `expr ?& keys`
     #[parse(infix, bp = 10)]
-    JsonAllKeys(Box<Expr<'input>>, punct::QuestionAmp, Box<Expr<'input>>),
+    JsonAllKeys(Box<Expr<'input>>,  #[tok(QUESTIONAMP, this)] Box<Expr<'input>>),
     /// Geometric intersect: `a ?# b`. Must precede `JsonKey` (`?`).
     #[parse(infix, bp = 5)]
-    Intersect(Box<Expr<'input>>, punct::QuestionHash, Box<Expr<'input>>),
+    Intersect(Box<Expr<'input>>,  #[tok(QUESTIONHASH, this)] Box<Expr<'input>>),
     /// Geometric perpendicular: `a ?-| b`. Must precede `Horizontal` (`?-`)
     /// so the 3-char token wins over the 2-char token.
     #[parse(infix, bp = 5)]
     Perpendicular(
         Box<Expr<'input>>,
-        punct::QuestionDashPipe,
+        #[tok(QUESTIONDASHPIPE, this)]
         Box<Expr<'input>>,
     ),
     /// Geometric horizontal: `a ?- b`. Must precede `JsonKey` (`?`).
     #[parse(infix, bp = 5)]
-    Horizontal(Box<Expr<'input>>, punct::QuestionDash, Box<Expr<'input>>),
+    Horizontal(Box<Expr<'input>>,  #[tok(QUESTIONDASH, this)] Box<Expr<'input>>),
     /// Geometric "is horizontal" prefix: `?- s` — tests whether the
     /// LSEG/LINE `s` is horizontal. PG's geometry.sql uses this in WHERE.
     #[parse(prefix, bp = 12)]
-    IsHorizontal(punct::QuestionDash, Box<Expr<'input>>),
+    IsHorizontal( #[tok(QUESTIONDASH, this)] Box<Expr<'input>>),
     /// Geometric "is vertical" prefix: `?| s`.
     #[parse(prefix, bp = 12)]
-    IsVertical(punct::QuestionPipe, Box<Expr<'input>>),
+    IsVertical( #[tok(QUESTIONPIPE, this)] Box<Expr<'input>>),
     /// Geometric "below": `a <^ b`.
     #[parse(infix, bp = 5)]
-    Below(Box<Expr<'input>>, punct::LtCaret, Box<Expr<'input>>),
+    Below(Box<Expr<'input>>,  #[tok(LTCARET, this)] Box<Expr<'input>>),
     /// Geometric "above": `a >^ b`.
     #[parse(infix, bp = 5)]
-    Above(Box<Expr<'input>>, punct::GtCaret, Box<Expr<'input>>),
+    Above(Box<Expr<'input>>,  #[tok(GTCARET, this)] Box<Expr<'input>>),
     /// JSON key-exists: `expr ? key`
     #[parse(infix, bp = 10)]
-    JsonKey(Box<Expr<'input>>, punct::Question, Box<Expr<'input>>),
+    JsonKey(Box<Expr<'input>>,  #[tok(QUESTION, this)] Box<Expr<'input>>),
     /// JSONB contains: `expr @> expr`
     #[parse(infix, bp = 10)]
-    JsonContains(Box<Expr<'input>>, punct::AtGt, Box<Expr<'input>>),
+    JsonContains(Box<Expr<'input>>,  #[tok(ATGT, this)] Box<Expr<'input>>),
     /// JSONB contained-by: `expr <@ expr`
     #[parse(infix, bp = 10)]
-    JsonContainedBy(Box<Expr<'input>>, punct::LtAt, Box<Expr<'input>>),
+    JsonContainedBy(Box<Expr<'input>>,  #[tok(LTAT, this)] Box<Expr<'input>>),
 
     // --- Postgres text-search / jsonpath / range / geometric 3-char operators ---
     //
@@ -2674,100 +2082,100 @@ pub enum Expr<'input> {
     // the trailing `|` / `#` dangling.
     /// Text-search / jsonb path match: `expr @@@ expr`.
     #[parse(infix, bp = 5)]
-    TsMatch3(Box<Expr<'input>>, punct::AtAtAt, Box<Expr<'input>>),
+    TsMatch3(Box<Expr<'input>>,  #[tok(ATATAT, this)] Box<Expr<'input>>),
     /// User-defined triple-less-than: `a <<< b`. Before `StrictlyLeft` (`<<`).
     #[parse(infix, bp = 5)]
-    TripleLt(Box<Expr<'input>>, punct::LtLtLt, Box<Expr<'input>>),
+    TripleLt(Box<Expr<'input>>,  #[tok(LTLTLT, this)] Box<Expr<'input>>),
     /// Geometric strictly-below: `a <<| b`. Before `StrictlyLeft` (`<<`).
     #[parse(infix, bp = 5)]
-    StrictlyBelow(Box<Expr<'input>>, punct::LtLtPipe, Box<Expr<'input>>),
+    StrictlyBelow(Box<Expr<'input>>,  #[tok(LTLTPIPE, this)] Box<Expr<'input>>),
     /// Inet is-subset-or-equal: `a <<= b`. Before `StrictlyLeft` (`<<`).
     #[parse(infix, bp = 5)]
-    SubsetEq(Box<Expr<'input>>, punct::LtLtEq, Box<Expr<'input>>),
+    SubsetEq(Box<Expr<'input>>,  #[tok(LTLTEQ, this)] Box<Expr<'input>>),
     /// Distance: `a <-> b`. Before any `<` variant.
     #[parse(infix, bp = 10)]
-    Distance(Box<Expr<'input>>, punct::LtMinusGt, Box<Expr<'input>>),
+    Distance(Box<Expr<'input>>,  #[tok(LTMINUSGT, this)] Box<Expr<'input>>),
     /// User-defined triple-greater-than: `a >>> b`. Before `StrictlyRight` (`>>`).
     #[parse(infix, bp = 5)]
-    TripleGt(Box<Expr<'input>>, punct::GtGtGt, Box<Expr<'input>>),
+    TripleGt(Box<Expr<'input>>,  #[tok(GTGTGT, this)] Box<Expr<'input>>),
     /// Inet is-superset-or-equal: `a >>= b`. Before `StrictlyRight` (`>>`).
     #[parse(infix, bp = 5)]
-    SupersetEq(Box<Expr<'input>>, punct::GtGtEq, Box<Expr<'input>>),
+    SupersetEq(Box<Expr<'input>>,  #[tok(GTGTEQ, this)] Box<Expr<'input>>),
     /// Range adjacent: `a -|- b`. Before `Sub` (`-`).
     #[parse(infix, bp = 5)]
-    Adjacent(Box<Expr<'input>>, punct::MinusPipeMinus, Box<Expr<'input>>),
+    Adjacent(Box<Expr<'input>>,  #[tok(MINUSPIPEMINUS, this)] Box<Expr<'input>>),
     /// Geometric strictly-above: `a |>> b`. Before `Concat` (`||`).
     #[parse(infix, bp = 5)]
-    StrictlyAbove(Box<Expr<'input>>, punct::PipeGtGt, Box<Expr<'input>>),
+    StrictlyAbove(Box<Expr<'input>>,  #[tok(PIPEGTGT, this)] Box<Expr<'input>>),
     /// Geometric no-extend-below: `a |&> b`. Before `Concat` (`||`).
     #[parse(infix, bp = 5)]
-    NoExtendBelow(Box<Expr<'input>>, punct::PipeAmpGt, Box<Expr<'input>>),
+    NoExtendBelow(Box<Expr<'input>>,  #[tok(PIPEAMPGT, this)] Box<Expr<'input>>),
     /// Geometric no-extend-above: `a &<| b`. Before `NoExtendRight` (`&<`).
     #[parse(infix, bp = 5)]
-    NoExtendAbove(Box<Expr<'input>>, punct::AmpLtPipe, Box<Expr<'input>>),
+    NoExtendAbove(Box<Expr<'input>>,  #[tok(AMPLTPIPE, this)] Box<Expr<'input>>),
 
     // --- 2-char operators ---
     /// Text-search / jsonb path match: `expr @@ expr`.
     #[parse(infix, bp = 5)]
-    TsMatch(Box<Expr<'input>>, punct::AtAt, Box<Expr<'input>>),
+    TsMatch(Box<Expr<'input>>,  #[tok(ATAT, this)] Box<Expr<'input>>),
     /// Jsonpath exists: `expr @? path`.
     #[parse(infix, bp = 5)]
-    JsonPathExists(Box<Expr<'input>>, punct::AtQuestion, Box<Expr<'input>>),
+    JsonPathExists(Box<Expr<'input>>,  #[tok(ATQUESTION, this)] Box<Expr<'input>>),
     /// Range / array overlap: `a && b`.
     #[parse(infix, bp = 10)]
-    Overlap(Box<Expr<'input>>, punct::AmpAmp, Box<Expr<'input>>),
+    Overlap(Box<Expr<'input>>,  #[tok(AMPAMP, this)] Box<Expr<'input>>),
     /// Range does-not-extend-right: `a &< b`.
     #[parse(infix, bp = 5)]
-    NoExtendRight(Box<Expr<'input>>, punct::AmpLt, Box<Expr<'input>>),
+    NoExtendRight(Box<Expr<'input>>,  #[tok(AMPLT, this)] Box<Expr<'input>>),
     /// Range does-not-extend-left: `a &> b`.
     #[parse(infix, bp = 5)]
-    NoExtendLeft(Box<Expr<'input>>, punct::AmpGt, Box<Expr<'input>>),
+    NoExtendLeft(Box<Expr<'input>>,  #[tok(AMPGT, this)] Box<Expr<'input>>),
     /// Range strictly-left-of: `a << b`.
     #[parse(infix, bp = 5)]
-    StrictlyLeft(Box<Expr<'input>>, punct::LtLt, Box<Expr<'input>>),
+    StrictlyLeft(Box<Expr<'input>>,  #[tok(LTLT, this)] Box<Expr<'input>>),
     /// Range strictly-right-of: `a >> b`.
     #[parse(infix, bp = 5)]
-    StrictlyRight(Box<Expr<'input>>, punct::GtGt, Box<Expr<'input>>),
+    StrictlyRight(Box<Expr<'input>>,  #[tok(GTGT, this)] Box<Expr<'input>>),
 
     // --- User-defined / custom infix operators ---
     /// `expr === expr` — user-defined triple-equal. Must come before `Eq` (`=`).
     #[parse(infix, bp = 5)]
-    TripleEq(Box<Expr<'input>>, punct::TripleEq, Box<Expr<'input>>),
+    TripleEq(Box<Expr<'input>>,  #[tok(TRIPLEEQ, this)] Box<Expr<'input>>),
     /// `expr !== expr` — user-defined not-equal. Must come before `BangEq` (`!=`).
     #[parse(infix, bp = 5)]
-    BangEqEq(Box<Expr<'input>>, punct::BangEqEq, Box<Expr<'input>>),
+    BangEqEq(Box<Expr<'input>>,  #[tok(BANGEQEQ, this)] Box<Expr<'input>>),
     /// `expr ## expr` — geometric closest-point / path intersection.
     /// Must come before `BitXor` (`#`).
     #[parse(infix, bp = 5)]
-    GeomClosest(Box<Expr<'input>>, punct::HashHash, Box<Expr<'input>>),
+    GeomClosest(Box<Expr<'input>>,  #[tok(HASHHASH, this)] Box<Expr<'input>>),
 
     #[parse(infix, bp = 1)]
-    Or(Box<Expr<'input>>, OR, Box<Expr<'input>>),
+    Or(Box<Expr<'input>>,  #[tok(OR, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 2)]
-    And(Box<Expr<'input>>, AND, Box<Expr<'input>>),
+    And(Box<Expr<'input>>,  #[tok(AND, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    BangEq(Box<Expr<'input>>, punct::BangEq, Box<Expr<'input>>),
+    BangEq(Box<Expr<'input>>,  #[tok(BANGEQ, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    Neq(Box<Expr<'input>>, punct::Neq, Box<Expr<'input>>),
+    Neq(Box<Expr<'input>>,  #[tok(NEQ, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    Lte(Box<Expr<'input>>, punct::Lte, Box<Expr<'input>>),
+    Lte(Box<Expr<'input>>,  #[tok(LTE, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    Gte(Box<Expr<'input>>, punct::Gte, Box<Expr<'input>>),
+    Gte(Box<Expr<'input>>,  #[tok(GTE, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    Eq(Box<Expr<'input>>, punct::Eq, Box<Expr<'input>>),
+    Eq(Box<Expr<'input>>,  #[tok(EQ, this)] Box<Expr<'input>>),
 
     /// Text starts-with: `expr ^@ expr` (PostgreSQL `starts_with` operator).
     /// `^@` is a single token (see `punct::CaretAt`); declared before
     /// `CustomInfix` so it wins the declaration-order tiebreak. bp=8 matches
     /// Postgres's generic `Op` precedence.
     #[parse(infix, bp = 8)]
-    StartsWith(Box<Expr<'input>>, punct::CaretAt, Box<Expr<'input>>),
+    StartsWith(Box<Expr<'input>>,  #[tok(CARETAT, this)] Box<Expr<'input>>),
     /// JSONB delete-path: `expr #- path` (PostgreSQL jsonb delete-at-path
     /// operator). `#-` is a single token (see `punct::HashMinus`); declared
     /// before `CustomInfix` so it wins the declaration-order tiebreak. bp=10
     /// matches the neighbouring `#>`/`#>>` JSON path operators.
     #[parse(infix, bp = 10)]
-    JsonDeletePath(Box<Expr<'input>>, punct::HashMinus, Box<Expr<'input>>),
+    JsonDeletePath(Box<Expr<'input>>,  #[tok(HASHMINUS, this)] Box<Expr<'input>>),
 
     /// Catch-all infix: any user-defined operator not matched by a specific
     /// token above. Declared BEFORE single-char operators so 2+ char custom
@@ -2784,38 +2192,38 @@ pub enum Expr<'input> {
     ),
 
     #[parse(infix, bp = 5)]
-    Lt(Box<Expr<'input>>, punct::Lt, Box<Expr<'input>>),
+    Lt(Box<Expr<'input>>,  #[tok(LT, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 5)]
-    Gt(Box<Expr<'input>>, punct::Gt, Box<Expr<'input>>),
+    Gt(Box<Expr<'input>>,  #[tok(GT, this)] Box<Expr<'input>>),
     /// String concatenation: `expr || expr`
     #[parse(infix, bp = 10)]
-    Concat(Box<Expr<'input>>, punct::Concat, Box<Expr<'input>>),
+    Concat(Box<Expr<'input>>,  #[tok(CONCAT, this)] Box<Expr<'input>>),
     /// Bitwise OR: `expr | expr`. Must come after `Concat` (`||`) so the
     /// longer token matches first at the punctuation level.
     #[parse(infix, bp = 10)]
-    BitOr(Box<Expr<'input>>, punct::Pipe, Box<Expr<'input>>),
+    BitOr(Box<Expr<'input>>,  #[tok(PIPE, this)] Box<Expr<'input>>),
     /// Bitwise AND: `expr & expr`.
     #[parse(infix, bp = 10)]
-    BitAnd(Box<Expr<'input>>, punct::Amp, Box<Expr<'input>>),
+    BitAnd(Box<Expr<'input>>,  #[tok(AMP, this)] Box<Expr<'input>>),
     /// Bitwise XOR: `expr # expr` (Postgres bit-string / integer operator).
     #[parse(infix, bp = 10)]
-    BitXor(Box<Expr<'input>>, punct::Pound, Box<Expr<'input>>),
+    BitXor(Box<Expr<'input>>,  #[tok(POUND, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 10)]
-    Add(Box<Expr<'input>>, punct::Plus, Box<Expr<'input>>),
+    Add(Box<Expr<'input>>,  #[tok(PLUS, this)] Box<Expr<'input>>),
     #[parse(infix, bp = 10)]
-    Sub(Box<Expr<'input>>, punct::Minus, Box<Expr<'input>>),
+    Sub(Box<Expr<'input>>,  #[tok(MINUS, this)] Box<Expr<'input>>),
     /// Multiplication: `expr * expr`
     #[parse(infix, bp = 11)]
-    Mul(Box<Expr<'input>>, punct::Star, Box<Expr<'input>>),
+    Mul(Box<Expr<'input>>,  #[tok(STAR, this)] Box<Expr<'input>>),
     /// Division: `expr / expr`
     #[parse(infix, bp = 11)]
-    Div(Box<Expr<'input>>, punct::Slash, Box<Expr<'input>>),
+    Div(Box<Expr<'input>>,  #[tok(SLASH, this)] Box<Expr<'input>>),
     /// Modulo: `expr % expr`
     #[parse(infix, bp = 11)]
-    Mod(Box<Expr<'input>>, punct::Percent, Box<Expr<'input>>),
+    Mod(Box<Expr<'input>>,  #[tok(PERCENT, this)] Box<Expr<'input>>),
     /// Exponentiation: `expr ^ expr` (Postgres numeric power operator).
     #[parse(infix, bp = 13)]
-    Pow(Box<Expr<'input>>, punct::Caret, Box<Expr<'input>>),
+    Pow(Box<Expr<'input>>,  #[tok(CARET, this)] Box<Expr<'input>>),
 
     // --- Atoms ---
     /// `ANY(expr)` or `ANY(subquery)` — quantified comparison operand.
@@ -2848,7 +2256,7 @@ pub enum Expr<'input> {
     /// `StringLit` — `CastFunc` is `TypeName StringLit` and would match `e`
     /// as a type name followed by the string literal.
     #[parse(atom)]
-    EscapeStringLit(literal::EscapeStringLit<'input>),
+    EscapeStringLit(#[lex(pattern = r"(?i:E)'(?:[^'\\]|\\.|'')*'")] literal::EscapeStringLit<'input>),
     /// `TIMESTAMP [WITH|WITHOUT TIME ZONE] 'string'`. Must come before `CastFunc`
     /// since `timestamp` is also an identifier.
     #[parse(atom)]
@@ -2952,7 +2360,7 @@ pub enum Expr<'input> {
     /// Function call: `func(args)` -- must come before ColumnRef
     #[parse(atom)]
     Func(Box<FuncCall<'input>>),
-    /// `USER` — the reserved-keyword spelling of `CURRENT_USER` as a
+    #[tok(USER)] /// `USER` — the reserved-keyword spelling of `CURRENT_USER` as a
     /// zero-arg function reference. PG's gram.y `func_expr_common_subexpr`
     /// includes `USER { … }` as a synonym for `CURRENT_USER`. pg-sql keeps
     /// `USER` reserved at the token level (for the `CREATE USER ...`
@@ -2961,7 +2369,7 @@ pub enum Expr<'input> {
     /// atom. Declared before `ColumnRef` for clarity (ColumnRef cannot
     /// match a reserved keyword anyway).
     #[parse(atom)]
-    User(USER),
+    User,
     /// Qualified wildcard: `table.*` -- must come before QualRef and ColumnRef
     #[parse(atom)]
     QualWild(QualifiedWildcard<'input>),
@@ -2988,40 +2396,40 @@ pub enum Expr<'input> {
     /// is also declared first at the atom level. Without this ordering, the
     /// formatter would round-trip `B'10'` as `B '10'` (inserted space).
     #[parse(atom)]
-    BitStringLit(literal::BitStringLit<'input>),
+    BitStringLit(#[lex(pattern = r"(?i:B)'[^']*'")] literal::BitStringLit<'input>),
     /// Hex-string literal: `X'1FF'`. Same ordering rationale as
     /// `BitStringLit` — must precede `StringLit` and any plain `Ident`.
     #[parse(atom)]
-    HexStringLit(literal::HexStringLit<'input>),
+    HexStringLit(#[lex(pattern = r"(?i:X)'[^']*'")] literal::HexStringLit<'input>),
     /// String literal sequence: `'hello'` or `'first' 'second' ...` —
     /// Postgres concatenates adjacent string literals into one.
     #[parse(atom)]
     StringLit(StringLitSeq0<'input>),
-    /// Boolean true
+    #[tok(TRUE)] /// Boolean true
     #[parse(atom)]
-    BoolTrue(TRUE),
-    /// Boolean false
+    BoolTrue,
+    #[tok(FALSE)] /// Boolean false
     #[parse(atom)]
-    BoolFalse(FALSE),
-    /// NULL
+    BoolFalse,
+    #[tok(NULL)] /// NULL
     #[parse(atom)]
-    Null(NULL),
-    /// `DEFAULT` — placeholder usable in INSERT/UPDATE value positions.
+    Null,
+    #[tok(DEFAULT)] /// `DEFAULT` — placeholder usable in INSERT/UPDATE value positions.
     #[parse(atom)]
-    Default(DEFAULT),
+    Default,
     /// Positional parameter reference: `$1`, `$2`, etc. Used in function bodies
     /// and prepared statements.
     #[parse(atom)]
-    PositionalParam(literal::DollarNum<'input>),
+    PositionalParam(#[lex(matcher)] literal::DollarNum<'input>),
     /// Unqualified column reference: `f1` or `"Foo"`
     #[parse(atom)]
     ColumnRef(crate::tokens::ColId<'input>),
     /// psql client variable substitution: `:foo`, `:'foo'`, `:"foo"`.
     #[parse(atom)]
-    PsqlVar(literal::PsqlVar<'input>),
-    /// Bare wildcard: `*`
+    PsqlVar(literal::PsqlVariable<'input>),
+    #[tok(STAR)] /// Bare wildcard: `*`
     #[parse(atom)]
-    Star(punct::Star),
+    Star,
 }
 
 #[cfg(test)]
@@ -3035,10 +2443,12 @@ mod tests {
     /// Takes `&'static str` because `test_input` leaks the `LexResult` and
     /// the returned `Expr` borrows the source for that `'static` lifetime.
     fn parse_expr_classified(src: &'static str) -> Expr<'static> {
-        let mut input = crate::tokens::test_input(src);
-        let expr = Expr::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover parsing {src:?}: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -3254,10 +2664,12 @@ mod tests {
 
     #[test]
     fn parse_integer_literal() {
-        let mut input = crate::tokens::test_input("42");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("42");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::IntegerLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     /// Regression: the Pratt-enum kind-match `peek` (emitted when a
@@ -3269,12 +2681,16 @@ mod tests {
     #[test]
     fn pratt_peek_classified_covers_identifier_atoms() {
         for src in ["a", "abc", "foo(1)", "count(*)"] {
-            let mut plain = crate::tokens::test_input(src);
+            let plain_lexed = crate::tokens::lex(src);
+            assert_eq!(plain_lexed.errors().count(), 0, "lex errors in plain");
+            let mut plain = plain_lexed.input();
             assert!(
                 Expr::peek(&mut plain),
                 "Expr::peek (no classifier) should accept {src:?}"
             );
-            let mut classified = crate::tokens::test_input(src);
+            let classified_lexed = crate::tokens::lex(src);
+            assert_eq!(classified_lexed.errors().count(), 0, "lex errors in classified");
+            let mut classified = classified_lexed.input();
             assert!(
                 Expr::peek(&mut classified),
                 "Expr::peek (classified) should accept {src:?}"
@@ -3305,30 +2721,36 @@ mod tests {
     #[test]
     fn parse_dollar_string_literal_expr() {
         // Regression: json.sql uses `$$'foo'$$::json` and similar.
-        let mut input = crate::tokens::test_input("$$''$$");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("$$''$$");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::DollarStringLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_string_literal() {
-        let mut input = crate::tokens::test_input("'hello'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'hello'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::StringLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_adjacent_string_literals() {
-        let mut input = crate::tokens::test_input("'a' 'b'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'a' 'b'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         if let Expr::StringLit(seq) = &expr {
             assert_eq!(seq.parts.len(), 2);
         } else {
             panic!("expected Expr::StringLit, got {:?}", expr);
         }
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     /// PostgreSQL concatenates adjacent string literals across whitespace, but
@@ -3337,9 +2759,10 @@ mod tests {
     /// be left unconsumed (so the comment-bearing continuation is rejected).
     #[test]
     fn reject_string_continuation_across_comment() {
-        let mut input =
-            crate::tokens::test_input("'first line'\n/* not allowed */\n' - next line'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'first line'\n/* not allowed */\n' - next line'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         if let Expr::StringLit(seq) = &expr {
             assert_eq!(
                 seq.parts.len(),
@@ -3350,7 +2773,7 @@ mod tests {
             panic!("expected Expr::StringLit, got {expr:?}");
         }
         assert!(
-            !input.is_empty(),
+            !input.is_eof(),
             "the second string part must be left unconsumed"
         );
     }
@@ -3372,34 +2795,40 @@ mod tests {
     /// still concatenate — the regression guard for `reject_…_across_comment`.
     #[test]
     fn parse_string_continuation_across_newline() {
-        let mut input = crate::tokens::test_input("'first line'\n' - next line'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'first line'\n' - next line'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         if let Expr::StringLit(seq) = &expr {
             assert_eq!(seq.parts.len(), 2);
         } else {
             panic!("expected Expr::StringLit, got {expr:?}");
         }
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_three_part_string_concat() {
         // 3-part adjacent string literal concatenation. Postgres concatenates
         // these into a single value at parse time.
-        let mut input = crate::tokens::test_input("'first' 'second' 'third'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'first' 'second' 'third'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         if let Expr::StringLit(seq) = &expr {
             assert_eq!(seq.parts.len(), 3);
         } else {
             panic!("expected StringLit, got {:?}", expr);
         }
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_four_part_string_concat() {
-        let mut input = crate::tokens::test_input("'a' 'b' 'c' 'd'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'a' 'b' 'c' 'd'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         if let Expr::StringLit(seq) = &expr {
             assert_eq!(seq.parts.len(), 4);
         } else {
@@ -3410,80 +2839,94 @@ mod tests {
     #[test]
     fn parse_three_adjacent_strings_with_quoted_alias() {
         use crate::ast::dml::select::SelectStmt;
-        let mut input = crate::tokens::test_input(
-            "SELECT 'first line' ' - next line' ' - third line' AS \"Three lines to one\"",
-        );
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT 'first line' ' - next line' ' - third line' AS \"Three lines to one\"");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_three_adjacent_strings_with_alias() {
         // SELECT 'first line' ' - next line' AS foo
         use crate::ast::dml::select::SelectStmt;
-        let mut input = crate::tokens::test_input("SELECT 'first line' ' - next line' AS foo");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT 'first line' ' - next line' AS foo");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_xmlelement_simple() {
-        let mut input = crate::tokens::test_input("xmlelement(name foo, 'content')");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("xmlelement(name foo, 'content')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::XmlElement(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_xmlelement_with_attributes() {
-        let mut input = crate::tokens::test_input(
-            "xmlelement(name foo, xmlattributes(1 as a, 2 as b), 'content')",
-        );
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("xmlelement(name foo, xmlattributes(1 as a, 2 as b), 'content')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::XmlElement(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_xmlpi_basic() {
-        let mut input = crate::tokens::test_input("xmlpi(name foo)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("xmlpi(name foo)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::XmlPi(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_xmlpi_with_content() {
-        let mut input = crate::tokens::test_input("xmlpi(name foo, 'bar')");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("xmlpi(name foo, 'bar')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::XmlPi(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_unicode_string_lit_basic() {
-        let mut input = crate::tokens::test_input(r"U&'d\0061t\+000061'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex(r"U&'d\0061t\+000061'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::UnicodeStringLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_unicode_string_lit_uescape() {
-        let mut input = crate::tokens::test_input(r"U&'d!0061t\+000061' UESCAPE '!'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex(r"U&'d!0061t\+000061' UESCAPE '!'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::UnicodeStringLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_cast_func_with_precision() {
         // `char(20) 'characters'` — function-style type cast with precision.
-        let mut input = crate::tokens::test_input("char(20) 'characters'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("char(20) 'characters'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::CastFunc(_)));
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -3493,11 +2936,13 @@ mod tests {
     fn parse_unicode_string_with_backslash() {
         // `U&' \'` — backslash is literal content, not an escape. The string
         // ends at the second quote. UESCAPE '!' follows.
-        let mut input = crate::tokens::test_input(r"U&' \' UESCAPE '!'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex(r"U&' \' UESCAPE '!'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::UnicodeStringLit(_)));
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -3505,10 +2950,12 @@ mod tests {
 
     #[test]
     fn parse_xmlforest() {
-        let mut input = crate::tokens::test_input("xmlforest(a, b AS bee, c)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("xmlforest(a, b AS bee, c)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::XmlForest(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
@@ -3522,68 +2969,86 @@ mod tests {
             "SELECT .5",
             "SELECT 2e3",
         ] {
-            let mut input = crate::tokens::test_input(sql);
-            let _stmt = SelectStmt::parse(&mut input).unwrap();
-            assert!(input.is_empty(), "leftover for {sql}");
+            let lexed = crate::tokens::lex(sql);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+            assert!(input.is_eof(), "leftover for {sql}");
         }
     }
 
     #[test]
     fn parse_escape_string_literal() {
-        let mut input = crate::tokens::test_input(r"E'r_\_view%'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex(r"E'r_\_view%'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::EscapeStringLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_func_call_order_by() {
-        let mut input = crate::tokens::test_input("jsonb_agg(q ORDER BY x, y)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("jsonb_agg(q ORDER BY x, y)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Func(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_psql_var() {
-        let mut input = crate::tokens::test_input(":foo_oid");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(":foo_oid");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_psql_var_in_func_call() {
-        let mut input = crate::tokens::test_input("pg_stat_get_function_calls(:func_oid)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("pg_stat_get_function_calls(:func_oid)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_trim_both_from() {
-        let mut input = crate::tokens::test_input("TRIM(BOTH FROM '  hi  ')");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("TRIM(BOTH FROM '  hi  ')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_trim_leading_from() {
-        let mut input = crate::tokens::test_input("TRIM(LEADING FROM '  hi  ')");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("TRIM(LEADING FROM '  hi  ')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_trim_trailing_from() {
-        let mut input = crate::tokens::test_input("TRIM(TRAILING FROM '  hi  ')");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("TRIM(TRAILING FROM '  hi  ')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_trim_both_chars_from() {
-        let mut input = crate::tokens::test_input("TRIM(BOTH 'x' FROM 'xxhixx')");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("TRIM(BOTH 'x' FROM 'xxhixx')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// `TRIM([LEADING|TRAILING|BOTH] expr_list)` — gram.y `trim_list`
@@ -3597,10 +3062,12 @@ mod tests {
             "TRIM(LEADING ' foo ')",
             "TRIM(BOTH ' foo ')",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            let _expr = Expr::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            let _expr = Expr::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -3614,11 +3081,13 @@ mod tests {
     #[test]
     fn parse_user_zero_arg_atom() {
         for src in ["SELECT USER", "SELECT USER AS us", "SELECT * FROM USER"] {
-            let mut input = crate::tokens::test_input(src);
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let _stmt = crate::ast::Statement::parse(&mut input)
-                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -3627,355 +3096,444 @@ mod tests {
 
     #[test]
     fn parse_substring_from() {
-        let mut input = crate::tokens::test_input("SUBSTRING('1234567890' FROM 3)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SUBSTRING('1234567890' FROM 3)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_substring_from_for() {
-        let mut input = crate::tokens::test_input("SUBSTRING('1234567890' FROM 4 FOR 3)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SUBSTRING('1234567890' FROM 4 FOR 3)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_notnull_isnull() {
-        let mut input = crate::tokens::test_input("x.c NOTNULL");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("x.c NOTNULL");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Notnull(..)));
-        assert!(input.is_empty());
-        let mut input = crate::tokens::test_input("x.c ISNULL");
-        let expr = Expr::parse(&mut input).unwrap();
+        assert!(input.is_eof());
+        let lexed = crate::tokens::lex("x.c ISNULL");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Isnull(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_collation_for() {
-        let mut input = crate::tokens::test_input("collation for ('foo')");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
-        let mut input = crate::tokens::test_input("collation for ((SELECT a FROM t LIMIT 1))");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("collation for ('foo')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
+        let lexed = crate::tokens::lex("collation for ((SELECT a FROM t LIMIT 1))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_cast_call() {
-        let mut input = crate::tokens::test_input("CAST('42' AS text COLLATE \"C\")");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
-        let mut input = crate::tokens::test_input("CAST(b AS varchar)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CAST('42' AS text COLLATE \"C\")");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
+        let lexed = crate::tokens::lex("CAST(b AS varchar)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_substring_for_only() {
-        let mut input = crate::tokens::test_input("substring(d FOR 30)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("substring(d FOR 30)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_substring_similar_escape() {
-        let mut input =
-            crate::tokens::test_input("SUBSTRING('abcdefg' SIMILAR 'a#\"%#\"g' ESCAPE '#')");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SUBSTRING('abcdefg' SIMILAR 'a#\"%#\"g' ESCAPE '#')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_position_in() {
-        let mut input = crate::tokens::test_input("POSITION('4' IN '1234567890')");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("POSITION('4' IN '1234567890')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_overlay_placing_from() {
-        let mut input = crate::tokens::test_input("OVERLAY('abcdef' PLACING '45' FROM 4)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("OVERLAY('abcdef' PLACING '45' FROM 4)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_overlay_placing_from_for() {
-        let mut input = crate::tokens::test_input("OVERLAY('abcdef' PLACING '45' FROM 4 FOR 2)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("OVERLAY('abcdef' PLACING '45' FROM 4 FOR 2)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_extract_epoch_from_date() {
-        let mut input = crate::tokens::test_input("EXTRACT(EPOCH FROM DATE '1970-01-01')");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("EXTRACT(EPOCH FROM DATE '1970-01-01')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Extract(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_extract_century_from_ident() {
-        let mut input = crate::tokens::test_input("EXTRACT(CENTURY FROM d)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("EXTRACT(CENTURY FROM d)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_extract_string_field() {
-        let mut input = crate::tokens::test_input("EXTRACT('year' FROM t)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("EXTRACT('year' FROM t)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_func_named_arg_mixed() {
-        let mut input = crate::tokens::test_input("f(a, b => 1, c)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("f(a, b => 1, c)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_jsonb_path_query_silent() {
-        let mut input =
-            crate::tokens::test_input("jsonb_path_query('[1]', 'strict $[1]', silent => true)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("jsonb_path_query('[1]', 'strict $[1]', silent => true)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_func_all_named_args() {
-        let mut input = crate::tokens::test_input("f(silent => false, verbose => true)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("f(silent => false, verbose => true)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_extract_year_from_now() {
-        let mut input = crate::tokens::test_input("EXTRACT(year FROM now())");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("EXTRACT(year FROM now())");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_is_distinct_from() {
-        let mut input = crate::tokens::test_input("a IS DISTINCT FROM b");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("a IS DISTINCT FROM b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_is_not_distinct_from() {
-        let mut input = crate::tokens::test_input("a IS NOT DISTINCT FROM b");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("a IS NOT DISTINCT FROM b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_power_operator() {
-        let mut input = crate::tokens::test_input("2^1000");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("2^1000");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_double_precision_type_cast() {
-        let mut input = crate::tokens::test_input("3.14::double precision");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("3.14::double precision");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_case_searched() {
-        let mut input = crate::tokens::test_input("CASE WHEN 1 < 2 THEN 3 END");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CASE WHEN 1 < 2 THEN 3 END");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Case(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_case_searched_with_else() {
-        let mut input =
-            crate::tokens::test_input("CASE WHEN 1 < 2 THEN 3 WHEN 4 < 5 THEN 6 ELSE 7 END");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CASE WHEN 1 < 2 THEN 3 WHEN 4 < 5 THEN 6 ELSE 7 END");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_case_simple() {
-        let mut input =
-            crate::tokens::test_input("CASE x WHEN 1 THEN 'a' WHEN 2 THEN 'b' ELSE 'c' END");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CASE x WHEN 1 THEN 'a' WHEN 2 THEN 'b' ELSE 'c' END");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_case_nested() {
-        let mut input =
-            crate::tokens::test_input("CASE WHEN (CASE WHEN 1=1 THEN 1 END) > 0 THEN 'y' END");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CASE WHEN (CASE WHEN 1=1 THEN 1 END) > 0 THEN 'y' END");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_func_call_within_group() {
-        let mut input = crate::tokens::test_input("percentile_disc(0.5) WITHIN GROUP (ORDER BY v)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("percentile_disc(0.5) WITHIN GROUP (ORDER BY v)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Func(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_func_call_within_group_multi() {
-        let mut input = crate::tokens::test_input("rank(1, 2) WITHIN GROUP (ORDER BY a, b)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("rank(1, 2) WITHIN GROUP (ORDER BY a, b)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_func_call_filter() {
-        let mut input = crate::tokens::test_input("sum(x) FILTER (WHERE y > 0)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("sum(x) FILTER (WHERE y > 0)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Func(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_func_call_filter_over() {
-        let mut input =
-            crate::tokens::test_input("sum(x) FILTER (WHERE y > 0) OVER (PARTITION BY z)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("sum(x) FILTER (WHERE y > 0) OVER (PARTITION BY z)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_func_call_order_by_nulls_first() {
-        let mut input = crate::tokens::test_input("jsonb_agg(q ORDER BY x NULLS FIRST, y)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("jsonb_agg(q ORDER BY x NULLS FIRST, y)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_func_call_variadic() {
-        let mut input = crate::tokens::test_input("jsonb_build_array(VARIADIC a)");
-        let _expr = Expr::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("jsonb_build_array(VARIADIC a)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_timestamp_with_tz_literal() {
-        let mut input =
-            crate::tokens::test_input("timestamp with time zone '2001-12-27 04:05:06+08'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("timestamp with time zone '2001-12-27 04:05:06+08'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TimestampLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_timestamp_precision_without_tz_literal() {
         // Regression: timestamp.sql uses `timestamp(2) without time zone 'now'`.
-        let mut input = crate::tokens::test_input("timestamp(2) without time zone 'now'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("timestamp(2) without time zone 'now'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TimestampLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_at_time_zone() {
-        let mut input = crate::tokens::test_input("f1 AT TIME ZONE 'UTC+10'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1 AT TIME ZONE 'UTC+10'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::AtTimeZone(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_at_time_zone_interval() {
-        let mut input = crate::tokens::test_input("f1 AT TIME ZONE INTERVAL '-10:00'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1 AT TIME ZONE INTERVAL '-10:00'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::AtTimeZone(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_at_local() {
-        let mut input = crate::tokens::test_input("f1 AT LOCAL");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1 AT LOCAL");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::AtLocal(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_time_literal() {
-        let mut input = crate::tokens::test_input("time '12:34'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("time '12:34'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TimeLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_date_literal_as_castfunc() {
-        let mut input = crate::tokens::test_input("date '2024-01-01'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("date '2024-01-01'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         // `date` is an Ident-based TypeName, so this parses as CastFunc.
         assert!(matches!(expr, Expr::CastFunc(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_interval_literal_bare() {
-        let mut input = crate::tokens::test_input("interval '1 hour'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("interval '1 hour'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_interval_literal_year() {
-        let mut input = crate::tokens::test_input("INTERVAL '1' YEAR");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INTERVAL '1' YEAR");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_interval_literal_year_to_month() {
-        let mut input = crate::tokens::test_input("INTERVAL '1-2' YEAR TO MONTH");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INTERVAL '1-2' YEAR TO MONTH");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_named_arg_colon_equals() {
-        let mut input = crate::tokens::test_input("make_interval(years := 1, months := 2)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("make_interval(years := 1, months := 2)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Func(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_unary_plus() {
-        let mut input = crate::tokens::test_input("+42");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("+42");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Pos(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_positional_param() {
-        let mut input = crate::tokens::test_input("$1");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("$1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::PositionalParam(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_positional_param_in_expr() {
-        let mut input = crate::tokens::test_input("$1 + $2");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("$1 + $2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Add(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     /// `$1` must preserve its digits when reformatted — a positional parameter
@@ -3983,8 +3541,10 @@ mod tests {
     #[test]
     fn positional_param_preserves_digits() {
         use recursa::fmt::FormatStyle;
-        let mut input = crate::tokens::test_input("$2");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("$2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         let formatted = crate::formatter::format_tokens_sql(&expr, FormatStyle::default());
         assert_eq!(formatted.trim(), "$2");
     }
@@ -3995,146 +3555,184 @@ mod tests {
             "INTERVAL(0) '1 day 01:23:45.6789'",
             "interval(2) '1 day 01:23:45.6789'",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            let expr = Expr::parse(&mut input).unwrap();
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            let expr = Expr::parse(&mut input).unwrap().into_ast();
             assert!(matches!(expr, Expr::IntervalLit(_)), "failed for {src:?}");
-            assert!(input.is_empty(), "leftover for {src:?}");
+            assert!(input.is_eof(), "leftover for {src:?}");
         }
     }
 
     #[test]
     fn parse_interval_second_precision() {
-        let mut input = crate::tokens::test_input("INTERVAL '1.234' second(2)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INTERVAL '1.234' second(2)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_interval_day_to_second_precision() {
-        let mut input = crate::tokens::test_input("INTERVAL '1 2:03:04.5678' day to second(2)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INTERVAL '1 2:03:04.5678' day to second(2)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_cast_interval_day_to_minute() {
-        let mut input = crate::tokens::test_input("f1::INTERVAL DAY TO MINUTE");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1::INTERVAL DAY TO MINUTE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Cast(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_interval_minute_to_second_precision() {
-        let mut input = crate::tokens::test_input("INTERVAL '12:34.5678' minute to second(2)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INTERVAL '12:34.5678' minute to second(2)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_interval_literal_day_to_hour() {
-        let mut input = crate::tokens::test_input("INTERVAL '1 2:03' DAY TO HOUR");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INTERVAL '1 2:03' DAY TO HOUR");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_interval_literal_hour_to_second() {
-        let mut input = crate::tokens::test_input("INTERVAL '1' HOUR TO SECOND");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("INTERVAL '1' HOUR TO SECOND");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_escape_string_literal_lowercase_e() {
-        let mut input = crate::tokens::test_input("e'foo'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("e'foo'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::EscapeStringLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_bool_true() {
-        let mut input = crate::tokens::test_input("true");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("true");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BoolTrue(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_bool_false() {
-        let mut input = crate::tokens::test_input("false");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("false");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BoolFalse(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_null() {
-        let mut input = crate::tokens::test_input("null");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("null");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Null(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_column_ref() {
-        let mut input = crate::tokens::test_input("f1");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::ColumnRef(_)));
     }
 
     #[test]
     fn parse_qualified_column_ref() {
-        let mut input = crate::tokens::test_input("BOOLTBL1.f1");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("BOOLTBL1.f1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::QualRef(_)));
     }
 
     #[test]
     fn parse_qualified_wildcard() {
-        let mut input = crate::tokens::test_input("BOOLTBL1.*");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("BOOLTBL1.*");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::QualWild(_)));
     }
 
     #[test]
     fn parse_star() {
-        let mut input = crate::tokens::test_input("*");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("*");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Star(_)));
     }
 
     #[test]
     fn parse_function_call_no_args() {
-        let mut input = crate::tokens::test_input("foo()");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("foo()");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Func(_)));
     }
 
     #[test]
     fn parse_function_call_with_args() {
-        let mut input = crate::tokens::test_input("pg_input_is_valid('true', 'bool')");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("pg_input_is_valid('true', 'bool')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Func(_)));
     }
 
     #[test]
     fn parse_function_call_booleq() {
-        let mut input = crate::tokens::test_input("booleq(bool 'false', f1)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("booleq(bool 'false', f1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Func(_)));
     }
 
     #[test]
     fn parse_parenthesized_expr() {
-        let mut input = crate::tokens::test_input("(1)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("(1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Paren(_)));
     }
 
@@ -4142,15 +3740,19 @@ mod tests {
 
     #[test]
     fn parse_type_cast_bool_string() {
-        let mut input = crate::tokens::test_input("bool 't'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("bool 't'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::CastFunc(_)));
     }
 
     #[test]
     fn parse_type_cast_boolean_string() {
-        let mut input = crate::tokens::test_input("boolean 'false'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("boolean 'false'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::CastFunc(_)));
     }
 
@@ -4158,8 +3760,10 @@ mod tests {
 
     #[test]
     fn parse_not_expr() {
-        let mut input = crate::tokens::test_input("not false");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("not false");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Not(_, _)));
     }
 
@@ -4167,29 +3771,37 @@ mod tests {
 
     #[test]
     fn parse_and_expr() {
-        let mut input = crate::tokens::test_input("true AND false");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("true AND false");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::And(..)));
     }
 
     #[test]
     fn parse_or_expr() {
-        let mut input = crate::tokens::test_input("true OR false");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("true OR false");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Or(..)));
     }
 
     #[test]
     fn parse_eq_expr() {
-        let mut input = crate::tokens::test_input("f1 = true");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1 = true");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Eq(..)));
     }
 
     #[test]
     fn parse_neq_expr() {
-        let mut input = crate::tokens::test_input("f1 <> false");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1 <> false");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Neq(..)));
     }
 
@@ -4197,15 +3809,19 @@ mod tests {
 
     #[test]
     fn parse_cast_colon_colon() {
-        let mut input = crate::tokens::test_input("0::boolean");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("0::boolean");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Cast(..)));
     }
 
     #[test]
     fn parse_chained_cast() {
-        let mut input = crate::tokens::test_input("'TrUe'::text::boolean");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'TrUe'::text::boolean");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         // Outer should be Cast
         assert!(matches!(expr, Expr::Cast(..)));
     }
@@ -4214,29 +3830,37 @@ mod tests {
 
     #[test]
     fn parse_is_true() {
-        let mut input = crate::tokens::test_input("f1 IS TRUE");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1 IS TRUE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BoolTest(..)));
     }
 
     #[test]
     fn parse_is_not_false() {
-        let mut input = crate::tokens::test_input("f1 IS NOT FALSE");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1 IS NOT FALSE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BoolTest(..)));
     }
 
     #[test]
     fn parse_is_unknown() {
-        let mut input = crate::tokens::test_input("b IS UNKNOWN");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("b IS UNKNOWN");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BoolTest(..)));
     }
 
     #[test]
     fn parse_is_not_unknown() {
-        let mut input = crate::tokens::test_input("b IS NOT UNKNOWN");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("b IS NOT UNKNOWN");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BoolTest(..)));
     }
 
@@ -4244,23 +3868,29 @@ mod tests {
 
     #[test]
     fn parse_between_expr() {
-        let mut input = crate::tokens::test_input("a BETWEEN 12 AND 17");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a BETWEEN 12 AND 17");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BetweenExpr(..)));
     }
 
     #[test]
     fn parse_not_between_expr() {
-        let mut input = crate::tokens::test_input("a NOT BETWEEN 1 AND 5");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a NOT BETWEEN 1 AND 5");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NotBetweenExpr(..)));
     }
 
     #[test]
     fn parse_between_as_value() {
         // BETWEEN yields a boolean value that can appear in a SELECT list.
-        let mut input = crate::tokens::test_input("x BETWEEN a AND b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("x BETWEEN a AND b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BetweenExpr(..)));
     }
 
@@ -4268,8 +3898,10 @@ mod tests {
     fn between_does_not_break_and_parse() {
         // A plain AND expression must still parse as And, not be confused
         // with the BETWEEN postfix.
-        let mut input = crate::tokens::test_input("a AND b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a AND b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::And(..)));
     }
 
@@ -4278,8 +3910,10 @@ mod tests {
     #[test]
     fn and_binds_tighter_than_or() {
         // a OR b AND c should parse as a OR (b AND c)
-        let mut input = crate::tokens::test_input("true OR false AND true");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("true OR false AND true");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         // Top-level should be OR
         match &expr {
             Expr::Or(..) => {}
@@ -4290,8 +3924,10 @@ mod tests {
     #[test]
     fn comparison_binds_tighter_than_and() {
         // a AND b = c should parse as a AND (b = c)
-        let mut input = crate::tokens::test_input("true AND f1 = false");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("true AND f1 = false");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         match &expr {
             Expr::And(..) => {}
             other => panic!("expected AND at top level, got {other:?}"),
@@ -4301,25 +3937,31 @@ mod tests {
     #[test]
     fn bool_cast_or_expr() {
         // bool 't' or bool 'f' should parse as (bool 't') OR (bool 'f')
-        let mut input = crate::tokens::test_input("bool 't' or bool 'f'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("bool 't' or bool 'f'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Or(..)));
     }
 
     #[test]
     fn is_true_in_select_item() {
         // b IS TRUE should parse without consuming AS that follows
-        let mut input = crate::tokens::test_input("b IS TRUE");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("b IS TRUE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BoolTest(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn cast_chain_in_expression() {
         // true::boolean::text should chain
-        let mut input = crate::tokens::test_input("true::boolean::text");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("true::boolean::text");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Cast(..)));
     }
 
@@ -4327,610 +3969,752 @@ mod tests {
 
     #[test]
     fn parse_addition() {
-        let mut input = crate::tokens::test_input("4+4");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("4+4");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Add(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_subtraction() {
-        let mut input = crate::tokens::test_input("10-3");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("10-3");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Sub(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_unary_minus() {
-        let mut input = crate::tokens::test_input("-1");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("-1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Neg(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Numeric literal ---
 
     #[test]
     fn parse_numeric_literal() {
-        let mut input = crate::tokens::test_input("77.7");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("77.7");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NumericLit(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- IN expression ---
 
     #[test]
     fn parse_in_expr() {
-        let mut input = crate::tokens::test_input("f1 IN (1, 2, 3)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1 IN (1, 2, 3)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::InExpr(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- JSON / JSONB operators ---
 
     #[test]
     fn parse_json_field() {
-        let mut input = crate::tokens::test_input("data -> 'key'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("data -> 'key'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::JsonField(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_json_field_text() {
-        let mut input = crate::tokens::test_input("data ->> 'key'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("data ->> 'key'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::JsonFieldText(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_json_path() {
-        let mut input = crate::tokens::test_input("data #> '{a,b}'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("data #> '{a,b}'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::JsonPath(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_json_path_text() {
-        let mut input = crate::tokens::test_input("data #>> '{a,b}'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("data #>> '{a,b}'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::JsonPathText(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_jsonb_contains() {
-        let mut input = crate::tokens::test_input("a @> b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a @> b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::JsonContains(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_jsonb_contained_by() {
-        let mut input = crate::tokens::test_input("a <@ b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a <@ b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::JsonContainedBy(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_jsonb_key_exists() {
-        let mut input = crate::tokens::test_input("a ? 'k'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a ? 'k'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::JsonKey(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_jsonb_any_key() {
-        let mut input = crate::tokens::test_input("a ?| b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a ?| b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::JsonAnyKey(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_jsonb_all_keys() {
-        let mut input = crate::tokens::test_input("a ?& b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a ?& b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::JsonAllKeys(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Postgres text-search / range / geometric operators ---
 
     #[test]
     fn parse_ts_match() {
-        let mut input = crate::tokens::test_input("a @@ 'foo|bar'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a @@ 'foo|bar'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TsMatch(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_ts_match3() {
-        let mut input = crate::tokens::test_input("a @@@ b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a @@@ b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TsMatch3(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_json_path_exists() {
-        let mut input = crate::tokens::test_input("j @? '$.a'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("j @? '$.a'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::JsonPathExists(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_overlap() {
-        let mut input = crate::tokens::test_input("r && s");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("r && s");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Overlap(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_strictly_left() {
-        let mut input = crate::tokens::test_input("a << b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a << b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::StrictlyLeft(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_strictly_right() {
-        let mut input = crate::tokens::test_input("a >> b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a >> b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::StrictlyRight(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_subset_eq() {
-        let mut input = crate::tokens::test_input("a <<= b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a <<= b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::SubsetEq(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_superset_eq() {
-        let mut input = crate::tokens::test_input("a >>= b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a >>= b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::SupersetEq(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_adjacent() {
-        let mut input = crate::tokens::test_input("a -|- b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a -|- b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Adjacent(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_distance() {
-        let mut input = crate::tokens::test_input("p1 <-> p2");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("p1 <-> p2");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Distance(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_no_extend_right() {
-        let mut input = crate::tokens::test_input("a &< b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a &< b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NoExtendRight(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_no_extend_left() {
-        let mut input = crate::tokens::test_input("a &> b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a &> b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NoExtendLeft(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_strictly_above() {
-        let mut input = crate::tokens::test_input("a |>> b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a |>> b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::StrictlyAbove(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_strictly_below() {
-        let mut input = crate::tokens::test_input("a <<| b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a <<| b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::StrictlyBelow(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_no_extend_above() {
-        let mut input = crate::tokens::test_input("a &<| b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a &<| b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NoExtendAbove(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_no_extend_below() {
-        let mut input = crate::tokens::test_input("a |&> b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a |&> b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NoExtendBelow(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_intersect() {
-        let mut input = crate::tokens::test_input("a ?# b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a ?# b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Intersect(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_horizontal() {
-        let mut input = crate::tokens::test_input("a ?- b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a ?- b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Horizontal(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- LIKE / ILIKE ---
 
     #[test]
     fn parse_like_expr() {
-        let mut input = crate::tokens::test_input("table_name LIKE 'foo%'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("table_name LIKE 'foo%'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Like(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_like_escape_string() {
-        let mut input = crate::tokens::test_input(r"table_name LIKE E'r_\_view%'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex(r"table_name LIKE E'r_\_view%'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Like(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_not_like_expr() {
-        let mut input = crate::tokens::test_input("table_name NOT LIKE 'bar%'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("table_name NOT LIKE 'bar%'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NotLike(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_similar_to_expr() {
-        let mut input = crate::tokens::test_input("x SIMILAR TO 'a%'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("x SIMILAR TO 'a%'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::SimilarTo(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_not_similar_to_expr() {
-        let mut input = crate::tokens::test_input("x NOT SIMILAR TO 'a%'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("x NOT SIMILAR TO 'a%'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NotSimilarTo(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_ilike_expr() {
-        let mut input = crate::tokens::test_input("name ILIKE '%FOO%'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("name ILIKE '%FOO%'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Ilike(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_not_ilike_expr() {
-        let mut input = crate::tokens::test_input("name NOT ILIKE '%bar%'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("name NOT ILIKE '%bar%'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NotIlike(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_like_escape() {
-        let mut input = crate::tokens::test_input("'hawkeye' LIKE 'h%' ESCAPE '#'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'hawkeye' LIKE 'h%' ESCAPE '#'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Like(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_not_like_escape() {
-        let mut input = crate::tokens::test_input("'hawkeye' NOT LIKE 'h%' ESCAPE '#'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'hawkeye' NOT LIKE 'h%' ESCAPE '#'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NotLike(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_similar_to_escape() {
-        let mut input = crate::tokens::test_input("'abcdefg' SIMILAR TO '_bcd#%' ESCAPE '#'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'abcdefg' SIMILAR TO '_bcd#%' ESCAPE '#'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::SimilarTo(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_not_similar_to_escape() {
-        let mut input = crate::tokens::test_input("'abc' NOT SIMILAR TO 'a%' ESCAPE '#'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'abc' NOT SIMILAR TO 'a%' ESCAPE '#'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NotSimilarTo(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_ilike_escape() {
-        let mut input = crate::tokens::test_input("name ILIKE '%FOO%' ESCAPE '#'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("name ILIKE '%FOO%' ESCAPE '#'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Ilike(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_not_ilike_escape() {
-        let mut input = crate::tokens::test_input("name NOT ILIKE '%bar%' ESCAPE '#'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("name NOT ILIKE '%bar%' ESCAPE '#'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::NotIlike(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_similar_to_escape_null() {
-        let mut input = crate::tokens::test_input("'abcdefg' SIMILAR TO '_bcd%' ESCAPE NULL");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("'abcdefg' SIMILAR TO '_bcd%' ESCAPE NULL");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::SimilarTo(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Regex match operators ---
 
     #[test]
     fn parse_regex_match() {
-        let mut input = crate::tokens::test_input("relname ~ '^foo'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("relname ~ '^foo'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::RegexMatch(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_regex_not_match() {
-        let mut input = crate::tokens::test_input("name !~ 'bar'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("name !~ 'bar'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::RegexNotMatch(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_regex_imatch() {
-        let mut input = crate::tokens::test_input("name ~* 'FOO'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("name ~* 'FOO'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::RegexIMatch(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_regex_not_imatch() {
-        let mut input = crate::tokens::test_input("name !~* '.*'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("name !~* '.*'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::RegexNotIMatch(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- COLLATE postfix ---
 
     #[test]
     fn parse_collate_postfix() {
-        let mut input = crate::tokens::test_input("a COLLATE \"C\"");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a COLLATE \"C\"");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Collate(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- DEFAULT atom ---
 
     #[test]
     fn parse_default_atom() {
-        let mut input = crate::tokens::test_input("DEFAULT");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DEFAULT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Default(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Subquery expression ---
 
     #[test]
     fn parse_subquery_expr() {
-        let mut input = crate::tokens::test_input("(SELECT 1)");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("(SELECT 1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Paren(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Locale-aware text comparison operators ---
 
     #[test]
     fn parse_tilde_lt_tilde_infix() {
-        let mut input = crate::tokens::test_input("f1 ~<~ 'YX'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("f1 ~<~ 'YX'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TildeLtTilde(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_tilde_leq_tilde_infix() {
-        let mut input = crate::tokens::test_input("t ~<=~ 'Aztec'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("t ~<=~ 'Aztec'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TildeLeqTilde(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_tilde_geq_tilde_infix() {
-        let mut input = crate::tokens::test_input("t ~>=~ 'Worth'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("t ~>=~ 'Worth'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TildeGeqTilde(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_tilde_gt_tilde_infix() {
-        let mut input = crate::tokens::test_input("t ~>~ 'Worth'");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("t ~>~ 'Worth'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TildeGtTilde(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- User-defined equality/inequality ---
 
     #[test]
     fn parse_triple_eq_infix() {
-        let mut input = crate::tokens::test_input("a === 1");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a === 1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TripleEq(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_bang_eq_eq_infix() {
-        let mut input = crate::tokens::test_input("a !== 1");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a !== 1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BangEqEq(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Geometric closest-point / intersection ---
 
     #[test]
     fn parse_hash_hash_infix() {
-        let mut input = crate::tokens::test_input("p.f1 ## l.s");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("p.f1 ## l.s");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::GeomClosest(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Prefix: geometric path length `@-@` ---
 
     #[test]
     fn parse_at_minus_at_prefix() {
-        let mut input = crate::tokens::test_input("@-@ s");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("@-@ s");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::PathLength(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Prefix: user-defined `@#@` ---
 
     #[test]
     fn parse_at_hash_at_prefix() {
-        let mut input = crate::tokens::test_input("@#@ 24");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("@#@ 24");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::AtHashAtPrefix(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Prefix: user-defined `!=-` ---
 
     #[test]
     fn parse_bang_eq_minus_prefix() {
-        let mut input = crate::tokens::test_input("!=- 10");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("!=- 10");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::BangEqMinusPrefix(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Prefix: geometric `#` (number of points in path) ---
 
     #[test]
     fn parse_pound_prefix() {
-        let mut input = crate::tokens::test_input("#thepath");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("#thepath");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::PointCount(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Infix: geometric `?||` (parallel) and `?-|` (perpendicular) ---
 
     #[test]
     fn parse_question_pipe_pipe_infix() {
-        let mut input = crate::tokens::test_input("a ?|| b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a ?|| b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Parallel(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_question_dash_pipe_infix() {
-        let mut input = crate::tokens::test_input("a ?-| b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a ?-| b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Perpendicular(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Infix: geometric `<^` (below) and `>^` (above) ---
 
     #[test]
     fn parse_lt_caret_infix() {
-        let mut input = crate::tokens::test_input("a <^ b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a <^ b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Below(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_gt_caret_infix() {
-        let mut input = crate::tokens::test_input("a >^ b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a >^ b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Above(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Infix: user-defined `<<<` and `>>>` ---
 
     #[test]
     fn parse_triple_lt_infix() {
-        let mut input = crate::tokens::test_input("a <<< 5");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a <<< 5");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TripleLt(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_triple_gt_infix() {
-        let mut input = crate::tokens::test_input("a >>> 0");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a >>> 0");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::TripleGt(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Infix: user-defined `<%` ---
 
     #[test]
     fn parse_lt_percent_infix() {
-        let mut input = crate::tokens::test_input("a <% b");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a <% b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::CustomInfix(..)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- Subquery quantifier: ANY / ALL / SOME ---
@@ -4938,10 +4722,12 @@ mod tests {
     #[test]
     fn parse_eq_any_subquery() {
         // `a = ANY(SELECT 1)` — comparison with quantified subquery.
-        let mut input = crate::tokens::test_input("a = ANY(SELECT 1)");
-        let _expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a = ANY(SELECT 1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -4950,10 +4736,12 @@ mod tests {
     #[test]
     fn parse_eq_all_array() {
         // `a = ALL('{ab}')` — comparison with quantified array.
-        let mut input = crate::tokens::test_input("a = ALL('{ab}')");
-        let _expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a = ALL('{ab}')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -4962,10 +4750,12 @@ mod tests {
     #[test]
     fn parse_not_tilde_all() {
         // `a !~ ALL('{ab}')` — regex not-match with ALL quantifier.
-        let mut input = crate::tokens::test_input("a !~ ALL('{ab}')");
-        let _expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a !~ ALL('{ab}')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -4974,10 +4764,12 @@ mod tests {
     #[test]
     fn parse_eq_some_subquery() {
         // `a = SOME(SELECT 1)` — SOME is synonym for ANY.
-        let mut input = crate::tokens::test_input("a = SOME(SELECT 1)");
-        let _expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a = SOME(SELECT 1)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -4988,11 +4780,13 @@ mod tests {
     #[test]
     fn parse_array_slice_full() {
         // `a[1:2]` — full slice with lower and upper bounds.
-        let mut input = crate::tokens::test_input("a[1:2]");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a[1:2]");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Slice(..)));
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -5015,10 +4809,12 @@ mod tests {
             "('{1,2,3}'::int[])[1:NULL]",
             "('{{{1},{2},{3}},{{4},{5},{6}}}'::int[])[1][1:NULL][1]",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            let _expr = Expr::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            let _expr = Expr::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -5028,11 +4824,13 @@ mod tests {
     #[test]
     fn parse_array_slice_lower_only() {
         // `a[1:]` — slice with only lower bound.
-        let mut input = crate::tokens::test_input("a[1:]");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a[1:]");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Slice(..)));
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -5041,11 +4839,13 @@ mod tests {
     #[test]
     fn parse_array_slice_upper_only() {
         // `a[:2]` — slice with only upper bound.
-        let mut input = crate::tokens::test_input("a[:2]");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a[:2]");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Slice(..)));
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -5054,11 +4854,13 @@ mod tests {
     #[test]
     fn parse_array_slice_unbounded() {
         // `a[:]` — unbounded slice (all elements).
-        let mut input = crate::tokens::test_input("a[:]");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a[:]");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Slice(..)));
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -5067,11 +4869,13 @@ mod tests {
     #[test]
     fn parse_subscript_unchanged() {
         // `a[1]` — regular subscript still works.
-        let mut input = crate::tokens::test_input("a[1]");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("a[1]");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::Subscript(..)));
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -5080,11 +4884,13 @@ mod tests {
     #[test]
     fn parse_any_array_literal() {
         // `ANY('{red,green}'::rainbow[])` — bare ANY as atom.
-        let mut input = crate::tokens::test_input("ANY('{red,green}'::rainbow[])");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("ANY('{red,green}'::rainbow[])");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::AnyExpr(_)));
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -5093,11 +4899,13 @@ mod tests {
     #[test]
     fn parse_all_array_literal() {
         // `ALL('{red,red}'::rainbow[])` — bare ALL as atom.
-        let mut input = crate::tokens::test_input("ALL('{red,red}'::rainbow[])");
-        let expr = Expr::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("ALL('{red,red}'::rainbow[])");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
         assert!(matches!(expr, Expr::AllExpr(_)));
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -5118,11 +4926,13 @@ mod tests {
             // Single value list.
             "SELECT * FROM t WHERE b IN (1, 2, 3)",
         ] {
-            let mut input = crate::tokens::test_input(src);
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let _stmt = crate::ast::Statement::parse(&mut input)
-                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -5150,11 +4960,13 @@ mod tests {
             "SELECT ((select 1))",
             "SELECT ((select 1) UNION select 2)",
         ] {
-            let mut input = crate::tokens::test_input(src);
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let _stmt = crate::ast::Statement::parse(&mut input)
-                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );

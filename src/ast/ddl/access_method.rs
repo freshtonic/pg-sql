@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -15,42 +13,29 @@ use crate::tokens::{literal, punct};
 use recursa_diagram::railroad;
 
 /// `INDEX | TABLE` — the access-method type keyword in `CREATE ACCESS METHOD`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AccessMethodType {
-    Index(INDEX),
-    Table(TABLE),
+    #[tok(INDEX)] Index,
+    #[tok(TABLE)] Table,
 }
 
 /// `CREATE ACCESS METHOD name TYPE { INDEX | TABLE } HANDLER handler_name` —
 /// Postgres' `CreateAmStmt`. `handler_name` is a possibly-qualified function
 /// name (`name [.name …]`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateAccessMethodStmt<'input> {
-    pub create: CREATE,
-    pub access: ACCESS,
-    pub method: METHOD,
+    #[tok(CREATE, ACCESS, METHOD, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub r#type: TYPE,
+    #[tok(TYPE, this)]
     pub am_type: AccessMethodType,
-    pub handler: HANDLER,
+    #[tok(HANDLER, this)]
     pub handler_name: QualifiedName<'input>,
 }
 
 /// `DROP ACCESS METHOD [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropAccessMethodStmt<'input> {
-    pub drop: DROP,
-    pub access: ACCESS,
-    pub method: METHOD,
+    #[tok(DROP, ACCESS, METHOD, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -65,23 +50,24 @@ mod tests {
 
     #[test]
     fn parse_create_access_method_index() {
-        let mut input =
-            crate::tokens::test_input("CREATE ACCESS METHOD gist2 TYPE INDEX HANDLER gisthandler");
-        let stmt = CreateAccessMethodStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ACCESS METHOD gist2 TYPE INDEX HANDLER gisthandler");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateAccessMethodStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.text(), "gist2");
         assert!(matches!(stmt.am_type, AccessMethodType::Index(_)));
         assert_eq!(stmt.handler_name.object(), "gisthandler");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_access_method_table() {
-        let mut input = crate::tokens::test_input(
-            "CREATE ACCESS METHOD heap2 TYPE TABLE HANDLER heap_tableam_handler",
-        );
-        let stmt = CreateAccessMethodStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE ACCESS METHOD heap2 TYPE TABLE HANDLER heap_tableam_handler");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateAccessMethodStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.text(), "heap2");
         assert!(matches!(stmt.am_type, AccessMethodType::Table(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

@@ -4,8 +4,6 @@
 //! dedicated file because its grammar mirrors COMMENT.
 
 use recursa::seq::Seq0;
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::names::{AggregateArgs, QualifiedName};
@@ -33,10 +31,7 @@ use crate::tokens::{literal, punct};
 /// object id), `CAST` and `TRANSFORM`. A `COMMENT ON` / `SECURITY LABEL ON`
 /// of a deferred kind fails this enum and the whole statement surfaces as a
 /// [`crate::ast::FileItem::ParseError`] in the file-level parse output.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CommentObject<'input> {
     // CONSTRAINT and object_type_name_on_any_name `name ON any_name` forms —
     // listed first since their leading keyword is unambiguous.
@@ -93,362 +88,257 @@ pub enum CommentObject<'input> {
 /// `LARGE OBJECT NumericOnly` comment object (gram.y `COMMENT ON LARGE_P
 /// OBJECT_P NumericOnly`). The OID is a numeric literal — corpus uses only
 /// positive `IntegerLit`s.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentLargeObjectObject<'input> {
-    pub large: LARGE,
-    pub object: crate::tokens::soft_keyword::OBJECT,
+    #[tok(LARGE, OBJECT, this)]
     pub oid: literal::IntegerLit<'input>,
 }
 
 /// `OPERATOR op(args)` comment object — Postgres' `operator_with_argtypes`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentOperatorObject<'input> {
-    pub kind: OPERATOR,
+    #[tok(OPERATOR, this)]
     pub target: crate::ast::shared::names::OperatorWithArgtypes<'input>,
 }
 
 /// `TABLE name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentTableObject<'input> {
-    pub kind: TABLE,
+    #[tok(TABLE, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `SEQUENCE name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentSequenceObject<'input> {
-    pub kind: SEQUENCE,
+    #[tok(SEQUENCE, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `VIEW name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentViewObject<'input> {
-    pub kind: VIEW,
+    #[tok(VIEW, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `INDEX name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentIndexObject<'input> {
-    pub kind: INDEX,
+    #[tok(INDEX, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `COLLATION name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentCollationObject<'input> {
-    pub kind: COLLATION,
+    #[tok(COLLATION, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `CONVERSION name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentConversionObject<'input> {
-    pub kind: CONVERSION,
+    #[tok(CONVERSION, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `STATISTICS name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentStatisticsObject<'input> {
-    pub kind: STATISTICS,
+    #[tok(STATISTICS, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `COLUMN any_name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentColumnObject<'input> {
-    pub kind: COLUMN,
+    #[tok(COLUMN, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `MATERIALIZED VIEW name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentMatViewObject<'input> {
-    pub kind: (MATERIALIZED, VIEW),
+    #[tok(MATERIALIZED, VIEW, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `FOREIGN TABLE name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentForeignTableObject<'input> {
-    pub kind: (FOREIGN, TABLE),
+    #[tok(FOREIGN, TABLE, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `TEXT SEARCH PARSER name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentTsParserObject<'input> {
-    pub kind: (TEXT, SEARCH, PARSER),
+    #[tok(TEXT, SEARCH, PARSER, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `TEXT SEARCH DICTIONARY name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentTsDictionaryObject<'input> {
-    pub kind: (TEXT, SEARCH, DICTIONARY),
+    #[tok(TEXT, SEARCH, DICTIONARY, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `TEXT SEARCH TEMPLATE name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentTsTemplateObject<'input> {
-    pub kind: (TEXT, SEARCH, TEMPLATE),
+    #[tok(TEXT, SEARCH, TEMPLATE, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `TEXT SEARCH CONFIGURATION name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentTsConfigObject<'input> {
-    pub kind: (TEXT, SEARCH, CONFIGURATION),
+    #[tok(TEXT, SEARCH, CONFIGURATION, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `DATABASE name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentDatabaseObject<'input> {
-    pub kind: DATABASE,
+    #[tok(DATABASE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `ROLE name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentRoleObject<'input> {
-    pub kind: ROLE,
+    #[tok(ROLE, this)]
     pub name: crate::tokens::NonReservedWord<'input>,
 }
 
 /// `SUBSCRIPTION name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentSubscriptionObject<'input> {
-    pub kind: SUBSCRIPTION,
+    #[tok(SUBSCRIPTION, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `TABLESPACE name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentTablespaceObject<'input> {
-    pub kind: TABLESPACE,
+    #[tok(TABLESPACE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `EXTENSION name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentExtensionObject<'input> {
-    pub kind: EXTENSION,
+    #[tok(EXTENSION, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `PUBLICATION name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentPublicationObject<'input> {
-    pub kind: PUBLICATION,
+    #[tok(PUBLICATION, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `SCHEMA name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentSchemaObject<'input> {
-    pub kind: SCHEMA,
+    #[tok(SCHEMA, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `SERVER name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentServerObject<'input> {
-    pub kind: SERVER,
+    #[tok(SERVER, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `LANGUAGE name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentLanguageObject<'input> {
-    pub kind: LANGUAGE,
+    #[tok(LANGUAGE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `PROCEDURAL LANGUAGE name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentProceduralLanguageObject<'input> {
-    pub kind: (PROCEDURAL, LANGUAGE),
+    #[tok(PROCEDURAL, LANGUAGE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `ACCESS METHOD name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentAccessMethodObject<'input> {
-    pub kind: (ACCESS, METHOD),
+    #[tok(ACCESS, METHOD, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `EVENT TRIGGER name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentEventTriggerObject<'input> {
-    pub kind: (EVENT, TRIGGER),
+    #[tok(EVENT, TRIGGER, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `FOREIGN DATA WRAPPER name` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentForeignDataWrapperObject<'input> {
-    pub kind: (FOREIGN, DATA, WRAPPER),
+    #[tok(FOREIGN, DATA, WRAPPER, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `TYPE Typename` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentTypeObject<'input> {
-    pub kind: TYPE,
+    #[tok(TYPE, this)]
     pub type_name: crate::ast::shared::names::TypeName<'input>,
 }
 
 /// `DOMAIN Typename` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentDomainObject<'input> {
-    pub kind: DOMAIN,
+    #[tok(DOMAIN, this)]
     pub type_name: crate::ast::shared::names::TypeName<'input>,
 }
 
 /// `POLICY name ON table` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentPolicyObject<'input> {
-    pub kind: POLICY,
+    #[tok(POLICY, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
 }
 
 /// `RULE name ON table` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentRuleObject<'input> {
-    pub kind: RULE,
+    #[tok(RULE, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
 }
 
 /// `TRIGGER name ON table` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentTriggerObject<'input> {
-    pub kind: TRIGGER,
+    #[tok(TRIGGER, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub table: QualifiedName<'input>,
 }
 
 /// `CONSTRAINT name ON [DOMAIN] any_name` — the constraint object forms.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentConstraintObject<'input> {
-    pub constraint: CONSTRAINT,
+    #[tok(CONSTRAINT, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub on: ON,
-    pub domain: Option<DOMAIN>,
+    #[tok(ON, this)]
+    #[presence(DOMAIN)]
+    pub domain: bool,
     pub container: QualifiedName<'input>,
 }
 
@@ -457,84 +347,71 @@ pub struct CommentConstraintObject<'input> {
 /// Only the parenthesized-signature form is modelled; every corpus example
 /// carries an explicit argument list. The bare-name (`args_unspecified`) form
 /// is not exercised by any corpus statement.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentFunctionObject<'input> {
-    pub kind: FUNCTION,
+    #[tok(FUNCTION, this)]
     pub name: QualifiedName<'input>,
-    pub args: Surrounded<
-        punct::LParen,
-        Seq0<crate::ast::ddl::function::FuncParam<'input>, punct::Comma>,
-        punct::RParen,
-    >,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:
+
+        Vec<crate::ast::ddl::function::FuncParam<'input> >
+
+    ,
 }
 
 /// `PROCEDURE name(args)` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentProcedureObject<'input> {
-    pub kind: PROCEDURE,
+    #[tok(PROCEDURE, this)]
     pub name: QualifiedName<'input>,
-    pub args: Surrounded<
-        punct::LParen,
-        Seq0<crate::ast::ddl::function::FuncParam<'input>, punct::Comma>,
-        punct::RParen,
-    >,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:
+
+        Vec<crate::ast::ddl::function::FuncParam<'input> >
+
+    ,
 }
 
 /// `ROUTINE name(args)` comment object.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentRoutineObject<'input> {
-    pub kind: ROUTINE,
+    #[tok(ROUTINE, this)]
     pub name: QualifiedName<'input>,
-    pub args: Surrounded<
-        punct::LParen,
-        Seq0<crate::ast::ddl::function::FuncParam<'input>, punct::Comma>,
-        punct::RParen,
-    >,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:
+
+        Vec<crate::ast::ddl::function::FuncParam<'input> >
+
+    ,
 }
 
 /// `AGGREGATE name(args)` — Postgres' `aggregate_with_argtypes`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentAggregateObject<'input> {
-    pub aggregate: AGGREGATE,
+    #[tok(AGGREGATE, this)]
     pub name: QualifiedName<'input>,
     pub args: AggregateArgs<'input>,
 }
 
 /// The comment/label text — Postgres' `comment_text` / `security_label`: a
 /// string literal or the keyword `NULL` (drop the comment/label).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CommentText<'input> {
-    Null(NULL),
+    #[tok(NULL)] Null,
     Text(literal::StringLit<'input>),
 }
 
 // --- COMMENT ---
 
 /// `COMMENT ON object IS { 'text' | NULL }`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CommentStmt<'input> {
-    pub comment: COMMENT,
-    pub on: ON,
+    #[tok(COMMENT, ON, this)]
     pub object: CommentObject<'input>,
-    pub is: IS,
+    #[tok(IS, this)]
     pub text: CommentText<'input>,
 }
 
@@ -549,10 +426,7 @@ pub struct CommentStmt<'input> {
 /// Variant ordering: `String` before `Word` is irrelevant (disjoint
 /// first-sets — a quoted string vs an identifier), but the string form is the
 /// one the corpus exercises (`FOR 'dummy'`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SecurityLabelProviderName<'input> {
     String(literal::StringLit<'input>),
     Word(literal::Ident<'input>),
@@ -560,12 +434,9 @@ pub enum SecurityLabelProviderName<'input> {
 
 /// The `FOR provider` clause on a `SECURITY LABEL` statement — Postgres'
 /// `opt_provider`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SecurityLabelProvider<'input> {
-    pub for_kw: FOR,
+    #[tok(FOR, this)]
     pub name: SecurityLabelProviderName<'input>,
 }
 
@@ -575,17 +446,13 @@ pub struct SecurityLabelProvider<'input> {
 /// Postgres' `SecLabelStmt` accepts a subset of object kinds; the wider
 /// `CommentObject` enum is reused since SECURITY LABEL of an unsupported kind
 /// is rejected by PostgreSQL anyway and never appears in the corpus.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SecurityLabelStmt<'input> {
-    pub security: SECURITY,
-    pub label: LABEL,
+    #[tok(SECURITY, LABEL, this)]
     pub provider: Option<SecurityLabelProvider<'input>>,
-    pub on: ON,
+    #[tok(ON, this)]
     pub object: CommentObject<'input>,
-    pub is: IS,
+    #[tok(IS, this)]
     pub text: CommentText<'input>,
 }
 

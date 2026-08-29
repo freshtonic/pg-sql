@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -17,17 +15,16 @@ use recursa_diagram::railroad;
 /// `function_with_argtypes` reference inside a `CREATE TRANSFORM` element.
 /// Always parenthesised in this position (`prsd_lextype(internal)`) — the
 /// bare-name form is not exercised by the transform grammar.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TransformFunctionRef<'input> {
     pub name: QualifiedName<'input>,
-    pub args: Surrounded<
-        punct::LParen,
-        Seq0<crate::ast::ddl::function::FuncParam<'input>, punct::Comma>,
-        punct::RParen,
-    >,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:
+
+        Vec<crate::ast::ddl::function::FuncParam<'input> >
+
+    ,
 }
 
 /// One element of `CREATE TRANSFORM (..., ...)`. Per gram.y
@@ -37,36 +34,21 @@ pub struct TransformFunctionRef<'input> {
 ///
 /// Variant ordering: disjoint first tokens (`FROM` vs `TO`), so order doesn't
 /// matter for disambiguation.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TransformElement<'input> {
     From(TransformFromElement<'input>),
     To(TransformToElement<'input>),
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TransformFromElement<'input> {
-    pub from: FROM,
-    pub sql: SQL,
-    pub with: WITH,
-    pub function: FUNCTION,
+    #[tok(FROM, SQL, WITH, FUNCTION, this)]
     pub func: TransformFunctionRef<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TransformToElement<'input> {
-    pub to: TO,
-    pub sql: SQL,
-    pub with: WITH,
-    pub function: FUNCTION,
+    #[tok(TO, SQL, WITH, FUNCTION, this)]
     pub func: TransformFunctionRef<'input>,
 }
 
@@ -75,34 +57,28 @@ pub struct TransformToElement<'input> {
 /// `{FROM|TO} SQL WITH FUNCTION ...` entries; pg-sql models the list as
 /// `Seq1` of `TransformElement` separated by `Comma`, and relies on PG to reject duplicates and
 /// empty lists at semantic-analysis time.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateTransformStmt<'input> {
-    pub create: CREATE,
-    pub or_replace: Option<(OR, REPLACE)>,
-    pub transform: TRANSFORM,
-    pub r#for: FOR,
+    #[tok(CREATE, this, TRANSFORM, FOR)]
+    #[presence(OR, REPLACE)]
+    pub or_replace: bool,
     pub type_name: crate::ast::shared::names::TypeName<'input>,
-    pub language: LANGUAGE,
+    #[tok(LANGUAGE, this)]
     pub lang_name: crate::ast::ddl::function::LanguageName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub elements:
-        Surrounded<punct::LParen, Seq1<TransformElement<'input>, punct::Comma>, punct::RParen>,
+         recursa::Vec1<TransformElement<'input> > ,
 }
 
 /// `DROP TRANSFORM [IF EXISTS] FOR Typename LANGUAGE name [CASCADE|RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropTransformStmt<'input> {
-    pub drop: DROP,
-    pub transform: TRANSFORM,
+    #[tok(DROP, TRANSFORM, this)]
     pub if_exists: Option<IfExists>,
-    pub r#for: FOR,
+    #[tok(FOR, this)]
     pub type_name: crate::ast::shared::names::TypeName<'input>,
-    pub language: LANGUAGE,
+    #[tok(LANGUAGE, this)]
     pub lang_name: crate::ast::ddl::function::LanguageName<'input>,
     pub behavior: Option<DropBehavior>,
 }
@@ -120,32 +96,33 @@ mod tests {
     /// and `TO SQL WITH FUNCTION ...` element forms.
     #[test]
     fn parse_create_transform() {
-        let mut input = crate::tokens::test_input(
-            "CREATE TRANSFORM FOR int LANGUAGE SQL (\
+        let lexed = crate::tokens::lex("CREATE TRANSFORM FOR int LANGUAGE SQL (\
              FROM SQL WITH FUNCTION prsd_lextype(internal),\
-             TO SQL WITH FUNCTION int4recv(internal))",
-        );
-        let _stmt = CreateTransformStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+             TO SQL WITH FUNCTION int4recv(internal))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTransformStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_or_replace_transform_to_only() {
-        let mut input = crate::tokens::test_input(
-            "CREATE OR REPLACE TRANSFORM FOR text LANGUAGE plpgsql \
-             (TO SQL WITH FUNCTION textrecv(internal))",
-        );
-        let _stmt = CreateTransformStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE OR REPLACE TRANSFORM FOR text LANGUAGE plpgsql \
+             (TO SQL WITH FUNCTION textrecv(internal))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateTransformStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_transform() {
-        let mut input =
-            crate::tokens::test_input("DROP TRANSFORM IF EXISTS FOR int LANGUAGE SQL CASCADE");
-        let stmt = DropTransformStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("DROP TRANSFORM IF EXISTS FOR int LANGUAGE SQL CASCADE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropTransformStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
         assert!(stmt.behavior.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

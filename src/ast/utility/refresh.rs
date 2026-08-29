@@ -1,6 +1,5 @@
 //! REFRESH MATERIALIZED VIEW statement.
 
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::shared::names::QualifiedName;
@@ -14,15 +13,11 @@ use crate::tokens::keyword::*;
 ///
 /// Reuses the `WithDataClause` from `create_table.rs` (also used by
 /// `CREATE TABLE AS … WITH [NO] DATA`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RefreshStmt<'input> {
-    pub refresh: REFRESH,
-    pub materialized: MATERIALIZED,
-    pub view: VIEW,
-    pub concurrently: Option<CONCURRENTLY>,
+    #[tok(REFRESH, MATERIALIZED, VIEW, this)]
+    #[presence(CONCURRENTLY)]
+    pub concurrently: bool,
     pub name: QualifiedName<'input>,
     pub with_data: Option<crate::ast::ddl::table::WithDataClause>,
 }

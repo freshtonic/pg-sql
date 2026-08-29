@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -16,21 +14,15 @@ use crate::tokens::{literal, punct};
 use recursa_diagram::railroad;
 
 /// `SCHEMA name` option on `CREATE EXTENSION`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExtensionSchemaOption<'input> {
-    pub schema: SCHEMA,
+    #[tok(SCHEMA, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `VERSION { sconst | ident }` option on `CREATE EXTENSION`. Postgres'
 /// `NonReservedWord_or_Sconst` allows either a quoted string or a bareword.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ExtensionVersionValue<'input> {
     String(CopySconst<'input>),
     /// Any bareword (incl. soft keywords) — `NonReservedWord`.
@@ -38,48 +30,34 @@ pub enum ExtensionVersionValue<'input> {
 }
 
 /// `VERSION value` option on `CREATE EXTENSION`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExtensionVersionOption<'input> {
-    pub version: VERSION,
+    #[tok(VERSION, this)]
     pub value: ExtensionVersionValue<'input>,
 }
 
 /// A single CREATE EXTENSION option — Postgres' `create_extension_opt_item`.
 /// Options are unordered and repeatable.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ExtensionOption<'input> {
     Schema(ExtensionSchemaOption<'input>),
     Version(ExtensionVersionOption<'input>),
-    Cascade(CASCADE),
+    #[tok(CASCADE)] Cascade,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateExtensionStmt<'input> {
-    pub create: CREATE,
-    pub extension: EXTENSION,
+    #[tok(CREATE, EXTENSION, this)]
     pub if_not_exists: Option<crate::ast::shared::flags::IfNotExists>,
     pub name: crate::tokens::ColId<'input>,
-    pub with: Option<WITH>,
+    #[tok(optional(WITH), this)]
     pub options: Vec<ExtensionOption<'input>>,
 }
 
 /// `DROP EXTENSION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropExtensionStmt<'input> {
-    pub drop: DROP,
-    pub extension: EXTENSION,
+    #[tok(DROP, EXTENSION, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -90,22 +68,16 @@ pub struct DropExtensionStmt<'input> {
 ///
 /// pg-sql accepts `TO sconst` (a string literal); the bare-identifier
 /// form is not exercised by the corpus.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterExtensionUpdateTo<'input> {
-    pub to: TO,
+    #[tok(TO, this)]
     pub version: literal::StringLit<'input>,
 }
 
 /// `UPDATE [TO version]` — Postgres' `AlterExtensionStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterExtensionUpdate<'input> {
-    pub update: UPDATE,
+    #[tok(UPDATE, this)]
     pub to: Option<AlterExtensionUpdateTo<'input>>,
 }
 
@@ -115,24 +87,21 @@ pub struct AlterExtensionUpdate<'input> {
 ///
 /// Variant ordering: longer multi-keyword variants first (e.g.
 /// `MATERIALIZED VIEW` before `VIEW`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ExtensionObjectTypeAnyName {
-    MaterializedView((MATERIALIZED, VIEW)),
-    ForeignTable((FOREIGN, TABLE)),
-    TextSearchParser((TEXT, SEARCH, PARSER)),
-    TextSearchDictionary((TEXT, SEARCH, DICTIONARY)),
-    TextSearchTemplate((TEXT, SEARCH, TEMPLATE)),
-    TextSearchConfiguration((TEXT, SEARCH, CONFIGURATION)),
-    Table(TABLE),
-    Sequence(SEQUENCE),
-    View(VIEW),
-    Index(INDEX),
-    Collation(COLLATION),
-    Conversion(CONVERSION),
-    Statistics(STATISTICS),
+    #[tok(MATERIALIZED, VIEW)] MaterializedView,
+    #[tok(FOREIGN, TABLE)] ForeignTable,
+    #[tok(TEXT, SEARCH, PARSER)] TextSearchParser,
+    #[tok(TEXT, SEARCH, DICTIONARY)] TextSearchDictionary,
+    #[tok(TEXT, SEARCH, TEMPLATE)] TextSearchTemplate,
+    #[tok(TEXT, SEARCH, CONFIGURATION)] TextSearchConfiguration,
+    #[tok(TABLE)] Table,
+    #[tok(SEQUENCE)] Sequence,
+    #[tok(VIEW)] View,
+    #[tok(INDEX)] Index,
+    #[tok(COLLATION)] Collation,
+    #[tok(CONVERSION)] Conversion,
+    #[tok(STATISTICS)] Statistics,
 }
 
 /// `ACCESS METHOD` / `EVENT TRIGGER` / `FOREIGN DATA WRAPPER` / etc. —
@@ -141,30 +110,24 @@ pub enum ExtensionObjectTypeAnyName {
 /// the dedicated `ALTER EXTENSION ... LANGUAGE` branch below).
 ///
 /// Variant ordering: longest multi-keyword forms first.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ExtensionObjectTypeName {
-    ForeignDataWrapper((FOREIGN, DATA, WRAPPER)),
-    AccessMethod((ACCESS, METHOD)),
-    EventTrigger((EVENT, TRIGGER)),
-    Database(DATABASE),
-    Role(ROLE),
-    Subscription(SUBSCRIPTION),
-    Tablespace(TABLESPACE),
-    Extension(EXTENSION),
-    Publication(PUBLICATION),
-    Schema(SCHEMA),
-    Server(SERVER),
+    #[tok(FOREIGN, DATA, WRAPPER)] ForeignDataWrapper,
+    #[tok(ACCESS, METHOD)] AccessMethod,
+    #[tok(EVENT, TRIGGER)] EventTrigger,
+    #[tok(DATABASE)] Database,
+    #[tok(ROLE)] Role,
+    #[tok(SUBSCRIPTION)] Subscription,
+    #[tok(TABLESPACE)] Tablespace,
+    #[tok(EXTENSION)] Extension,
+    #[tok(PUBLICATION)] Publication,
+    #[tok(SCHEMA)] Schema,
+    #[tok(SERVER)] Server,
 }
 
 /// `add_drop object_type_any_name any_name` — the dotted-name branch of
 /// Postgres' `AlterExtensionContentsStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterExtensionAnyNameMember<'input> {
     pub object_type: ExtensionObjectTypeAnyName,
     pub name: QualifiedName<'input>,
@@ -172,10 +135,7 @@ pub struct AlterExtensionAnyNameMember<'input> {
 
 /// `add_drop object_type_name name` — the simple-name branch of
 /// Postgres' `AlterExtensionContentsStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterExtensionNameMember<'input> {
     pub object_type: ExtensionObjectTypeName,
     pub name: crate::tokens::ColId<'input>,
@@ -184,13 +144,9 @@ pub struct AlterExtensionNameMember<'input> {
 /// `add_drop [PROCEDURAL] LANGUAGE name` — Postgres'
 /// `AlterExtensionContentsStmt` LANGUAGE branch (via the
 /// `opt_procedural LANGUAGE` arm of `drop_type_name`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterExtensionLanguageMember<'input> {
-    pub procedural: Option<PROCEDURAL>,
-    pub language: LANGUAGE,
+    #[tok(optional(PROCEDURAL), LANGUAGE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
@@ -214,10 +170,7 @@ pub struct AlterExtensionLanguageMember<'input> {
 /// `TEXT SEARCH …` / `MATERIALIZED VIEW` / `FOREIGN TABLE` multi-keyword
 /// forms win over their single-keyword cousins in
 /// `ExtensionObjectTypeName`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterExtensionMember<'input> {
     Language(AlterExtensionLanguageMember<'input>),
     AnyName(AlterExtensionAnyNameMember<'input>),
@@ -225,22 +178,16 @@ pub enum AlterExtensionMember<'input> {
 }
 
 /// `ADD member` — Postgres' `AlterExtensionContentsStmt` ADD branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterExtensionAdd<'input> {
-    pub add: ADD,
+    #[tok(ADD, this)]
     pub member: AlterExtensionMember<'input>,
 }
 
 /// `DROP member` — Postgres' `AlterExtensionContentsStmt` DROP branch.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterExtensionDrop<'input> {
-    pub drop: DROP,
+    #[tok(DROP, this)]
     pub member: AlterExtensionMember<'input>,
 }
 
@@ -251,10 +198,7 @@ pub struct AlterExtensionDrop<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`UPDATE`, `ADD`, `DROP`, `SET`), so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterExtensionAction<'input> {
     Update(AlterExtensionUpdate<'input>),
     Add(AlterExtensionAdd<'input>),
@@ -265,13 +209,9 @@ pub enum AlterExtensionAction<'input> {
 /// `ALTER EXTENSION name action` — Postgres' `AlterExtensionStmt` and
 /// `AlterExtensionContentsStmt` plus the extension branch of
 /// `AlterObjectSchemaStmt`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterExtensionStmt<'input> {
-    pub alter: ALTER,
-    pub extension: EXTENSION,
+    #[tok(ALTER, EXTENSION, this)]
     pub name: crate::tokens::ColId<'input>,
     pub action: AlterExtensionAction<'input>,
 }
@@ -285,50 +225,60 @@ mod tests {
 
     #[test]
     fn parse_create_extension_plain() {
-        let mut input = crate::tokens::test_input("CREATE EXTENSION hstore");
-        let stmt = CreateExtensionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE EXTENSION hstore");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateExtensionStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.text(), "hstore");
         assert!(stmt.if_not_exists.is_none());
         assert!(stmt.options.is_empty());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_extension_if_not_exists_with_options() {
-        let mut input = crate::tokens::test_input(
-            "CREATE EXTENSION IF NOT EXISTS hstore WITH SCHEMA public VERSION '1.6' CASCADE",
-        );
-        let stmt = CreateExtensionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE EXTENSION IF NOT EXISTS hstore WITH SCHEMA public VERSION '1.6' CASCADE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateExtensionStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_not_exists.is_some());
         assert_eq!(stmt.options.len(), 3);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_extension_update() {
-        let mut input = crate::tokens::test_input("ALTER EXTENSION my_ext UPDATE TO '1.1'");
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER EXTENSION my_ext UPDATE TO '1.1'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_extension_update_no_to() {
-        let mut input = crate::tokens::test_input("ALTER EXTENSION my_ext UPDATE");
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER EXTENSION my_ext UPDATE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_extension_set_schema() {
-        let mut input = crate::tokens::test_input("ALTER EXTENSION my_ext SET SCHEMA new_schema");
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER EXTENSION my_ext SET SCHEMA new_schema");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_extension_add_table() {
-        let mut input = crate::tokens::test_input("ALTER EXTENSION my_ext ADD TABLE my_table");
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("ALTER EXTENSION my_ext ADD TABLE my_table");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 }

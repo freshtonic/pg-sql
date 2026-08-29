@@ -1,7 +1,5 @@
 /// CREATE FUNCTION / DROP FUNCTION statement AST.
 use recursa::seq::{OptionalTrailing, Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::{CastType, Expr, TypeName};
 use crate::tokens::keyword::*;
@@ -24,20 +22,14 @@ use crate::tokens::soft_keyword::*;
 // ---------------------------------------------------------------------------
 
 /// SETOF type: `SETOF typename`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetofReturn<'input> {
-    pub setof: SETOF,
+    #[tok(SETOF, this)]
     pub type_name: TypeName<'input>,
 }
 
 /// Function return type: `SETOF type` or plain `type`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ReturnType<'input> {
     Setof(SetofReturn<'input>),
     Plain(TypeName<'input>),
@@ -45,21 +37,15 @@ pub enum ReturnType<'input> {
 
 /// LANGUAGE clause: `LANGUAGE name` or `LANGUAGE 'name'`. Postgres accepts
 /// the language name as an identifier or as a single-quoted string literal.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum LanguageName<'input> {
     Ident(literal::AliasName<'input>),
     String(literal::StringLit<'input>),
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LanguageOption<'input> {
-    pub language: LANGUAGE,
+    #[tok(LANGUAGE, this)]
     pub name: LanguageName<'input>,
 }
 
@@ -69,26 +55,22 @@ pub struct LanguageOption<'input> {
 ///
 /// Variant ordering: dollar-quoted before single-quoted before psql var
 /// (different first chars).
-#[railroad]
 #[cfg_attr(feature = "arbitrary", derive(::recursa::arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FuncBodyPart<'input> {
     Dollar(literal::DollarStringLit<'input>),
     String(literal::StringLit<'input>),
-    PsqlVar(literal::PsqlVar<'input>),
+    PsqlVar(literal::PsqlVariable<'input>),
 }
 
 /// Full function body — `AS body [, symbol]`. The second comma-separated
 /// form is used for C-language functions where the first part names the
 /// shared object file and the second names the exported C symbol.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FuncBody<'input> {
     pub obj_file: FuncBodyPart<'input>,
-    pub symbol: Option<(punct::Comma, FuncBodyPart<'input>)>,
+    #[tok(COMMA, this)]
+    pub symbol: Option<FuncBodyPart<'input>>,
 }
 
 /// Function return type name -- extends TypeName with additional types
@@ -98,54 +80,40 @@ pub struct FuncBody<'input> {
 ///
 /// Variant ordering: `PctType` first so its longer prefix wins on
 /// `name.attr%TYPE` over the bare `Base` form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FuncReturnTypeName<'input> {
-    Trigger(TRIGGER),
+    #[tok(TRIGGER)] Trigger,
     PctType(PctTypeRef<'input>),
     Base(CastType<'input>),
 }
 
 /// RETURNS clause for functions: `RETURNS [SETOF] type`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FuncReturnsClause<'input> {
-    pub returns: RETURNS,
+    #[tok(RETURNS, this)]
     pub return_type: FuncReturnType<'input>,
 }
 
 /// A single column in `RETURNS TABLE(col type, ...)`: `name type`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableColumn<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub type_name: CastType<'input>,
 }
 
 /// `TABLE(col type, ...)` — tabular function return type.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FuncReturnsTable<'input> {
-    pub table: TABLE,
-    pub columns: Surrounded<punct::LParen, Seq1<TableColumn<'input>, punct::Comma>, punct::RParen>,
+    #[tok(TABLE, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub columns:  recursa::Vec1<TableColumn<'input> > ,
 }
 
 /// Function return type: TABLE(...), SETOF type, or plain type.
 ///
 /// `Table` before `Setof` and `Plain` — `TABLE` is a keyword that won't
 /// match as an identifier-based type.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FuncReturnType<'input> {
     Table(FuncReturnsTable<'input>),
     Setof(FuncSetofReturn<'input>),
@@ -153,27 +121,21 @@ pub enum FuncReturnType<'input> {
 }
 
 /// SETOF type for function returns.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FuncSetofReturn<'input> {
-    pub setof: SETOF,
+    #[tok(SETOF, this)]
     pub type_name: FuncReturnTypeName<'input>,
 }
 
 // --- Function parameters ---
 
 /// Argument mode prefix: `IN | OUT | INOUT | VARIADIC`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ArgMode {
-    In(IN),
-    Inout(INOUT),
-    Out(OUT),
-    Variadic(VARIADIC),
+    #[tok(IN)] In,
+    #[tok(INOUT)] Inout,
+    #[tok(OUT)] Out,
+    #[tok(VARIADIC)] Variadic,
 }
 
 /// `qualified_name%TYPE` — the PG-specific reference-type form used in
@@ -182,36 +144,27 @@ pub enum ArgMode {
 /// one `.attr` segment). We accept a plain qualified name with one or
 /// more parts so simple `name.col%TYPE` and longer chains
 /// (`hobbies_r.person.name%TYPE`) both round-trip.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PctTypeRef<'input> {
+    #[tok(this, PERCENT, TYPE)]
     pub name: crate::ast::shared::names::QualifiedName<'input>,
-    pub percent: punct::Percent,
-    pub type_kw: TYPE,
 }
 
 /// A function parameter / return-type slot. Either a regular type (with
 /// optional precision / array suffix) or the `qualified_name%TYPE`
 /// reference-type form. The `%TYPE` variant is listed first so its longer
 /// match wins via declaration-order tiebreak.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FuncArgType<'input> {
     PctType(PctTypeRef<'input>),
     Cast(CastType<'input>),
 }
 
 /// `[mode] name type [default]` -- a named function parameter with mode first.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct NamedFuncParam<'input> {
     pub mode: Option<ArgMode>,
+    #[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#, admits(type_function_name))]
     pub name: crate::tokens::type_function_name<'input>,
     pub type_name: FuncArgType<'input>,
     pub default: Option<ParamDefault<'input>>,
@@ -220,11 +173,9 @@ pub struct NamedFuncParam<'input> {
 /// `name mode type [default]` -- a named function parameter with mode after name.
 ///
 /// Postgres allows `f2 OUT anyelement` where the mode follows the name.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct NameModeParam<'input> {
+    #[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#, admits(type_function_name))]
     pub name: crate::tokens::type_function_name<'input>,
     pub mode: ArgMode,
     pub type_name: FuncArgType<'input>,
@@ -232,10 +183,7 @@ pub struct NameModeParam<'input> {
 }
 
 /// `[mode] type [default]` -- an unnamed function parameter.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UnnamedFuncParam<'input> {
     pub mode: Option<ArgMode>,
     pub type_name: FuncArgType<'input>,
@@ -243,20 +191,14 @@ pub struct UnnamedFuncParam<'input> {
 }
 
 /// Default value separator: `DEFAULT` or `=`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ParamDefaultSep {
-    Default(DEFAULT),
-    Eq(punct::Eq),
+    #[tok(DEFAULT)] Default,
+    #[tok(EQ)] Eq,
 }
 
 /// `DEFAULT expr` or `= expr` trailing default on a function parameter.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ParamDefault<'input> {
     pub sep: ParamDefaultSep,
     pub value: Expr<'input>,
@@ -271,10 +213,7 @@ pub struct ParamDefault<'input> {
 ///
 /// `NameMode` must come first because `name mode type` would otherwise
 /// be parsed by `Named` as name=ident, type=mode_keyword (wrong).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FuncParam<'input> {
     NameMode(NameModeParam<'input>),
     Named(NamedFuncParam<'input>),
@@ -284,47 +223,35 @@ pub enum FuncParam<'input> {
 // --- Function options (unordered list) ---
 
 /// `IMMUTABLE` / `STABLE` / `VOLATILE` volatility.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum VolatilityOption {
-    Immutable(IMMUTABLE),
-    Stable(STABLE),
-    Volatile(VOLATILE),
+    #[tok(IMMUTABLE)] Immutable,
+    #[tok(STABLE)] Stable,
+    #[tok(VOLATILE)] Volatile,
 }
 
 /// `PARALLEL SAFE` / `PARALLEL RESTRICTED` / `PARALLEL UNSAFE` parallelism
 /// declaration.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ParallelMode {
-    Safe(SAFE),
-    Restricted(RESTRICTED),
-    Unsafe(UNSAFE),
+    #[tok(SAFE)] Safe,
+    #[tok(RESTRICTED)] Restricted,
+    #[tok(UNSAFE)] Unsafe,
 }
 
 /// `PARALLEL { SAFE | RESTRICTED | UNSAFE }` function option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ParallelOption {
-    pub parallel: PARALLEL,
+    #[tok(PARALLEL, this)]
     pub mode: ParallelMode,
 }
 
 /// Separator between a SET config parameter name and its value — either
 /// `=` or `TO`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SetAssignSep {
-    Eq(punct::Eq),
-    To(TO),
+    #[tok(EQ)] Eq,
+    #[tok(TO)] To,
 }
 
 /// `SET config_param { = | TO } var_list` function option — per-function GUC
@@ -333,37 +260,29 @@ pub enum SetAssignSep {
 /// Postgres `set_rest_more: ColId TO var_list | ColId '=' var_list` admits a
 /// comma-separated `var_list`, so values like `SET datestyle to iso, mdy`
 /// (rules.sql) parse cleanly.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SetFuncOption<'input> {
-    pub set: SET,
+    #[tok(SET, this)]
     pub name: literal::AliasName<'input>,
     pub sep: SetAssignSep,
-    pub values: Seq1<crate::ast::session::set_reset::SetValue<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub values: recursa::Vec1<crate::ast::session::set_reset::SetValue<'input> >,
 }
 
 /// `STRICT` / `CALLED ON NULL INPUT` / `RETURNS NULL ON NULL INPUT`.
 ///
 /// Variant ordering: longer (multi-keyword) forms before `Strict`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum StrictnessOption {
-    CalledOnNullInput((CALLED, ON, NULL, INPUT)),
-    ReturnsNullOnNullInput((RETURNS, NULL, ON, NULL, INPUT)),
-    Strict(STRICT),
+    #[tok(CALLED, ON, NULL, INPUT)] CalledOnNullInput,
+    #[tok(RETURNS, NULL, ON, NULL, INPUT)] ReturnsNullOnNullInput,
+    #[tok(STRICT)] Strict,
 }
 
 /// `AS body` clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AsOption<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub body: FuncBody<'input>,
 }
 
@@ -372,10 +291,7 @@ pub struct AsOption<'input> {
 /// Variant ordering: multi-token options listed before single-keyword
 /// options, and `StrictnessOption` (which itself has multi-keyword variants)
 /// listed before plain `VolatilityOption`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FuncOption<'input> {
     Strictness(StrictnessOption),
     Volatility(VolatilityOption),
@@ -389,8 +305,8 @@ pub enum FuncOption<'input> {
     ExternalSecurity(ExternalSecurityOption),
     /// `LEAKPROOF` / `NOT LEAKPROOF`.
     Leakproof(LeakproofOption),
-    /// `WINDOW` — declares the function as a window function.
-    Window(WINDOW),
+    #[tok(WINDOW)] /// `WINDOW` — declares the function as a window function.
+    Window,
     /// `COST numeric`.
     Cost(CostOption<'input>),
     /// `ROWS numeric`.
@@ -416,105 +332,68 @@ pub enum FuncOption<'input> {
 
 /// Empty `BEGIN ATOMIC END` body. Non-empty bodies are not yet modelled —
 /// see `FuncOption::BeginAtomicEmpty` for the rationale.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct BeginAtomicEmpty {
-    pub begin: BEGIN,
-    pub atomic: ATOMIC,
-    pub end: END,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum BeginAtomicEmpty { #[tok(BEGIN, ATOMIC, END)] Value, }
 
 /// `RETURN expr` option on CREATE FUNCTION (SQL-standard body form).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ReturnOption<'input> {
-    pub r#return: RETURN,
+    #[tok(RETURN, this)]
     pub expr: Expr<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SecurityMode {
-    Definer(DEFINER),
-    Invoker(INVOKER),
+    #[tok(DEFINER)] Definer,
+    #[tok(INVOKER)] Invoker,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SecurityOption {
-    pub security: SECURITY,
+    #[tok(SECURITY, this)]
     pub mode: SecurityMode,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExternalSecurityOption {
-    pub external: EXTERNAL,
+    #[tok(EXTERNAL, this)]
     pub inner: SecurityOption,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum LeakproofOption {
-    NotLeakproof((NOT, LEAKPROOF)),
-    Leakproof(LEAKPROOF),
+    #[tok(NOT, LEAKPROOF)] NotLeakproof,
+    #[tok(LEAKPROOF)] Leakproof,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CostOption<'input> {
-    pub cost: COST,
+    #[tok(COST, this)]
     pub value: Expr<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RowsOption<'input> {
-    pub rows: ROWS,
+    #[tok(ROWS, this)]
     pub value: Expr<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SupportOption<'input> {
-    pub support: SUPPORT,
+    #[tok(SUPPORT, this)]
     pub name: crate::ast::shared::names::QualifiedName<'input>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TransformOption<'input> {
-    pub transform: TRANSFORM,
-    pub items: Seq0<TransformForType<'input>, punct::Comma>,
+    #[tok(TRANSFORM, this)]
+    #[sep(COMMA)]
+    pub items: Vec<TransformForType<'input> >,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TransformForType<'input> {
-    pub r#for: FOR,
-    pub r#type: TYPE,
+    #[tok(FOR, TYPE, this)]
     pub type_name: CastType<'input>,
 }
 
@@ -531,18 +410,17 @@ pub struct ExtractedFuncBody<'a> {
 /// CREATE [OR REPLACE] FUNCTION statement.
 ///
 /// Function options after the signature/RETURNS may appear in any order.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateFunctionStmt<'input> {
-    pub create: CREATE,
-    pub or_replace: Option<(OR, REPLACE)>,
-    pub function: FUNCTION,
+    #[tok(CREATE, this, FUNCTION)]
+    #[presence(OR, REPLACE)]
+    pub or_replace: bool,
     pub name: crate::ast::shared::names::FuncDefName<'input>,
-    pub args: Surrounded<punct::LParen, Seq0<FuncParam<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:  Vec<FuncParam<'input> > ,
     pub returns: Option<FuncReturnsClause<'input>>,
-    pub options: Seq0<FuncOption<'input>, (), OptionalTrailing>,
+    pub options: Vec<FuncOption<'input>  >,
 }
 
 impl<'input> CreateFunctionStmt<'input> {
@@ -598,43 +476,38 @@ fn strip_dollar_quotes(s: &str) -> &str {
 
 /// A single entry in a `DROP FUNCTION` target list: optional qualified name
 /// plus an optional parenthesized signature.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropFunctionTarget<'input> {
     pub name: crate::ast::shared::names::FuncDefName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub args:
-        Option<Surrounded<punct::LParen, Seq0<FuncParam<'input>, punct::Comma>, punct::RParen>>,
+        Option< Vec<FuncParam<'input> > >,
 }
 
 /// DROP FUNCTION statement: `DROP FUNCTION name[(args)] [, name[(args)] ...]`.
 ///
 /// The argument list on each target is optional: when the function name is
 /// unambiguous in the current schema, Postgres allows omitting the signature.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropFunctionStmt<'input> {
-    pub drop: DROP,
-    pub function: FUNCTION,
-    pub if_exists: Option<(IF, EXISTS)>,
-    pub targets: Seq0<DropFunctionTarget<'input>, punct::Comma>,
+    #[tok(DROP, FUNCTION, this)]
+    #[presence(IF, EXISTS)]
+    pub if_exists: bool,
+    #[sep(COMMA)]
+    pub targets: Vec<DropFunctionTarget<'input> >,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
 
 /// DROP ROUTINE statement — Postgres synonym for DROP FUNCTION/PROCEDURE
 /// that dispatches by name/signature at lookup time.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropRoutineStmt<'input> {
-    pub drop: DROP,
-    pub routine: ROUTINE,
-    pub if_exists: Option<(IF, EXISTS)>,
-    pub targets: Seq0<DropFunctionTarget<'input>, punct::Comma>,
+    #[tok(DROP, ROUTINE, this)]
+    #[presence(IF, EXISTS)]
+    pub if_exists: bool,
+    #[sep(COMMA)]
+    pub targets: Vec<DropFunctionTarget<'input> >,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
 
@@ -648,195 +521,204 @@ mod tests {
 
     #[test]
     fn parse_create_function_return_body() {
-        let mut input =
-            crate::tokens::test_input("CREATE FUNCTION f() RETURNS boolean RETURN false");
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS boolean RETURN false");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_basic() {
-        let mut input = crate::tokens::test_input(
-            "create function sillysrf(int) returns setof int as 'values (1),(10),(2),($1)' language sql immutable",
-        );
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("create function sillysrf(int) returns setof int as 'values (1),(10),(2),($1)' language sql immutable");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.name.object(), "sillysrf");
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_function_basic() {
-        let mut input = crate::tokens::test_input("drop function sillysrf(int)");
-        let stmt = DropFunctionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("drop function sillysrf(int)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(
             stmt.targets.iter().next().unwrap().name.object(),
             "sillysrf"
         );
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_function_multi() {
-        let mut input = crate::tokens::test_input("drop function a(), b(), c()");
-        let _stmt = DropFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("drop function a(), b(), c()");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_named_param() {
-        let mut input = crate::tokens::test_input(
-            "create function polyf(x anyelement) returns anyelement as $$ select x + 1 $$ language sql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function polyf(x anyelement) returns anyelement as $$ select x + 1 $$ language sql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_function_cascade() {
-        let mut input = crate::tokens::test_input("DROP FUNCTION int4_casttesttype(int4) CASCADE");
-        let _stmt = DropFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("DROP FUNCTION int4_casttesttype(int4) CASCADE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_drop_function_named_param() {
-        let mut input = crate::tokens::test_input("drop function polyf(x anyelement)");
-        let _stmt = DropFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("drop function polyf(x anyelement)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_returns_trigger() {
-        let mut input = crate::tokens::test_input(
-            "create function f() returns trigger language plpgsql as $$ begin end $$",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function f() returns trigger language plpgsql as $$ begin end $$");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_strict_immutable() {
-        let mut input = crate::tokens::test_input(
-            "create function f() returns int immutable strict language sql as 'SELECT 1'",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function f() returns int immutable strict language sql as 'SELECT 1'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_options_reordered() {
-        let mut input = crate::tokens::test_input(
-            "create function f() returns int language sql strict as 'SELECT 1'",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function f() returns int language sql strict as 'SELECT 1'");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_in_out_named() {
-        let mut input = crate::tokens::test_input(
-            "create function f(in i int, out j int) returns int as $$ begin return i+1; end $$ language plpgsql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function f(in i int, out j int) returns int as $$ begin return i+1; end $$ language plpgsql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_in_out_no_returns() {
-        let mut input = crate::tokens::test_input(
-            "create function f(in i int, out j int) as $$ begin end $$ language plpgsql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function f(in i int, out j int) as $$ begin end $$ language plpgsql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_setof_record() {
-        let mut input = crate::tokens::test_input(
-            "create function gs(v integer, out a integer, out b integer) returns setof record as $f$ select 1 $f$ language plpgsql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function gs(v integer, out a integer, out b integer) returns setof record as $f$ select 1 $f$ language plpgsql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_polymorphic_out() {
-        let mut input = crate::tokens::test_input(
-            "create function poly(a anyelement, b anyarray, OUT x anyarray) as $$ begin end $$ language plpgsql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function poly(a anyelement, b anyarray, OUT x anyarray) as $$ begin end $$ language plpgsql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_param_eq_default() {
-        let mut input = crate::tokens::test_input(
-            "create function f(a int = 1, b int = 2) returns int as $$ select 1 $$ language sql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function f(a int = 1, b int = 2) returns int as $$ select 1 $$ language sql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_param_default_keyword() {
-        let mut input = crate::tokens::test_input(
-            "create function f(a int default 1) returns int as $$ select 1 $$ language sql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function f(a int default 1) returns int as $$ select 1 $$ language sql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_unnamed_default() {
-        let mut input = crate::tokens::test_input(
-            "create function dfunc(a int = 1, int = 2) returns int as $$ select 1 $$ language sql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function dfunc(a int = 1, int = 2) returns int as $$ select 1 $$ language sql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_array_arg() {
-        let mut input = crate::tokens::test_input(
-            "CREATE FUNCTION stfnp(int[]) RETURNS int[] AS 'select $1' LANGUAGE SQL",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE FUNCTION stfnp(int[]) RETURNS int[] AS 'select $1' LANGUAGE SQL");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_array_arg_multi() {
-        let mut input = crate::tokens::test_input(
-            "CREATE FUNCTION f(int[], text[]) RETURNS int[] AS 'select $1' LANGUAGE SQL",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE FUNCTION f(int[], text[]) RETURNS int[] AS 'select $1' LANGUAGE SQL");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_nested_array() {
-        let mut input = crate::tokens::test_input(
-            "CREATE FUNCTION f(x int[][]) RETURNS int[][] AS 'select x' LANGUAGE SQL",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("CREATE FUNCTION f(x int[][]) RETURNS int[][] AS 'select x' LANGUAGE SQL");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_multi_named_params() {
-        let mut input = crate::tokens::test_input(
-            "create function tg_hub_adjustslots(hname bpchar, oldn integer, newn integer) returns integer as ' begin return 1; end ' language plpgsql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("create function tg_hub_adjustslots(hname bpchar, oldn integer, newn integer) returns integer as ' begin return 1; end ' language plpgsql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn func_body_dollar_quoted() {
-        let mut input = crate::tokens::test_input(
-            "CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$ BEGIN PERFORM 1; END; $$",
-        );
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$ BEGIN PERFORM 1; END; $$");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
         let body = stmt.func_body().expect("should extract body");
         assert_eq!(body.lang, "plpgsql");
         assert_eq!(body.body.trim(), "BEGIN PERFORM 1; END;");
@@ -844,9 +726,10 @@ mod tests {
 
     #[test]
     fn func_body_single_quoted() {
-        let mut input =
-            crate::tokens::test_input("CREATE FUNCTION f() RETURNS int AS 'SELECT 1' LANGUAGE sql");
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS int AS 'SELECT 1' LANGUAGE sql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
         let body = stmt.func_body().expect("should extract body");
         assert_eq!(body.lang, "sql");
         assert_eq!(body.body, "SELECT 1");
@@ -854,10 +737,10 @@ mod tests {
 
     #[test]
     fn func_body_tagged_dollar_quote() {
-        let mut input = crate::tokens::test_input(
-            "CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $proc$ DECLARE x int; BEGIN x := 1; END; $proc$",
-        );
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $proc$ DECLARE x int; BEGIN x := 1; END; $proc$");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
         let body = stmt.func_body().expect("should extract body");
         assert_eq!(body.lang, "plpgsql");
         assert_eq!(body.body.trim(), "DECLARE x int; BEGIN x := 1; END;");
@@ -865,12 +748,12 @@ mod tests {
 
     #[test]
     fn func_returns_table() {
-        let mut input = crate::tokens::test_input(
-            "CREATE FUNCTION f(int) RETURNS TABLE(a int, b int) AS $$ BEGIN RETURN QUERY SELECT 1, 2; END; $$ LANGUAGE plpgsql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE FUNCTION f(int) RETURNS TABLE(a int, b int) AS $$ BEGIN RETURN QUERY SELECT 1, 2; END; $$ LANGUAGE plpgsql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -878,12 +761,12 @@ mod tests {
 
     #[test]
     fn func_returns_table_varchar() {
-        let mut input = crate::tokens::test_input(
-            "CREATE FUNCTION f() RETURNS TABLE(a varchar(5)) AS $$ SELECT 'hello'::varchar(5) $$ LANGUAGE sql",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS TABLE(a varchar(5)) AS $$ SELECT 'hello'::varchar(5) $$ LANGUAGE sql");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -895,12 +778,12 @@ mod tests {
     /// a `createfunc_opt_list`.
     #[test]
     fn parse_create_function_set_var_list() {
-        let mut input = crate::tokens::test_input(
-            "CREATE FUNCTION f() RETURNS integer AS 'select 1;' LANGUAGE SQL SET datestyle to iso, mdy",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS integer AS 'select 1;' LANGUAGE SQL SET datestyle to iso, mdy");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -910,17 +793,17 @@ mod tests {
     /// `createfunc_opt_item`. The rules.sql regression chains five of them.
     #[test]
     fn parse_create_function_multiple_set_options() {
-        let mut input = crate::tokens::test_input(
-            "CREATE FUNCTION f() RETURNS integer AS 'select 1;' LANGUAGE SQL \
+        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS integer AS 'select 1;' LANGUAGE SQL \
              SET search_path TO PG_CATALOG \
              SET extra_float_digits TO 2 \
              SET work_mem TO '4MB' \
              SET datestyle to iso, mdy \
-             SET local_preload_libraries TO ''",
-        );
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap();
+             SET local_preload_libraries TO ''");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -1096,84 +979,60 @@ mod tests {
 
 /// `PARALLEL { SAFE | RESTRICTED | UNSAFE }` mode keyword on a function
 /// option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterFuncParallelMode {
-    Safe(SAFE),
-    Restricted(RESTRICTED),
-    Unsafe(UNSAFE),
+    #[tok(SAFE)] Safe,
+    #[tok(RESTRICTED)] Restricted,
+    #[tok(UNSAFE)] Unsafe,
 }
 
 /// `PARALLEL { SAFE | RESTRICTED | UNSAFE }` function option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFuncParallelItem {
-    pub parallel: PARALLEL,
+    #[tok(PARALLEL, this)]
     pub mode: AlterFuncParallelMode,
 }
 
 /// `SECURITY { DEFINER | INVOKER }` mode keyword.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterFuncSecurityMode {
-    Definer(DEFINER),
-    Invoker(INVOKER),
+    #[tok(DEFINER)] Definer,
+    #[tok(INVOKER)] Invoker,
 }
 
 /// `SECURITY { DEFINER | INVOKER }` function option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFuncSecurityItem {
-    pub security: SECURITY,
+    #[tok(SECURITY, this)]
     pub mode: AlterFuncSecurityMode,
 }
 
 /// `EXTERNAL SECURITY { DEFINER | INVOKER }` function option — older
 /// SQL-standard spelling, still accepted by gram.y.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFuncExternalSecurityItem {
-    pub external: EXTERNAL,
+    #[tok(EXTERNAL, this)]
     pub inner: AlterFuncSecurityItem,
 }
 
 /// `COST NumericOnly` function option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFuncCostItem<'input> {
-    pub cost: COST,
+    #[tok(COST, this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `ROWS NumericOnly` function option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFuncRowsItem<'input> {
-    pub rows: ROWS,
+    #[tok(ROWS, this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `SUPPORT any_name` function option — names a planner-support function.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFuncSupportItem<'input> {
-    pub support: SUPPORT,
+    #[tok(SUPPORT, this)]
     pub name: QualifiedName<'input>,
 }
 
@@ -1189,17 +1048,14 @@ pub struct AlterFuncSupportItem<'input> {
 /// SECURITY ...` and `NOT LEAKPROOF` and `PARALLEL ...` and `SECURITY
 /// ...` are 2-3 tokens; the bare keyword variants are 1 token. All
 /// leading tokens are distinct so longest-match is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CommonFuncOptItem<'input> {
     // Multi-keyword forms first.
-    CalledOnNullInput((CALLED, ON, NULL, INPUT)),
-    ReturnsNullOnNullInput((RETURNS, NULL, ON, NULL, INPUT)),
+    #[tok(CALLED, ON, NULL, INPUT)] CalledOnNullInput,
+    #[tok(RETURNS, NULL, ON, NULL, INPUT)] ReturnsNullOnNullInput,
     ExternalSecurity(AlterFuncExternalSecurityItem),
     Security(AlterFuncSecurityItem),
-    NotLeakproof((NOT, LEAKPROOF)),
+    #[tok(NOT, LEAKPROOF)] NotLeakproof,
     Parallel(AlterFuncParallelItem),
     Cost(AlterFuncCostItem<'input>),
     Rows(AlterFuncRowsItem<'input>),
@@ -1209,11 +1065,11 @@ pub enum CommonFuncOptItem<'input> {
     Set(crate::ast::session::set_reset::SetStmt<'input>),
     Reset(crate::ast::session::set_reset::ResetStmt<'input>),
     // Single-keyword forms.
-    Leakproof(LEAKPROOF),
-    Strict(STRICT),
-    Immutable(IMMUTABLE),
-    Stable(STABLE),
-    Volatile(VOLATILE),
+    #[tok(LEAKPROOF)] Leakproof,
+    #[tok(STRICT)] Strict,
+    #[tok(IMMUTABLE)] Immutable,
+    #[tok(STABLE)] Stable,
+    #[tok(VOLATILE)] Volatile,
 }
 
 /// `common_func_opt_item …+ [RESTRICT]` — the action-list branch of
@@ -1222,13 +1078,11 @@ pub enum CommonFuncOptItem<'input> {
 /// `common_func_opt_item` as the base case, not empty). The trailing
 /// `RESTRICT` is gram.y's deprecated `opt_restrict`, present for SQL
 /// compliance and ignored semantically.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFuncOptions<'input> {
-    pub items: Seq1<CommonFuncOptItem<'input>, (), recursa::seq::OptionalTrailing>,
-    pub restrict: Option<RESTRICT>,
+    pub items: recursa::Vec1<CommonFuncOptItem<'input>  >,
+    #[presence(RESTRICT)]
+    pub restrict: bool,
 }
 
 /// One action on `ALTER { FUNCTION | PROCEDURE | ROUTINE }
@@ -1243,10 +1097,7 @@ pub struct AlterFuncOptions<'input> {
 /// - Other variants have distinct leading keywords (`RENAME`, `OWNER`,
 ///   `DEPENDS`, `NO`, plus all the `common_func_opt_item` first tokens),
 ///   so order is for clarity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterFuncAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -1264,13 +1115,9 @@ pub enum AlterFuncAction<'input> {
 /// The argument signature reuses [`DropFunctionTarget`] (gram.y's
 /// `function_with_argtypes`), which already covers both the `name(args)`
 /// and bare-`name` shapes.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFunctionStmt<'input> {
-    pub alter: ALTER,
-    pub function: FUNCTION,
+    #[tok(ALTER, FUNCTION, this)]
     pub target: crate::ast::ddl::function::DropFunctionTarget<'input>,
     pub action: AlterFuncAction<'input>,
 }
@@ -1278,13 +1125,9 @@ pub struct AlterFunctionStmt<'input> {
 /// `ALTER ROUTINE function_with_argtypes action` — same action shape as
 /// [`AlterFunctionStmt`]. `ROUTINE` is gram.y's dispatch-at-lookup
 /// synonym that resolves to a function or procedure by name/signature.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterRoutineStmt<'input> {
-    pub alter: ALTER,
-    pub routine: ROUTINE,
+    #[tok(ALTER, ROUTINE, this)]
     pub target: crate::ast::ddl::function::DropFunctionTarget<'input>,
     pub action: AlterFuncAction<'input>,
 }

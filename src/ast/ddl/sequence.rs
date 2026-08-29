@@ -2,8 +2,6 @@
 #![allow(unused_imports)]
 
 use recursa::seq::{Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
@@ -15,64 +13,44 @@ use crate::tokens::{literal, punct};
 use recursa_diagram::railroad;
 
 /// `AS TypeName` sequence option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqAsOption<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub type_name: CastType<'input>,
 }
 
 /// `INCREMENT [BY] N` sequence option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqIncrementOption<'input> {
-    pub increment: INCREMENT,
-    pub by: Option<BY>,
+    #[tok(INCREMENT, optional(BY), this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `MINVALUE N` sequence option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqMinValueOption<'input> {
-    pub minvalue: MINVALUE,
+    #[tok(MINVALUE, this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `MAXVALUE N` sequence option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqMaxValueOption<'input> {
-    pub maxvalue: MAXVALUE,
+    #[tok(MAXVALUE, this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `START [WITH] N` sequence option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqStartOption<'input> {
-    pub start: START,
-    pub with: Option<WITH>,
+    #[tok(START, optional(WITH), this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `CACHE N` sequence option.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqCacheOption<'input> {
-    pub cache: CACHE,
+    #[tok(CACHE, this)]
     pub value: NumericOnly<'input>,
 }
 
@@ -81,46 +59,32 @@ pub struct SeqCacheOption<'input> {
 /// Variant ordering: `None` (a single keyword) before `Name` (a dotted
 /// identifier path) — they are disambiguated by first token, but the
 /// declaration order matches the gram.y rule ordering.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum OwnedByTarget<'input> {
-    None(NONE),
+    #[tok(NONE)] None,
     Name(QualifiedName<'input>),
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOwnedByOption<'input> {
-    pub owned: OWNED,
-    pub by: BY,
+    #[tok(OWNED, BY, this)]
     pub target: OwnedByTarget<'input>,
 }
 
 /// `RESTART [[WITH] N]` sequence option (used by ALTER SEQUENCE). The
 /// `RESTART` keyword is a soft keyword so it remains reclaimable as an
 /// identifier in non-sequence positions.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqRestartOption<'input> {
-    pub restart: RESTART,
-    pub with: Option<(Option<WITH>, NumericOnly<'input>)>,
+    #[tok(RESTART, optional(WITH), this)]
+    pub with: Option<NumericOnly<'input>>,
 }
 
 /// `SEQUENCE NAME qualified_name` sequence option — used to set the
 /// underlying sequence relation's `relname` during pg_dump restores.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqSequenceNameOption<'input> {
-    pub sequence: SEQUENCE,
-    pub name_kw: NAME,
+    #[tok(SEQUENCE, NAME, this)]
     pub name: QualifiedName<'input>,
 }
 
@@ -129,14 +93,11 @@ pub struct SeqSequenceNameOption<'input> {
 /// Variant ordering: multi-token forms (`NoCycle`, `NoMinvalue`, `NoMaxvalue`,
 /// `OwnedBy`, `SequenceName`) before any single-token form they share a first
 /// token with so longest-match-wins picks the longer spelling.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SeqOption<'input> {
-    NoCycle((NO, CYCLE)),
-    NoMinvalue((NO, MINVALUE)),
-    NoMaxvalue((NO, MAXVALUE)),
+    #[tok(NO, CYCLE)] NoCycle,
+    #[tok(NO, MINVALUE)] NoMinvalue,
+    #[tok(NO, MAXVALUE)] NoMaxvalue,
     As(SeqAsOption<'input>),
     Increment(SeqIncrementOption<'input>),
     Minvalue(SeqMinValueOption<'input>),
@@ -146,24 +107,21 @@ pub enum SeqOption<'input> {
     OwnedBy(SeqOwnedByOption<'input>),
     Restart(SeqRestartOption<'input>),
     SequenceName(SeqSequenceNameOption<'input>),
-    Cycle(CYCLE),
-    Unlogged(UNLOGGED),
+    #[tok(CYCLE)] Cycle,
+    #[tok(UNLOGGED)] Unlogged,
     // `LOGGED` is in Postgres' SeqOptElem but no corpus statement uses it
     // (it is the default); a `LOGGED` keyword token does not yet exist in
     // pg-sql. Add when first needed.
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CreateSequenceStmt<'input> {
-    pub create: CREATE,
+    #[tok(CREATE, this)]
     /// Optional temporary persistence modifier: `TEMP`, `TEMPORARY`, or
     /// `UNLOGGED`. Postgres' `OptTemp` covers all three between `CREATE` and
     /// `SEQUENCE`.
     pub persistence: Option<CreatePersistence>,
-    pub sequence: SEQUENCE,
+    #[tok(SEQUENCE, this)]
     pub if_not_exists: Option<IfNotExists>,
     pub name: QualifiedName<'input>,
     pub options: Vec<SeqOption<'input>>,
@@ -177,24 +135,17 @@ pub struct CreateSequenceStmt<'input> {
 /// `LOCAL TEMP[ORARY]`) — none of which are exercised by the sequence corpus
 /// but kept for forward-compat — would come first; today only `Temporary`,
 /// `Temp`, `Unlogged` are modelled.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum CreatePersistence {
-    Temporary(TEMPORARY),
-    Temp(TEMP),
-    Unlogged(UNLOGGED),
+    #[tok(TEMPORARY)] Temporary,
+    #[tok(TEMP)] Temp,
+    #[tok(UNLOGGED)] Unlogged,
 }
 
 /// `DROP SEQUENCE [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct DropSequenceStmt<'input> {
-    pub drop: DROP,
-    pub sequence: SEQUENCE,
+    #[tok(DROP, SEQUENCE, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -202,25 +153,13 @@ pub struct DropSequenceStmt<'input> {
 
 /// `SET LOGGED` — Postgres' `alter_table_cmd` SET LOGGED branch. Used by
 /// ALTER SEQUENCE in the corpus (and by ALTER TABLE, modelled separately).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct SetLoggedClause {
-    pub set: SET,
-    pub logged: LOGGED,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum SetLoggedClause { #[tok(SET, LOGGED)] Value, }
 
 /// `SET UNLOGGED` — Postgres' `alter_table_cmd` SET UNLOGGED branch.
 /// `UNLOGGED` is the existing hard keyword token; `SET` precedes it here.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct SetUnloggedClause {
-    pub set: SET,
-    pub unlogged: UNLOGGED,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum SetUnloggedClause { #[tok(SET, UNLOGGED)] Value, }
 
 /// One action on `ALTER SEQUENCE [IF EXISTS] name action` — Postgres'
 /// `AlterSeqStmt` (`SeqOptList`), the sequence-specific subset of
@@ -237,10 +176,7 @@ pub struct SetUnloggedClause {
 ///   `AS`, `CACHE`, `CYCLE`, `INCREMENT`, `MAXVALUE`, `MINVALUE`,
 ///   `NO …`, `OWNED`, `RESTART`, `SEQUENCE`, `START`, `UNLOGGED` — none
 ///   of which conflict with the keyword-led variants above.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum AlterSequenceAction<'input> {
     SetLogged(SetLoggedClause),
     SetUnlogged(SetUnloggedClause),
@@ -257,10 +193,7 @@ pub enum AlterSequenceAction<'input> {
 /// on a non-empty SeqOpt and commit. The leading `UNLOGGED` SeqOption is
 /// the bare `UNLOGGED` keyword form — distinct from the `SET UNLOGGED`
 /// branch above (which has the leading `SET`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptList<'input> {
     pub head: SeqOption<'input>,
     pub rest: Vec<SeqOption<'input>>,
@@ -269,13 +202,9 @@ pub struct SeqOptList<'input> {
 /// `ALTER SEQUENCE [IF EXISTS] name action` — Postgres' `AlterSeqStmt`,
 /// the sequence-applicable subset of ALTER TABLE's `alter_table_cmds`,
 /// and `RenameStmt` / `AlterObjectSchemaStmt` branches for sequences.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["ddl"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AlterSequenceStmt<'input> {
-    pub alter: ALTER,
-    pub sequence: SEQUENCE,
+    #[tok(ALTER, SEQUENCE, this)]
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
     pub action: AlterSequenceAction<'input>,
@@ -290,51 +219,57 @@ mod tests {
 
     #[test]
     fn parse_create_sequence_plain() {
-        let mut input = crate::tokens::test_input("CREATE SEQUENCE s1");
-        let stmt = CreateSequenceStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE SEQUENCE s1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateSequenceStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.persistence.is_none());
         assert!(stmt.options.is_empty());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_sequence_options() {
-        let mut input = crate::tokens::test_input(
-            "CREATE SEQUENCE s1 AS integer INCREMENT BY 2 MINVALUE 1 MAXVALUE 100 START WITH 5 CACHE 10 CYCLE",
-        );
-        let stmt = CreateSequenceStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE SEQUENCE s1 AS integer INCREMENT BY 2 MINVALUE 1 MAXVALUE 100 START WITH 5 CACHE 10 CYCLE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateSequenceStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.options.len(), 7);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_sequence_no_minvalue_owned_by() {
-        let mut input = crate::tokens::test_input(
-            "CREATE SEQUENCE s1 NO MINVALUE NO MAXVALUE NO CYCLE OWNED BY t.col",
-        );
-        let stmt = CreateSequenceStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE SEQUENCE s1 NO MINVALUE NO MAXVALUE NO CYCLE OWNED BY t.col");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateSequenceStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.options.len(), 4);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_sequence_temp_if_not_exists() {
-        let mut input = crate::tokens::test_input("CREATE TEMPORARY SEQUENCE IF NOT EXISTS s1");
-        let stmt = CreateSequenceStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE TEMPORARY SEQUENCE IF NOT EXISTS s1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateSequenceStmt::parse(&mut input).unwrap().into_ast();
         assert!(matches!(
             stmt.persistence,
             Some(CreatePersistence::Temporary(_))
         ));
         assert!(stmt.if_not_exists.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_sequence_owned_by_none() {
-        let mut input = crate::tokens::test_input("CREATE SEQUENCE s1 OWNED BY NONE");
-        let stmt = CreateSequenceStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("CREATE SEQUENCE s1 OWNED BY NONE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateSequenceStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.options.len(), 1);
         assert!(matches!(stmt.options[0], SeqOption::OwnedBy(_)));
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 }

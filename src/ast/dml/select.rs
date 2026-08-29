@@ -1,7 +1,5 @@
 /// SELECT statement AST.
 use recursa::seq::{OptionalTrailing, Seq0, Seq1};
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 use recursa_diagram::railroad;
 
 use crate::ast::dml::values::Subquery;
@@ -15,10 +13,7 @@ use crate::tokens::{literal, punct};
 use crate::tokens::keyword::*;
 use crate::tokens::soft_keyword::*;
 /// A single item in the SELECT list: `expr [AS alias]` or `expr alias`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SelectItem<'input> {
     pub expr: Expr<'input>,
     pub alias: Option<Alias<'input>>,
@@ -28,12 +23,9 @@ pub struct SelectItem<'input> {
 /// Uses AliasName so keywords are accepted (e.g., `SELECT 1 AS true`).
 /// The optional UESCAPE suffix applies when the alias is a unicode-quoted
 /// identifier (`U&"..."`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct AsAlias<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
     pub uescape: Option<crate::ast::shared::expr::UescapeSuffix<'input>>,
 }
@@ -42,10 +34,7 @@ pub struct AsAlias<'input> {
 ///
 /// Variant ordering: WithAs (`AS name`) has a longer first_pattern than
 /// Bare (`ident`), so longest-match-wins picks it when AS is present.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum Alias<'input> {
     WithAs(AsAlias<'input>),
     Bare(literal::Ident<'input>),
@@ -62,74 +51,61 @@ impl<'input> Alias<'input> {
 }
 
 /// FROM clause: `FROM table [, table ...]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FromClause<'input> {
-    pub from: FROM,
-    pub tables: Seq0<TableRef<'input>, punct::Comma>,
+    #[tok(FROM, this)]
+    #[sep(COMMA)]
+    pub tables: Vec<TableRef<'input> >,
 }
 
 /// Table name with inheritance marker and optional alias: `person* p`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct InheritedTable<'input> {
     pub name: QualifiedName<'input>,
-    pub star: punct::Star,
+    #[tok(STAR, this)]
     pub alias: Option<literal::Ident<'input>>,
 }
 
 /// `AS name [(col1, col2)]` table alias form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableAliasWithAs<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns: Option<
-        Surrounded<punct::LParen, Seq0<literal::AliasName<'input>, punct::Comma>, punct::RParen>,
+         Vec<literal::AliasName<'input> > ,
     >,
 }
 
 /// Bare `name [(col1, col2)]` table alias form. Bare alias names must not
 /// be reserved keywords (uses `Ident`, not `AliasName`), otherwise clauses
 /// like `FROM unnest(a) ORDER BY 1` would consume `ORDER` as an alias.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableAliasBare<'input> {
     pub name: literal::Ident<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns: Option<
-        Surrounded<punct::LParen, Seq0<literal::AliasName<'input>, punct::Comma>, punct::RParen>,
+         Vec<literal::AliasName<'input> > ,
     >,
 }
 
 /// Table alias: `AS name [(col1, col2)]` or bare `name [(col1, col2)]`.
 ///
 /// Variant ordering: `WithAs` (`AS`) before `Bare` (ident).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum TableAlias<'input> {
     WithAs(TableAliasWithAs<'input>),
     Bare(TableAliasBare<'input>),
 }
 
 /// Subquery in FROM: `(SELECT ...) AS alias`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SubqueryRef<'input> {
-    pub lparen: punct::LParen,
+    #[tok(LPAREN, this)]
     pub query: Box<Subquery<'input>>,
-    pub rparen: punct::RParen,
+    #[tok(RPAREN, this)]
     pub alias: Option<TableAlias<'input>>,
 }
 
@@ -138,24 +114,19 @@ pub struct SubqueryRef<'input> {
 /// Distinguished from `SubqueryRef` by what the `(` contains: a subquery
 /// starts with `SELECT` / `VALUES` / `TABLE` / `WITH` (all keywords),
 /// whereas a parenthesized join tree starts with a table name (ident).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ParenJoinRef<'input> {
-    pub lparen: punct::LParen,
+    #[tok(LPAREN, this)]
     pub table: Box<TableRef<'input>>,
-    pub rparen: punct::RParen,
+    #[tok(RPAREN, this)]
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
 /// `LATERAL (subquery) [alias]` — the parenthesized-subquery LATERAL form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LateralSubquery<'input> {
-    pub query: Surrounded<punct::LParen, Box<Subquery<'input>>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    pub query:  Box<Subquery<'input>> ,
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
@@ -164,10 +135,7 @@ pub struct LateralSubquery<'input> {
 ///
 /// Variant ordering: `JsonTable` / `XmlTable` (soft keyword) before `Func`,
 /// which would otherwise reclaim them as ordinary function names.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum LateralBody<'input> {
     Subquery(LateralSubquery<'input>),
     JsonTable(Box<JsonTableRef<'input>>),
@@ -177,12 +145,9 @@ pub enum LateralBody<'input> {
 
 /// `LATERAL` table reference in FROM: `LATERAL (VALUES(...)) v`,
 /// `LATERAL func(...)`, `LATERAL XMLTABLE(...)`, `LATERAL JSON_TABLE(...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LateralRef<'input> {
-    pub lateral: LATERAL,
+    #[tok(LATERAL, this)]
     pub body: LateralBody<'input>,
 }
 
@@ -190,12 +155,10 @@ pub struct LateralRef<'input> {
 ///
 /// `ONLY` means do not recurse into inheritance children (the opposite
 /// of the `table *` `InheritedTable` form).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PlainTable<'input> {
-    pub only: Option<ONLY>,
+    #[presence(ONLY)]
+    pub only: bool,
     pub name: QualifiedName<'input>,
     pub alias: Option<PlainTableAlias<'input>>,
 }
@@ -210,46 +173,38 @@ pub struct PlainTable<'input> {
 ///
 /// Variant ordering: `WithAs` (starts with `AS`) must be listed before `Bare`
 /// so longest-match-wins picks it when `AS` is present.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PlainTableAlias<'input> {
     WithAs(PlainTableAliasWithAs<'input>),
     Bare(PlainTableAliasBare<'input>),
 }
 
 /// `AS name [(col, ...)]` form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PlainTableAliasWithAs<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns: Option<
-        Surrounded<punct::LParen, Seq0<literal::AliasName<'input>, punct::Comma>, punct::RParen>,
+         Vec<literal::AliasName<'input> > ,
     >,
 }
 
 /// Bare `name [(col, ...)]` form. Uses `literal::Ident` to reject keywords.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct PlainTableAliasBare<'input> {
     pub name: literal::Ident<'input>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns: Option<
-        Surrounded<punct::LParen, Seq0<literal::AliasName<'input>, punct::Comma>, punct::RParen>,
+         Vec<literal::AliasName<'input> > ,
     >,
 }
 
 /// A column definition inside a function-table column-def-list:
 /// `name type` (e.g., `a int`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FuncTableColumnDef<'input> {
     pub name: literal::AliasName<'input>,
     pub type_name: crate::ast::shared::expr::CastType<'input>,
@@ -257,15 +212,14 @@ pub struct FuncTableColumnDef<'input> {
 
 /// `[AS] alias (col type, ...)` or just `(col type, ...)` -- the
 /// column definition list form for table-returning functions.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ColumnDefList<'input> {
-    pub r#as: Option<AS>,
+    #[tok(optional(AS), this)]
     pub name: Option<literal::AliasName<'input>>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns:
-        Surrounded<punct::LParen, Seq0<FuncTableColumnDef<'input>, punct::Comma>, punct::RParen>,
+         Vec<FuncTableColumnDef<'input> > ,
 }
 
 /// Alias of a function table reference: either a regular `TableAlias`
@@ -274,23 +228,18 @@ pub struct ColumnDefList<'input> {
 /// Variant ordering: `ColumnDefList` is more specific (its inner uses
 /// `name type` pairs requiring at least one type token after each name)
 /// so list it first.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FuncTableAlias<'input> {
     ColumnDefList(ColumnDefList<'input>),
     Plain(TableAlias<'input>),
 }
 
 /// Function call used as table reference with optional WITH ORDINALITY and alias.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FuncTableRef<'input> {
     pub func: FuncCall<'input>,
-    pub ordinality: Option<(WITH, ORDINALITY)>,
+    #[presence(WITH, ORDINALITY)]
+    pub ordinality: bool,
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
@@ -310,31 +259,26 @@ pub struct FuncTableRef<'input> {
 ///
 /// Variant ordering: keyword-led forms in declaration order; each variant's
 /// leading token is distinct, so the first-set tree dispatches cleanly.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SpecialFuncTableExpr<'input> {
     /// `CAST(expr AS type [COLLATE "c"])`.
     Cast(crate::ast::shared::expr::CastCall<'input>),
     /// `COLLATION FOR (expr)`.
     CollationFor(crate::ast::shared::expr::CollationForCall<'input>),
-    /// `USER` — the reserved-keyword spelling of `CURRENT_USER`. Used as a
+    #[tok(USER)] /// `USER` — the reserved-keyword spelling of `CURRENT_USER`. Used as a
     /// zero-arg function reference in FROM (`SELECT * FROM USER`). The
     /// other reserved-feeling spellings (CURRENT_TIMESTAMP, LOCALTIMESTAMP,
     /// ...) lex as `UnquotedIdent` and parse as `PlainTable.name`; only
     /// `USER` is a hard keyword in pg-sql and so needs an explicit variant.
-    User(USER),
+    User,
 }
 
 /// `FROM`-clause special-form function expression with optional alias.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SpecialFuncTableRef<'input> {
     pub func: SpecialFuncTableExpr<'input>,
-    pub ordinality: Option<(WITH, ORDINALITY)>,
+    #[presence(WITH, ORDINALITY)]
+    pub ordinality: bool,
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
@@ -347,47 +291,33 @@ pub struct SpecialFuncTableRef<'input> {
 
 /// `[AS] ‹name›` — a path-variable name (after the JSON_TABLE path, or on a
 /// `NESTED PATH`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTablePathName<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
 }
 
 /// `PATH '‹jsonpath›'` clause on a JSON_TABLE column.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTableColumnPath<'input> {
-    pub path: PATH,
+    #[tok(PATH, this)]
     pub path_str: literal::StringLit<'input>,
 }
 
 /// `FOR ORDINALITY` — the row-counter column kind.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
-pub struct JsonTableOrdinality {
-    pub r#for: FOR,
-    pub ordinality: ORDINALITY,
-}
+#[derive(recursa::Node, Debug, Clone)]
+pub enum JsonTableOrdinality { #[tok(FOR, ORDINALITY)] Value, }
 
 /// The typed-column tail: `‹type› [EXISTS] [FORMAT JSON ...] [PATH '...']
 /// [wrapper] [quotes] [behavior ON EMPTY] [behavior ON ERROR]`.
 ///
 /// `EXISTS` columns and regular columns are merged — `exists` is just an
 /// optional marker — and clauses are parsed permissively.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTableTypedColumn<'input> {
     pub ty: CastType<'input>,
-    pub exists: Option<EXISTS>,
+    #[presence(EXISTS)]
+    pub exists: bool,
     pub format: Option<JsonFormat<'input>>,
     pub path: Option<JsonTableColumnPath<'input>>,
     pub wrapper: Option<JsonWrapper>,
@@ -400,10 +330,7 @@ pub struct JsonTableTypedColumn<'input> {
 ///
 /// `Ordinality` leads with `FOR`, `Typed` with a type — distinct first
 /// tokens, so the enum dispatches cleanly.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum JsonTableColumnKind<'input> {
     Ordinality(JsonTableOrdinality),
@@ -411,10 +338,7 @@ pub enum JsonTableColumnKind<'input> {
 }
 
 /// A non-`NESTED` JSON_TABLE column: `‹name› {FOR ORDINALITY | ‹type› ...}`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTableValuedColumn<'input> {
     pub name: literal::AliasName<'input>,
     pub kind: JsonTableColumnKind<'input>,
@@ -422,13 +346,9 @@ pub struct JsonTableValuedColumn<'input> {
 
 /// `NESTED [PATH] '‹jsonpath›' [AS ‹name›] COLUMNS ( ... )` — projects a
 /// nested jsonpath into additional columns.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTableNestedColumn<'input> {
-    pub nested: NESTED,
-    pub path: Option<PATH>,
+    #[tok(NESTED, optional(PATH), this)]
     pub path_str: literal::StringLit<'input>,
     pub as_name: Option<JsonTablePathName<'input>>,
     pub columns: JsonTableColumnList<'input>,
@@ -440,35 +360,27 @@ pub struct JsonTableNestedColumn<'input> {
 /// column literally named `nested` would also match `Valued`'s
 /// keyword-permissive `AliasName`, so `Nested` is tried first and falls
 /// through on non-NESTED syntax.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum JsonTableColumn<'input> {
     Nested(JsonTableNestedColumn<'input>),
     Valued(JsonTableValuedColumn<'input>),
 }
 
 /// `COLUMNS ( ‹column› [, ...] )` — the JSON_TABLE column list (may be empty).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTableColumnList<'input> {
-    pub columns: COLUMNS,
-    pub list: Surrounded<punct::LParen, Seq0<JsonTableColumn<'input>, punct::Comma>, punct::RParen>,
+    #[tok(COLUMNS, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub list:  Vec<JsonTableColumn<'input> > ,
 }
 
 /// Inner contents of `JSON_TABLE ( ‹ctx› , ‹path› [AS name] [PASSING ...]
 /// COLUMNS ( ... ) [behavior ON ERROR] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTableInner<'input> {
     pub context: Box<Expr<'input>>,
     pub context_format: Option<JsonFormat<'input>>,
-    pub comma: punct::Comma,
+    #[tok(COMMA, this)]
     pub path: Box<Expr<'input>>,
     pub path_name: Option<JsonTablePathName<'input>>,
     pub passing: Option<JsonPassing<'input>>,
@@ -477,20 +389,14 @@ pub struct JsonTableInner<'input> {
 }
 
 /// The `JSON_TABLE ( ... )` construct.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTable<'input> {
-    pub kw: JSON_TABLE,
-    pub inner: Surrounded<punct::LParen, JsonTableInner<'input>, punct::RParen>,
+    #[tok(JSON_TABLE, LPAREN, this, RPAREN)]
+    pub inner:  JsonTableInner<'input> ,
 }
 
 /// `JSON_TABLE(...)` as a table reference, with an optional table alias.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTableRef<'input> {
     pub table: JsonTable<'input>,
     pub alias: Option<TableAlias<'input>>,
@@ -502,31 +408,22 @@ pub struct JsonTableRef<'input> {
 // function in FROM/JOIN, projecting an XPath match into rows and columns.
 
 /// One entry of an `XMLNAMESPACES(...)` list: `‹uri› AS ‹prefix›`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlNamespaceNamed<'input> {
     pub uri: Box<Expr<'input>>,
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub prefix: literal::AliasName<'input>,
 }
 
 /// The `DEFAULT ‹uri›` entry of an `XMLNAMESPACES(...)` list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlNamespaceDefault<'input> {
-    pub default: DEFAULT,
+    #[tok(DEFAULT, this)]
     pub uri: Box<Expr<'input>>,
 }
 
 /// One namespace declaration: a `DEFAULT ‹uri›` or a `‹uri› AS ‹prefix›`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum XmlNamespaceItem<'input> {
     Default(XmlNamespaceDefault<'input>),
     Named(XmlNamespaceNamed<'input>),
@@ -534,52 +431,37 @@ pub enum XmlNamespaceItem<'input> {
 
 /// `XMLNAMESPACES ( ‹item› [, ...] ) ,` — the optional namespace prefix of
 /// `XMLTABLE`. The trailing comma separates it from the row expression.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableNamespaces<'input> {
-    pub kw: XMLNAMESPACES,
+    #[tok(XMLNAMESPACES, LPAREN, this, RPAREN, COMMA)]
+    #[sep(COMMA)]
     pub items:
-        Surrounded<punct::LParen, Seq1<XmlNamespaceItem<'input>, punct::Comma>, punct::RParen>,
-    pub comma: punct::Comma,
+         recursa::Vec1<XmlNamespaceItem<'input> > ,
 }
 
 /// `PATH '‹xpath›'` clause on an XMLTABLE column.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableColumnPath<'input> {
-    pub path: PATH,
+    #[tok(PATH, this)]
     pub xpath: Box<Expr<'input>>,
 }
 
 /// `DEFAULT ‹expr›` clause on an XMLTABLE column.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableColumnDefault<'input> {
-    pub default: DEFAULT,
+    #[tok(DEFAULT, this)]
     pub value: Box<Expr<'input>>,
 }
 
 /// `NOT NULL` / `NULL` nullability marker on an XMLTABLE column.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum XmlTableColumnNull {
-    NotNull((NOT, NULL)),
-    Null(NULL),
+    #[tok(NOT, NULL)] NotNull,
+    #[tok(NULL)] Null,
 }
 
 /// `‹type› [PATH '...'] [DEFAULT expr] [NOT NULL|NULL]` — the typed-column tail.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableTypedColumn<'input> {
     pub ty: CastType<'input>,
     pub path: Option<XmlTableColumnPath<'input>>,
@@ -588,20 +470,14 @@ pub struct XmlTableTypedColumn<'input> {
 }
 
 /// The tail of an XMLTABLE column, after its name: `FOR ORDINALITY` or a type.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum XmlTableColumnKind<'input> {
     Ordinality(JsonTableOrdinality),
     Typed(XmlTableTypedColumn<'input>),
 }
 
 /// One column of an XMLTABLE `COLUMNS` list: `‹name› ‹kind›`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableColumn<'input> {
     pub name: literal::AliasName<'input>,
     pub kind: XmlTableColumnKind<'input>,
@@ -609,36 +485,28 @@ pub struct XmlTableColumn<'input> {
 
 /// Inner contents of `XMLTABLE ( [XMLNAMESPACES(...),] ‹row_xpath›
 /// PASSING [BY {REF|VALUE}] ‹doc› [BY {REF|VALUE}] COLUMNS ‹col› [, ...] )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableInner<'input> {
     pub namespaces: Option<XmlTableNamespaces<'input>>,
     pub row_expr: Box<Expr<'input>>,
-    pub passing: PASSING,
+    #[tok(PASSING, this)]
     pub by_before: Option<XmlPassingBy>,
     pub doc: Box<Expr<'input>>,
     pub by_after: Option<XmlPassingBy>,
-    pub columns: COLUMNS,
-    pub column_list: Seq1<XmlTableColumn<'input>, punct::Comma>,
+    #[tok(COLUMNS, this)]
+    #[sep(COMMA)]
+    pub column_list: recursa::Vec1<XmlTableColumn<'input> >,
 }
 
 /// The `XMLTABLE ( ... )` construct.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTable<'input> {
-    pub kw: XMLTABLE,
-    pub inner: Surrounded<punct::LParen, XmlTableInner<'input>, punct::RParen>,
+    #[tok(XMLTABLE, LPAREN, this, RPAREN)]
+    pub inner:  XmlTableInner<'input> ,
 }
 
 /// `XMLTABLE(...)` as a table reference, with an optional table alias.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableRef<'input> {
     pub table: XmlTable<'input>,
     pub alias: Option<TableAlias<'input>>,
@@ -647,22 +515,17 @@ pub struct XmlTableRef<'input> {
 // --- ROWS FROM (...) table reference ---
 
 /// `AS ( col type [, ...] )` column-definition list on a `ROWS FROM` item.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RowsFromColDef<'input> {
-    pub r#as: AS,
+    #[tok(AS, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns:
-        Surrounded<punct::LParen, Seq0<FuncTableColumnDef<'input>, punct::Comma>, punct::RParen>,
+         Vec<FuncTableColumnDef<'input> > ,
 }
 
 /// One function entry of a `ROWS FROM (...)` list: a function call with an
 /// optional `AS (coldef, ...)` column-definition list.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RowsFromItem<'input> {
     pub func: FuncCall<'input>,
     pub coldef: Option<RowsFromColDef<'input>>,
@@ -670,15 +533,13 @@ pub struct RowsFromItem<'input> {
 
 /// `ROWS FROM ( func [, ...] ) [WITH ORDINALITY] [alias]` — the multi-function
 /// table reference, evaluating several set-returning functions in parallel.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RowsFromRef<'input> {
-    pub rows: ROWS,
-    pub from: FROM,
-    pub items: Surrounded<punct::LParen, Seq1<RowsFromItem<'input>, punct::Comma>, punct::RParen>,
-    pub ordinality: Option<(WITH, ORDINALITY)>,
+    #[tok(ROWS, FROM, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub items:  recursa::Vec1<RowsFromItem<'input> > ,
+    #[presence(WITH, ORDINALITY)]
+    pub ordinality: bool,
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
@@ -692,10 +553,7 @@ pub struct RowsFromRef<'input> {
 /// - Func before Inherited/Table: FuncCall's `ident(` pattern is longer
 ///   than bare ident.
 /// - Inherited before Table: `person*` matches longer than `person`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SimpleTableRef<'input> {
     Lateral(LateralRef<'input>),
     JsonTable(Box<JsonTableRef<'input>>),
@@ -718,45 +576,33 @@ pub enum SimpleTableRef<'input> {
 }
 
 /// Join type: LEFT, RIGHT, FULL, INNER, CROSS, or plain JOIN.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum JoinType {
-    Left(LEFT),
-    Right(RIGHT),
-    Full(FULL),
-    Inner(INNER),
-    Cross(CROSS),
+    #[tok(LEFT)] Left,
+    #[tok(RIGHT)] Right,
+    #[tok(FULL)] Full,
+    #[tok(INNER)] Inner,
+    #[tok(CROSS)] Cross,
 }
 
 /// JOIN condition: ON expr or USING (col, ...)
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum JoinCondition<'input> {
     On(JoinOn<'input>),
     Using(JoinUsing<'input>),
 }
 
 /// ON condition for JOIN
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JoinOn<'input> {
-    pub on: ON,
+    #[tok(ON, this)]
     pub condition: Box<Expr<'input>>,
 }
 
 /// `AS alias` form of a JOIN USING alias.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JoinUsingAliasWithAs<'input> {
-    pub r#as: AS,
+    #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
 }
 
@@ -764,24 +610,19 @@ pub struct JoinUsingAliasWithAs<'input> {
 ///
 /// Variant ordering: `WithAs` (`AS name`) is longer than `Bare`
 /// (`ident`); list it first.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum JoinUsingAlias<'input> {
     WithAs(JoinUsingAliasWithAs<'input>),
     Bare(literal::Ident<'input>),
 }
 
 /// USING clause for JOIN: `USING (col, ...) [[AS] alias]`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JoinUsing<'input> {
-    pub using: USING,
+    #[tok(USING, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub columns:
-        Surrounded<punct::LParen, Seq0<literal::AliasName<'input>, punct::Comma>, punct::RParen>,
+         Vec<literal::AliasName<'input> > ,
     pub alias: Option<JoinUsingAlias<'input>>,
 }
 
@@ -791,15 +632,12 @@ pub struct JoinUsing<'input> {
 /// `OUTER` is allowed (and traditionally written) after `LEFT`/`RIGHT`/`FULL`.
 /// Postgres accepts but does not require it; the grammar accepts it after any
 /// join type for simplicity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct JoinSuffix<'input> {
-    pub natural: Option<NATURAL>,
+    #[presence(NATURAL)]
+    pub natural: bool,
     pub join_type: Option<JoinType>,
-    pub outer: Option<OUTER>,
-    pub join: JOIN,
+    #[tok(optional(OUTER), JOIN, this)]
     /// The join's right operand — a full (recursive) `TableRef`, not a
     /// bare `SimpleTableRef`. This is what makes deferred `ON` clauses
     /// work: `a JOIN b JOIN c ON x ON y` parses as
@@ -812,35 +650,28 @@ pub struct JoinSuffix<'input> {
 
 /// TABLESAMPLE clause: `TABLESAMPLE method (args) [REPEATABLE (seed)]`.
 /// Attached to a single table reference (not to joined results).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableSampleClause<'input> {
-    pub tablesample: TABLESAMPLE,
+    #[tok(TABLESAMPLE, this)]
     pub method: literal::AliasName<'input>,
-    pub args: Surrounded<punct::LParen, Seq0<Expr<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub args:  Vec<Expr<'input> > ,
     pub repeatable: Option<TableSampleRepeatable<'input>>,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableSampleRepeatable<'input> {
-    pub repeatable: REPEATABLE,
-    pub seed: Surrounded<punct::LParen, Expr<'input>, punct::RParen>,
+    #[tok(REPEATABLE, LPAREN, this, RPAREN)]
+    pub seed:  Expr<'input> ,
 }
 
 /// A table reference that may have zero or more JOIN suffixes.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct TableRef<'input> {
     pub base: SimpleTableRef<'input>,
     pub tablesample: Option<TableSampleClause<'input>>,
-    pub joins: Seq0<JoinSuffix<'input>, (), OptionalTrailing>,
+    pub joins: Vec<JoinSuffix<'input>  >,
 }
 
 /// WHERE-clause body: either a normal expression or the cursor-current
@@ -848,33 +679,23 @@ pub struct TableRef<'input> {
 ///
 /// Variant ordering: `CurrentOf` must come before `Expr` since `CURRENT`
 /// is a specific keyword lead-in.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum WhereCondition<'input> {
     CurrentOf(WhereCurrentOf<'input>),
     Expr(Expr<'input>),
 }
 
 /// `CURRENT OF cursor_name` filter.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WhereCurrentOf<'input> {
-    pub current: CURRENT,
-    pub of: OF,
+    #[tok(CURRENT, OF, this)]
     pub cursor: literal::AliasName<'input>,
 }
 
 /// WHERE clause: `WHERE expr` or `WHERE CURRENT OF cursor`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WhereClause<'input> {
-    pub r#where: WHERE,
+    #[tok(WHERE, this)]
     pub condition: WhereCondition<'input>,
 }
 
@@ -882,55 +703,40 @@ pub struct WhereClause<'input> {
 ///
 /// Variant ordering: longer (4-char) locale operators before shorter (3-char),
 /// then single-char `>` / `<` last.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum UsingOp<'input> {
-    TildeLeqTilde(punct::TildeLeqTilde),
-    TildeGeqTilde(punct::TildeGeqTilde),
-    TildeLtTilde(punct::TildeLtTilde),
-    TildeGtTilde(punct::TildeGtTilde),
-    Gt(punct::Gt),
-    Lt(punct::Lt),
-    Custom(literal::CustomOp<'input>),
+    #[tok(TILDELEQTILDE)] TildeLeqTilde,
+    #[tok(TILDEGEQTILDE)] TildeGeqTilde,
+    #[tok(TILDELTTILDE)] TildeLtTilde,
+    #[tok(TILDEGTTILDE)] TildeGtTilde,
+    #[tok(GT)] Gt,
+    #[tok(LT)] Lt,
+    Custom(#[lex(matcher)] literal::CustomOp<'input>),
 }
 
 /// USING clause in ORDER BY: `USING op`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct UsingClause<'input> {
-    pub using: USING,
+    #[tok(USING, this)]
     pub op: UsingOp<'input>,
 }
 
 /// Sort direction: ASC or DESC.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SortDir {
-    Asc(ASC),
-    Desc(DESC),
+    #[tok(ASC)] Asc,
+    #[tok(DESC)] Desc,
 }
 
 /// NULLS FIRST or NULLS LAST.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum NullsOrder {
-    First((NULLS, FIRST)),
-    Last((NULLS, LAST)),
+    #[tok(NULLS, FIRST)] First,
+    #[tok(NULLS, LAST)] Last,
 }
 
 /// A single ORDER BY item: `expr [ASC|DESC] [USING op] [NULLS FIRST|LAST]`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OrderByItem<'input> {
     pub expr: Expr<'input>,
     pub dir: Option<SortDir>,
@@ -939,83 +745,59 @@ pub struct OrderByItem<'input> {
 }
 
 /// ORDER BY clause: `ORDER BY item [, item ...]`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OrderByClause<'input> {
-    pub order: ORDER,
-    pub by: BY,
-    pub items: Seq0<OrderByItem<'input>, punct::Comma>,
+    #[tok(ORDER, BY, this)]
+    #[sep(COMMA)]
+    pub items: Vec<OrderByItem<'input> >,
 }
 
 /// OFFSET clause: `OFFSET expr`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct OffsetClause<'input> {
-    pub offset: OFFSET,
+    #[tok(OFFSET, this)]
     pub count: Expr<'input>,
 }
 
 /// LIMIT clause: `LIMIT expr`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct LimitClause<'input> {
-    pub limit: LIMIT,
+    #[tok(LIMIT, this)]
     pub count: Expr<'input>,
 }
 
 /// `FIRST` or `NEXT` keyword in FETCH clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FetchFirstOrNext {
-    First(FIRST),
-    Next(NEXT),
+    #[tok(FIRST)] First,
+    #[tok(NEXT)] Next,
 }
 
 /// `ROW` or `ROWS` keyword in FETCH clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FetchRowOrRows {
-    Rows(ROWS),
-    Row(ROW),
+    #[tok(ROWS)] Rows,
+    #[tok(ROW)] Row,
 }
 
 /// `ONLY` or `WITH TIES` — FETCH clause termination mode.
 ///
 /// `WithTies` declared first since it's longer and both start after a keyword.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FetchMode {
-    WithTies((WITH, TIES)),
-    Only(ONLY),
+    #[tok(WITH, TIES)] WithTies,
+    #[tok(ONLY)] Only,
 }
 
 /// FETCH without count: `{ ROW | ROWS } { ONLY | WITH TIES }`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FetchNoCount {
     pub row_or_rows: FetchRowOrRows,
     pub mode: FetchMode,
 }
 
 /// FETCH with count: `expr { ROW | ROWS } { ONLY | WITH TIES }`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FetchWithCount<'input> {
     pub count: Box<Expr<'input>>,
     pub row_or_rows: FetchRowOrRows,
@@ -1027,22 +809,16 @@ pub struct FetchWithCount<'input> {
 ///
 /// `NoCount` (peeks `ROW`/`ROWS`) must come first so it's tried before
 /// `WithCount` which would greedily consume `ROWS` as an identifier.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum FetchFirstBody<'input> {
     NoCount(FetchNoCount),
     WithCount(FetchWithCount<'input>),
 }
 
 /// `FETCH { FIRST | NEXT } [count] { ROW | ROWS } { ONLY | WITH TIES }`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct FetchFirstClause<'input> {
-    pub fetch: FETCH,
+    #[tok(FETCH, this)]
     pub first_or_next: FetchFirstOrNext,
     pub body: FetchFirstBody<'input>,
 }
@@ -1052,10 +828,7 @@ pub struct FetchFirstClause<'input> {
 ///
 /// `FetchFirst` must come before `Offset` and `Limit` since `FETCH` is
 /// a keyword that doesn't overlap with LIMIT/OFFSET.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum LimitOffsetItem<'input> {
     FetchFirst(FetchFirstClause<'input>),
     Limit(LimitClause<'input>),
@@ -1063,12 +836,9 @@ pub enum LimitOffsetItem<'input> {
 }
 
 /// FOR UPDATE / FOR SHARE / FOR NO KEY UPDATE / FOR KEY SHARE locking clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForUpdateClause<'input> {
-    pub r#for: FOR,
+    #[tok(FOR, this)]
     pub mode: LockingMode,
     /// Optional `OF table[, ...]` restricting the lock to a subset of the
     /// FROM-list entries (plain tables or table aliases).
@@ -1078,97 +848,77 @@ pub struct ForUpdateClause<'input> {
 }
 
 /// `OF name[, ...]` in a `FOR UPDATE` locking clause.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ForUpdateOf<'input> {
-    pub of: OF,
-    pub names: Seq0<crate::tokens::ColId<'input>, punct::Comma>,
+    #[tok(OF, this)]
+    #[sep(COMMA)]
+    pub names: Vec<crate::tokens::ColId<'input> >,
 }
 
 /// `NOWAIT | SKIP LOCKED` suffix on a `FOR UPDATE` clause.
 ///
 /// Variant ordering: `SkipLocked` (two tokens) before `Nowait` (one token).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ForUpdateWait {
-    SkipLocked((SKIP, LOCKED)),
-    Nowait(NOWAIT),
+    #[tok(SKIP, LOCKED)] SkipLocked,
+    #[tok(NOWAIT)] Nowait,
 }
 
 /// Lock strength for `SELECT ... FOR ...` locking clauses.
 ///
 /// Variant ordering: longer (`NO KEY UPDATE`, `KEY SHARE`) before shorter
 /// (`UPDATE`, `SHARE`) so longest-match wins.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum LockingMode {
-    NoKeyUpdate((NO, KEY, UPDATE)),
-    KeyShare((KEY, SHARE)),
-    Update(UPDATE),
-    Share(SHARE),
+    #[tok(NO, KEY, UPDATE)] NoKeyUpdate,
+    #[tok(KEY, SHARE)] KeyShare,
+    #[tok(UPDATE)] Update,
+    #[tok(SHARE)] Share,
 }
 
 /// GROUP BY clause: `GROUP BY item, ...` where each item is an expression
 /// or one of the grouping primitives (GROUPING SETS, ROLLUP, CUBE).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GroupByClause<'input> {
-    pub group: GROUP,
-    pub by: BY,
+    #[tok(GROUP, BY, this)]
     /// Optional `DISTINCT` / `ALL` modifier (Postgres 16+).
     pub modifier: Option<GroupByModifier>,
-    pub items: Seq0<GroupByItem<'input>, punct::Comma>,
+    #[sep(COMMA)]
+    pub items: Vec<GroupByItem<'input> >,
 }
 
 /// `GROUP BY [DISTINCT|ALL]` modifier.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum GroupByModifier {
-    Distinct(DISTINCT),
-    All(ALL),
+    #[tok(DISTINCT)] Distinct,
+    #[tok(ALL)] All,
 }
 
 /// `GROUPING SETS ( item, ... )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct GroupingSetsItem<'input> {
-    pub grouping_sets: (GROUPING, SETS),
+    #[tok(GROUPING, SETS, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub groups:
-        Surrounded<punct::LParen, Seq0<Box<GroupByItem<'input>>, punct::Comma>, punct::RParen>,
+         Vec<Box<GroupByItem<'input>> > ,
 }
 
 /// `ROLLUP ( item, ... )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct RollupItem<'input> {
-    pub rollup: ROLLUP,
+    #[tok(ROLLUP, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub items:
-        Surrounded<punct::LParen, Seq0<Box<GroupByItem<'input>>, punct::Comma>, punct::RParen>,
+         Vec<Box<GroupByItem<'input>> > ,
 }
 
 /// `CUBE ( item, ... )`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct CubeItem<'input> {
-    pub cube: CUBE,
+    #[tok(CUBE, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
     pub items:
-        Surrounded<punct::LParen, Seq0<Box<GroupByItem<'input>>, punct::Comma>, punct::RParen>,
+         Vec<Box<GroupByItem<'input>> > ,
 }
 
 /// A single element in a GROUP BY clause.
@@ -1176,10 +926,7 @@ pub struct CubeItem<'input> {
 /// Variant ordering: two-keyword primitives first (`GROUPING SETS`), then
 /// single-keyword primitives (`ROLLUP`, `CUBE`), then the catch-all `Expr`
 /// which also handles `(a, b)` row-style groupings.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum GroupByItem<'input> {
     GroupingSets(GroupingSetsItem<'input>),
     Rollup(RollupItem<'input>),
@@ -1188,51 +935,41 @@ pub enum GroupByItem<'input> {
 }
 
 /// HAVING clause: `HAVING expr`
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct HavingClause<'input> {
-    pub having: HAVING,
+    #[tok(HAVING, this)]
     pub condition: Expr<'input>,
 }
 
 /// A single named window definition: `name AS (inline_window_spec)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WindowDef<'input> {
     pub name: crate::tokens::ColId<'input>,
-    pub r#as: AS,
-    pub spec: Surrounded<
-        punct::LParen,
-        crate::ast::shared::expr::InlineWindowSpec<'input>,
-        punct::RParen,
-    >,
+    #[tok(AS, LPAREN, this, RPAREN)]
+    pub spec:
+
+        crate::ast::shared::expr::InlineWindowSpec<'input>
+
+    ,
 }
 
 /// `WINDOW name AS (...)[, name AS (...), ...]` clause in SELECT.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct WindowClause<'input> {
-    pub window: WINDOW,
-    pub defs: Seq1<WindowDef<'input>, punct::Comma>,
+    #[tok(WINDOW, this)]
+    #[sep(COMMA)]
+    pub defs: recursa::Vec1<WindowDef<'input> >,
 }
 
 /// `INTO [TEMP|TEMPORARY|UNLOGGED] [TABLE] target` clause for the
 /// Postgres `SELECT ... INTO new_table` statement form.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SelectIntoClause<'input> {
-    pub into: INTO,
+    #[tok(INTO, this)]
     pub temp: Option<crate::ast::ddl::table::TempKw>,
-    pub unlogged: Option<UNLOGGED>,
-    pub table: Option<TABLE>,
+    #[tok(this, optional(TABLE))]
+    #[presence(UNLOGGED)]
+    pub unlogged: bool,
     pub target: crate::ast::shared::names::QualifiedName<'input>,
     pub using: Option<crate::ast::ddl::table::UsingAccessMethodClause<'input>>,
 }
@@ -1241,44 +978,36 @@ pub struct SelectIntoClause<'input> {
 ///
 /// Variant ordering: `On` (longer, starts with `DISTINCT ON`) before `All`
 /// (just `DISTINCT`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SelectDistinct<'input> {
     On(SelectDistinctOn<'input>),
-    All(DISTINCT),
+    #[tok(DISTINCT)] All,
 }
 
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct SelectDistinctOn<'input> {
-    pub distinct: DISTINCT,
-    pub on: ON,
-    pub exprs: Surrounded<
-        punct::LParen,
-        Seq0<crate::ast::shared::expr::Expr<'input>, punct::Comma>,
-        punct::RParen,
-    >,
+    #[tok(DISTINCT, ON, LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub exprs:
+
+        Vec<crate::ast::shared::expr::Expr<'input> >
+
+    ,
 }
 
 /// SELECT statement.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["dql"])]
+#[derive(recursa::Node, Debug, Clone)]
 #[format_tokens(group(consistent))]
 pub struct SelectStmt<'input> {
-    pub select: SELECT,
+    #[tok(SELECT, this)]
     pub distinct: Option<Box<SelectDistinct<'input>>>,
+    #[sep(COMMA)]
     /// SELECT item list. Wrapped in `Option` (with `Seq1` inside) so
     /// the parser fork-and-tries the items via `Option::parse`. This both
     /// allows the empty form `SELECT FROM tbl` (a regression-test case) and
     /// avoids over-eager peeks in `Expr` consuming the next clause keyword.
     #[format_tokens(group(consistent), indent, break(flat = " ", broken = "\n"))]
-    pub items: Option<Box<Seq1<SelectItem<'input>, punct::Comma>>>,
+    pub items: Option<Box<recursa::Vec1<SelectItem<'input> >>>,
     #[format_tokens(break(flat = " ", broken = "\n"))]
     pub into: Option<Box<SelectIntoClause<'input>>>,
     #[format_tokens(break(flat = " ", broken = "\n"))]
@@ -1320,28 +1049,27 @@ impl<'input> SelectStmt<'input> {
 /// A SELECT body that can appear in subqueries -- WITH, SELECT, or VALUES.
 /// WithBody must come before Select so `WITH ... SELECT` matches before bare `SELECT`.
 /// SelectStmt must come before ValuesStmt so `SELECT` keyword wins over ambiguity.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SelectBody<'input> {
     WithBody(Box<crate::ast::shared::with_clause::WithStatement<'input>>),
     Select(Box<SelectStmt<'input>>),
     Values(ValuesBody<'input>),
 }
 
+#[derive(recursa::Node, Debug, Clone)]
+pub struct ValuesRow<'input> {
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    pub values: Vec<Expr<'input>>,
+}
+
 /// VALUES body: `VALUES (expr, ...), (expr, ...)`
 /// Can appear standalone or inside subqueries.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ValuesBody<'input> {
-    pub values: VALUES,
-    pub rows: Seq0<
-        Surrounded<punct::LParen, Seq0<Expr<'input>, punct::Comma>, punct::RParen>,
-        punct::Comma,
-    >,
+    #[tok(VALUES, this)]
+    #[sep(COMMA)]
+    pub rows: Vec<ValuesRow<'input>>,
 }
 
 #[cfg(test)]
@@ -1352,10 +1080,12 @@ mod tests {
 
     /// Parse `src` as a complete `SELECT` through the logos lex pass.
     fn parse_select_classified(src: &'static str) {
-        let mut input = crate::tokens::test_input(src);
-        SelectStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+        let lexed = crate::tokens::lex(src);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        SelectStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover parsing {src:?}: {:?}",
             &input.source()[input.byte_offset()..]
         );
@@ -1426,42 +1156,50 @@ mod tests {
 
     #[test]
     fn parse_simple_select() {
-        let mut input = crate::tokens::test_input("SELECT 1 AS one");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT 1 AS one");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.item_count(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_empty_items() {
-        let mut input = crate::tokens::test_input("SELECT FROM emp");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT FROM emp");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.item_count(), 0);
         assert!(stmt.from_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_paren_join_cross() {
-        let mut input = crate::tokens::test_input("SELECT * FROM (a CROSS JOIN b) AS tx");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM (a CROSS JOIN b) AS tx");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_paren_join_using() {
-        let mut input = crate::tokens::test_input("SELECT * FROM (a JOIN b USING (i)) AS x");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM (a JOIN b USING (i)) AS x");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_paren_join_with_col_aliases() {
-        let mut input = crate::tokens::test_input(
-            "SELECT * FROM (a t1 (x, y) CROSS JOIN b t2 (p, q)) AS tx (a, b, c, d)",
-        );
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM (a t1 (x, y) CROSS JOIN b t2 (p, q)) AS tx (a, b, c, d)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// `CAST(...)` and `COLLATION FOR (...)` are PG `func_expr_common_subexpr`
@@ -1479,11 +1217,13 @@ mod tests {
             "SELECT * FROM cast(1+2 as int4) as i4",
             "SELECT * FROM coalesce(1,2) as c, collation for ('x'::text) col, cast(1+2 as int4) as i4",
         ] {
-            let mut input = crate::tokens::test_input(src);
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let _stmt =
-                SelectStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                SelectStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
@@ -1492,8 +1232,10 @@ mod tests {
 
     #[test]
     fn parse_select_from_where() {
-        let mut input = crate::tokens::test_input("SELECT f1 FROM BOOLTBL1 WHERE f1 = true");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT f1 FROM BOOLTBL1 WHERE f1 = true");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.item_count(), 1);
         assert!(stmt.from_clause.is_some());
         assert!(stmt.where_clause.is_some());
@@ -1501,15 +1243,19 @@ mod tests {
 
     #[test]
     fn parse_select_star() {
-        let mut input = crate::tokens::test_input("SELECT * FROM t");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.item_count(), 1);
     }
 
     #[test]
     fn parse_select_with_alias_keyword() {
-        let mut input = crate::tokens::test_input("SELECT 1 AS true");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT 1 AS true");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         let first = stmt.items().next().unwrap();
         let alias = first.alias.as_ref().unwrap();
         assert_eq!(alias.name(), "true");
@@ -1517,16 +1263,19 @@ mod tests {
 
     #[test]
     fn parse_select_order_by() {
-        let mut input = crate::tokens::test_input("SELECT f1 FROM t ORDER BY f1");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT f1 FROM t ORDER BY f1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.order_by.is_some());
     }
 
     #[test]
     fn parse_select_from_function() {
-        let mut input =
-            crate::tokens::test_input("SELECT * FROM pg_input_error_info('junk', 'bool')");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM pg_input_error_info('junk', 'bool')");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.from_clause.is_some());
     }
 
@@ -1534,169 +1283,201 @@ mod tests {
 
     #[test]
     fn parse_order_by_using() {
-        let mut input = crate::tokens::test_input("SELECT f1 FROM t ORDER BY f1 using >");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT f1 FROM t ORDER BY f1 using >");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.order_by.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_order_by_asc() {
-        let mut input = crate::tokens::test_input("SELECT * FROM t ORDER BY f1 ASC");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY f1 ASC");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.order_by.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_order_by_desc() {
-        let mut input = crate::tokens::test_input("SELECT * FROM t ORDER BY f1 DESC");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY f1 DESC");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.order_by.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_order_by_nulls_first() {
-        let mut input = crate::tokens::test_input("SELECT * FROM t ORDER BY f1 NULLS FIRST");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY f1 NULLS FIRST");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.order_by.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_order_by_desc_nulls_last() {
-        let mut input = crate::tokens::test_input("SELECT * FROM t ORDER BY f1 DESC NULLS LAST");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY f1 DESC NULLS LAST");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.order_by.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- OFFSET/LIMIT ---
 
     #[test]
     fn parse_select_offset() {
-        let mut input = crate::tokens::test_input("SELECT 1 OFFSET 0");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT 1 OFFSET 0");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.limit_offset_1.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_limit() {
-        let mut input = crate::tokens::test_input("SELECT 1 LIMIT 1");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT 1 LIMIT 1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.limit_offset_1.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     // --- FOR UPDATE ---
 
     #[test]
     fn parse_select_from_only() {
-        let mut input = crate::tokens::test_input("SELECT f1 FROM ONLY t");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT f1 FROM ONLY t");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.from_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_from_only_with_alias() {
-        let mut input = crate::tokens::test_input("SELECT f1 FROM ONLY t AS x");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT f1 FROM ONLY t AS x");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.from_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_from_qualified_name() {
-        let mut input = crate::tokens::test_input("SELECT * FROM myschema.mytable");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM myschema.mytable");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.from_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_window_clause_standalone() {
         use super::WindowClause;
-        let mut input = crate::tokens::test_input("WINDOW w AS (PARTITION BY y ORDER BY z)");
-        let wc = WindowClause::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("WINDOW w AS (PARTITION BY y ORDER BY z)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let wc = WindowClause::parse(&mut input).unwrap().into_ast();
         assert_eq!(wc.defs.len(), 1);
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_window_clause() {
-        let mut input = crate::tokens::test_input(
-            "SELECT sum(x) OVER w FROM t WINDOW w AS (PARTITION BY y ORDER BY z)",
-        );
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT sum(x) OVER w FROM t WINDOW w AS (PARTITION BY y ORDER BY z)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.window.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_frame_rows_between() {
-        let mut input = crate::tokens::test_input(
-            "SELECT sum(x) OVER (ORDER BY y ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t",
-        );
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT sum(x) OVER (ORDER BY y ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_over_named() {
-        let mut input = crate::tokens::test_input("SELECT sum(x) OVER w FROM t");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT sum(x) OVER w FROM t");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_from_alias_with_column_list() {
-        let mut input = crate::tokens::test_input("SELECT * FROM tbl AS t (a, b, c)");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM tbl AS t (a, b, c)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.from_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_from_qualified_name_with_alias() {
-        let mut input = crate::tokens::test_input("SELECT * FROM s.t AS x");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM s.t AS x");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.from_clause.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_join_using_alias() {
-        let mut input = crate::tokens::test_input("SELECT * FROM a JOIN b USING (i) AS x");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM a JOIN b USING (i) AS x");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_join_using_alias_where() {
-        let mut input =
-            crate::tokens::test_input("SELECT * FROM a JOIN b USING (i) AS x WHERE x.i = 1");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM a JOIN b USING (i) AS x WHERE x.i = 1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_func_with_ordinality() {
-        let mut input =
-            crate::tokens::test_input("SELECT * FROM rngfunct(1) WITH ORDINALITY AS z(a, b, ord)");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM rngfunct(1) WITH ORDINALITY AS z(a, b, ord)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_func_column_def_list() {
-        let mut input = crate::tokens::test_input(
-            "SELECT * FROM test_ret_set_rec_dyn(1500) AS (a int, b int, c int)",
-        );
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM test_ret_set_rec_dyn(1500) AS (a int, b int, c int)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     /// Corpus: `select * from json_populate_recordset(row(0::int),'[...]') q (a text, b text)`
@@ -1716,12 +1497,12 @@ mod tests {
     #[test]
     #[ignore]
     fn parse_select_func_table_bare_alias_col_def() {
-        let mut input = crate::tokens::test_input(
-            "select * from json_populate_recordset(row(0::int),'[{\"a\":\"1\"}]') q (a text, b text)",
-        );
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("select * from json_populate_recordset(row(0::int),'[{\"a\":\"1\"}]') q (a text, b text)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "leftover at {}: {:?}",
             input.byte_offset(),
             &input.source()[input.byte_offset()..]
@@ -1730,115 +1511,129 @@ mod tests {
 
     #[test]
     fn parse_select_func_with_ordinality_unnest() {
-        let mut input = crate::tokens::test_input(
-            "SELECT * FROM unnest(array['a','b']) WITH ORDINALITY AS z(a, ord)",
-        );
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM unnest(array['a','b']) WITH ORDINALITY AS z(a, ord)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_natural_join() {
-        let mut input = crate::tokens::test_input("SELECT * FROM a NATURAL JOIN b");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM a NATURAL JOIN b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_natural_left_join() {
-        let mut input = crate::tokens::test_input("SELECT * FROM a NATURAL LEFT JOIN b");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM a NATURAL LEFT JOIN b");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_left_outer_join_using() {
-        let mut input = crate::tokens::test_input("SELECT * FROM a LEFT OUTER JOIN b USING (i)");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM a LEFT OUTER JOIN b USING (i)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_full_outer_join_using() {
-        let mut input = crate::tokens::test_input("SELECT * FROM a FULL OUTER JOIN b USING (i)");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM a FULL OUTER JOIN b USING (i)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_right_outer_join_on() {
-        let mut input =
-            crate::tokens::test_input("SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_paren_join_simple() {
-        let mut input = crate::tokens::test_input(
-            "SELECT * FROM a LEFT JOIN (b JOIN c ON b.x = c.x) ON a.y = b.y",
-        );
-        SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM a LEFT JOIN (b JOIN c ON b.x = c.x) ON a.y = b.y");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_paren_join_with_subquery_inside() {
-        let mut input = crate::tokens::test_input(
-            "SELECT * FROM a LEFT JOIN (b JOIN (SELECT 1 AS x) s ON b.x = s.x) ON a.y = b.y",
-        );
-        SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM a LEFT JOIN (b JOIN (SELECT 1 AS x) s ON b.x = s.x) ON a.y = b.y");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_paren_join_leading_subquery() {
-        let mut input = crate::tokens::test_input(
-            "SELECT * FROM a LEFT JOIN ((SELECT * FROM b) s LEFT JOIN c ON s.x = c.x) ON a.y = s.y",
-        );
-        SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT * FROM a LEFT JOIN ((SELECT * FROM b) s LEFT JOIN c ON s.x = c.x) ON a.y = s.y");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_group_by_grouping_sets_simple() {
-        let mut input = crate::tokens::test_input(
-            "SELECT sum(c) FROM t GROUP BY GROUPING SETS ((), (a), (a,b))",
-        );
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT sum(c) FROM t GROUP BY GROUPING SETS ((), (a), (a,b))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.group_by.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_group_by_rollup() {
-        let mut input = crate::tokens::test_input("SELECT sum(c) FROM t GROUP BY ROLLUP (a, b)");
-        SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT sum(c) FROM t GROUP BY ROLLUP (a, b)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_group_by_cube() {
-        let mut input = crate::tokens::test_input("SELECT sum(c) FROM t GROUP BY CUBE (a, b)");
-        SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT sum(c) FROM t GROUP BY CUBE (a, b)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_group_by_grouping_sets_nested() {
-        let mut input = crate::tokens::test_input(
-            "SELECT sum(c) FROM t GROUP BY GROUPING SETS (ROLLUP(a), CUBE(b))",
-        );
-        SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT sum(c) FROM t GROUP BY GROUPING SETS (ROLLUP(a), CUBE(b))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_group_by_mixed_primitives() {
-        let mut input =
-            crate::tokens::test_input("SELECT sum(c) FROM t GROUP BY a, ROLLUP(b), CUBE(c)");
-        SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex("SELECT sum(c) FROM t GROUP BY a, ROLLUP(b), CUBE(c)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
@@ -1849,18 +1644,22 @@ mod tests {
             "SELECT a FROM t GROUP BY DISTINCT ROLLUP(a, b), ROLLUP(a, c)",
             "SELECT a FROM t GROUP BY ALL ROLLUP(a, b), ROLLUP(a, c)",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            SelectStmt::parse(&mut input).unwrap();
-            assert!(input.is_empty(), "leftover for {src:?}");
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            SelectStmt::parse(&mut input).unwrap().into_ast();
+            assert!(input.is_eof(), "leftover for {src:?}");
         }
     }
 
     #[test]
     fn parse_select_for_update() {
-        let mut input = crate::tokens::test_input("SELECT f1 FROM t FOR UPDATE");
-        let stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT f1 FROM t FOR UPDATE");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.for_update.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
@@ -1872,10 +1671,12 @@ mod tests {
             "SELECT * FROM t FOR NO KEY UPDATE",
             "SELECT * FROM t FOR KEY SHARE",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            let stmt = SelectStmt::parse(&mut input).unwrap();
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
             assert!(stmt.for_update.is_some(), "no locking clause: {src:?}");
-            assert!(input.is_empty(), "leftover for {src:?}");
+            assert!(input.is_eof(), "leftover for {src:?}");
         }
     }
 
@@ -1889,27 +1690,30 @@ mod tests {
             "SELECT * FROM t ORDER BY c USING ~<=~",
             "SELECT * FROM t ORDER BY c USING ~>=~",
         ] {
-            let mut input = crate::tokens::test_input(src);
-            let _stmt = SelectStmt::parse(&mut input).unwrap_or_else(|e| panic!("{src}: {e}"));
-            assert!(input.is_empty(), "leftover for {src:?}");
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            let _stmt = SelectStmt::parse(&mut input).unwrap_or_else(|e| panic!("{src}: {e}")).into_ast();
+            assert!(input.is_eof(), "leftover for {src:?}");
         }
     }
 
     #[test]
     fn parse_select_unicode_alias() {
-        let mut input =
-            crate::tokens::test_input(r#"SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061""#);
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(r#"SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061""#);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_unicode_alias_uescape() {
-        let mut input = crate::tokens::test_input(
-            r#"SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*'"#,
-        );
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
-        assert!(input.is_empty());
+        let lexed = crate::tokens::lex(r#"SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*'"#);
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
     }
 
     // --- LIMIT / OFFSET / FETCH FIRST ---
@@ -1917,10 +1721,12 @@ mod tests {
     #[test]
     fn parse_offset_before_limit() {
         // Standard SQL order: OFFSET before LIMIT.
-        let mut input = crate::tokens::test_input("SELECT * FROM t ORDER BY x OFFSET 10 LIMIT 5");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY x OFFSET 10 LIMIT 5");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -1929,10 +1735,12 @@ mod tests {
     #[test]
     fn parse_limit_before_offset() {
         // Postgres order: LIMIT before OFFSET.
-        let mut input = crate::tokens::test_input("SELECT * FROM t ORDER BY x LIMIT 5 OFFSET 10");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY x LIMIT 5 OFFSET 10");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -1940,11 +1748,12 @@ mod tests {
 
     #[test]
     fn parse_fetch_first_rows_only() {
-        let mut input =
-            crate::tokens::test_input("SELECT * FROM t ORDER BY x FETCH FIRST 5 ROWS ONLY");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY x FETCH FIRST 5 ROWS ONLY");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -1952,11 +1761,12 @@ mod tests {
 
     #[test]
     fn parse_fetch_first_row_with_ties() {
-        let mut input =
-            crate::tokens::test_input("SELECT * FROM t ORDER BY x FETCH FIRST 2 ROW WITH TIES");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY x FETCH FIRST 2 ROW WITH TIES");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -1965,11 +1775,12 @@ mod tests {
     #[test]
     fn parse_fetch_first_rows_no_count() {
         // FETCH FIRST ROWS WITH TIES — count is omitted (defaults to 1).
-        let mut input =
-            crate::tokens::test_input("SELECT * FROM t ORDER BY x FETCH FIRST ROWS WITH TIES");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY x FETCH FIRST ROWS WITH TIES");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -1977,11 +1788,12 @@ mod tests {
 
     #[test]
     fn parse_fetch_next_row_only() {
-        let mut input =
-            crate::tokens::test_input("SELECT * FROM t ORDER BY x FETCH NEXT 1 ROW ONLY");
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY x FETCH NEXT 1 ROW ONLY");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -1989,12 +1801,12 @@ mod tests {
 
     #[test]
     fn parse_offset_then_fetch() {
-        let mut input = crate::tokens::test_input(
-            "SELECT * FROM t ORDER BY x OFFSET 10 FETCH FIRST 5 ROWS ONLY",
-        );
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY x OFFSET 10 FETCH FIRST 5 ROWS ONLY");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -2002,12 +1814,12 @@ mod tests {
 
     #[test]
     fn parse_fetch_then_offset() {
-        let mut input = crate::tokens::test_input(
-            "SELECT * FROM t ORDER BY x FETCH FIRST 5 ROWS WITH TIES OFFSET 10",
-        );
-        let _stmt = SelectStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("SELECT * FROM t ORDER BY x FETCH FIRST 5 ROWS WITH TIES OFFSET 10");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
         assert!(
-            input.is_empty(),
+            input.is_eof(),
             "remaining: {}",
             &input.source()[input.byte_offset()..]
         );
@@ -2027,11 +1839,13 @@ mod tests {
             "SELECT \"trim\"('abc')",
             "SELECT \"any\"('a')",
         ] {
-            let mut input = crate::tokens::test_input(src);
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let _stmt =
-                SelectStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                SelectStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );

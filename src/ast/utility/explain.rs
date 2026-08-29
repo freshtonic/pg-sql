@@ -1,7 +1,5 @@
 /// EXPLAIN statement AST.
 use recursa::seq::Seq0;
-use recursa::surrounded::Surrounded;
-use recursa::{FormatTokens, Transform, Visit};
 
 use crate::tokens::keyword::*;
 use crate::tokens::{literal, punct};
@@ -13,15 +11,12 @@ use recursa_diagram::railroad;
 /// `opt_boolean_or_string` / `NumericOnly`, so it accepts `ON`/`OFF`,
 /// `TRUE`/`FALSE`, bare identifiers, numeric literals, and string literals
 /// (e.g. `format 'json'`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum ExplainOptValue<'input> {
-    On(ON),
-    Off(OFF),
-    True(TRUE),
-    False(FALSE),
+    #[tok(ON)] On,
+    #[tok(OFF)] Off,
+    #[tok(TRUE)] True,
+    #[tok(FALSE)] False,
     // Numeric literal (e.g. `WAL on, ROWS 100`). `NumericLit` requires a
     // decimal/exponent (longer match), so it must come before `IntegerLit`.
     Numeric(literal::NumericLit<'input>),
@@ -32,31 +27,24 @@ pub enum ExplainOptValue<'input> {
 }
 
 /// A single explain option: `name value` (e.g., `costs off`).
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules)]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExplainOption<'input> {
     pub name: literal::AliasName<'input>,
     pub value: Option<ExplainOptValue<'input>>,
 }
 
 /// Explain options: `(opt, ...)`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, FormatTokens, Visit, Transform, derive_more::Deref)]
-#[recursa::parser(rules = SqlRules)]
 pub struct ExplainOptions<'input>(
-    #[deref] pub Surrounded<punct::LParen, Seq0<ExplainOption<'input>, punct::Comma>, punct::RParen>,
+    #[tok(LPAREN, this, RPAREN)]
+    #[sep(COMMA)]
+    #[deref] pub  Vec<ExplainOption<'input> > ,
 );
 
 /// EXPLAIN statement: `EXPLAIN [(options)] statement`.
-#[railroad]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Debug, Clone, FormatTokens, Visit, Transform)]
-#[recursa::parser(rules = SqlRules, meta_tags = ["utility"])]
+#[derive(recursa::Node, Debug, Clone)]
 pub struct ExplainStmt<'input> {
-    pub explain: EXPLAIN,
+    #[tok(EXPLAIN, this)]
     pub options: Option<ExplainOptions<'input>>,
     pub body: Box<crate::ast::Statement<'input>>,
 }
@@ -69,20 +57,22 @@ mod tests {
 
     #[test]
     fn parse_explain_costs_off() {
-        let mut input = crate::tokens::test_input("explain (costs off) select * from t");
-        let stmt = ExplainStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("explain (costs off) select * from t");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = ExplainStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.options.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     #[test]
     fn parse_explain_multiple_options() {
-        let mut input = crate::tokens::test_input(
-            "explain (costs off, analyze on, timing off, summary off) select * from t",
-        );
-        let stmt = ExplainStmt::parse(&mut input).unwrap();
+        let lexed = crate::tokens::lex("explain (costs off, analyze on, timing off, summary off) select * from t");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = ExplainStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.options.is_some());
-        assert!(input.is_empty());
+        assert!(input.is_eof());
     }
 
     /// `EXPLAIN (VERBOSE TRUE, COSTS FALSE)` — PG's `explain_option_arg` accepts
@@ -96,12 +86,14 @@ mod tests {
             "EXPLAIN (VERBOSE true) SELECT 1",
             "EXPLAIN (BUFFERS false) SELECT 1",
         ] {
-            let mut input = crate::tokens::test_input(src);
+            let lexed = crate::tokens::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
             let stmt =
-                ExplainStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                ExplainStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}")).into_ast();
             assert!(stmt.options.is_some());
             assert!(
-                input.is_empty(),
+                input.is_eof(),
                 "leftover for {src:?}: {:?}",
                 &input.source()[input.byte_offset()..]
             );
