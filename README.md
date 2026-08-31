@@ -21,14 +21,14 @@ against `sqlparser-rs` (`PostgreSqlDialect`).
 Run everything:
 
 ```bash
-cargo bench -p pg-sql
+cargo bench -p pg-sql --features postgres-oracle
 ```
 
 Filter to one group:
 
 ```bash
-cargo bench -p pg-sql -- corpus/head-to-head
-cargo bench -p pg-sql -- stress/insert_values
+cargo bench -p pg-sql --features postgres-oracle -- corpus/head-to-head
+cargo bench -p pg-sql --features postgres-oracle -- stress/insert_values
 ```
 
 Groups:

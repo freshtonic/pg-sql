@@ -1,0 +1,2337 @@
+{
+  "schema_version": 1,
+  "issue": 9,
+  "base_execution_sha256": "0c0c76016571f281d4bee0a00449800d31a32530076f045578f739d276464c76",
+  "base_inventory_sha256": "823091d9e06bfd915ddd254874b6a678b4c1a3ef9fa0e5c324f4456365797cd7",
+  "frozen_prefix": {
+    "entry_count": 55,
+    "sha256": "fedb99cf805863ea99ba74467b28c5afea4c5a37234d49e0d3af4be8b7acf8a5"
+  },
+  "changes": [
+    {
+      "id": "issue-9-001-contextual-star",
+      "source_ids": [
+        "ast::shared::expr::Expr::Star"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::SelectItem::Star",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "SelectItem",
+          "member": "Star"
+        },
+        {
+          "id": "ast::shared::expr::FunctionCallBody::Star",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionCallBody",
+          "member": "Star"
+        },
+        {
+          "id": "ast::shared::expr::FunctionWithinGroupBody::Star",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionWithinGroupBody",
+          "member": "Star"
+        }
+      ],
+      "rationale": "PostgreSQL admits bare star in target-list and function-application productions, not as a general scalar expression; the single legacy expression variant is rehomed into those contextual alternatives."
+    },
+    {
+      "id": "issue-9-002-select-item-payload",
+      "source_ids": [
+        "ast::dml::select::SelectItem",
+        "ast::dml::select::SelectItem.expr",
+        "ast::dml::select::SelectItem.alias"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::SelectItem",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "SelectItem"
+        },
+        {
+          "id": "ast::dml::select::SelectExprItem.expr",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectExprItem",
+          "member": "expr"
+        },
+        {
+          "id": "ast::dml::select::SelectExprItem.alias",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectExprItem",
+          "member": "alias"
+        }
+      ],
+      "rationale": "The legacy expression and alias payload remains intact in SelectExprItem while SelectItem becomes the PostgreSQL-correct choice between that payload and an unaliased bare star."
+    },
+    {
+      "id": "issue-9-003-function-application-state",
+      "source_ids": [
+        "ast::shared::expr::FuncCall",
+        "ast::shared::expr::QuotedFuncCall",
+        "ast::shared::expr::FuncCall.star_arg",
+        "ast::shared::expr::QuotedFuncCall.star_arg",
+        "ast::shared::expr::FuncCall.distinct",
+        "ast::shared::expr::QuotedFuncCall.distinct",
+        "ast::shared::expr::FuncCall.args",
+        "ast::shared::expr::QuotedFuncCall.args",
+        "ast::shared::expr::FuncCall.order_by",
+        "ast::shared::expr::QuotedFuncCall.order_by"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::expr::FuncCall",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "FuncCall"
+        },
+        {
+          "id": "ast::shared::expr::QuotedFuncCall",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "QuotedFuncCall"
+        },
+        {
+          "id": "ast::shared::expr::FunctionCallTail::Plain",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionCallTail",
+          "member": "Plain"
+        },
+        {
+          "id": "ast::shared::expr::FunctionCallTail::WithinGroup",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionCallTail",
+          "member": "WithinGroup"
+        },
+        {
+          "id": "ast::shared::expr::FunctionCallTail::TypedLiteral",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionCallTail",
+          "member": "TypedLiteral"
+        },
+        {
+          "id": "ast::shared::expr::FunctionCallBody::Star",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionCallBody",
+          "member": "Star"
+        },
+        {
+          "id": "ast::shared::expr::FunctionCallBody::Distinct",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionCallBody",
+          "member": "Distinct"
+        },
+        {
+          "id": "ast::shared::expr::FunctionCallBody::All",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionCallBody",
+          "member": "All"
+        },
+        {
+          "id": "ast::shared::expr::FunctionCallBody::LeadingVariadic",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionCallBody",
+          "member": "LeadingVariadic"
+        },
+        {
+          "id": "ast::shared::expr::FunctionCallBody::Args",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionCallBody",
+          "member": "Args"
+        },
+        {
+          "id": "ast::shared::expr::FunctionArgumentAfterComma::Variadic",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionArgumentAfterComma",
+          "member": "Variadic"
+        },
+        {
+          "id": "ast::shared::expr::FunctionWithinGroupBody::All",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionWithinGroupBody",
+          "member": "All"
+        },
+        {
+          "id": "ast::shared::expr::FunctionWithinGroupBody::Args",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionWithinGroupBody",
+          "member": "Args"
+        },
+        {
+          "id": "ast::shared::expr::FunctionOrdinaryArguments.args",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionOrdinaryArguments",
+          "member": "args"
+        },
+        {
+          "id": "ast::shared::expr::FunctionAllArguments.args",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionAllArguments",
+          "member": "args"
+        },
+        {
+          "id": "ast::shared::expr::FunctionDistinctArguments.args",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionDistinctArguments",
+          "member": "args"
+        },
+        {
+          "id": "ast::shared::expr::FunctionLeadingVariadicArguments.variadic",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionLeadingVariadicArguments",
+          "member": "variadic"
+        },
+        {
+          "id": "ast::shared::expr::FunctionOrdinaryArguments.order_by",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionOrdinaryArguments",
+          "member": "order_by"
+        },
+        {
+          "id": "ast::shared::expr::FunctionAllArguments.order_by",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionAllArguments",
+          "member": "order_by"
+        },
+        {
+          "id": "ast::shared::expr::FunctionDistinctArguments.order_by",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionDistinctArguments",
+          "member": "order_by"
+        },
+        {
+          "id": "ast::shared::expr::FunctionLeadingVariadicArguments.order_by",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionLeadingVariadicArguments",
+          "member": "order_by"
+        }
+      ],
+      "rationale": "Independent optional fields admitted invalid star, DISTINCT, variadic, empty, and ORDER BY combinations. The staged application body retains their semantic payloads while making PostgreSQL's mutually exclusive states structural for ordinary and quoted calls."
+    },
+    {
+      "id": "issue-9-004-function-tail-state",
+      "source_ids": [
+        "ast::shared::expr::FuncCall.within_group",
+        "ast::shared::expr::QuotedFuncCall.within_group",
+        "ast::shared::expr::FuncCall.filter",
+        "ast::shared::expr::QuotedFuncCall.filter",
+        "ast::shared::expr::FuncCall.window",
+        "ast::shared::expr::QuotedFuncCall.window"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::expr::FunctionCallTail::WithinGroup",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "FunctionCallTail",
+          "member": "WithinGroup"
+        },
+        {
+          "id": "ast::shared::expr::FunctionWithinGroupTail.within_group",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionWithinGroupTail",
+          "member": "within_group"
+        },
+        {
+          "id": "ast::shared::expr::FunctionPlainTail.filter",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionPlainTail",
+          "member": "filter"
+        },
+        {
+          "id": "ast::shared::expr::FunctionWithinGroupTail.filter",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionWithinGroupTail",
+          "member": "filter"
+        },
+        {
+          "id": "ast::shared::expr::FunctionPlainTail.window",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionPlainTail",
+          "member": "window"
+        },
+        {
+          "id": "ast::shared::expr::FunctionWithinGroupTail.window",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "FunctionWithinGroupTail",
+          "member": "window"
+        }
+      ],
+      "rationale": "WITHIN GROUP has stricter application-body rules than a plain call, while FILTER and OVER remain legal continuations of both states; dedicated tail types preserve the payloads and exclude invalid combinations."
+    },
+    {
+      "id": "issue-9-005-quantified-any",
+      "source_ids": [
+        "ast::shared::expr::Expr::AnyExpr",
+        "ast::shared::expr::Expr::AnyExpr.0",
+        "ast::shared::expr::AnyExpr",
+        "ast::shared::expr::AnyExpr.content"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::expr::Expr::QuantifiedComparison",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "Expr",
+          "member": "QuantifiedComparison"
+        },
+        {
+          "id": "ast::shared::expr::QuantifiedComparisonKind::Any",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "QuantifiedComparisonKind",
+          "member": "Any"
+        },
+        {
+          "id": "ast::shared::expr::QuantifiedComparisonSuffix.operand",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "QuantifiedComparisonSuffix",
+          "member": "operand"
+        }
+      ],
+      "rationale": "ANY(parenthesized content) is not a standalone PostgreSQL expression; its content is retained as the operand of the required left-expression/operator/quantifier suffix."
+    },
+    {
+      "id": "issue-9-006-quantified-all",
+      "source_ids": [
+        "ast::shared::expr::Expr::AllExpr",
+        "ast::shared::expr::Expr::AllExpr.0",
+        "ast::shared::expr::AllExpr",
+        "ast::shared::expr::AllExpr.content"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::expr::Expr::QuantifiedComparison",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "Expr",
+          "member": "QuantifiedComparison"
+        },
+        {
+          "id": "ast::shared::expr::QuantifiedComparisonKind::All",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "QuantifiedComparisonKind",
+          "member": "All"
+        },
+        {
+          "id": "ast::shared::expr::QuantifiedComparisonSuffix.operand",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "QuantifiedComparisonSuffix",
+          "member": "operand"
+        }
+      ],
+      "rationale": "ALL(parenthesized content) is not a standalone PostgreSQL expression; its content is retained as the operand of the required left-expression/operator/quantifier suffix."
+    },
+    {
+      "id": "issue-9-007-quantified-some",
+      "source_ids": [
+        "ast::shared::expr::Expr::SomeExpr",
+        "ast::shared::expr::Expr::SomeExpr.0",
+        "ast::shared::expr::SomeExpr",
+        "ast::shared::expr::SomeExpr.content"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::expr::Expr::QuantifiedComparison",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "Expr",
+          "member": "QuantifiedComparison"
+        },
+        {
+          "id": "ast::shared::expr::QuantifiedComparisonKind::Some",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "QuantifiedComparisonKind",
+          "member": "Some"
+        },
+        {
+          "id": "ast::shared::expr::QuantifiedComparisonSuffix.operand",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "QuantifiedComparisonSuffix",
+          "member": "operand"
+        }
+      ],
+      "rationale": "SOME(parenthesized content) is not a standalone PostgreSQL expression; its content is retained as the operand of the required left-expression/operator/quantifier suffix."
+    },
+    {
+      "id": "issue-9-008-postgresql-cte-name-category",
+      "source_ids": [
+        "ast::shared::with_clause::CteDefinition.name"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::with_clause::CteDefinition.name",
+          "path": "src/ast/shared/with_clause.rs",
+          "kind": "field",
+          "item": "CteDefinition",
+          "member": "name"
+        }
+      ],
+      "rationale": "PostgreSQL defines a common-table-expression name with the ColId category. Narrowing the legacy AliasName approximation prevents reserved clause syntax such as AS from being consumed as a name while retaining unreserved names such as RECURSIVE in every actual name position."
+    },
+    {
+      "id": "issue-9-009-function-parameter-list",
+      "source_ids": [
+        "ast::ddl::function::CreateFunctionStmt.args",
+        "ast::ddl::function::DropFunctionTarget.args",
+        "ast::ddl::procedure::CreateProcedureStmt.args",
+        "ast::ddl::procedure::DropProcedureTarget.args"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::function::FunctionParameters",
+          "path": "src/ast/ddl/function.rs",
+          "kind": "type",
+          "item": "FunctionParameters"
+        },
+        {
+          "id": "ast::ddl::function::CreateFunctionStmt.args",
+          "path": "src/ast/ddl/function.rs",
+          "kind": "field",
+          "item": "CreateFunctionStmt",
+          "member": "args"
+        },
+        {
+          "id": "ast::ddl::function::DropFunctionTarget.args",
+          "path": "src/ast/ddl/function.rs",
+          "kind": "field",
+          "item": "DropFunctionTarget",
+          "member": "args"
+        },
+        {
+          "id": "ast::ddl::procedure::CreateProcedureStmt.args",
+          "path": "src/ast/ddl/procedure.rs",
+          "kind": "field",
+          "item": "CreateProcedureStmt",
+          "member": "args"
+        },
+        {
+          "id": "ast::ddl::procedure::DropProcedureTarget.args",
+          "path": "src/ast/ddl/procedure.rs",
+          "kind": "field",
+          "item": "DropProcedureTarget",
+          "member": "args"
+        }
+      ],
+      "rationale": "Function and procedure parameter parentheses delimit the whole list, not each repeated parameter. The shared FunctionParameters node preserves the original vector ergonomics through Deref while making empty and multi-parameter signatures parse according to PostgreSQL grammar."
+    },
+    {
+      "id": "issue-9-010-call-argument-list",
+      "source_ids": [
+        "ast::ddl::procedure::CallStmt.args"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::procedure::CallArguments",
+          "path": "src/ast/ddl/procedure.rs",
+          "kind": "type",
+          "item": "CallArguments"
+        },
+        {
+          "id": "ast::ddl::procedure::CallStmt.args",
+          "path": "src/ast/ddl/procedure.rs",
+          "kind": "field",
+          "item": "CallStmt",
+          "member": "args"
+        }
+      ],
+      "rationale": "CALL parentheses delimit the complete comma-separated argument list rather than every repeated argument. CallArguments keeps empty and multi-argument calls faithful to PostgreSQL syntax while preserving vector ergonomics through Deref."
+    },
+    {
+      "id": "issue-9-011-indexed-constraint-column-list",
+      "source_ids": [
+        "ast::ddl::table::IndexedConstraintColumns.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::table::IndexedConstraintColumnList",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "type",
+          "item": "IndexedConstraintColumnList"
+        },
+        {
+          "id": "ast::ddl::table::IndexedConstraintColumns.columns",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "field",
+          "item": "IndexedConstraintColumns",
+          "member": "columns"
+        }
+      ],
+      "rationale": "PRIMARY KEY and UNIQUE parentheses delimit the complete comma-separated column list rather than every repeated column. IndexedConstraintColumnList preserves the original vector cardinality and ergonomics through Deref while leaving the trailing INCLUDE, storage, and tablespace clauses outside the list."
+    },
+    {
+      "id": "issue-9-012-foreign-key-column-list",
+      "source_ids": [
+        "ast::ddl::table::TableForeignKey.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::table::ForeignKeyColumnList",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "type",
+          "item": "ForeignKeyColumnList"
+        },
+        {
+          "id": "ast::ddl::table::TableForeignKey.columns",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "field",
+          "item": "TableForeignKey",
+          "member": "columns"
+        }
+      ],
+      "rationale": "FOREIGN KEY parentheses delimit the complete comma-separated local-column list rather than every repeated column. ForeignKeyColumnList preserves the original vector cardinality and ergonomics through Deref while the enclosing node owns the FOREIGN KEY prefix and REFERENCES continuation."
+    },
+    {
+      "id": "issue-9-013-exclusion-constraint-list",
+      "source_ids": [
+        "ast::ddl::table::TableExclude.exclusions"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::table::ExclusionConstraintList",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "type",
+          "item": "ExclusionConstraintList"
+        },
+        {
+          "id": "ast::ddl::table::TableExclude.exclusions",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "field",
+          "item": "TableExclude",
+          "member": "exclusions"
+        }
+      ],
+      "rationale": "EXCLUDE parentheses delimit the complete non-empty comma-separated exclusion list rather than every repeated element. ExclusionConstraintList preserves the original Vec1 cardinality and ergonomics through Deref while the enclosing node owns EXCLUDE, USING, and the trailing index clauses."
+    },
+    {
+      "id": "issue-9-014-partition-column-definition-list",
+      "source_ids": [
+        "ast::ddl::table::CreatePartitionedTableStmt.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::table::PartitionColumnDefList",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "type",
+          "item": "PartitionColumnDefList"
+        },
+        {
+          "id": "ast::ddl::table::CreatePartitionedTableStmt.columns",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "field",
+          "item": "CreatePartitionedTableStmt",
+          "member": "columns"
+        }
+      ],
+      "rationale": "The standalone partitioned-table parentheses delimit the complete comma-separated column-definition list rather than every repeated definition. PartitionColumnDefList preserves the original vector cardinality and ergonomics through Deref while PARTITION BY remains a continuation of the enclosing statement."
+    },
+    {
+      "id": "issue-9-015-insert-query-source",
+      "source_ids": [
+        "ast::dml::insert::InsertSource::Rows",
+        "ast::dml::insert::InsertSource::Select"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::insert::InsertSource::Select",
+          "path": "src/ast/dml/insert.rs",
+          "kind": "variant",
+          "item": "InsertSource",
+          "member": "Select"
+        },
+        {
+          "id": "ast::dml::values::Subquery",
+          "path": "src/ast/dml/values.rs",
+          "kind": "type",
+          "item": "Subquery"
+        }
+      ],
+      "rationale": "PostgreSQL defines VALUES as a query source for INSERT, and Subquery already preserves whether that query is SELECT, VALUES, TABLE, or parenthesized. Removing the duplicate top-level Rows alternative eliminates an exact grammar overlap without losing the source form in the nested AST."
+    },
+    {
+      "id": "issue-9-016-nonempty-explain-options",
+      "source_ids": [
+        "ast::utility::explain::ExplainOptions.0"
+      ],
+      "destinations": [
+        {
+          "id": "ast::utility::explain::ExplainOptions.0",
+          "path": "src/ast/utility/explain.rs",
+          "kind": "field",
+          "item": "ExplainOptions",
+          "member": "0"
+        }
+      ],
+      "rationale": "EXPLAIN parentheses delimit one or more options; an empty option list is not PostgreSQL syntax. Using Vec1 makes the option list itself non-nullable while preserving list ergonomics through Deref."
+    },
+    {
+      "id": "issue-9-017-explain-input-choice",
+      "source_ids": [
+        "ast::utility::explain::ExplainStmt.options",
+        "ast::utility::explain::ExplainStmt.body"
+      ],
+      "destinations": [
+        {
+          "id": "ast::utility::explain::ExplainInput",
+          "path": "src/ast/utility/explain.rs",
+          "kind": "type",
+          "item": "ExplainInput"
+        },
+        {
+          "id": "ast::utility::explain::ExplainOptionsAndStatement",
+          "path": "src/ast/utility/explain.rs",
+          "kind": "type",
+          "item": "ExplainOptionsAndStatement"
+        },
+        {
+          "id": "ast::utility::explain::ExplainStmt.input",
+          "path": "src/ast/utility/explain.rs",
+          "kind": "field",
+          "item": "ExplainStmt",
+          "member": "input"
+        }
+      ],
+      "rationale": "The optional EXPLAIN option list and a parenthesized statement share the same opening token. Modeling the two complete continuations as an enum lets Recursa use balanced-delimiter dispatch, while accessors preserve direct read access to the options and explained statement."
+    },
+    {
+      "id": "issue-9-018-partition-column-option-list",
+      "source_ids": [
+        "ast::ddl::table::PartitionOfBody.column_options",
+        "ast::ddl::table::OfTypeBody.column_options"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::table::PartitionColumnOptionList",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "type",
+          "item": "PartitionColumnOptionList"
+        },
+        {
+          "id": "ast::ddl::table::PartitionOfBody.column_options",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "field",
+          "item": "PartitionOfBody",
+          "member": "column_options"
+        },
+        {
+          "id": "ast::ddl::table::OfTypeBody.column_options",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "field",
+          "item": "OfTypeBody",
+          "member": "column_options"
+        }
+      ],
+      "rationale": "Typed-table and partition override parentheses delimit the complete comma-separated option list rather than every repeated option. PartitionColumnOptionList preserves the legacy zero-or-more cardinality and vector ergonomics through Deref."
+    },
+    {
+      "id": "issue-9-019-table-element-list",
+      "source_ids": [
+        "ast::ddl::table::ColumnsBody.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::table::TableElementList",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "type",
+          "item": "TableElementList"
+        },
+        {
+          "id": "ast::ddl::table::ColumnsBody.columns",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "field",
+          "item": "ColumnsBody",
+          "member": "columns"
+        }
+      ],
+      "rationale": "CREATE TABLE parentheses delimit the complete zero-or-more table-element list. TableElementList keeps the delimiters local without changing the legacy empty-list cardinality, preserves vector ergonomics through Deref, and lets the items accessor expose a cardinality-neutral slice."
+    },
+    {
+      "id": "issue-9-020-storage-parameter-qualified-tail",
+      "source_ids": [
+        "ast::ddl::index::StorageParamName.namespace",
+        "ast::ddl::index::StorageParamName.name"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::index::StorageParamQualifiedTail",
+          "path": "src/ast/ddl/index.rs",
+          "kind": "type",
+          "item": "StorageParamQualifiedTail"
+        },
+        {
+          "id": "ast::ddl::index::StorageParamName.head",
+          "path": "src/ast/ddl/index.rs",
+          "kind": "field",
+          "item": "StorageParamName",
+          "member": "head"
+        },
+        {
+          "id": "ast::ddl::index::StorageParamName.qualified_tail",
+          "path": "src/ast/ddl/index.rs",
+          "kind": "field",
+          "item": "StorageParamName",
+          "member": "qualified_tail"
+        }
+      ],
+      "rationale": "A bare reloption name and the optional namespace prefix begin with the same identifier category, so the prefix-first representation commits before it can observe a dot. Parsing one required head followed by an optional dot-qualified tail gives the optional component a disjoint first token; namespace and name accessors preserve truthful semantic access."
+    },
+    {
+      "id": "issue-9-021-columns-with-clause",
+      "source_ids": [
+        "ast::ddl::table::WithOidsClause",
+        "ast::ddl::table::ColumnsBody.with_oids",
+        "ast::ddl::table::ColumnsBody.with_storage"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::table::WithOidsClause",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "type",
+          "item": "WithOidsClause"
+        },
+        {
+          "id": "ast::ddl::table::ColumnsStorageParams",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "type",
+          "item": "ColumnsStorageParams"
+        },
+        {
+          "id": "ast::ddl::table::ColumnsWithValue",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "type",
+          "item": "ColumnsWithValue"
+        },
+        {
+          "id": "ast::ddl::table::ColumnsWithClause",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "type",
+          "item": "ColumnsWithClause"
+        },
+        {
+          "id": "ast::ddl::table::ColumnsBody.with",
+          "path": "src/ast/ddl/table.rs",
+          "kind": "field",
+          "item": "ColumnsBody",
+          "member": "with"
+        }
+      ],
+      "rationale": "WITH OIDS and WITH (storage parameters) share a first token and cannot be represented safely as consecutive optional fields. Factoring WITH once and choosing between OIDS and a parenthesized parameter list on the second token makes the branches disjoint; WITHOUT OIDS remains a separate branch, while accessors retain the legacy semantic views."
+    },
+    {
+      "id": "issue-9-022-update-list-wrappers",
+      "source_ids": [
+        "ast::dml::update::TupleAssignment.columns",
+        "ast::dml::update::UpdateStmt.assignments"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::update::SetTargetList",
+          "path": "src/ast/dml/update.rs",
+          "kind": "type",
+          "item": "SetTargetList"
+        },
+        {
+          "id": "ast::dml::update::TupleAssignment.columns",
+          "path": "src/ast/dml/update.rs",
+          "kind": "field",
+          "item": "TupleAssignment",
+          "member": "columns"
+        },
+        {
+          "id": "ast::dml::update::SetClause",
+          "path": "src/ast/dml/update.rs",
+          "kind": "type",
+          "item": "SetClause"
+        },
+        {
+          "id": "ast::dml::update::UpdateStmt.assignments",
+          "path": "src/ast/dml/update.rs",
+          "kind": "field",
+          "item": "UpdateStmt",
+          "member": "assignments"
+        }
+      ],
+      "rationale": "Tuple-assignment parentheses and the UPDATE SET keyword each delimit a complete comma-separated list rather than every repeated element. The wrappers preserve vector ergonomics while placing syntax at the list boundary."
+    },
+    {
+      "id": "issue-9-023-update-alias-precedence",
+      "source_ids": [
+        "ast::dml::update::UpdateTableAlias",
+        "ast::dml::update::UpdateTableAlias.r#as",
+        "ast::dml::update::UpdateTableAlias.name"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::update::UpdateTableAlias",
+          "path": "src/ast/dml/update.rs",
+          "kind": "type",
+          "item": "UpdateTableAlias"
+        },
+        {
+          "id": "ast::dml::update::UpdateTableAlias::WithAs",
+          "path": "src/ast/dml/update.rs",
+          "kind": "variant",
+          "item": "UpdateTableAlias",
+          "member": "WithAs"
+        },
+        {
+          "id": "ast::dml::update::UpdateTableAlias::Bare",
+          "path": "src/ast/dml/update.rs",
+          "kind": "variant",
+          "item": "UpdateTableAlias",
+          "member": "Bare"
+        },
+        {
+          "id": "ast::dml::update::UpdateTableAliasWithAs.name",
+          "path": "src/ast/dml/update.rs",
+          "kind": "field",
+          "item": "UpdateTableAliasWithAs",
+          "member": "name"
+        },
+        {
+          "id": "tokens::literal::UpdateAliasName",
+          "path": "src/tokens.rs",
+          "kind": "type",
+          "item": "UpdateAliasName"
+        }
+      ],
+      "rationale": "PostgreSQL gives SET precedence as the UPDATE clause keyword only for a bare target alias. Splitting explicit AS aliases from a named bare-alias admission excludes SET in that one position while retaining AS set, quoted aliases, and SET as an assignment target."
+    },
+    {
+      "id": "issue-9-024-constraint-trigger-row-marker",
+      "source_ids": [
+        "ast::ddl::trigger::CreateConstraintTriggerStmt.r#for",
+        "ast::ddl::trigger::CreateConstraintTriggerStmt.each",
+        "ast::ddl::trigger::CreateConstraintTriggerStmt.row"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::trigger::ForEachRow",
+          "path": "src/ast/ddl/trigger.rs",
+          "kind": "type",
+          "item": "ForEachRow"
+        },
+        {
+          "id": "ast::ddl::trigger::CreateConstraintTriggerStmt.for_each_row",
+          "path": "src/ast/ddl/trigger.rs",
+          "kind": "field",
+          "item": "CreateConstraintTriggerStmt",
+          "member": "for_each_row"
+        }
+      ],
+      "rationale": "FOR EACH ROW is mandatory on a constraint trigger and cannot be attached to the following optional WHEN clause. A zero-payload semantic marker preserves the mandatory syntax independently of that optional child."
+    },
+    {
+      "id": "issue-9-025-foreign-table-list-wrappers",
+      "source_ids": [
+        "ast::ddl::foreign::ForeignTableColumnsBody.columns",
+        "ast::ddl::foreign::ForeignTablePartitionBody.column_options"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::foreign::ForeignTableColumnList",
+          "path": "src/ast/ddl/foreign.rs",
+          "kind": "type",
+          "item": "ForeignTableColumnList"
+        },
+        {
+          "id": "ast::ddl::foreign::ForeignTableColumnsBody.columns",
+          "path": "src/ast/ddl/foreign.rs",
+          "kind": "field",
+          "item": "ForeignTableColumnsBody",
+          "member": "columns"
+        },
+        {
+          "id": "ast::ddl::foreign::ForeignTablePartitionColumnOptions",
+          "path": "src/ast/ddl/foreign.rs",
+          "kind": "type",
+          "item": "ForeignTablePartitionColumnOptions"
+        },
+        {
+          "id": "ast::ddl::foreign::ForeignTablePartitionBody.column_options",
+          "path": "src/ast/ddl/foreign.rs",
+          "kind": "field",
+          "item": "ForeignTablePartitionBody",
+          "member": "column_options"
+        }
+      ],
+      "rationale": "Foreign-table column and partition-option parentheses delimit their complete zero-or-more lists. Dedicated wrappers preserve the legacy cardinality and keep delimiters outside repetition."
+    },
+    {
+      "id": "issue-9-026-index-element-list",
+      "source_ids": [
+        "ast::ddl::index::CreateIndexStmt.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::index::IndexElementList",
+          "path": "src/ast/ddl/index.rs",
+          "kind": "type",
+          "item": "IndexElementList"
+        },
+        {
+          "id": "ast::ddl::index::CreateIndexStmt.columns",
+          "path": "src/ast/ddl/index.rs",
+          "kind": "field",
+          "item": "CreateIndexStmt",
+          "member": "columns"
+        }
+      ],
+      "rationale": "CREATE INDEX parentheses delimit the complete zero-or-more element list. IndexElementList preserves the legacy vector cardinality and ergonomics while owning the delimiters once."
+    },
+    {
+      "id": "issue-9-027-materialized-view-column-list",
+      "source_ids": [
+        "ast::ddl::materialized_view::CreateMatViewTarget.column_list"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::materialized_view::CreateMatViewColumnList",
+          "path": "src/ast/ddl/materialized_view.rs",
+          "kind": "type",
+          "item": "CreateMatViewColumnList"
+        },
+        {
+          "id": "ast::ddl::materialized_view::CreateMatViewTarget.column_list",
+          "path": "src/ast/ddl/materialized_view.rs",
+          "kind": "field",
+          "item": "CreateMatViewTarget",
+          "member": "column_list"
+        }
+      ],
+      "rationale": "The optional materialized-view column-list parentheses surround the complete nonempty list, so a wrapper owns those delimiters without changing the optionality or item semantics."
+    },
+    {
+      "id": "issue-9-028-operator-class-item-list",
+      "source_ids": [
+        "ast::ddl::operator::CreateOperatorClassStmt.items"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::operator::CreateOpclassItemList",
+          "path": "src/ast/ddl/operator.rs",
+          "kind": "type",
+          "item": "CreateOpclassItemList"
+        },
+        {
+          "id": "ast::ddl::operator::CreateOperatorClassStmt.items",
+          "path": "src/ast/ddl/operator.rs",
+          "kind": "field",
+          "item": "CreateOperatorClassStmt",
+          "member": "items"
+        }
+      ],
+      "rationale": "Operator-class item commas separate the complete AS list; the wrapper places AS once before the nonempty list while retaining the original items."
+    },
+    {
+      "id": "issue-9-029-statistics-type-list",
+      "source_ids": [
+        "ast::ddl::statistics::CreateStatisticsStmt.stat_types"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::statistics::StatisticsTypeList",
+          "path": "src/ast/ddl/statistics.rs",
+          "kind": "type",
+          "item": "StatisticsTypeList"
+        },
+        {
+          "id": "ast::ddl::statistics::CreateStatisticsStmt.stat_types",
+          "path": "src/ast/ddl/statistics.rs",
+          "kind": "field",
+          "item": "CreateStatisticsStmt",
+          "member": "stat_types"
+        }
+      ],
+      "rationale": "The optional CREATE STATISTICS type parentheses wrap one complete nonempty list. StatisticsTypeList owns the shared delimiters without changing the outer optionality."
+    },
+    {
+      "id": "issue-9-030-transform-list-wrappers",
+      "source_ids": [
+        "ast::ddl::transform::CreateTransformStmt.elements",
+        "ast::ddl::transform::TransformFunctionRef.args"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::transform::TransformElementList",
+          "path": "src/ast/ddl/transform.rs",
+          "kind": "type",
+          "item": "TransformElementList"
+        },
+        {
+          "id": "ast::ddl::transform::CreateTransformStmt.elements",
+          "path": "src/ast/ddl/transform.rs",
+          "kind": "field",
+          "item": "CreateTransformStmt",
+          "member": "elements"
+        },
+        {
+          "id": "ast::ddl::transform::TransformFunctionRef.args",
+          "path": "src/ast/ddl/transform.rs",
+          "kind": "field",
+          "item": "TransformFunctionRef",
+          "member": "args"
+        },
+        {
+          "id": "ast::ddl::function::FunctionParameters",
+          "path": "src/ast/ddl/function.rs",
+          "kind": "type",
+          "item": "FunctionParameters"
+        }
+      ],
+      "rationale": "CREATE TRANSFORM parentheses delimit its complete element list, and transform function arguments reuse the canonical whole-parameter-list wrapper already introduced for routines."
+    },
+    {
+      "id": "issue-9-031-with-clause-list-wrappers",
+      "source_ids": [
+        "ast::shared::with_clause::SearchClause.columns",
+        "ast::shared::with_clause::CteDefinition.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::with_clause::SearchColumnList",
+          "path": "src/ast/shared/with_clause.rs",
+          "kind": "type",
+          "item": "SearchColumnList"
+        },
+        {
+          "id": "ast::shared::with_clause::SearchClause.columns",
+          "path": "src/ast/shared/with_clause.rs",
+          "kind": "field",
+          "item": "SearchClause",
+          "member": "columns"
+        },
+        {
+          "id": "ast::shared::with_clause::CteColumnList",
+          "path": "src/ast/shared/with_clause.rs",
+          "kind": "type",
+          "item": "CteColumnList"
+        },
+        {
+          "id": "ast::shared::with_clause::CteDefinition.columns",
+          "path": "src/ast/shared/with_clause.rs",
+          "kind": "field",
+          "item": "CteDefinition",
+          "member": "columns"
+        }
+      ],
+      "rationale": "SEARCH BY and CTE column parentheses each delimit a complete comma-separated list. Dedicated wrappers keep the shared prefixes and delimiters outside repetition while preserving list cardinality."
+    },
+    {
+      "id": "issue-9-032-analyze-list-wrappers",
+      "source_ids": [
+        "ast::utility::analyze::AnalyzeStmt.options",
+        "ast::utility::analyze::AnalyzeTarget.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::utility::analyze::AnalyzeOptions",
+          "path": "src/ast/utility/analyze.rs",
+          "kind": "type",
+          "item": "AnalyzeOptions"
+        },
+        {
+          "id": "ast::utility::analyze::AnalyzeStmt.options",
+          "path": "src/ast/utility/analyze.rs",
+          "kind": "field",
+          "item": "AnalyzeStmt",
+          "member": "options"
+        },
+        {
+          "id": "ast::utility::analyze::AnalyzeColumnList",
+          "path": "src/ast/utility/analyze.rs",
+          "kind": "type",
+          "item": "AnalyzeColumnList"
+        },
+        {
+          "id": "ast::utility::analyze::AnalyzeTarget.columns",
+          "path": "src/ast/utility/analyze.rs",
+          "kind": "field",
+          "item": "AnalyzeTarget",
+          "member": "columns"
+        }
+      ],
+      "rationale": "ANALYZE option and column parentheses each wrap one complete nonempty list. The new wrappers retain outer optionality and list ergonomics while owning their delimiters once."
+    },
+    {
+      "id": "issue-9-033-comment-function-parameters",
+      "source_ids": [
+        "ast::utility::comment::CommentFunctionObject.args",
+        "ast::utility::comment::CommentProcedureObject.args",
+        "ast::utility::comment::CommentRoutineObject.args"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::function::FunctionParameters",
+          "path": "src/ast/ddl/function.rs",
+          "kind": "type",
+          "item": "FunctionParameters"
+        },
+        {
+          "id": "ast::utility::comment::CommentFunctionObject.args",
+          "path": "src/ast/utility/comment.rs",
+          "kind": "field",
+          "item": "CommentFunctionObject",
+          "member": "args"
+        },
+        {
+          "id": "ast::utility::comment::CommentProcedureObject.args",
+          "path": "src/ast/utility/comment.rs",
+          "kind": "field",
+          "item": "CommentProcedureObject",
+          "member": "args"
+        },
+        {
+          "id": "ast::utility::comment::CommentRoutineObject.args",
+          "path": "src/ast/utility/comment.rs",
+          "kind": "field",
+          "item": "CommentRoutineObject",
+          "member": "args"
+        }
+      ],
+      "rationale": "COMMENT ON callable signatures reuse the canonical whole-parameter-list wrapper so one pair of parentheses surrounds every zero-or-more argument list."
+    },
+    {
+      "id": "issue-9-034-copy-generic-option-name-list",
+      "source_ids": [
+        "ast::utility::copy::CopyGenericOptionArg::ParenList.0"
+      ],
+      "destinations": [
+        {
+          "id": "ast::utility::copy::CopyGenericOptionNameList",
+          "path": "src/ast/utility/copy.rs",
+          "kind": "type",
+          "item": "CopyGenericOptionNameList"
+        },
+        {
+          "id": "ast::utility::copy::CopyGenericOptionArg::ParenList",
+          "path": "src/ast/utility/copy.rs",
+          "kind": "variant",
+          "item": "CopyGenericOptionArg",
+          "member": "ParenList"
+        }
+      ],
+      "rationale": "A parenthesized generic COPY option argument contains one nonempty comma-separated name list. The payload wrapper places the parentheses around the list as a whole."
+    },
+    {
+      "id": "issue-9-035-vacuum-column-list",
+      "source_ids": [
+        "ast::utility::vacuum::VacuumRelation.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::utility::vacuum::VacuumColumnList",
+          "path": "src/ast/utility/vacuum.rs",
+          "kind": "type",
+          "item": "VacuumColumnList"
+        },
+        {
+          "id": "ast::utility::vacuum::VacuumRelation.columns",
+          "path": "src/ast/utility/vacuum.rs",
+          "kind": "field",
+          "item": "VacuumRelation",
+          "member": "columns"
+        }
+      ],
+      "rationale": "VACUUM relation-column parentheses delimit one complete nonempty list. VacuumColumnList keeps the delimiters local without changing the optional relation-column semantics."
+    },
+    {
+      "id": "issue-9-036-rule-do-clause",
+      "source_ids": [
+        "ast::ddl::rule::CreateRuleStmt.r#do",
+        "ast::ddl::rule::CreateRuleStmt.instead_also",
+        "ast::ddl::rule::CreateRuleStmt.actions"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::rule::RuleDoClause",
+          "path": "src/ast/ddl/rule.rs",
+          "kind": "type",
+          "item": "RuleDoClause"
+        },
+        {
+          "id": "ast::ddl::rule::RuleDoClause.instead_also",
+          "path": "src/ast/ddl/rule.rs",
+          "kind": "field",
+          "item": "RuleDoClause",
+          "member": "instead_also"
+        },
+        {
+          "id": "ast::ddl::rule::RuleDoClause.actions",
+          "path": "src/ast/ddl/rule.rs",
+          "kind": "field",
+          "item": "RuleDoClause",
+          "member": "actions"
+        },
+        {
+          "id": "ast::ddl::rule::CreateRuleStmt.do_clause",
+          "path": "src/ast/ddl/rule.rs",
+          "kind": "field",
+          "item": "CreateRuleStmt",
+          "member": "do_clause"
+        }
+      ],
+      "rationale": "DO is mandatory before the optional INSTEAD or ALSO modifier. RuleDoClause owns that required prefix and nests the preserved modifier and action payload so neither optionality nor token order is distorted."
+    },
+    {
+      "id": "issue-9-037-xmltable-column-list",
+      "source_ids": [
+        "ast::dml::select::XmlTableInner.column_list"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::XmlTableColumnList",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "XmlTableColumnList"
+        },
+        {
+          "id": "ast::dml::select::XmlTableInner.column_list",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "XmlTableInner",
+          "member": "column_list"
+        }
+      ],
+      "rationale": "XMLTABLE COLUMNS introduces one complete nonempty comma-separated column list. XmlTableColumnList preserves that cardinality and vector ergonomics while attaching COLUMNS once at the list boundary."
+    },
+    {
+      "id": "issue-9-038-group-by-callable-primitives",
+      "source_ids": [
+        "ast::dml::select::GroupByItem::Rollup",
+        "ast::dml::select::GroupByItem::Rollup.0",
+        "ast::dml::select::GroupByItem::Cube",
+        "ast::dml::select::GroupByItem::Cube.0"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::GroupByItem::Expr",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "GroupByItem",
+          "member": "Expr"
+        }
+      ],
+      "rationale": "ROLLUP(...) and CUBE(...) are also legal PostgreSQL function-call expressions, making the specialized and expression alternatives syntactically identical in GROUP BY. The callable spellings remain fully represented by GroupByItem::Expr rather than retaining an ambiguous duplicate semantic branch."
+    },
+    {
+      "id": "issue-9-039-lock-table-presence",
+      "source_ids": [
+        "ast::utility::lock::LockStmt.table"
+      ],
+      "destinations": [
+        {
+          "id": "ast::utility::lock::LockStmt.table",
+          "path": "src/ast/utility/lock.rs",
+          "kind": "field",
+          "item": "LockStmt",
+          "member": "table"
+        }
+      ],
+      "rationale": "Although TABLE is optional filler in LOCK syntax, generated Pretty output from the semantic AST must retain whether it was authored. A presence boolean restores the legacy distinction and exact round trips."
+    },
+    {
+      "id": "issue-9-040-optional-transaction-keyword-presence",
+      "source_ids": [
+        "ast::tcl::prepared::DeallocateStmt.prepare",
+        "ast::tcl::savepoint::ReleaseStmt.savepoint",
+        "ast::tcl::transaction::RollbackToClause.savepoint"
+      ],
+      "destinations": [
+        {
+          "id": "ast::tcl::prepared::DeallocateStmt.prepare",
+          "path": "src/ast/tcl/prepared.rs",
+          "kind": "field",
+          "item": "DeallocateStmt",
+          "member": "prepare"
+        },
+        {
+          "id": "ast::tcl::savepoint::ReleaseStmt.savepoint",
+          "path": "src/ast/tcl/savepoint.rs",
+          "kind": "field",
+          "item": "ReleaseStmt",
+          "member": "savepoint"
+        },
+        {
+          "id": "ast::tcl::transaction::RollbackToClause.savepoint",
+          "path": "src/ast/tcl/transaction.rs",
+          "kind": "field",
+          "item": "RollbackToClause",
+          "member": "savepoint"
+        }
+      ],
+      "rationale": "Optional PREPARE and SAVEPOINT keywords carry an authored-source distinction required by semantic Pretty output. Presence booleans restore the legacy fields instead of discarding those tokens in syntax-only attachments."
+    },
+    {
+      "id": "issue-9-041-view-column-list",
+      "source_ids": [
+        "ast::ddl::view::CreateViewStmt.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::view::CreateViewColumnList",
+          "path": "src/ast/ddl/view.rs",
+          "kind": "type",
+          "item": "CreateViewColumnList"
+        },
+        {
+          "id": "ast::ddl::view::CreateViewStmt.columns",
+          "path": "src/ast/ddl/view.rs",
+          "kind": "field",
+          "item": "CreateViewStmt",
+          "member": "columns"
+        }
+      ],
+      "rationale": "CREATE VIEW output-column parentheses delimit one complete nonempty list. CreateViewColumnList keeps those delimiters outside repetition while preserving outer optionality and vector ergonomics."
+    },
+    {
+      "id": "issue-9-042-select-table-alias-column-lists",
+      "source_ids": [
+        "ast::dml::select::TableAliasWithAs.columns",
+        "ast::dml::select::TableAliasBare.columns",
+        "ast::dml::select::PlainTableAliasWithAs.columns",
+        "ast::dml::select::PlainTableAliasBare.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::TableAliasColumnList",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "TableAliasColumnList"
+        },
+        {
+          "id": "ast::dml::select::TableAliasWithAs.columns",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "TableAliasWithAs",
+          "member": "columns"
+        },
+        {
+          "id": "ast::dml::select::TableAliasBare.columns",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "TableAliasBare",
+          "member": "columns"
+        },
+        {
+          "id": "ast::dml::select::PlainTableAliasWithAs.columns",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "PlainTableAliasWithAs",
+          "member": "columns"
+        },
+        {
+          "id": "ast::dml::select::PlainTableAliasBare.columns",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "PlainTableAliasBare",
+          "member": "columns"
+        }
+      ],
+      "rationale": "Alias-column parentheses delimit one complete nonempty list in every table-alias spelling. TableAliasColumnList centralizes that boundary while preserving each alias form's optional list semantics."
+    },
+    {
+      "id": "issue-9-043-select-join-head",
+      "source_ids": [
+        "ast::dml::select::JoinSuffix.table"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::JoinType",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "JoinType"
+        },
+        {
+          "id": "ast::dml::select::JoinSuffix.join_type",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "JoinSuffix",
+          "member": "join_type"
+        },
+        {
+          "id": "ast::dml::select::JoinSuffix.table",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "JoinSuffix",
+          "member": "table"
+        }
+      ],
+      "rationale": "JOIN and optional OUTER belong to the join operator, not the recursive right-hand table reference. The required semantic JoinType prevents recursive table parsing from consuming or duplicating that syntax while retaining Pretty output."
+    },
+    {
+      "id": "issue-9-044-empty-grouping-set",
+      "source_ids": [
+        "ast::dml::select::GroupByItem"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::EmptyGroupingSet",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "EmptyGroupingSet"
+        },
+        {
+          "id": "ast::dml::select::GroupByItem::Empty",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "GroupByItem",
+          "member": "Empty"
+        }
+      ],
+      "rationale": "GROUPING SETS permits an explicitly empty grouping set written as (). EmptyGroupingSet gives that syntax a non-recursive semantic home instead of forcing it through an expression alternative."
+    },
+    {
+      "id": "issue-9-045-trigger-event-list",
+      "source_ids": [
+        "ast::ddl::trigger::CreateTriggerStmt.events",
+        "ast::ddl::trigger::CreateConstraintTriggerStmt.events"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::trigger::TriggerEventList",
+          "path": "src/ast/ddl/trigger.rs",
+          "kind": "type",
+          "item": "TriggerEventList"
+        },
+        {
+          "id": "ast::ddl::trigger::CreateTriggerStmt.events",
+          "path": "src/ast/ddl/trigger.rs",
+          "kind": "field",
+          "item": "CreateTriggerStmt",
+          "member": "events"
+        },
+        {
+          "id": "ast::ddl::trigger::CreateConstraintTriggerStmt.events",
+          "path": "src/ast/ddl/trigger.rs",
+          "kind": "field",
+          "item": "CreateConstraintTriggerStmt",
+          "member": "events"
+        }
+      ],
+      "rationale": "OR separates complete trigger events. TriggerEventList owns the separator once for both trigger statement forms, preserving parse and Pretty output instead of attaching OR to each repeated element."
+    },
+    {
+      "id": "issue-9-046-event-trigger-value-list",
+      "source_ids": [
+        "ast::ddl::trigger::EventTriggerWhenItem.values"
+      ],
+      "destinations": [
+        {
+          "id": "ast::ddl::trigger::EventTriggerValueList",
+          "path": "src/ast/ddl/trigger.rs",
+          "kind": "type",
+          "item": "EventTriggerValueList"
+        },
+        {
+          "id": "ast::ddl::trigger::EventTriggerWhenItem.values",
+          "path": "src/ast/ddl/trigger.rs",
+          "kind": "field",
+          "item": "EventTriggerWhenItem",
+          "member": "values"
+        }
+      ],
+      "rationale": "An event-trigger IN filter contains one parenthesized nonempty comma-separated string list. EventTriggerValueList keeps the delimiters and commas at the whole-list boundary for stable Pretty reparsing."
+    },
+    {
+      "id": "issue-9-047-parenthesized-expression-indirection",
+      "source_ids": [
+        "ast::shared::expr::ParenExpr",
+        "ast::shared::expr::ParenExpr.0",
+        "ast::shared::expr::Expr::Paren",
+        "ast::shared::expr::Expr::Paren.0"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::expr::ParenContent",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "ParenContent"
+        },
+        {
+          "id": "ast::shared::expr::ParenthesizedIndirection",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "ParenthesizedIndirection"
+        },
+        {
+          "id": "ast::shared::expr::ParenthesizedIndirection::Star",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "ParenthesizedIndirection",
+          "member": "Star"
+        },
+        {
+          "id": "ast::shared::expr::ParenthesizedExpr",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "ParenthesizedExpr"
+        },
+        {
+          "id": "ast::shared::expr::ParenthesizedExpr.indirection",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "ParenthesizedExpr",
+          "member": "indirection"
+        },
+        {
+          "id": "ast::shared::expr::Expr::Parenthesized",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "Expr",
+          "member": "Parenthesized"
+        }
+      ],
+      "rationale": "The legacy parenthesized payload is expanded into explicit content and an ordered indirection chain so fields, subscripts, and terminal dot-star syntax preserve authored order. Keeping dot-star in the chain avoids a separate out-of-order optional field."
+    },
+    {
+      "id": "issue-9-048-nested-array-elements",
+      "source_ids": [
+        "ast::shared::expr::ArrayElement::Nested",
+        "ast::shared::expr::ArrayElement::Nested.0"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::expr::NestedArrayElements",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "NestedArrayElements"
+        },
+        {
+          "id": "ast::shared::expr::NestedArrayElements.elements",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "NestedArrayElements",
+          "member": "elements"
+        },
+        {
+          "id": "ast::shared::expr::ArrayElement::Nested",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "ArrayElement",
+          "member": "Nested"
+        }
+      ],
+      "rationale": "Each nested ARRAY bracket pair surrounds one complete comma-separated element list. NestedArrayElements retains the legacy recursive payload while moving delimiters and separators to their whole-list boundary."
+    },
+    {
+      "id": "issue-9-049-json-quotes-keyword",
+      "source_ids": [
+        "ast::shared::expr::JsonQuotes.quotes"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::expr::JsonQuotesKeyword",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "JsonQuotesKeyword"
+        },
+        {
+          "id": "ast::shared::expr::JsonQuotes.quotes",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "JsonQuotes",
+          "member": "quotes"
+        }
+      ],
+      "rationale": "QUOTES is mandatory semantic syntax between KEEP or OMIT and the optional ON SCALAR STRING suffix. JsonQuotesKeyword preserves the required legacy field and Pretty output instead of attaching the keyword to a nullable neighbor."
+    },
+    {
+      "id": "issue-9-050-join-using-columns",
+      "source_ids": [
+        "ast::dml::select::JoinUsing.columns"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::JoinUsingColumns",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "JoinUsingColumns"
+        },
+        {
+          "id": "ast::dml::select::JoinUsing.columns",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "JoinUsing",
+          "member": "columns"
+        }
+      ],
+      "rationale": "JOIN USING parentheses surround only the comma-separated column list; the optional alias follows the closing parenthesis. JoinUsingColumns restores that boundary while retaining the legacy zero-or-more list cardinality."
+    },
+    {
+      "id": "issue-9-051-rows-from-item-list",
+      "source_ids": [
+        "ast::dml::select::RowsFromRef.items"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::RowsFromItemList",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "RowsFromItemList"
+        },
+        {
+          "id": "ast::dml::select::RowsFromRef.items",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "RowsFromRef",
+          "member": "items"
+        }
+      ],
+      "rationale": "ROWS FROM parentheses surround the complete nonempty function list while WITH ORDINALITY and aliases follow the closing parenthesis. RowsFromItemList restores that syntax boundary without changing the list contents."
+    },
+    {
+      "id": "issue-9-052-json-table-format",
+      "source_ids": [
+        "ast::dml::select::JsonTableTypedColumn.format",
+        "ast::dml::select::JsonTableInner.context_format"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::JsonTableFormat",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "JsonTableFormat"
+        },
+        {
+          "id": "ast::dml::select::JsonTableTypedColumn.format",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "JsonTableTypedColumn",
+          "member": "format"
+        },
+        {
+          "id": "ast::dml::select::JsonTableInner.context_format",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "JsonTableInner",
+          "member": "context_format"
+        }
+      ],
+      "rationale": "JSON_TABLE requires FORMAT JSON as one complete optional clause before its optional encoding. JsonTableFormat preserves that clause and its encoding payload instead of reusing a wrapper whose delimiters were attached at the wrong boundary."
+    },
+    {
+      "id": "issue-9-053-join-head",
+      "source_ids": [
+        "ast::dml::select::JoinType",
+        "ast::dml::select::JoinType::Left.0",
+        "ast::dml::select::JoinType::Right.0",
+        "ast::dml::select::JoinType::Full.0",
+        "ast::dml::select::JoinType::Inner.0",
+        "ast::dml::select::JoinType::Cross.0",
+        "ast::dml::select::JoinSuffix.join_type"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::JoinType",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "JoinType"
+        },
+        {
+          "id": "ast::dml::select::JoinType::Left",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "Left"
+        },
+        {
+          "id": "ast::dml::select::JoinType::Right",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "Right"
+        },
+        {
+          "id": "ast::dml::select::JoinType::Full",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "Full"
+        },
+        {
+          "id": "ast::dml::select::JoinType::Inner",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "Inner"
+        },
+        {
+          "id": "ast::dml::select::JoinType::Cross",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "Cross"
+        },
+        {
+          "id": "ast::dml::select::JoinType::Plain",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "Plain"
+        },
+        {
+          "id": "ast::dml::select::JoinSuffix.join_type",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "JoinSuffix",
+          "member": "join_type"
+        }
+      ],
+      "rationale": "Every join suffix has a required JOIN head. Moving JOIN and optional OUTER into the nonnullable JoinType alternatives retains the qualified join kinds, represents plain JOIN explicitly, and removes an ambiguous all-nullable prefix."
+    },
+    {
+      "id": "issue-9-054-select-target-state",
+      "source_ids": [
+        "ast::dml::select::SelectStmt.items",
+        "ast::dml::select::SelectStmt.into",
+        "ast::dml::select::SelectStmt.from_clause"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::SelectStmt.head",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectStmt",
+          "member": "head"
+        },
+        {
+          "id": "ast::dml::select::SelectTargets",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "SelectTargets"
+        },
+        {
+          "id": "ast::dml::select::SelectTargets::Empty",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "SelectTargets",
+          "member": "Empty"
+        },
+        {
+          "id": "ast::dml::select::SelectTargets::Items",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "SelectTargets",
+          "member": "Items"
+        },
+        {
+          "id": "ast::dml::select::SelectTargetList",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "SelectTargetList"
+        },
+        {
+          "id": "ast::dml::select::SelectTargetList.items",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectTargetList",
+          "member": "items"
+        },
+        {
+          "id": "ast::dml::select::SelectTargetList.into",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectTargetList",
+          "member": "into"
+        },
+        {
+          "id": "ast::dml::select::SelectTargetList.from_clause",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectTargetList",
+          "member": "from_clause"
+        }
+      ],
+      "rationale": "PostgreSQL permits the exact empty-target form SELECT FROM while ordinary target lists are nonempty and may be followed by INTO or FROM. SelectTargets makes those two states explicit and keeps the legacy target, INTO, and FROM payloads accessible through stable helpers."
+    },
+    {
+      "id": "issue-9-055-type-name-ident-admission",
+      "source_ids": [
+        "ast::shared::expr::TypeName",
+        "ast::shared::expr::TypeName::Bool",
+        "ast::shared::expr::TypeName::Bool.0",
+        "ast::shared::expr::TypeName::Text",
+        "ast::shared::expr::TypeName::Text.0",
+        "ast::shared::expr::TypeName::Serial",
+        "ast::shared::expr::TypeName::Serial.0",
+        "ast::shared::expr::TypeName::DoublePrecision",
+        "ast::shared::expr::TypeName::DoublePrecision.0",
+        "ast::shared::expr::TypeName::Unknown",
+        "ast::shared::expr::TypeName::Unknown.0",
+        "ast::shared::expr::TypeName::Ident",
+        "ast::shared::expr::TypeName::Ident.0"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::expr::TypeName",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "TypeName"
+        },
+        {
+          "id": "ast::shared::expr::TypeName::Bool",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "TypeName",
+          "member": "Bool"
+        },
+        {
+          "id": "ast::shared::expr::TypeName::Text",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "TypeName",
+          "member": "Text"
+        },
+        {
+          "id": "ast::shared::expr::TypeName::Serial",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "TypeName",
+          "member": "Serial"
+        },
+        {
+          "id": "ast::shared::expr::TypeName::DoublePrecision",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "TypeName",
+          "member": "DoublePrecision"
+        },
+        {
+          "id": "ast::shared::expr::TypeName::Unknown",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "TypeName",
+          "member": "Unknown"
+        },
+        {
+          "id": "ast::shared::expr::TypeName::Ident",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "TypeName",
+          "member": "Ident"
+        },
+        {
+          "id": "ast::shared::expr::TypeNameIdent",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "TypeNameIdent"
+        },
+        {
+          "id": "ast::shared::expr::TypeNameIdent.parts",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "TypeNameIdent",
+          "member": "parts"
+        },
+        {
+          "id": "tokens::type_name_ident",
+          "path": "src/tokens.rs",
+          "kind": "type",
+          "item": "type_name_ident"
+        },
+        {
+          "id": "tokens::type_name_ident::Text",
+          "path": "src/tokens.rs",
+          "kind": "variant",
+          "item": "type_name_ident",
+          "member": "Text"
+        },
+        {
+          "id": "tokens::type_name_ident::Text.0",
+          "path": "src/tokens.rs",
+          "kind": "field",
+          "item": "type_name_ident",
+          "member": "Text.0"
+        }
+      ],
+      "rationale": "The fixed BOOL, TEXT, SERIAL, DOUBLE PRECISION, and UNKNOWN spellings retain their legacy TypeName variants, while identifier-spelled and qualified names remain the Ident variant. A dedicated admission excludes the fixed spellings, admits JSON despite its keyword category, and replaces the legacy QualifiedName payload with an ambiguity-free list exposing the same object-name semantics."
+    },
+    {
+      "id": "issue-9-056-select-distinct-head",
+      "source_ids": [
+        "ast::dml::select::SelectStmt.distinct",
+        "ast::dml::select::SelectDistinct",
+        "ast::dml::select::SelectDistinct::On",
+        "ast::dml::select::SelectDistinct::On.0",
+        "ast::dml::select::SelectDistinct::All",
+        "ast::dml::select::SelectDistinctOn",
+        "ast::dml::select::SelectDistinctOn.exprs"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::SelectDistinct",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "SelectDistinct"
+        },
+        {
+          "id": "ast::dml::select::SelectDistinct::On",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "SelectDistinct",
+          "member": "On"
+        },
+        {
+          "id": "ast::dml::select::SelectDistinct::All",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "SelectDistinct",
+          "member": "All"
+        },
+        {
+          "id": "ast::dml::select::SelectDistinctOn",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "SelectDistinctOn"
+        },
+        {
+          "id": "ast::dml::select::SelectDistinctOn.exprs",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectDistinctOn",
+          "member": "exprs"
+        },
+        {
+          "id": "ast::dml::select::SelectStmt.head",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectStmt",
+          "member": "head"
+        },
+        {
+          "id": "ast::dml::select::SelectHead",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "SelectHead"
+        },
+        {
+          "id": "ast::dml::select::SelectHead::DistinctOn",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "SelectHead",
+          "member": "DistinctOn"
+        },
+        {
+          "id": "ast::dml::select::SelectHead::Distinct",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "SelectHead",
+          "member": "Distinct"
+        },
+        {
+          "id": "ast::dml::select::SelectHead::Plain",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "SelectHead",
+          "member": "Plain"
+        },
+        {
+          "id": "ast::dml::select::SelectDistinctOnTargets",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "SelectDistinctOnTargets"
+        },
+        {
+          "id": "ast::dml::select::SelectDistinctOnTargets.qualifier",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectDistinctOnTargets",
+          "member": "qualifier"
+        },
+        {
+          "id": "ast::dml::select::SelectDistinctOnTargets.targets",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectDistinctOnTargets",
+          "member": "targets"
+        },
+        {
+          "id": "ast::dml::select::SelectDistinctTargets",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "SelectDistinctTargets"
+        },
+        {
+          "id": "ast::dml::select::SelectDistinctTargets.targets",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "SelectDistinctTargets",
+          "member": "targets"
+        }
+      ],
+      "rationale": "PostgreSQL SELECT may have no DISTINCT qualifier, bare DISTINCT, or DISTINCT ON expressions. SelectHead stores those states explicitly; the qualified alternatives own their required fixed prefixes before sharing SelectTargets, so no nested nullable qualifier competes with the target FIRST set. SelectStmt::distinct projects the retained SelectDistinct semantic value."
+    },
+    {
+      "id": "issue-9-057-select-table-routing",
+      "source_ids": [
+        "ast::dml::select::PlainTable.name",
+        "ast::dml::select::FuncTableRef.func",
+        "ast::dml::select::JoinSuffix.outer",
+        "ast::dml::select::TableRef.joins",
+        "tokens::literal::WindowRefNameIdent"
+      ],
+      "destinations": [
+        {
+          "id": "tokens::table_function_name",
+          "path": "src/tokens.rs",
+          "kind": "type",
+          "item": "table_function_name"
+        },
+        {
+          "id": "tokens::table_function_name::Text",
+          "path": "src/tokens.rs",
+          "kind": "variant",
+          "item": "table_function_name",
+          "member": "Text"
+        },
+        {
+          "id": "tokens::table_function_name::Text.0",
+          "path": "src/tokens.rs",
+          "kind": "field",
+          "item": "table_function_name",
+          "member": "Text.0"
+        },
+        {
+          "id": "ast::dml::select::TableFunctionName",
+          "path": "src/ast/dml/select.rs",
+          "kind": "type",
+          "item": "TableFunctionName"
+        },
+        {
+          "id": "ast::dml::select::TableFunctionName::Qualified",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "TableFunctionName",
+          "member": "Qualified"
+        },
+        {
+          "id": "ast::dml::select::TableFunctionName::Qualified.0",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "TableFunctionName",
+          "member": "Qualified.0"
+        },
+        {
+          "id": "ast::dml::select::TableFunctionName::Name",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "TableFunctionName",
+          "member": "Name"
+        },
+        {
+          "id": "ast::dml::select::TableFunctionName::Name.0",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "TableFunctionName",
+          "member": "Name.0"
+        },
+        {
+          "id": "ast::dml::select::NamedTableRef.name",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "NamedTableRef",
+          "member": "name"
+        },
+        {
+          "id": "ast::dml::select::JoinType::LeftOuter",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "LeftOuter"
+        },
+        {
+          "id": "ast::dml::select::JoinType::Left",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "Left"
+        },
+        {
+          "id": "ast::dml::select::JoinType::RightOuter",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "RightOuter"
+        },
+        {
+          "id": "ast::dml::select::JoinType::Right",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "Right"
+        },
+        {
+          "id": "ast::dml::select::JoinType::FullOuter",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "FullOuter"
+        },
+        {
+          "id": "ast::dml::select::JoinType::Full",
+          "path": "src/ast/dml/select.rs",
+          "kind": "variant",
+          "item": "JoinType",
+          "member": "Full"
+        },
+        {
+          "id": "ast::dml::select::JoinSuffix.table",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "JoinSuffix",
+          "member": "table"
+        },
+        {
+          "id": "tokens::literal::WindowRefNameIdent",
+          "path": "src/tokens.rs",
+          "kind": "type",
+          "item": "WindowRefNameIdent"
+        }
+      ],
+      "rationale": "FROM-item routing reserves COLLATION FOR for its dedicated table form, distinguishes qualified callable names from unqualified table/function names, and records PostgreSQL's right-recursive joined-table structure behind an explicit JOIN boundary. Exact OUTER variants preserve the authored spelling, recursive operands retain condition ownership, and window-reference admission yields to following PARTITION and ORDER clauses."
+    },
+    {
+      "id": "issue-9-058-merge-when-cardinality",
+      "source_ids": [
+        "ast::dml::merge::MergeStmt.when_clauses"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::merge::MergeStmt.when_clauses",
+          "path": "src/ast/dml/merge.rs",
+          "kind": "field",
+          "item": "MergeStmt",
+          "member": "when_clauses"
+        }
+      ],
+      "rationale": "PostgreSQL's merge_when_list is nonempty. Recursa Vec1 retains the legacy WHEN-clause payload while making the required first clause structural instead of allowing a MERGE statement with no action clauses."
+    },
+    {
+      "id": "issue-9-059-cast-type-families",
+      "source_ids": [
+        "ast::shared::expr::CastType.base",
+        "ast::shared::expr::CastType.varying",
+        "ast::shared::expr::CastType.precision",
+        "ast::shared::expr::CastType.tz",
+        "ast::shared::expr::CastType.interval_qualifier"
+      ],
+      "destinations": [
+        {
+          "id": "ast::shared::expr::CastType.head",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "CastType",
+          "member": "head"
+        },
+        {
+          "id": "ast::shared::expr::CastTypeHead",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "CastTypeHead"
+        },
+        {
+          "id": "ast::shared::expr::CastTypeHead::DateTime",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "CastTypeHead",
+          "member": "DateTime"
+        },
+        {
+          "id": "ast::shared::expr::CastTypeHead::Interval",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "CastTypeHead",
+          "member": "Interval"
+        },
+        {
+          "id": "ast::shared::expr::CastTypeHead::General",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "CastTypeHead",
+          "member": "General"
+        },
+        {
+          "id": "ast::shared::expr::DateTimeCastType",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "DateTimeCastType"
+        },
+        {
+          "id": "ast::shared::expr::DateTimeCastTypeName",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "DateTimeCastTypeName"
+        },
+        {
+          "id": "ast::shared::expr::DateTimeCastType.base",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "DateTimeCastType",
+          "member": "base"
+        },
+        {
+          "id": "ast::shared::expr::DateTimeCastType.precision",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "DateTimeCastType",
+          "member": "precision"
+        },
+        {
+          "id": "ast::shared::expr::DateTimeCastType.tz",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "DateTimeCastType",
+          "member": "tz"
+        },
+        {
+          "id": "ast::shared::expr::IntervalCastType",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "IntervalCastType"
+        },
+        {
+          "id": "ast::shared::expr::IntervalCastType.modifier",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "IntervalCastType",
+          "member": "modifier"
+        },
+        {
+          "id": "ast::shared::expr::IntervalCastTypeModifier",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "IntervalCastTypeModifier"
+        },
+        {
+          "id": "ast::shared::expr::IntervalCastTypeModifier::Precision",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "IntervalCastTypeModifier",
+          "member": "Precision"
+        },
+        {
+          "id": "ast::shared::expr::IntervalCastTypeModifier::Qualifier",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "variant",
+          "item": "IntervalCastTypeModifier",
+          "member": "Qualifier"
+        },
+        {
+          "id": "ast::shared::expr::GeneralCastType",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "GeneralCastType"
+        },
+        {
+          "id": "ast::shared::expr::GeneralCastType.base",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "GeneralCastType",
+          "member": "base"
+        },
+        {
+          "id": "ast::shared::expr::GeneralCastType.varying",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "GeneralCastType",
+          "member": "varying"
+        },
+        {
+          "id": "ast::shared::expr::GeneralCastType.precision",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "field",
+          "item": "GeneralCastType",
+          "member": "precision"
+        },
+        {
+          "id": "ast::shared::expr::GeneralCastTypeName",
+          "path": "src/ast/shared/expr.rs",
+          "kind": "type",
+          "item": "GeneralCastTypeName"
+        }
+      ],
+      "rationale": "PostgreSQL gives date/time and interval type modifiers dedicated productions. CastTypeHead rehomes the legacy base and modifier payloads into disjoint date/time, interval, and general families so a general type cannot consume a following WITH clause as a timezone qualifier while preserving precision, timezone, interval-range, and VARYING spelling information."
+    },
+    {
+      "id": "issue-9-060-select-bare-alias-precedence",
+      "source_ids": [
+        "ast::dml::select::Alias::Bare.0"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::Alias::Bare.0",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "Alias",
+          "member": "Bare.0"
+        },
+        {
+          "id": "tokens::literal::SelectBareAliasName",
+          "path": "src/tokens.rs",
+          "kind": "type",
+          "item": "SelectBareAliasName"
+        }
+      ],
+      "rationale": "PostgreSQL admits its orthogonal BareColLabel keyword set on SELECT targets, but shifts IS into expression continuations before reducing a bare alias. The dedicated admission preserves bare reserved labels and quoted identifiers while excluding IS only at this alias boundary."
+    },
+    {
+      "id": "issue-9-061-table-alias-col-id-admission",
+      "source_ids": [
+        "ast::dml::select::TableAliasBare.name",
+        "ast::dml::select::PlainTableAliasBare.name"
+      ],
+      "destinations": [
+        {
+          "id": "ast::dml::select::TableAliasBare.name",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "TableAliasBare",
+          "member": "name"
+        },
+        {
+          "id": "ast::dml::select::PlainTableAliasBare.name",
+          "path": "src/ast/dml/select.rs",
+          "kind": "field",
+          "item": "PlainTableAliasBare",
+          "member": "name"
+        }
+      ],
+      "rationale": "PostgreSQL's alias_clause admits ColId rather than every non-reserved word category. Narrowing bare table aliases prevents JOIN, NATURAL, OUTER, and related table-expression starters from being consumed as aliases while retaining legal unreserved and column-name aliases."
+    }
+  ]
+}

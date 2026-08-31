@@ -2,15 +2,11 @@
 ///
 /// `CREATE [OR REPLACE] [TEMP|TEMPORARY] [RECURSIVE] VIEW name [(cols)] AS query`
 /// `DROP VIEW [IF EXISTS] name`
-use recursa::seq::Seq0;
-
 use crate::ast::ddl::table::TempKw;
 use crate::ast::dml::values::Subquery;
 use crate::ast::shared::flags::DropBehavior;
 use crate::ast::shared::names::QualifiedName;
-use crate::tokens::keyword::*;
-use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
+use crate::tokens::literal;
 // ---------------------------------------------------------------------------
 // Additional imports for the ALTER/DROP types appended to this file as part
 // of the DDL physical-extraction migration. Glob imports keep cross-batch
@@ -25,8 +21,6 @@ use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 #[allow(unused_imports)]
 use crate::ast::shared::numbers::*;
-#[allow(unused_imports)]
-use crate::tokens::soft_keyword::*;
 // ---------------------------------------------------------------------------
 
 /// CREATE VIEW statement.
@@ -40,11 +34,7 @@ pub struct CreateViewStmt<'input> {
     #[presence(RECURSIVE)]
     pub recursive: bool,
     pub name: QualifiedName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub columns: Option<
-         Vec<literal::AliasName<'input> > ,
-    >,
+    pub columns: Option<CreateViewColumnList<'input>>,
     /// Optional `USING access_method` (accepted by PG parser though rejected
     /// semantically for plain VIEW; tests include it).
     pub using: Option<ViewUsing<'input>>,
@@ -57,6 +47,15 @@ pub struct CreateViewStmt<'input> {
     /// updatable views to cascade predicate checks to underlying rows.
     pub check_option: Option<ViewCheckOption>,
 }
+
+/// Optional parenthesized, nonempty CREATE VIEW output-column list.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct CreateViewColumnList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<literal::AliasName<'input>>,
+);
 
 /// `USING access_method` trailer on CREATE VIEW.
 #[derive(recursa::Node, Debug, Clone)]
@@ -74,8 +73,10 @@ pub struct ViewCheckOption {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ViewCheckMode {
-    #[tok(CASCADED)] Cascaded,
-    #[tok(LOCAL)] Local,
+    #[tok(CASCADED)]
+    Cascaded,
+    #[tok(LOCAL)]
+    Local,
 }
 
 /// DROP VIEW statement:
@@ -89,84 +90,14 @@ pub struct DropViewStmt<'input> {
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
     #[sep(COMMA)]
-    pub names: Vec<QualifiedName<'input> >,
+    pub names: Vec<QualifiedName<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-
-    #[test]
-    fn parse_create_view() {
-        let lexed = crate::tokens::lex("CREATE VIEW v AS SELECT 1");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.object(), "v");
-        assert!(stmt.or_replace.is_none());
-        assert!(stmt.temp.is_none());
-        assert!(stmt.recursive.is_none());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_temp_view() {
-        let lexed = crate::tokens::lex("CREATE TEMPORARY VIEW v AS SELECT 1");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.temp.is_some());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_recursive_view() {
-        let lexed = crate::tokens::lex("CREATE RECURSIVE VIEW nums (n) AS VALUES (1) UNION ALL SELECT n+1 FROM nums WHERE n < 5");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.recursive.is_some());
-        assert!(stmt.columns.is_some());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_or_replace_recursive_view() {
-        let lexed = crate::tokens::lex("CREATE OR REPLACE RECURSIVE VIEW nums (n) AS VALUES (1) UNION ALL SELECT n+1 FROM nums WHERE n < 6");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.or_replace.is_some());
-        assert!(stmt.recursive.is_some());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_view() {
-        let lexed = crate::tokens::lex("DROP VIEW v");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropViewStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.names.len(), 1);
-        assert!(stmt.if_exists.is_none());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_view_if_exists_multi_cascade() {
-        let lexed = crate::tokens::lex("DROP VIEW IF EXISTS a, b CASCADE");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropViewStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.if_exists.is_some());
-        assert_eq!(stmt.names.len(), 2);
-        assert!(stmt.behavior.is_some());
-        assert!(input.is_eof());
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/view.tests.rs"
+));
 
 // =========================================================================
 // ALTER/DROP VIEW — appended from simple_stmts.rs during physical extraction.
@@ -238,8 +169,8 @@ pub enum AlterViewAction<'input> {
 /// branches that begin with `ALTER VIEW …`, plus the view branches of
 /// `RenameStmt` / `AlterObjectSchemaStmt` / `AlterOwnerStmt`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(ALTER, VIEW, this)]
 pub struct AlterViewStmt<'input> {
-    #[tok(ALTER, VIEW, this)]
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
     pub action: AlterViewAction<'input>,

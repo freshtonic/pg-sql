@@ -1,10 +1,6 @@
 /// CREATE FUNCTION / DROP FUNCTION statement AST.
-use recursa::seq::{OptionalTrailing, Seq0, Seq1};
-
 use crate::ast::shared::expr::{CastType, Expr, TypeName};
-use crate::tokens::keyword::*;
-use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
+use crate::tokens::literal;
 // ---------------------------------------------------------------------------
 // Additional imports for the ALTER/DROP types appended to this file as part
 // of the DDL physical-extraction migration. Glob imports keep cross-batch
@@ -17,8 +13,6 @@ use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
-#[allow(unused_imports)]
-use crate::tokens::soft_keyword::*;
 // ---------------------------------------------------------------------------
 
 /// SETOF type: `SETOF typename`
@@ -55,7 +49,6 @@ pub struct LanguageOption<'input> {
 ///
 /// Variant ordering: dollar-quoted before single-quoted before psql var
 /// (different first chars).
-#[cfg_attr(feature = "arbitrary", derive(::recursa::arbitrary::Arbitrary))]
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FuncBodyPart<'input> {
     Dollar(literal::DollarStringLit<'input>),
@@ -73,18 +66,11 @@ pub struct FuncBody<'input> {
     pub symbol: Option<FuncBodyPart<'input>>,
 }
 
-/// Function return type name -- extends TypeName with additional types
-/// that are valid as function return types (e.g., `trigger`), and allows
-/// array suffixes via `CastType`. Also accepts the `qualified%TYPE`
-/// reference-type form (PG `func_type: type_function_name attrs '%' TYPE_P`).
-///
-/// Variant ordering: `PctType` first so its longer prefix wins on
-/// `name.attr%TYPE` over the bare `Base` form.
+/// Function return type name, including both ordinary cast types and the
+/// PostgreSQL-specific `qualified%TYPE` reference form.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum FuncReturnTypeName<'input> {
-    #[tok(TRIGGER)] Trigger,
-    PctType(PctTypeRef<'input>),
-    Base(CastType<'input>),
+pub struct FuncReturnTypeName<'input> {
+    pub value: FunctionType<'input>,
 }
 
 /// RETURNS clause for functions: `RETURNS [SETOF] type`.
@@ -103,10 +89,10 @@ pub struct TableColumn<'input> {
 
 /// `TABLE(col type, ...)` — tabular function return type.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(TABLE, LPAREN, this, RPAREN)]
 pub struct FuncReturnsTable<'input> {
-    #[tok(TABLE, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub columns:  recursa::Vec1<TableColumn<'input> > ,
+    pub columns: recursa::Vec1<TableColumn<'input>>,
 }
 
 /// Function return type: TABLE(...), SETOF type, or plain type.
@@ -132,39 +118,117 @@ pub struct FuncSetofReturn<'input> {
 /// Argument mode prefix: `IN | OUT | INOUT | VARIADIC`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ArgMode {
-    #[tok(IN)] In,
-    #[tok(INOUT)] Inout,
-    #[tok(OUT)] Out,
-    #[tok(VARIADIC)] Variadic,
+    #[tok(IN)]
+    In,
+    #[tok(INOUT)]
+    Inout,
+    #[tok(OUT)]
+    Out,
+    #[tok(VARIADIC)]
+    Variadic,
 }
 
-/// `qualified_name%TYPE` — the PG-specific reference-type form used in
-/// function parameter and return types. `gram.y::func_type` is
-/// `type_function_name attrs '%' TYPE_P` (a qualified name with at least
-/// one `.attr` segment). We accept a plain qualified name with one or
-/// more parts so simple `name.col%TYPE` and longer chains
-/// (`hobbies_r.person.name%TYPE`) both round-trip.
+/// Fixed PostgreSQL built-in type names. Identifier-spelled type names are
+/// factored separately so their shared qualified prefix can be parsed once.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct PctTypeRef<'input> {
-    #[tok(this, PERCENT, TYPE)]
-    pub name: crate::ast::shared::names::QualifiedName<'input>,
+pub enum FunctionBuiltinTypeName {
+    #[tok(BOOLEAN)]
+    Boolean,
+    #[tok(INTEGER)]
+    Integer,
+    #[tok(INT)]
+    Int,
+    #[tok(NUMERIC)]
+    Numeric,
+    #[tok(VARCHAR)]
+    Varchar,
+    #[tok(TIMESTAMP)]
+    Timestamp,
+    #[tok(TIME)]
+    Time,
+    #[tok(INTERVAL)]
+    Interval,
+    #[tok(BIT)]
+    Bit,
+    #[tok(CHARACTER)]
+    Character,
 }
 
-/// A function parameter / return-type slot. Either a regular type (with
-/// optional precision / array suffix) or the `qualified_name%TYPE`
-/// reference-type form. The `%TYPE` variant is listed first so its longer
-/// match wins via declaration-order tiebreak.
+/// Suffix shared by built-in and identifier-spelled cast types.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum FuncArgType<'input> {
-    PctType(PctTypeRef<'input>),
-    Cast(CastType<'input>),
+pub struct FunctionCastTypeTail<'input> {
+    /// `PRECISION` in `DOUBLE PRECISION`.
+    #[presence(PRECISION)]
+    pub precision_keyword: bool,
+    #[presence(VARYING)]
+    pub varying: bool,
+    pub precision: Option<TypePrecision<'input>>,
+    pub tz: Option<TimeZoneQualifier>,
+    pub interval_qualifier: Option<IntervalQualifier<'input>>,
+    pub array_suffixes: Vec<ArraySuffix<'input>>,
+    pub array_kw_suffix: Option<ArrayKwSuffix<'input>>,
+}
+
+/// A built-in type plus the ordinary cast-type suffixes.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct FunctionBuiltinType<'input> {
+    pub base: FunctionBuiltinTypeName,
+    pub tail: FunctionCastTypeTail<'input>,
+}
+
+/// One dotted attribute in an identifier-spelled function type.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct FunctionTypeNamePart<'input> {
+    #[tok(DOT, this)]
+    pub name: literal::AliasName<'input>,
+}
+
+/// Shared qualified-name prefix of a cast type and `%TYPE` reference.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct FunctionTypeName<'input> {
+    pub first: crate::tokens::type_function_name<'input>,
+    pub rest: Vec<FunctionTypeNamePart<'input>>,
+}
+
+/// `%TYPE` suffix on a function type reference.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum FunctionPctTypeSuffix {
+    #[tok(PERCENT, TYPE)]
+    Value,
+}
+
+/// The suffix following a shared identifier-spelled type name.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum FunctionIdentifierTypeSuffix<'input> {
+    Pct(FunctionPctTypeSuffix),
+    Cast(FunctionCastTypeTail<'input>),
+}
+
+/// Identifier-spelled cast type or `qualified%TYPE` reference.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct FunctionIdentifierType<'input> {
+    pub name: FunctionTypeName<'input>,
+    pub suffix: FunctionIdentifierTypeSuffix<'input>,
+}
+
+/// A function type with the qualified identifier prefix factored before the
+/// `%TYPE` versus cast-suffix decision.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum FunctionType<'input> {
+    Builtin(FunctionBuiltinType<'input>),
+    Identifier(FunctionIdentifierType<'input>),
+}
+
+/// A function parameter type uses the same factored grammar as a return type.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct FuncArgType<'input> {
+    pub value: FunctionType<'input>,
 }
 
 /// `[mode] name type [default]` -- a named function parameter with mode first.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct NamedFuncParam<'input> {
     pub mode: Option<ArgMode>,
-    #[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#, admits(type_function_name))]
     pub name: crate::tokens::type_function_name<'input>,
     pub type_name: FuncArgType<'input>,
     pub default: Option<ParamDefault<'input>>,
@@ -175,7 +239,6 @@ pub struct NamedFuncParam<'input> {
 /// Postgres allows `f2 OUT anyelement` where the mode follows the name.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct NameModeParam<'input> {
-    #[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#, admits(type_function_name))]
     pub name: crate::tokens::type_function_name<'input>,
     pub mode: ArgMode,
     pub type_name: FuncArgType<'input>,
@@ -193,8 +256,10 @@ pub struct UnnamedFuncParam<'input> {
 /// Default value separator: `DEFAULT` or `=`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ParamDefaultSep {
-    #[tok(DEFAULT)] Default,
-    #[tok(EQ)] Eq,
+    #[tok(DEFAULT)]
+    Default,
+    #[tok(EQ)]
+    Eq,
 }
 
 /// `DEFAULT expr` or `= expr` trailing default on a function parameter.
@@ -204,20 +269,31 @@ pub struct ParamDefault<'input> {
     pub value: Expr<'input>,
 }
 
+/// The shared `[mode] type-or-name [type] [default]` shape of named and
+/// unnamed parameters. A second type means the first identifier is the
+/// parameter name; without it, the first value is the unnamed parameter's
+/// type. Factoring this shape avoids asking bounded lookahead to distinguish
+/// two arbitrarily long type prefixes.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct StandardFuncParam<'input> {
+    pub mode: Option<ArgMode>,
+    pub first: FuncArgType<'input>,
+    pub named_type: Option<FuncArgType<'input>>,
+    pub default: Option<ParamDefault<'input>>,
+}
+
 /// A single function parameter.
 ///
 /// Variant ordering:
 /// - `NameMode` (`ident mode type`) — longest, has ident then mode keyword
-/// - `Named` (`[mode] ident type`) — has mode then ident then type
-/// - `Unnamed` (`[mode] type`) — shortest, just optional mode + type
+/// - `Standard` factors `[mode] ident type` and `[mode] type` into one shape
 ///
 /// `NameMode` must come first because `name mode type` would otherwise
 /// be parsed by `Named` as name=ident, type=mode_keyword (wrong).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FuncParam<'input> {
     NameMode(NameModeParam<'input>),
-    Named(NamedFuncParam<'input>),
-    Unnamed(UnnamedFuncParam<'input>),
+    Standard(StandardFuncParam<'input>),
 }
 
 // --- Function options (unordered list) ---
@@ -225,18 +301,24 @@ pub enum FuncParam<'input> {
 /// `IMMUTABLE` / `STABLE` / `VOLATILE` volatility.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum VolatilityOption {
-    #[tok(IMMUTABLE)] Immutable,
-    #[tok(STABLE)] Stable,
-    #[tok(VOLATILE)] Volatile,
+    #[tok(IMMUTABLE)]
+    Immutable,
+    #[tok(STABLE)]
+    Stable,
+    #[tok(VOLATILE)]
+    Volatile,
 }
 
 /// `PARALLEL SAFE` / `PARALLEL RESTRICTED` / `PARALLEL UNSAFE` parallelism
 /// declaration.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ParallelMode {
-    #[tok(SAFE)] Safe,
-    #[tok(RESTRICTED)] Restricted,
-    #[tok(UNSAFE)] Unsafe,
+    #[tok(SAFE)]
+    Safe,
+    #[tok(RESTRICTED)]
+    Restricted,
+    #[tok(UNSAFE)]
+    Unsafe,
 }
 
 /// `PARALLEL { SAFE | RESTRICTED | UNSAFE }` function option.
@@ -250,8 +332,10 @@ pub struct ParallelOption {
 /// `=` or `TO`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum SetAssignSep {
-    #[tok(EQ)] Eq,
-    #[tok(TO)] To,
+    #[tok(EQ)]
+    Eq,
+    #[tok(TO)]
+    To,
 }
 
 /// `SET config_param { = | TO } var_list` function option — per-function GUC
@@ -266,7 +350,7 @@ pub struct SetFuncOption<'input> {
     pub name: literal::AliasName<'input>,
     pub sep: SetAssignSep,
     #[sep(COMMA)]
-    pub values: recursa::Vec1<crate::ast::session::set_reset::SetValue<'input> >,
+    pub values: recursa::Vec1<crate::ast::session::set_reset::SetValue<'input>>,
 }
 
 /// `STRICT` / `CALLED ON NULL INPUT` / `RETURNS NULL ON NULL INPUT`.
@@ -274,9 +358,12 @@ pub struct SetFuncOption<'input> {
 /// Variant ordering: longer (multi-keyword) forms before `Strict`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum StrictnessOption {
-    #[tok(CALLED, ON, NULL, INPUT)] CalledOnNullInput,
-    #[tok(RETURNS, NULL, ON, NULL, INPUT)] ReturnsNullOnNullInput,
-    #[tok(STRICT)] Strict,
+    #[tok(CALLED, ON, NULL, INPUT)]
+    CalledOnNullInput,
+    #[tok(RETURNS, NULL, ON, NULL, INPUT)]
+    ReturnsNullOnNullInput,
+    #[tok(STRICT)]
+    Strict,
 }
 
 /// `AS body` clause.
@@ -305,7 +392,8 @@ pub enum FuncOption<'input> {
     ExternalSecurity(ExternalSecurityOption),
     /// `LEAKPROOF` / `NOT LEAKPROOF`.
     Leakproof(LeakproofOption),
-    #[tok(WINDOW)] /// `WINDOW` — declares the function as a window function.
+    #[tok(WINDOW)]
+    /// `WINDOW` — declares the function as a window function.
     Window,
     /// `COST numeric`.
     Cost(CostOption<'input>),
@@ -324,16 +412,18 @@ pub enum FuncOption<'input> {
     /// would require a peek-time predicate on the inner statement list to
     /// stop before the closing `END` keyword. The corpus only exercises
     /// the empty form (`CREATE PROCEDURE ptest8(x text) BEGIN ATOMIC
-    /// END`); non-empty bodies surface as
-    /// [`crate::ast::FileItem::ParseError`] until a peek-postcondition
-    /// lands on `BeginAtomicStmt`.
+    /// END`); non-empty bodies remain outside the issue-9 strict-statement
+    /// grammar and surface as a structured parse error.
     BeginAtomicEmpty(BeginAtomicEmpty),
 }
 
 /// Empty `BEGIN ATOMIC END` body. Non-empty bodies are not yet modelled —
 /// see `FuncOption::BeginAtomicEmpty` for the rationale.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum BeginAtomicEmpty { #[tok(BEGIN, ATOMIC, END)] Value, }
+pub enum BeginAtomicEmpty {
+    #[tok(BEGIN, ATOMIC, END)]
+    Value,
+}
 
 /// `RETURN expr` option on CREATE FUNCTION (SQL-standard body form).
 #[derive(recursa::Node, Debug, Clone)]
@@ -344,8 +434,10 @@ pub struct ReturnOption<'input> {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub enum SecurityMode {
-    #[tok(DEFINER)] Definer,
-    #[tok(INVOKER)] Invoker,
+    #[tok(DEFINER)]
+    Definer,
+    #[tok(INVOKER)]
+    Invoker,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
@@ -362,8 +454,10 @@ pub struct ExternalSecurityOption {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub enum LeakproofOption {
-    #[tok(NOT, LEAKPROOF)] NotLeakproof,
-    #[tok(LEAKPROOF)] Leakproof,
+    #[tok(NOT, LEAKPROOF)]
+    NotLeakproof,
+    #[tok(LEAKPROOF)]
+    Leakproof,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
@@ -385,10 +479,10 @@ pub struct SupportOption<'input> {
 }
 
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(TRANSFORM, this)]
 pub struct TransformOption<'input> {
-    #[tok(TRANSFORM, this)]
     #[sep(COMMA)]
-    pub items: Vec<TransformForType<'input> >,
+    pub items: recursa::Vec1<TransformForType<'input>>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
@@ -407,6 +501,18 @@ pub struct ExtractedFuncBody<'a> {
     pub body: &'a str,
 }
 
+/// Parenthesized function or procedure parameter list.
+///
+/// The wrapper keeps the delimiters around the complete comma-separated list
+/// while dereferencing to the underlying vector for callers.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct FunctionParameters<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<FuncParam<'input>>,
+);
+
 /// CREATE [OR REPLACE] FUNCTION statement.
 ///
 /// Function options after the signature/RETURNS may appear in any order.
@@ -416,11 +522,9 @@ pub struct CreateFunctionStmt<'input> {
     #[presence(OR, REPLACE)]
     pub or_replace: bool,
     pub name: crate::ast::shared::names::FuncDefName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub args:  Vec<FuncParam<'input> > ,
+    pub args: FunctionParameters<'input>,
     pub returns: Option<FuncReturnsClause<'input>>,
-    pub options: Vec<FuncOption<'input>  >,
+    pub options: Vec<FuncOption<'input>>,
 }
 
 impl<'input> CreateFunctionStmt<'input> {
@@ -432,7 +536,7 @@ impl<'input> CreateFunctionStmt<'input> {
         let lang = self.options.iter().find_map(|opt| match opt {
             FuncOption::Language(l) => Some(match &l.name {
                 LanguageName::Ident(id) => id.text(),
-                LanguageName::String(s) => strip_quotes(&s.0),
+                LanguageName::String(s) => strip_quotes(s.text()),
             }),
             _ => None,
         })?;
@@ -452,9 +556,12 @@ fn strip_quotes(s: &str) -> &str {
 
 fn strip_body_delimiters<'a>(part: &'a FuncBodyPart<'a>) -> &'a str {
     match part {
-        FuncBodyPart::Dollar(d) => strip_dollar_quotes(&d.0),
-        FuncBodyPart::String(s) => strip_quotes(&s.0),
-        FuncBodyPart::PsqlVar(v) => &v.0,
+        FuncBodyPart::Dollar(d) => strip_dollar_quotes(d.text()),
+        FuncBodyPart::String(s) => strip_quotes(s.text()),
+        FuncBodyPart::PsqlVar(v) => match &v.name {
+            literal::PsqlVariableValue::Name(name) => name.text(),
+            literal::PsqlVariableValue::String(string) => strip_quotes(string.text()),
+        },
     }
 }
 
@@ -479,10 +586,7 @@ fn strip_dollar_quotes(s: &str) -> &str {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DropFunctionTarget<'input> {
     pub name: crate::ast::shared::names::FuncDefName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub args:
-        Option< Vec<FuncParam<'input> > >,
+    pub args: Option<FunctionParameters<'input>>,
 }
 
 /// DROP FUNCTION statement: `DROP FUNCTION name[(args)] [, name[(args)] ...]`.
@@ -495,7 +599,7 @@ pub struct DropFunctionStmt<'input> {
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
     #[sep(COMMA)]
-    pub targets: Vec<DropFunctionTarget<'input> >,
+    pub targets: Vec<DropFunctionTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
 
@@ -507,471 +611,14 @@ pub struct DropRoutineStmt<'input> {
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
     #[sep(COMMA)]
-    pub targets: Vec<DropFunctionTarget<'input> >,
+    pub targets: Vec<DropFunctionTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ast::test_support::*;
-    use recursa::Parse;
-
-    use crate::ast::ddl::function::{CreateFunctionStmt, DropFunctionStmt};
-
-    #[test]
-    fn parse_create_function_return_body() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS boolean RETURN false");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_basic() {
-        let lexed = crate::tokens::lex("create function sillysrf(int) returns setof int as 'values (1),(10),(2),($1)' language sql immutable");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.object(), "sillysrf");
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_function_basic() {
-        let lexed = crate::tokens::lex("drop function sillysrf(int)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(
-            stmt.targets.iter().next().unwrap().name.object(),
-            "sillysrf"
-        );
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_function_multi() {
-        let lexed = crate::tokens::lex("drop function a(), b(), c()");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_named_param() {
-        let lexed = crate::tokens::lex("create function polyf(x anyelement) returns anyelement as $$ select x + 1 $$ language sql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_function_cascade() {
-        let lexed = crate::tokens::lex("DROP FUNCTION int4_casttesttype(int4) CASCADE");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_function_named_param() {
-        let lexed = crate::tokens::lex("drop function polyf(x anyelement)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_returns_trigger() {
-        let lexed = crate::tokens::lex("create function f() returns trigger language plpgsql as $$ begin end $$");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_strict_immutable() {
-        let lexed = crate::tokens::lex("create function f() returns int immutable strict language sql as 'SELECT 1'");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_options_reordered() {
-        let lexed = crate::tokens::lex("create function f() returns int language sql strict as 'SELECT 1'");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_in_out_named() {
-        let lexed = crate::tokens::lex("create function f(in i int, out j int) returns int as $$ begin return i+1; end $$ language plpgsql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_in_out_no_returns() {
-        let lexed = crate::tokens::lex("create function f(in i int, out j int) as $$ begin end $$ language plpgsql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_setof_record() {
-        let lexed = crate::tokens::lex("create function gs(v integer, out a integer, out b integer) returns setof record as $f$ select 1 $f$ language plpgsql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_polymorphic_out() {
-        let lexed = crate::tokens::lex("create function poly(a anyelement, b anyarray, OUT x anyarray) as $$ begin end $$ language plpgsql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_param_eq_default() {
-        let lexed = crate::tokens::lex("create function f(a int = 1, b int = 2) returns int as $$ select 1 $$ language sql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_param_default_keyword() {
-        let lexed = crate::tokens::lex("create function f(a int default 1) returns int as $$ select 1 $$ language sql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_unnamed_default() {
-        let lexed = crate::tokens::lex("create function dfunc(a int = 1, int = 2) returns int as $$ select 1 $$ language sql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_array_arg() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION stfnp(int[]) RETURNS int[] AS 'select $1' LANGUAGE SQL");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_array_arg_multi() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION f(int[], text[]) RETURNS int[] AS 'select $1' LANGUAGE SQL");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_nested_array() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION f(x int[][]) RETURNS int[][] AS 'select x' LANGUAGE SQL");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_function_multi_named_params() {
-        let lexed = crate::tokens::lex("create function tg_hub_adjustslots(hname bpchar, oldn integer, newn integer) returns integer as ' begin return 1; end ' language plpgsql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn func_body_dollar_quoted() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$ BEGIN PERFORM 1; END; $$");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        let body = stmt.func_body().expect("should extract body");
-        assert_eq!(body.lang, "plpgsql");
-        assert_eq!(body.body.trim(), "BEGIN PERFORM 1; END;");
-    }
-
-    #[test]
-    fn func_body_single_quoted() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS int AS 'SELECT 1' LANGUAGE sql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        let body = stmt.func_body().expect("should extract body");
-        assert_eq!(body.lang, "sql");
-        assert_eq!(body.body, "SELECT 1");
-    }
-
-    #[test]
-    fn func_body_tagged_dollar_quote() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $proc$ DECLARE x int; BEGIN x := 1; END; $proc$");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        let body = stmt.func_body().expect("should extract body");
-        assert_eq!(body.lang, "plpgsql");
-        assert_eq!(body.body.trim(), "DECLARE x int; BEGIN x := 1; END;");
-    }
-
-    #[test]
-    fn func_returns_table() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION f(int) RETURNS TABLE(a int, b int) AS $$ BEGIN RETURN QUERY SELECT 1, 2; END; $$ LANGUAGE plpgsql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(
-            input.is_eof(),
-            "remaining: {}",
-            &input.source()[input.byte_offset()..]
-        );
-    }
-
-    #[test]
-    fn func_returns_table_varchar() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS TABLE(a varchar(5)) AS $$ SELECT 'hello'::varchar(5) $$ LANGUAGE sql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(
-            input.is_eof(),
-            "remaining: {}",
-            &input.source()[input.byte_offset()..]
-        );
-    }
-
-    /// Postgres' `set_rest_more: ColId TO var_list | ColId '=' var_list`
-    /// admits a comma-separated `var_list` after `TO` / `=`. The rules.sql
-    /// regression exercises `SET datestyle to iso, mdy` as one option in
-    /// a `createfunc_opt_list`.
-    #[test]
-    fn parse_create_function_set_var_list() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS integer AS 'select 1;' LANGUAGE SQL SET datestyle to iso, mdy");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(
-            input.is_eof(),
-            "remaining: {}",
-            &input.source()[input.byte_offset()..]
-        );
-    }
-
-    /// Multiple `SET` options on a single CREATE FUNCTION — each is its own
-    /// `createfunc_opt_item`. The rules.sql regression chains five of them.
-    #[test]
-    fn parse_create_function_multiple_set_options() {
-        let lexed = crate::tokens::lex("CREATE FUNCTION f() RETURNS integer AS 'select 1;' LANGUAGE SQL \
-             SET search_path TO PG_CATALOG \
-             SET extra_float_digits TO 2 \
-             SET work_mem TO '4MB' \
-             SET datestyle to iso, mdy \
-             SET local_preload_libraries TO ''");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(
-            input.is_eof(),
-            "remaining: {}",
-            &input.source()[input.byte_offset()..]
-        );
-    }
-    #[test]
-    fn alter_function_rename_to() {
-        let stmt: AlterFunctionStmt =
-            parse_stmt("ALTER FUNCTION alt_func1(int) RENAME TO alt_func2");
-        assert_eq!(stmt.target.name.object(), "alt_func1");
-        assert!(matches!(stmt.action, AlterFuncAction::Rename(_)));
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION alt_func1(int) RENAME TO alt_func2");
-    }
-
-    #[test]
-    fn alter_function_owner_to() {
-        let stmt: AlterFunctionStmt =
-            parse_stmt("ALTER FUNCTION alt_func2(int) OWNER TO regress_alter_generic_user2");
-        assert!(matches!(stmt.action, AlterFuncAction::Owner(_)));
-        reparse_stable::<AlterFunctionStmt>(
-            "ALTER FUNCTION alt_func2(int) OWNER TO regress_alter_generic_user2",
-        );
-    }
-
-    #[test]
-    fn alter_function_set_schema() {
-        let stmt: AlterFunctionStmt =
-            parse_stmt("ALTER FUNCTION alt_func2(int) SET SCHEMA alt_nsp2");
-        assert!(matches!(stmt.action, AlterFuncAction::SetSchema(_)));
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION alt_func2(int) SET SCHEMA alt_nsp2");
-    }
-
-    #[test]
-    fn alter_function_depends_on_extension() {
-        reparse_stable::<AlterFunctionStmt>(
-            "ALTER FUNCTION f(int) DEPENDS ON EXTENSION my_extension",
-        );
-    }
-
-    #[test]
-    fn alter_function_no_depends_on_extension() {
-        reparse_stable::<AlterFunctionStmt>(
-            "ALTER FUNCTION f(int) NO DEPENDS ON EXTENSION my_extension",
-        );
-    }
-
-    #[test]
-    fn alter_function_immutable() {
-        let stmt: AlterFunctionStmt = parse_stmt("ALTER FUNCTION functest_C_1(int) IMMUTABLE");
-        assert!(matches!(stmt.action, AlterFuncAction::Options(_)));
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION functest_C_1(int) IMMUTABLE");
-    }
-
-    #[test]
-    fn alter_function_strict() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION functest_F_2(int) STRICT");
-    }
-
-    #[test]
-    fn alter_function_called_on_null_input() {
-        reparse_stable::<AlterFunctionStmt>(
-            "ALTER FUNCTION functest_F_3(int) CALLED ON NULL INPUT",
-        );
-    }
-
-    #[test]
-    fn alter_function_returns_null_on_null_input() {
-        reparse_stable::<AlterFunctionStmt>(
-            "ALTER FUNCTION non_strict(text) RETURNS NULL ON NULL INPUT",
-        );
-    }
-
-    #[test]
-    fn alter_function_security_invoker() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION functest_C_2(int) SECURITY INVOKER");
-    }
-
-    #[test]
-    fn alter_function_security_definer() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION functest_C_3(int) SECURITY DEFINER");
-    }
-
-    #[test]
-    fn alter_function_external_security_definer() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION f(int) EXTERNAL SECURITY DEFINER");
-    }
-
-    #[test]
-    fn alter_function_leakproof() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION functest_E_1(int) LEAKPROOF");
-    }
-
-    #[test]
-    fn alter_function_not_leakproof() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION functest_E_2(int) NOT LEAKPROOF");
-    }
-
-    #[test]
-    fn alter_function_cost() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION functest_B_3(int) COST 100");
-    }
-
-    #[test]
-    fn alter_function_rows() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION f(int) ROWS 200");
-    }
-
-    #[test]
-    fn alter_function_support() {
-        reparse_stable::<AlterFunctionStmt>(
-            "ALTER FUNCTION my_int_eq(int, int) SUPPORT test_support_func",
-        );
-    }
-
-    #[test]
-    fn alter_function_parallel_safe() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION f(int) PARALLEL SAFE");
-    }
-
-    #[test]
-    fn alter_function_volatile() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION functest_B_2(int) VOLATILE");
-    }
-
-    #[test]
-    fn alter_function_set_param() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION report_guc(text) SET work_mem = '2MB'");
-    }
-
-    #[test]
-    fn alter_function_reset_all() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION report_guc(text) RESET ALL");
-    }
-
-    #[test]
-    fn alter_function_multi_options_with_restrict() {
-        // Multiple options space-separated, optional RESTRICT at end (opt_restrict
-        // is the deprecated trailing modifier).
-        reparse_stable::<AlterFunctionStmt>(
-            "ALTER FUNCTION f(int) STRICT IMMUTABLE LEAKPROOF RESTRICT",
-        );
-    }
-
-    #[test]
-    fn alter_function_qualified_name() {
-        reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION alter1.plus1(int) SET SCHEMA alter2");
-    }
-
-    #[test]
-    fn alter_function_no_argtypes() {
-        // function_with_argtypes admits bare name (no parens) per gram.y.
-        reparse_stable::<AlterFunctionStmt>(
-            "ALTER FUNCTION terminate_nothrow OWNER TO pg_signal_backend",
-        );
-    }
-
-    #[test]
-    fn alter_routine_rename_no_argtypes() {
-        // ALTER ROUTINE accepts bare name (no parens).
-        reparse_stable::<AlterRoutineStmt>("ALTER ROUTINE cp_testfunc1a RENAME TO cp_testfunc1");
-    }
-
-    #[test]
-    fn alter_routine_rename_with_argtypes() {
-        reparse_stable::<AlterRoutineStmt>(
-            "ALTER ROUTINE cp_testfunc1(int) RENAME TO cp_testfunc1a",
-        );
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/function.tests.rs"
+));
 
 // =========================================================================
 // ALTER/DROP FUNCTION — appended from simple_stmts.rs during physical extraction.
@@ -981,9 +628,12 @@ mod tests {
 /// option.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum AlterFuncParallelMode {
-    #[tok(SAFE)] Safe,
-    #[tok(RESTRICTED)] Restricted,
-    #[tok(UNSAFE)] Unsafe,
+    #[tok(SAFE)]
+    Safe,
+    #[tok(RESTRICTED)]
+    Restricted,
+    #[tok(UNSAFE)]
+    Unsafe,
 }
 
 /// `PARALLEL { SAFE | RESTRICTED | UNSAFE }` function option.
@@ -996,8 +646,10 @@ pub struct AlterFuncParallelItem {
 /// `SECURITY { DEFINER | INVOKER }` mode keyword.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum AlterFuncSecurityMode {
-    #[tok(DEFINER)] Definer,
-    #[tok(INVOKER)] Invoker,
+    #[tok(DEFINER)]
+    Definer,
+    #[tok(INVOKER)]
+    Invoker,
 }
 
 /// `SECURITY { DEFINER | INVOKER }` function option.
@@ -1051,11 +703,14 @@ pub struct AlterFuncSupportItem<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CommonFuncOptItem<'input> {
     // Multi-keyword forms first.
-    #[tok(CALLED, ON, NULL, INPUT)] CalledOnNullInput,
-    #[tok(RETURNS, NULL, ON, NULL, INPUT)] ReturnsNullOnNullInput,
+    #[tok(CALLED, ON, NULL, INPUT)]
+    CalledOnNullInput,
+    #[tok(RETURNS, NULL, ON, NULL, INPUT)]
+    ReturnsNullOnNullInput,
     ExternalSecurity(AlterFuncExternalSecurityItem),
     Security(AlterFuncSecurityItem),
-    #[tok(NOT, LEAKPROOF)] NotLeakproof,
+    #[tok(NOT, LEAKPROOF)]
+    NotLeakproof,
     Parallel(AlterFuncParallelItem),
     Cost(AlterFuncCostItem<'input>),
     Rows(AlterFuncRowsItem<'input>),
@@ -1065,11 +720,16 @@ pub enum CommonFuncOptItem<'input> {
     Set(crate::ast::session::set_reset::SetStmt<'input>),
     Reset(crate::ast::session::set_reset::ResetStmt<'input>),
     // Single-keyword forms.
-    #[tok(LEAKPROOF)] Leakproof,
-    #[tok(STRICT)] Strict,
-    #[tok(IMMUTABLE)] Immutable,
-    #[tok(STABLE)] Stable,
-    #[tok(VOLATILE)] Volatile,
+    #[tok(LEAKPROOF)]
+    Leakproof,
+    #[tok(STRICT)]
+    Strict,
+    #[tok(IMMUTABLE)]
+    Immutable,
+    #[tok(STABLE)]
+    Stable,
+    #[tok(VOLATILE)]
+    Volatile,
 }
 
 /// `common_func_opt_item …+ [RESTRICT]` — the action-list branch of
@@ -1080,7 +740,7 @@ pub enum CommonFuncOptItem<'input> {
 /// compliance and ignored semantically.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFuncOptions<'input> {
-    pub items: recursa::Vec1<CommonFuncOptItem<'input>  >,
+    pub items: recursa::Vec1<CommonFuncOptItem<'input>>,
     #[presence(RESTRICT)]
     pub restrict: bool,
 }

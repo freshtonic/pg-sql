@@ -1,15 +1,14 @@
 //! FETCH / MOVE / CLOSE cursor statements.
 
-use recursa_diagram::railroad;
-
-use crate::tokens::keyword::*;
 use crate::tokens::literal;
 
 /// `FROM` or `IN` cursor-source keyword in FETCH/MOVE.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FetchSource {
-    #[tok(FROM)] From,
-    #[tok(IN)] In,
+    #[tok(FROM)]
+    From,
+    #[tok(IN)]
+    In,
 }
 
 /// `ABSOLUTE n` form. `n` is a `SignedIconst` per gram.y's
@@ -30,22 +29,23 @@ pub struct FetchRelative<'input> {
 
 /// `FORWARD [n|ALL]` form.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(FORWARD, this)]
 pub struct FetchForward<'input> {
-    #[tok(FORWARD, this)]
     pub count: Option<FetchCountOrAll<'input>>,
 }
 
 /// `BACKWARD [n|ALL]` form.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(BACKWARD, this)]
 pub struct FetchBackward<'input> {
-    #[tok(BACKWARD, this)]
     pub count: Option<FetchCountOrAll<'input>>,
 }
 
 /// A count or `ALL` marker following `FORWARD`/`BACKWARD`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FetchCountOrAll<'input> {
-    #[tok(ALL)] All,
+    #[tok(ALL)]
+    All,
     Count(literal::IntegerLit<'input>),
 }
 
@@ -60,11 +60,16 @@ pub enum FetchDirection<'input> {
     Relative(FetchRelative<'input>),
     Forward(FetchForward<'input>),
     Backward(FetchBackward<'input>),
-    #[tok(NEXT)] Next,
-    #[tok(PRIOR)] Prior,
-    #[tok(FIRST)] First,
-    #[tok(LAST)] Last,
-    #[tok(ALL)] All,
+    #[tok(NEXT)]
+    Next,
+    #[tok(PRIOR)]
+    Prior,
+    #[tok(FIRST)]
+    First,
+    #[tok(LAST)]
+    Last,
+    #[tok(ALL)]
+    All,
     Count(literal::IntegerLit<'input>),
 }
 
@@ -72,8 +77,8 @@ pub enum FetchDirection<'input> {
 /// FETCH [direction] [FROM|IN] cursor_name
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(FETCH, this)]
 pub struct FetchStmt<'input> {
-    #[tok(FETCH, this)]
     pub direction: Option<FetchDirection<'input>>,
     pub source: Option<FetchSource>,
     pub cursor: literal::AliasName<'input>,
@@ -85,8 +90,9 @@ pub struct FetchStmt<'input> {
 /// reserved word is not swallowed as a cursor name.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CloseTarget<'input> {
-    #[tok(ALL)] All,
-    Cursor(literal::AliasName<'input>),
+    #[tok(ALL)]
+    All,
+    Cursor(literal::Ident<'input>),
 }
 
 /// ```sql
@@ -102,29 +108,14 @@ pub struct CloseStmt<'input> {
 /// MOVE [direction] [FROM|IN] cursor_name
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(MOVE, this)]
 pub struct MoveStmt<'input> {
-    #[tok(MOVE, this)]
     pub direction: Option<FetchDirection<'input>>,
     pub source: Option<FetchSource>,
     pub cursor: literal::AliasName<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn close_cursor_is_modelled() {
-        let stmt: CloseStmt = parse_stmt("CLOSE foo1");
-        assert!(matches!(stmt.target, CloseTarget::Cursor(_)));
-        assert_eq!(roundtrip::<CloseStmt>("CLOSE foo1"), "CLOSE foo1");
-    }
-
-    #[test]
-    fn close_all_is_modelled() {
-        let stmt: CloseStmt = parse_stmt("CLOSE ALL");
-        assert!(matches!(stmt.target, CloseTarget::All(_)));
-        assert_eq!(roundtrip::<CloseStmt>("CLOSE ALL"), "CLOSE ALL");
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/cursor/fetch.tests.rs"
+));

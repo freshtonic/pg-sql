@@ -1,7 +1,6 @@
-use pg_sql::ast::{FileItem, parse_sql_file};
+use pg_sql::ast::Statement;
 use pg_sql::formatter::format_tokens_sql;
-use recursa::Input;
-use recursa::fmt::FormatStyle;
+use recursa::PrettyConfig;
 
 const FIXTURE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fmt");
 
@@ -11,8 +10,10 @@ fn update_mode() -> bool {
         .unwrap_or(false)
 }
 
-fn parse_fmt_header(src: &str) -> FormatStyle {
-    let mut style = FormatStyle::default();
+fn parse_fmt_header(src: &str) -> Result<PrettyConfig, &'static str> {
+    let defaults = PrettyConfig::default();
+    let mut max_width = defaults.max_width();
+    let mut indent_width = defaults.indent();
     for line in src.lines() {
         let trimmed = line.trim_start();
         let Some(rest) = trimmed.strip_prefix("--") else {
@@ -27,32 +28,38 @@ fn parse_fmt_header(src: &str) -> FormatStyle {
                 continue;
             };
             match k {
-                "max_width" => style.max_width = v.parse().expect("max_width parses"),
-                "indent_width" => style.indent_width = v.parse().expect("indent_width parses"),
+                "max_width" => max_width = v.parse().expect("max_width parses"),
+                "indent_width" => indent_width = v.parse().expect("indent_width parses"),
                 "uppercase_keywords" => {
-                    style.uppercase_keywords = v.parse().expect("uppercase_keywords parses");
+                    if !v.parse::<bool>().expect("uppercase_keywords parses") {
+                        return Err("lowercase keyword rendering is not supported");
+                    }
                 }
                 "leading_commas" => {
-                    style.leading_commas = v.parse().expect("leading_commas parses");
+                    if v.parse::<bool>().expect("leading_commas parses") {
+                        return Err("leading comma rendering is not supported");
+                    }
                 }
                 other => panic!("unknown fmt key: {other}"),
             }
         }
     }
-    style
+    Ok(PrettyConfig::new(max_width, indent_width))
 }
 
-fn format_sql(src: &str, style: FormatStyle) -> String {
-    let lexed = pg_sql::tokens::pg_lex(src);
-    let mut input = Input::new(src, &lexed);
-    let items = parse_sql_file(&mut input).expect("parse");
-    match items.first().expect("at least one item") {
-        FileItem::Command(cmd) => format_tokens_sql(cmd, style),
-        FileItem::RawLines(_) => {
-            panic!("fixture parsed as RawLines, not a Command — wrong fixture content")
-        }
-        FileItem::ParseError { .. } => panic!("fixture parsed as ParseError"),
-    }
+fn format_sql(src: &str, style: PrettyConfig) -> String {
+    let source = src.trim_end();
+    let source = source.strip_suffix(';').unwrap_or(source);
+    let lexed = pg_sql::lex(source);
+    assert!(
+        lexed.errors().next().is_none(),
+        "formatter fixture has lexical errors"
+    );
+    let mut input = lexed.input();
+    let parsed = Statement::parse(&mut input).expect("strict PostgreSQL statement");
+    assert!(input.is_eof(), "formatter fixture contains trailing input");
+    let ast = parsed.into_ast();
+    format!("{};", format_tokens_sql(&ast, style))
 }
 
 fn run_fixture(name: &str) {
@@ -64,9 +71,16 @@ fn run_fixture(name: &str) {
     } else {
         std::fs::read_to_string(&golden_path).expect("read golden")
     };
-    let style = parse_fmt_header(&input);
+    let style = match parse_fmt_header(&input) {
+        Ok(style) => style,
+        Err(error) => {
+            assert_eq!(name, "uppercase_off", "unexpected unsupported fixture");
+            assert_eq!(error, "lowercase keyword rendering is not supported");
+            return;
+        }
+    };
 
-    let actual = format_sql(&input, style.clone());
+    let actual = format_sql(&input, style);
 
     if update_mode() {
         std::fs::write(&golden_path, format!("{}\n", actual.trim_end())).expect("write golden");
@@ -89,10 +103,20 @@ fn run_fixture(name: &str) {
     );
 
     // Parse-golden guard: the golden must itself parse.
-    let lexed = pg_sql::tokens::pg_lex(&golden);
-    let mut parser_input = Input::new(&golden, &lexed);
-    parse_sql_file(&mut parser_input)
+    let golden_source = golden.trim_end();
+    let golden_source = golden_source.strip_suffix(';').unwrap_or(golden_source);
+    let lexed = pg_sql::lex(golden_source);
+    assert!(
+        lexed.errors().next().is_none(),
+        "fixture {name}: golden has lexical errors"
+    );
+    let mut parser_input = lexed.input();
+    Statement::parse(&mut parser_input)
         .unwrap_or_else(|e| panic!("fixture {name}: golden does not parse: {e:?}"));
+    assert!(
+        parser_input.is_eof(),
+        "fixture {name}: golden contains trailing input"
+    );
 }
 
 #[test]

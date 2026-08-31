@@ -1,17 +1,12 @@
 //! COLLATION DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use recursa::seq::{Seq0, Seq1};
-
 use crate::ast::ddl::role::DefList;
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
-use crate::tokens::keyword::*;
-use crate::tokens::soft_keyword::*;
 use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
 
 /// Body of `CREATE COLLATION` after the name: either a `def_list` of options
 /// (`LOCALE`/`LC_COLLATE`/`PROVIDER`/...), or `FROM existing_collation_name`.
@@ -32,8 +27,8 @@ pub struct CollationFromClause<'input> {
 }
 
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(CREATE, COLLATION, this)]
 pub struct CreateCollationStmt<'input> {
-    #[tok(CREATE, COLLATION, this)]
     pub if_not_exists: Option<IfNotExists>,
     pub name: QualifiedName<'input>,
     pub body: CreateCollationBody<'input>,
@@ -41,8 +36,8 @@ pub struct CreateCollationStmt<'input> {
 
 /// `DROP COLLATION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, COLLATION, this)]
 pub struct DropCollationStmt<'input> {
-    #[tok(DROP, COLLATION, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -50,7 +45,10 @@ pub struct DropCollationStmt<'input> {
 
 /// `REFRESH VERSION` — Postgres' `AlterCollationStmt` action.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum CollationRefreshVersion { #[tok(REFRESH, VERSION)] Value, }
+pub enum CollationRefreshVersion {
+    #[tok(REFRESH, VERSION)]
+    Value,
+}
 
 /// One action on `ALTER COLLATION any_name action` — Postgres'
 /// `RenameStmt`, `AlterOwnerStmt`, `AlterObjectSchemaStmt`, and
@@ -76,59 +74,7 @@ pub struct AlterCollationStmt<'input> {
     pub action: AlterCollationAction<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn parse_alter_collation_rename() {
-        let lexed = crate::tokens::lex("ALTER COLLATION test1 RENAME TO test11");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterCollationStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_collation_refresh_version() {
-        let lexed = crate::tokens::lex("ALTER COLLATION en_us REFRESH VERSION");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterCollationStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_collation_def_list() {
-        let lexed = crate::tokens::lex("CREATE COLLATION mycoll (LC_COLLATE = \"POSIX\", LC_CTYPE = \"POSIX\")");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateCollationStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.object(), "mycoll");
-        assert!(matches!(stmt.body, CreateCollationBody::Options(_)));
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_collation_from() {
-        let lexed = crate::tokens::lex("CREATE COLLATION mycoll FROM \"C\"");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateCollationStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.body, CreateCollationBody::From(_)));
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_collation_if_not_exists() {
-        let lexed = crate::tokens::lex("CREATE COLLATION IF NOT EXISTS mycoll FROM \"C\"");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateCollationStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.if_not_exists.is_some());
-        assert!(input.is_eof());
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/collation.tests.rs"
+));

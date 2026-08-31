@@ -1,16 +1,9 @@
 //! COPY statement.
 
-use recursa::seq::Seq1;
-use recursa_diagram::railroad;
-
 use crate::ast::shared::expr::Expr;
 use crate::ast::shared::names::QualifiedName;
 use crate::ast::tcl::prepared::PreparableStmt;
-use crate::tokens::keyword::*;
-use crate::tokens::soft_keyword::{
-    CSV, DELIMITER, DELIMITERS, ENCODING, FORCE, FREEZE, HEADER, PROGRAM, QUOTE, STDIN, STDOUT,
-};
-use crate::tokens::{literal, punct};
+use crate::tokens::literal;
 
 // --- COPY ---
 
@@ -83,7 +76,7 @@ pub struct CopyBinaryTableBody<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CopyQueryBody<'input> {
     #[tok(LPAREN, this, RPAREN)]
-    pub query:  Box<PreparableStmt<'input>> ,
+    pub query: Box<PreparableStmt<'input>>,
     #[tok(TO, this)]
     #[presence(PROGRAM)]
     pub program: bool,
@@ -94,18 +87,19 @@ pub struct CopyQueryBody<'input> {
 
 /// `(col [, ...])` column list on the table-form COPY statement.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(LPAREN, this, RPAREN)]
 pub struct CopyColumnList<'input> {
-    #[tok(LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub cols:
-         recursa::Vec1<crate::tokens::ColId<'input> > ,
+    pub cols: recursa::Vec1<crate::tokens::ColId<'input>>,
 }
 
 /// `FROM` or `TO` direction marker on the table-form COPY statement.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CopyDirection {
-    #[tok(FROM)] From,
-    #[tok(TO)] To,
+    #[tok(FROM)]
+    From,
+    #[tok(TO)]
+    To,
 }
 
 /// The source/destination of a COPY: a quoted filename, a psql `:'var'`
@@ -117,8 +111,10 @@ pub enum CopyDirection {
 /// the scanner could equally well classify as identifiers).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CopyTarget<'input> {
-    #[tok(STDIN)] Stdin,
-    #[tok(STDOUT)] Stdout,
+    #[tok(STDIN)]
+    Stdin,
+    #[tok(STDOUT)]
+    Stdout,
     File(literal::StringLit<'input>),
     PsqlVar(literal::PsqlVariable<'input>),
 }
@@ -162,12 +158,20 @@ pub enum CopyOptions<'input> {
 
 /// Parenthesised, comma-separated generic options: `(name [arg] [, ...])`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(LPAREN, this, RPAREN)]
 pub struct CopyGenericOptions<'input> {
-    #[tok(LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub list:
-         recursa::Vec1<CopyGenericOption<'input> > ,
+    pub list: recursa::Vec1<CopyGenericOption<'input>>,
 }
+
+/// Parenthesized list used as a generic COPY option argument.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct CopyGenericOptionNameList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<literal::AliasName<'input>>,
+);
 
 /// One entry in the parenthesised generic options list: `name [arg]`.
 ///
@@ -189,17 +193,15 @@ pub struct CopyGenericOption<'input> {
 /// fixed-shape variants first preserves longest-match-wins semantics).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CopyGenericOptionArg<'input> {
-    #[tok(DEFAULT)] Default,
-    #[tok(STAR)] Star,
-    ParenList(
-        #[tok(LPAREN, this, RPAREN)]
-        #[sep(COMMA)]
-         recursa::Vec1<literal::AliasName<'input> > ,
-    ),
+    #[tok(DEFAULT)]
+    Default,
+    #[tok(STAR)]
+    Star,
+    ParenList(CopyGenericOptionNameList<'input>),
     String(CopySconst<'input>),
     Numeric(literal::NumericLit<'input>),
     Integer(literal::IntegerLit<'input>),
-    Name(literal::AliasName<'input>),
+    Name(crate::tokens::NonReservedWord<'input>),
 }
 
 /// Legacy bareword options: zero-or-more space-separated option items.
@@ -228,11 +230,16 @@ pub enum CopyLegacyOptionItem<'input> {
     Quote(CopyQuoteOpt<'input>),
     Escape(CopyEscapeOpt<'input>),
     Encoding(CopyEncodingOpt<'input>),
-    #[tok(BINARY)] Binary,
-    #[tok(FREEZE)] Freeze,
-    #[tok(OIDS)] Oids,
-    #[tok(CSV)] Csv,
-    #[tok(HEADER)] Header,
+    #[tok(BINARY)]
+    Binary,
+    #[tok(FREEZE)]
+    Freeze,
+    #[tok(OIDS)]
+    Oids,
+    #[tok(CSV)]
+    Csv,
+    #[tok(HEADER)]
+    Header,
 }
 
 /// `DELIMITER [AS] 'c'` — legacy delimiter option.
@@ -296,8 +303,9 @@ pub struct CopyForceNullOpt<'input> {
 /// `columnList` in `gram.y` does not include outer `()`).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CopyForceTarget<'input> {
-    #[tok(STAR)] Star,
-    Columns(#[sep(COMMA)] recursa::Vec1<crate::tokens::ColId<'input> >),
+    #[tok(STAR)]
+    Star,
+    Columns(#[sep(COMMA)] recursa::Vec1<crate::tokens::ColId<'input>>),
 }
 
 /// `WHERE expr` clause on a `COPY ... FROM` (the only direction that accepts
@@ -308,192 +316,7 @@ pub struct CopyWhereClause<'input> {
     pub condition: Expr<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn copy_table_from_stdin_bare() {
-        let stmt: CopyStmt = parse_stmt("COPY t FROM STDIN");
-        let CopyBody::Table(table) = &stmt.body else {
-            panic!("expected table body");
-        };
-        assert!(matches!(table.direction, CopyDirection::From(_)));
-        assert!(matches!(table.target, CopyTarget::Stdin(_)));
-        assert!(table.columns.is_none());
-        assert!(table.program.is_none());
-        assert!(table.delimiter.is_none());
-        assert!(table.with.is_none());
-        assert!(table.options.is_none());
-        assert!(table.where_clause.is_none());
-        reparse_stable::<CopyStmt>("COPY t FROM STDIN");
-    }
-
-    #[test]
-    fn copy_table_to_stdout() {
-        let stmt: CopyStmt = parse_stmt("COPY t TO STDOUT");
-        let CopyBody::Table(table) = &stmt.body else {
-            panic!("expected table body");
-        };
-        assert!(matches!(table.direction, CopyDirection::To(_)));
-        assert!(matches!(table.target, CopyTarget::Stdout(_)));
-        reparse_stable::<CopyStmt>("COPY t TO STDOUT");
-    }
-
-    #[test]
-    fn copy_table_with_columns_from_stdin() {
-        let stmt: CopyStmt = parse_stmt("COPY t (a, b, c) FROM STDIN");
-        let CopyBody::Table(table) = &stmt.body else {
-            panic!("expected table body");
-        };
-        assert!(table.columns.is_some());
-        reparse_stable::<CopyStmt>("COPY t (a, b, c) FROM STDIN");
-    }
-
-    #[test]
-    fn copy_table_to_file() {
-        reparse_stable::<CopyStmt>("COPY t TO 'foo.csv'");
-    }
-
-    #[test]
-    fn copy_table_from_file() {
-        let stmt: CopyStmt = parse_stmt("COPY t FROM 'foo.csv'");
-        let CopyBody::Table(table) = &stmt.body else {
-            panic!("expected table body");
-        };
-        assert!(matches!(table.target, CopyTarget::File(_)));
-    }
-
-    #[test]
-    fn copy_table_to_stdout_csv_legacy() {
-        // Legacy `csv` option without WITH or parens.
-        reparse_stable::<CopyStmt>("COPY t TO STDOUT CSV");
-    }
-
-    #[test]
-    fn copy_table_from_stdin_csv_header_legacy() {
-        // Two consecutive legacy options.
-        reparse_stable::<CopyStmt>("COPY t FROM STDIN CSV HEADER");
-    }
-
-    #[test]
-    fn copy_table_to_file_csv_quote_escape_legacy() {
-        // Legacy options that carry string arguments.
-        reparse_stable::<CopyStmt>("COPY t TO 'f.csv' CSV QUOTE '|' ESCAPE '\\'");
-    }
-
-    #[test]
-    fn copy_table_with_legacy_delimiter_null_as() {
-        // `WITH` followed by legacy form.
-        reparse_stable::<CopyStmt>("COPY x FROM STDIN WITH DELIMITER AS ';' NULL AS ''");
-    }
-
-    #[test]
-    fn copy_table_using_delimiters_legacy() {
-        // `USING DELIMITERS 'c'` precedes the option list.
-        reparse_stable::<CopyStmt>("COPY t FROM 'f' USING DELIMITERS '|'");
-    }
-
-    #[test]
-    fn copy_table_binary_legacy() {
-        // `COPY BINARY t TO file` legacy binary option — `CopyBody::BinaryTable`.
-        let stmt: CopyStmt = parse_stmt("COPY BINARY t TO 'f'");
-        let CopyBody::BinaryTable(body) = &stmt.body else {
-            panic!("expected binary-table body");
-        };
-        assert!(matches!(body.inner.direction, CopyDirection::To(_)));
-        reparse_stable::<CopyStmt>("COPY BINARY t TO 'f'");
-    }
-
-    #[test]
-    fn copy_table_from_program() {
-        reparse_stable::<CopyStmt>("COPY t FROM PROGRAM 'cat foo.csv'");
-    }
-
-    #[test]
-    fn copy_table_generic_options_single() {
-        // `(freeze)` — a single generic option with no value.
-        reparse_stable::<CopyStmt>("COPY t FROM 'f' (FREEZE)");
-    }
-
-    #[test]
-    fn copy_table_with_generic_options() {
-        // `WITH (header match, format csv)` — generic options after WITH.
-        reparse_stable::<CopyStmt>("COPY t FROM STDIN WITH (HEADER MATCH, FORMAT CSV)");
-    }
-
-    #[test]
-    fn copy_table_generic_option_star() {
-        reparse_stable::<CopyStmt>("COPY t FROM STDIN (FORCE_QUOTE *)");
-    }
-
-    #[test]
-    fn copy_table_generic_option_paren_list() {
-        reparse_stable::<CopyStmt>("COPY t FROM STDIN (FORCE_QUOTE (a, b))");
-    }
-
-    #[test]
-    fn copy_table_from_where_expr() {
-        // `WHERE expr` after the option list (FROM-only).
-        reparse_stable::<CopyStmt>("COPY x FROM STDIN WHERE a = 1");
-    }
-
-    #[test]
-    fn copy_query_to_stdout() {
-        let stmt: CopyStmt = parse_stmt("COPY (SELECT * FROM t) TO STDOUT");
-        assert!(matches!(stmt.body, CopyBody::Query(_)));
-        reparse_stable::<CopyStmt>("COPY (SELECT * FROM t) TO STDOUT");
-    }
-
-    #[test]
-    fn copy_query_to_file() {
-        reparse_stable::<CopyStmt>("COPY (SELECT 1) TO 'f'");
-    }
-
-    #[test]
-    fn copy_query_with_generic_options() {
-        reparse_stable::<CopyStmt>("COPY (SELECT 1) TO STDOUT WITH (DEFAULT '\\D')");
-    }
-
-    #[test]
-    fn copy_query_insert_returning() {
-        // Query body must accept INSERT ... RETURNING (PreparableStmt).
-        reparse_stable::<CopyStmt>("COPY (INSERT INTO t (a) VALUES (1) RETURNING id) TO STDOUT");
-    }
-
-    #[test]
-    fn copy_table_with_encoding_legacy() {
-        reparse_stable::<CopyStmt>("COPY t FROM STDIN WITH ENCODING 'sql_ascii'");
-    }
-
-    #[test]
-    fn copy_table_legacy_force_quote_star() {
-        // Three-keyword legacy item.
-        reparse_stable::<CopyStmt>("COPY t TO 'f' CSV FORCE QUOTE *");
-    }
-
-    #[test]
-    fn copy_table_legacy_force_not_null_list() {
-        reparse_stable::<CopyStmt>("COPY t FROM 'f' CSV FORCE NOT NULL a, b");
-    }
-
-    #[test]
-    fn copy_table_legacy_with_null_as() {
-        // Corpus regression case: `WITH ... NULL AS '...'` chained options.
-        reparse_stable::<CopyStmt>("COPY t TO STDOUT WITH NULL AS E'\\0'");
-    }
-
-    #[test]
-    fn copy_table_legacy_chained_delimiter_null_encoding() {
-        // Three chained legacy options after WITH.
-        reparse_stable::<CopyStmt>(
-            "COPY x FROM STDIN WITH DELIMITER AS ':' NULL AS E'\\X' ENCODING 'sql_ascii'",
-        );
-    }
-
-    #[test]
-    fn copy_table_psql_var_target() {
-        reparse_stable::<CopyStmt>("COPY t TO :'filename' CSV");
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/utility/copy.tests.rs"
+));

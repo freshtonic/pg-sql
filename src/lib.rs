@@ -1,5 +1,6 @@
 recursa::grammar! {
     module = crate,
+    derives(Pretty, Visit, VisitMut),
     keyword_matching = ascii_insensitive,
     max_lookahead = 5,
 }

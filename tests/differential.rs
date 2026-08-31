@@ -1,50 +1,170 @@
+#![cfg(target_os = "linux")]
+
 //! Differential parser test: pg-sql vs PostgreSQL 17.9's raw_parser.
 //! See docs/plans/2026-05-21-differential-parser-testing-design.md.
 
 mod support;
 
+use std::collections::BTreeSet;
+
+use pg_oracle::parse_ok;
+use support::baseline::{Baseline, BaselineOutcome, FrozenStatements, OutcomeCounts};
 use support::diff_check::{Outcome, check_statement};
-use support::extract_statements;
+
+fn fixture_name(name: &str) -> &str {
+    name.strip_prefix("r#").unwrap_or(name)
+}
+
+fn baseline_name(name: &str) -> String {
+    format!("{}.sql", fixture_name(name))
+}
 
 fn run_corpus_file(name: &str) {
     // Fixture names that collide with Rust keywords (`async`, `box`, `enum`)
     // are written as raw identifiers in `corpus_tests!`. `stringify!` keeps
     // the `r#` prefix, but the fixture file on disk has none — strip it so
     // the path resolves.
-    let name = name.strip_prefix("r#").unwrap_or(name);
+    let name = fixture_name(name);
+    let baseline = Baseline::pinned();
+    let baseline_name = baseline_name(name);
+    let expected = baseline.file(&baseline_name);
+    let frozen = FrozenStatements::pinned().file(&baseline_name);
     let path = format!(
         "{}/vendor/postgres/src/test/regress/sql/{name}.sql",
         env!("CARGO_MANIFEST_DIR")
     );
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
+    let source_git_blob = git_blob(&path);
+    assert_eq!(
+        source_git_blob, frozen.source_git_blob,
+        "{name}: source fixture differs from the frozen PostgreSQL blob"
+    );
 
-    let mut pass = 0usize;
-    let mut skip = 0usize;
+    let statements = frozen
+        .statements(&text)
+        .unwrap_or_else(|error| panic!("{name}: cannot load frozen statements: {error}"));
+    assert_eq!(
+        statements.len(),
+        expected.statements,
+        "{name}: extracted statement count changed from the frozen baseline"
+    );
+
+    let mut actual = OutcomeCounts {
+        pass: 0,
+        skip: 0,
+        fail: 0,
+    };
+    let mut skips = Vec::new();
     let mut failures = Vec::new();
+    let mut identity_mismatches = Vec::new();
 
-    for (i, stmt) in extract_statements(&text).into_iter().enumerate() {
-        match check_statement(&stmt) {
-            Outcome::Pass => pass += 1,
-            Outcome::Skip(_) => skip += 1,
-            Outcome::Fail(reason) => failures.push(format!("  stmt {i}: {reason}")),
+    for (i, (source, legacy_item_kind)) in statements
+        .into_iter()
+        .zip(frozen.legacy_item_kinds())
+        .enumerate()
+    {
+        let stmt = support::Stmt {
+            source: source.to_owned(),
+        };
+        let expected_outcome = legacy_item_kind.expected_outcome(parse_ok(source));
+        let outcome = check_statement(&stmt);
+        let matches_frozen_identity = matches!(
+            (expected_outcome, &outcome),
+            (BaselineOutcome::Pass, Outcome::Pass)
+                | (BaselineOutcome::Skip, Outcome::Skip(_) | Outcome::Pass)
+        );
+        if !matches_frozen_identity {
+            identity_mismatches.push(format!(
+                "  stmt {i}: expected {expected_outcome:?}, got {outcome:?}"
+            ));
+        }
+        match outcome {
+            Outcome::Pass => actual.pass += 1,
+            Outcome::Skip(reason) => {
+                actual.skip += 1;
+                skips.push(format!("  stmt {i}: {reason}"));
+            }
+            Outcome::Fail(reason) => {
+                actual.fail += 1;
+                failures.push(format!("  stmt {i}: {reason}"));
+            }
         }
     }
 
-    eprintln!("[{name}] pass={pass} skip={skip} fail={}", failures.len());
+    eprintln!(
+        "[{name}] pass={} skip={} fail={}",
+        actual.pass, actual.skip, actual.fail
+    );
     assert!(
-        failures.is_empty(),
-        "{name}: {} statement(s) failed:\n{}",
-        failures.len(),
+        identity_mismatches.is_empty(),
+        "{name}: statement outcomes changed identity while aggregate counts may still match:\n{}",
+        identity_mismatches.join("\n")
+    );
+    assert_eq!(
+        actual.fail,
+        0,
+        "{name}: differential failures were introduced:\n{}",
         failures.join("\n")
     );
+    assert!(
+        actual.skip <= expected.outcomes.skip,
+        "{name}: skip count increased from {} to {}:\n{}",
+        expected.outcomes.skip,
+        actual.skip,
+        skips.join("\n")
+    );
+    assert!(
+        actual.pass >= expected.outcomes.pass,
+        "{name}: pass count fell from {} to {}",
+        expected.outcomes.pass,
+        actual.pass
+    );
+}
+
+fn git_blob(path: &str) -> String {
+    let output = std::process::Command::new("git")
+        .args(["hash-object", "--no-filters", path])
+        .output()
+        .unwrap_or_else(|error| panic!("cannot hash {path}: {error}"));
+    assert!(
+        output.status.success(),
+        "git hash-object failed for {path}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .expect("Git object ID is UTF-8")
+        .trim()
+        .to_owned()
 }
 
 macro_rules! corpus_tests {
     ($($name:ident),* $(,)?) => {
+        const CORPUS_FILES: &[&str] = &[$(stringify!($name)),*];
+
         $(
             #[test]
             fn $name() { run_corpus_file(stringify!($name)); }
         )*
+
+        #[test]
+        fn corpus_membership_matches_frozen_baseline() {
+            let declared = CORPUS_FILES
+                .iter()
+                .map(|name| baseline_name(name))
+                .collect::<BTreeSet<_>>();
+            let expected = Baseline::pinned()
+                .file_names()
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<BTreeSet<_>>();
+
+            assert_eq!(declared, expected);
+            assert_eq!(
+                FrozenStatements::pinned().file_names(),
+                Baseline::pinned().file_names()
+            );
+            assert_eq!(FrozenStatements::pinned().total_statements(), 43_474);
+        }
     };
 }
 

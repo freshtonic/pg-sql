@@ -386,6 +386,7 @@ dependencies = [
  "regex",
  "serde_json",
  "sqlparser",
+ "syn 2.0.119",
  "tempfile",
  "vec1",
 ]

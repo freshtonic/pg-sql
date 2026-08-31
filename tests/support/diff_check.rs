@@ -1,6 +1,7 @@
 use crate::support::Stmt;
 use pg_oracle::{Equal, parse_equal, parse_ok};
-use recursa::Input;
+use std::fmt;
+use std::ops::Range;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Outcome {
@@ -9,26 +10,126 @@ pub enum Outcome {
     Skip(String), // grammar gap reason
 }
 
-/// Parse `source` with pg-sql; return the reformatted SQL, or `None` if
-/// pg-sql cannot parse it structurally (raw COPY data, parse-error fallback,
-/// or whole-file parse failure).
-fn pgsql_format(source: &str) -> Option<String> {
-    use pg_sql::ast::{FileItem, parse_sql_file};
-    let lexed = pg_sql::tokens::pg_lex(source);
-    let mut input = Input::new(source, &lexed);
-    let items = parse_sql_file(&mut input).ok()?;
-    let item = items.first()?;
-    match item {
-        FileItem::Command(cmd) => Some(pg_sql::formatter::format_tokens_sql(
-            cmd,
-            recursa::fmt::FormatStyle::default(),
-        )),
-        // `RawLines` is non-SQL (e.g. COPY data); `ParseError` is a single
-        // SQL statement pg-sql failed to model. Neither has a reformatted
-        // form — `check_statement` interprets `None` as a grammar gap (Skip
-        // when PG accepts, Pass when PG also rejects).
-        FileItem::RawLines(_) | FileItem::ParseError { .. } => None,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StrictDiagnostic {
+    pub code: String,
+    pub region: Range<usize>,
+    pub anchor: Range<usize>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct StrictStatementFailure {
+    diagnostic: Option<StrictDiagnostic>,
+    summary: String,
+}
+
+impl StrictStatementFailure {
+    pub fn diagnostic(&self) -> Option<&StrictDiagnostic> {
+        self.diagnostic.as_ref()
     }
+}
+
+impl fmt::Display for StrictStatementFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.summary)
+    }
+}
+
+/// Lex one frozen legacy statement slice while excluding its document-level
+/// semicolon from the significant tokens presented to `Statement`.
+///
+/// The legacy extractor deliberately leaves trivia after the terminator in the
+/// statement's source range. Rebuilding the token stream keeps that complete
+/// source and every retained token span unchanged; only the final significant
+/// `SEMI` record is omitted. Lexically invalid input is returned verbatim so
+/// its mechanism-specific diagnostic and anchor are not weakened by rebuilding.
+fn lex_statement_source(source: &str) -> pg_sql::LexResult<'_> {
+    let lexed = pg_sql::lex(source);
+    if lexed.errors().next().is_some() {
+        return lexed;
+    }
+
+    let terminator = lexed
+        .tokens()
+        .last()
+        .filter(|token| token.kind() == pg_sql::TokenKind::SEMI)
+        .map(|token| token.span());
+    let Some(terminator) = terminator else {
+        return lexed;
+    };
+
+    let mut statement = pg_sql::LexBuilder::new(source);
+    for token in lexed.tokens() {
+        if token.span() != terminator {
+            statement
+                .append(token.kind(), token.span())
+                .expect("tokens copied from pg-sql lexing retain valid ordered spans");
+        }
+    }
+    statement.finish()
+}
+
+/// Strictly parse one extracted statement with pg-sql and return its formatted
+/// SQL or a stable diagnostic summary for the grammar gap.
+pub(crate) fn pgsql_format(source: &str) -> Result<String, StrictStatementFailure> {
+    use pg_sql::ast::Statement;
+
+    let lexed = lex_statement_source(source);
+    if let Some(error) = lexed.errors().next() {
+        let diagnostic = StrictDiagnostic {
+            code: error.code().to_owned(),
+            region: error.span().range(),
+            anchor: error.anchor().range(),
+        };
+        return Err(StrictStatementFailure {
+            summary: format!(
+                "pg-sql lexical failure {} at {:?}, anchor {:?}",
+                diagnostic.code, diagnostic.region, diagnostic.anchor
+            ),
+            diagnostic: Some(diagnostic),
+        });
+    }
+    let mut input = lexed.input();
+    let parsed = Statement::parse(&mut input).map_err(|error| {
+        let expected = error.expected().collect::<Vec<_>>().join(", ");
+        let diagnostic = StrictDiagnostic {
+            code: error.code().to_owned(),
+            region: error.span().range(),
+            anchor: error.anchor().range(),
+        };
+        StrictStatementFailure {
+            summary: format!(
+                "pg-sql parse failure {} ({:?}) at {:?}, anchor {:?}, found {:?}, expected [{}]",
+                diagnostic.code,
+                error.kind(),
+                diagnostic.region,
+                diagnostic.anchor,
+                error.found(),
+                expected
+            ),
+            diagnostic: Some(diagnostic),
+        }
+    })?;
+    if !input.is_eof() {
+        let cursor = input.cursor();
+        let trailing = lexed
+            .tokens()
+            .nth(cursor)
+            .expect("a non-EOF public cursor addresses a significant token");
+        return Err(StrictStatementFailure {
+            diagnostic: None,
+            summary: format!(
+                "pg-sql parse left trailing input {} at {:?}, token cursor {cursor}",
+                trailing.kind(),
+                trailing.span().range()
+            ),
+        });
+    }
+    let ast = parsed.into_ast();
+    Ok(pg_sql::formatter::format_tokens_sql(
+        &ast,
+        recursa::PrettyConfig::default(),
+    ))
 }
 
 pub fn check_statement(stmt: &Stmt) -> Outcome {
@@ -36,12 +137,15 @@ pub fn check_statement(stmt: &Stmt) -> Outcome {
 
     if parse_ok(src) {
         // PostgreSQL accepts the input.
-        let Some(formatted) = pgsql_format(src) else {
-            return Outcome::Skip("pg-sql cannot parse it".into());
+        let formatted = match pgsql_format(src) {
+            Ok(formatted) => formatted,
+            Err(diagnostic) => return Outcome::Skip(diagnostic.to_string()),
         };
         // (1) pg-sql must re-parse its own output.
-        if pgsql_format(&formatted).is_none() {
-            return Outcome::Fail("pg-sql cannot re-parse its own output".into());
+        if let Err(diagnostic) = pgsql_format(&formatted) {
+            return Outcome::Fail(format!(
+                "pg-sql cannot re-parse its own output: {diagnostic}"
+            ));
         }
         // (2) PostgreSQL must see the trees as identical.
         match parse_equal(src, &formatted) {
@@ -57,7 +161,7 @@ pub fn check_statement(stmt: &Stmt) -> Outcome {
     } else {
         // PostgreSQL rejects the input. pg-sql must not reformat it into
         // something PostgreSQL accepts.
-        if let Some(formatted) = pgsql_format(src)
+        if let Ok(formatted) = pgsql_format(src)
             && parse_ok(&formatted)
         {
             return Outcome::Fail(format!(
@@ -91,11 +195,84 @@ mod tests {
         assert_eq!(check("SELECT 123abc"), Outcome::Pass);
     }
 
-    // The plan's `grammar_gap_is_skip_not_fail` placeholder is intentionally
-    // omitted: at implementation time, pg-sql's grammar parses every advanced
-    // PostgreSQL 17.9 construct probed (MERGE, JSON_TABLE, XMLTABLE, recursive
-    // CTEs, GROUPING SETS, etc.), so no statement reaches the `Skip` arm. A
-    // vacuous no-op test asserts nothing; a contrived "gap" would not reflect
-    // reality. The `Skip` arm is exercised honestly by the Task 9 corpus
-    // driver if a real grammar gap is ever hit.
+    #[test]
+    fn grammar_gap_reports_stable_parse_diagnostics() {
+        let failure = pgsql_format("DELETE FROM t3 USING t1 JOIN t2 USING (a) WHERE t3.x > t1.a;")
+            .expect_err("the frozen permanent grammar gap must fail");
+        assert_eq!(
+            failure.diagnostic(),
+            Some(&StrictDiagnostic {
+                code: "RCA4100".into(),
+                region: 29..31,
+                anchor: 29..31,
+            })
+        );
+    }
+
+    #[test]
+    fn grammar_gap_reports_stable_lexical_diagnostics() {
+        let diagnostic =
+            pgsql_format("SELECT /* unterminated").expect_err("unterminated comment must fail");
+        assert_eq!(
+            diagnostic.to_string(),
+            "pg-sql lexical failure RCA4002 at 7..22, anchor 7..9"
+        );
+
+        let after_terminator = pgsql_format("SELECT 1; /* unterminated")
+            .expect_err("a post-terminator lexical failure must not be discarded");
+        assert_eq!(
+            after_terminator.to_string(),
+            "pg-sql lexical failure RCA4002 at 10..25, anchor 10..12"
+        );
+    }
+
+    #[test]
+    fn final_terminator_before_owned_line_comment_is_document_framing() {
+        pgsql_format("SELECT 1;\n\n-- advisory_lock cleanup")
+            .expect("the legacy slice's final semicolon must not enter Statement parsing");
+    }
+
+    #[test]
+    fn final_terminator_before_owned_block_comment_is_document_framing() {
+        pgsql_format("SELECT 1 <> 2; /* legacy-owned ; block comment */")
+            .expect("operators and comment text must not obscure the final SQL terminator");
+    }
+
+    #[test]
+    fn semicolons_inside_dollar_strings_are_not_statement_terminators() {
+        pgsql_format("SELECT $$body; -- still body$$;\n-- legacy-owned comment")
+            .expect("only the significant semicolon after the dollar string is framing");
+        pgsql_format("SELECT $$body; -- still body$$")
+            .expect("an interior semicolon must remain part of its dollar string");
+    }
+
+    #[test]
+    fn terminator_exclusion_preserves_owned_source_and_token_spans() {
+        let source = " \nSELECT 1;\n\n-- advisory_lock cleanup";
+        let lexed = lex_statement_source(source);
+        let tokens = lexed.tokens().collect::<Vec<_>>();
+
+        assert_eq!(lexed.source(), source);
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].text(), "SELECT");
+        assert_eq!(tokens[0].span().range(), 2..8);
+        assert_eq!(tokens[1].text(), "1");
+        assert_eq!(tokens[1].span().range(), 9..10);
+    }
+
+    #[test]
+    fn nonfinal_statement_separator_remains_significant() {
+        let lexed = lex_statement_source("SELECT 1; SELECT 2;");
+        let semicolons = lexed
+            .tokens()
+            .filter(|token| token.kind() == pg_sql::TokenKind::SEMI)
+            .collect::<Vec<_>>();
+
+        assert_eq!(semicolons.len(), 1);
+        assert_eq!(semicolons[0].span().range(), 8..9);
+    }
+
+    // The frozen baseline contains 18 PostgreSQL-accepted statements that the
+    // legacy grammar skipped. The corpus driver accounts for those skips per
+    // file and rejects every new skip.
 }

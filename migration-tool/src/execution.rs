@@ -19,6 +19,10 @@ use crate::test_call_rewrite::TestCallRewritePass;
 use crate::{Mapping, inventory, to_canonical_inventory_json};
 use crate::{grammar_rewrite::GeneratedWhitespaceCleanupPass, grammar_rewrite::GrammarRewritePass};
 
+const REVIEWED_SEMANTIC_FROZEN_PREFIX_ENTRY_COUNT: usize = 55;
+const REVIEWED_SEMANTIC_FROZEN_PREFIX_SHA256: &str =
+    "fedb99cf805863ea99ba74467b28c5afea4c5a37234d49e0d3af4be8b7acf8a5";
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExecutionRecord {
@@ -90,6 +94,51 @@ struct CompileCheckpoint {
     next_issue: u32,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReviewedSemanticChanges {
+    schema_version: u32,
+    issue: u32,
+    base_execution_sha256: String,
+    base_inventory_sha256: String,
+    frozen_prefix: ReviewedSemanticFrozenPrefix,
+    changes: Vec<ReviewedSemanticChange>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReviewedSemanticFrozenPrefix {
+    entry_count: usize,
+    sha256: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReviewedSemanticChange {
+    id: String,
+    source_ids: Vec<String>,
+    destinations: Vec<LiveSemanticDestination>,
+    rationale: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LiveSemanticDestination {
+    id: String,
+    path: String,
+    kind: LiveSemanticKind,
+    item: String,
+    member: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum LiveSemanticKind {
+    Type,
+    Field,
+    Variant,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ImportSection {
     PgSql,
@@ -156,8 +205,8 @@ fn parse_import_manifest(manifest: &str) -> Result<Vec<ImportManifestRow<'_>>, E
     Ok(rows)
 }
 
-/// Verify that the reviewed execution record describes the currently
-/// published migration output and the immutable inputs recorded by the repo.
+/// Reproduce the historical publication described by the reviewed execution
+/// record from its immutable inputs.
 pub fn verify_execution(repository: &Path, record_path: &Path) -> Result<(), ExecutionError> {
     let record_bytes = read(record_path)?;
     let record: ExecutionRecord = serde_json::from_slice(&record_bytes)
@@ -179,6 +228,7 @@ pub fn verify_execution(repository: &Path, record_path: &Path) -> Result<(), Exe
         &record.immutable_inputs.import_manifest_sha256,
         &read(&manifest_path)?,
     )?;
+    verify_import_manifest_objects(repository, &manifest_path)?;
     let inventory_bytes = read(&inventory_path)?;
     expect_digest(
         "migration inventory",
@@ -191,23 +241,14 @@ pub fn verify_execution(repository: &Path, record_path: &Path) -> Result<(), Exe
         &read(&grammar_manifest_path)?,
     )?;
     verify_inventory(&inventory_bytes, &record)?;
-    verify_provenance(repository, &record)?;
+    verify_historical_provenance(repository, &record)?;
 
-    let recorded_revision = read_text(&repository.join(".recursa-revision"))?;
     if record.recursa_revision != RECURSA_REVISION {
         return Err(fail(format!(
             "execution records unapproved Recursa revision {}",
             record.recursa_revision
         )));
     }
-    if recorded_revision.trim() != record.recursa_revision {
-        return Err(fail(format!(
-            ".recursa-revision is {}, execution records {}",
-            recorded_revision.trim(),
-            record.recursa_revision
-        )));
-    }
-    verify_recursa_checkout(repository)?;
 
     verify_review(&record)?;
     verify_commands(&record.commands)?;
@@ -249,26 +290,332 @@ pub fn verify_execution(repository: &Path, record_path: &Path) -> Result<(), Exe
         )));
     }
 
-    let published =
-        published_source_digest(repository, &manifest_path, &record.output.omitted_paths)?;
-    if published != record.output.published_payload_tree_sha256 {
+    // Replay constructs the issue-8 publication in a temporary paired
+    // checkout and performs the payload, publication, obsolete-artifact, and
+    // pinned-Recursa compile checks there. The live issue-9 source tree and
+    // live Recursa HEAD are intentionally outside this historical proof.
+    reproduce_execution(repository, &record, &manifest_path, &grammar_manifest_path)?;
+    Ok(())
+}
+
+/// Validate an append-only ledger of reviewed semantic changes against the
+/// immutable issue-8 inventory and the live AST declarations.
+pub fn verify_reviewed_semantic_changes(
+    repository: &Path,
+    ledger_path: &Path,
+) -> Result<(), ExecutionError> {
+    let ledger_bytes = read(ledger_path)?;
+    let ledger_json: serde_json::Value = serde_json::from_slice(&ledger_bytes)
+        .map_err(|error| fail(format!("parse {}: {error}", ledger_path.display())))?;
+    let ledger: ReviewedSemanticChanges = serde_json::from_slice(&ledger_bytes)
+        .map_err(|error| fail(format!("parse {}: {error}", ledger_path.display())))?;
+    if ledger.schema_version != 1 || ledger.issue != 9 {
         return Err(fail(format!(
-            "published payload tree digest is {published}, expected {}",
-            record.output.published_payload_tree_sha256
+            "reviewed semantic changes must use schema 1 for issue 9, got schema {} issue {}",
+            ledger.schema_version, ledger.issue
         )));
     }
-    let publication = publication_tree_digest(repository, &manifest_path)?;
-    if publication != record.output.publication_tree_sha256 {
+    verify_reviewed_semantic_frozen_prefix(&ledger, &ledger_json)?;
+
+    let execution = read(&repository.join("migration/execution.json"))?;
+    expect_digest(
+        "reviewed semantic changes base execution",
+        &ledger.base_execution_sha256,
+        &execution,
+    )?;
+    let inventory = read(&repository.join("migration/contract/inventory.json"))?;
+    expect_digest(
+        "reviewed semantic changes base inventory",
+        &ledger.base_inventory_sha256,
+        &inventory,
+    )?;
+    let inventory: serde_json::Value = serde_json::from_slice(&inventory)
+        .map_err(|error| fail(format!("parse migration inventory: {error}")))?;
+    let frozen_sources = inventory
+        .get("semantics")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| fail("migration inventory has no semantic rows".into()))?
+        .iter()
+        .filter_map(|row| row.get("id").and_then(serde_json::Value::as_str))
+        .collect::<BTreeSet<_>>();
+
+    if ledger.changes.is_empty() {
+        return Err(fail("reviewed semantic changes ledger is empty".into()));
+    }
+    let mut previous_id: Option<&str> = None;
+    let mut source_ids = BTreeSet::new();
+    for change in &ledger.changes {
+        if change.id.trim().is_empty()
+            || change.rationale.trim().is_empty()
+            || change.source_ids.is_empty()
+            || change.destinations.is_empty()
+        {
+            return Err(fail(format!(
+                "reviewed semantic change {:?} has an empty id, rationale, source, or destination",
+                change.id
+            )));
+        }
+        if previous_id.is_some_and(|previous| previous >= change.id.as_str()) {
+            return Err(fail(format!(
+                "reviewed semantic change ids are not strictly append-ordered at {:?}",
+                change.id
+            )));
+        }
+        previous_id = Some(&change.id);
+        for source in &change.source_ids {
+            if !frozen_sources.contains(source.as_str()) {
+                return Err(fail(format!(
+                    "unknown frozen semantic source {source:?} in {:?}",
+                    change.id
+                )));
+            }
+            if !source_ids.insert(source) {
+                return Err(fail(format!(
+                    "frozen semantic source {source:?} is reviewed more than once"
+                )));
+            }
+        }
+        for destination in &change.destinations {
+            verify_live_semantic_destination(repository, destination)?;
+        }
+    }
+    Ok(())
+}
+
+fn verify_reviewed_semantic_frozen_prefix(
+    ledger: &ReviewedSemanticChanges,
+    ledger_json: &serde_json::Value,
+) -> Result<(), ExecutionError> {
+    if ledger.frozen_prefix.entry_count != REVIEWED_SEMANTIC_FROZEN_PREFIX_ENTRY_COUNT
+        || ledger.frozen_prefix.sha256 != REVIEWED_SEMANTIC_FROZEN_PREFIX_SHA256
+    {
         return Err(fail(format!(
-            "publication tree digest is {publication}, expected {}",
-            record.output.publication_tree_sha256
+            "reviewed semantic changes frozen-prefix header must remain at {} entries with digest {}",
+            REVIEWED_SEMANTIC_FROZEN_PREFIX_ENTRY_COUNT, REVIEWED_SEMANTIC_FROZEN_PREFIX_SHA256
         )));
     }
 
-    verify_obsolete_artifacts(repository)?;
-    reproduce_execution(repository, &record, &manifest_path, &grammar_manifest_path)?;
-    verify_compile_checkpoint(repository, &record.review.compile_checkpoint)?;
+    let changes = ledger_json
+        .get("changes")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| fail("reviewed semantic changes ledger has no changes array".into()))?;
+    let prefix = changes
+        .get(..REVIEWED_SEMANTIC_FROZEN_PREFIX_ENTRY_COUNT)
+        .ok_or_else(|| {
+            fail(format!(
+                "reviewed semantic changes frozen prefix requires {} entries, ledger has {}",
+                REVIEWED_SEMANTIC_FROZEN_PREFIX_ENTRY_COUNT,
+                changes.len()
+            ))
+        })?;
+    let bytes = serde_json::to_vec(prefix).map_err(|error| {
+        fail(format!(
+            "serialize reviewed semantic frozen prefix: {error}"
+        ))
+    })?;
+    let actual = format!("{:x}", Sha256::digest(bytes));
+    if actual != REVIEWED_SEMANTIC_FROZEN_PREFIX_SHA256 {
+        return Err(fail(format!(
+            "reviewed semantic changes frozen prefix digest is {actual}, expected {}",
+            REVIEWED_SEMANTIC_FROZEN_PREFIX_SHA256
+        )));
+    }
     Ok(())
+}
+
+fn verify_live_semantic_destination(
+    repository: &Path,
+    destination: &LiveSemanticDestination,
+) -> Result<(), ExecutionError> {
+    let relative = Path::new(&destination.path);
+    if relative.is_absolute()
+        || relative
+            .extension()
+            .and_then(|extension| extension.to_str())
+            != Some("rs")
+        || relative
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+        || !(relative.starts_with("src/ast") || relative == Path::new("src/tokens.rs"))
+    {
+        return Err(fail(format!(
+            "invalid live semantic destination path {:?}",
+            destination.path
+        )));
+    }
+    let file_module = destination_module(relative)?;
+    let item_marker = format!("::{}", destination.item);
+    let item_offset = destination.id.rfind(&item_marker).ok_or_else(|| {
+        fail(format!(
+            "live semantic destination id {:?} does not name item {:?}",
+            destination.id, destination.item
+        ))
+    })?;
+    let module = &destination.id[..item_offset];
+    let nested_module = module
+        .strip_prefix(&file_module)
+        .and_then(|suffix| {
+            suffix
+                .strip_prefix("::")
+                .or_else(|| suffix.is_empty().then_some(""))
+        })
+        .ok_or_else(|| {
+            fail(format!(
+                "live semantic destination id {:?} is outside module {file_module:?}",
+                destination.id
+            ))
+        })?;
+
+    let source_path = repository.join(relative);
+    let source = read_text(&source_path)?;
+    let syntax = syn::parse_file(&source)
+        .map_err(|error| fail(format!("parse {}: {error}", source_path.display())))?;
+    let items = inline_module_items(&syntax.items, nested_module)?;
+    let exists = items.iter().any(|item| match item {
+        syn::Item::Struct(item) if item.ident == destination.item => match destination.kind {
+            LiveSemanticKind::Type => destination.member.is_none(),
+            LiveSemanticKind::Field => destination
+                .member
+                .as_deref()
+                .is_some_and(|member| struct_has_field(item, member)),
+            LiveSemanticKind::Variant => false,
+        },
+        syn::Item::Enum(item) if item.ident == destination.item => match destination.kind {
+            LiveSemanticKind::Type => destination.member.is_none(),
+            LiveSemanticKind::Variant => destination
+                .member
+                .as_deref()
+                .is_some_and(|member| item.variants.iter().any(|variant| variant.ident == member)),
+            LiveSemanticKind::Field => destination
+                .member
+                .as_deref()
+                .is_some_and(|member| enum_has_field(item, member)),
+        },
+        _ => false,
+    });
+    if !exists {
+        return Err(fail(format!(
+            "live AST destination {} does not exist in the live AST at {}",
+            destination.id,
+            source_path.display()
+        )));
+    }
+
+    let item = items
+        .iter()
+        .find(|item| match item {
+            syn::Item::Struct(item) => item.ident == destination.item,
+            syn::Item::Enum(item) => item.ident == destination.item,
+            _ => false,
+        })
+        .expect("an existing live destination has a matching item");
+    let expected_id = match (item, destination.kind, destination.member.as_deref()) {
+        (syn::Item::Struct(_), LiveSemanticKind::Type, None)
+        | (syn::Item::Enum(_), LiveSemanticKind::Type, None) => {
+            format!("{module}::{}", destination.item)
+        }
+        (syn::Item::Struct(_), LiveSemanticKind::Field, Some(member)) => {
+            format!("{module}::{}.{member}", destination.item)
+        }
+        (syn::Item::Enum(_), LiveSemanticKind::Field | LiveSemanticKind::Variant, Some(member)) => {
+            format!("{module}::{}::{member}", destination.item)
+        }
+        _ => {
+            return Err(fail(format!(
+                "live semantic destination {:?} has inconsistent kind/member",
+                destination.id
+            )));
+        }
+    };
+    if destination.id != expected_id {
+        return Err(fail(format!(
+            "live semantic destination id {:?} does not match {expected_id:?}",
+            destination.id
+        )));
+    }
+    Ok(())
+}
+
+fn inline_module_items<'a>(
+    root: &'a [syn::Item],
+    nested_module: &str,
+) -> Result<&'a [syn::Item], ExecutionError> {
+    let mut items = root;
+    for component in nested_module
+        .split("::")
+        .filter(|component| !component.is_empty())
+    {
+        let module = items.iter().find_map(|item| match item {
+            syn::Item::Mod(module) if module.ident == component => Some(module),
+            _ => None,
+        });
+        let Some((_, nested)) = module.and_then(|module| module.content.as_ref()) else {
+            return Err(fail(format!(
+                "live semantic destination module {nested_module:?} does not exist"
+            )));
+        };
+        items = nested;
+    }
+    Ok(items)
+}
+
+fn destination_module(relative: &Path) -> Result<String, ExecutionError> {
+    let relative = relative.strip_prefix("src/").map_err(|_| {
+        fail(format!(
+            "destination is outside src: {}",
+            relative.display()
+        ))
+    })?;
+    let mut components = relative
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    let file = components
+        .pop()
+        .ok_or_else(|| fail("destination has no file name".into()))?;
+    let stem = file
+        .strip_suffix(".rs")
+        .ok_or_else(|| fail(format!("destination is not Rust source: {file}")))?;
+    if stem != "mod" {
+        components.push(stem.to_owned());
+    }
+    Ok(components.join("::"))
+}
+
+fn struct_has_field(item: &syn::ItemStruct, member: &str) -> bool {
+    match &item.fields {
+        syn::Fields::Named(fields) => fields
+            .named
+            .iter()
+            .any(|field| field.ident.as_ref().is_some_and(|ident| ident == member)),
+        syn::Fields::Unnamed(fields) => member
+            .parse::<usize>()
+            .ok()
+            .is_some_and(|index| index < fields.unnamed.len()),
+        syn::Fields::Unit => false,
+    }
+}
+
+fn enum_has_field(item: &syn::ItemEnum, member: &str) -> bool {
+    let Some((variant_name, field_name)) = member.split_once('.') else {
+        return false;
+    };
+    item.variants
+        .iter()
+        .find(|variant| variant.ident == variant_name)
+        .is_some_and(|variant| match &variant.fields {
+            syn::Fields::Named(fields) => fields.named.iter().any(|field| {
+                field
+                    .ident
+                    .as_ref()
+                    .is_some_and(|ident| ident == field_name)
+            }),
+            syn::Fields::Unnamed(fields) => field_name
+                .parse::<usize>()
+                .ok()
+                .is_some_and(|index| index < fields.unnamed.len()),
+            syn::Fields::Unit => false,
+        })
 }
 
 fn verify_provenance(repository: &Path, record: &ExecutionRecord) -> Result<(), ExecutionError> {
@@ -428,6 +775,108 @@ fn verify_provenance(repository: &Path, record: &ExecutionRecord) -> Result<(), 
             "import provenance verifier failed: {}",
             String::from_utf8_lossy(&import_check.stderr)
         )));
+    }
+    Ok(())
+}
+
+fn verify_historical_provenance(
+    repository: &Path,
+    record: &ExecutionRecord,
+) -> Result<(), ExecutionError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temporary = tempfile::tempdir()
+        .map_err(|error| fail(format!("create provenance verification directory: {error}")))?;
+    let checkout = temporary.path().join("pg-sql");
+    checkout_commit(repository, SOURCE_CHECKPOINT, &checkout)?;
+    for relative in [
+        "docs/import-provenance.tsv",
+        "docs/import-provenance.legacy-commit",
+        "docs/import-provenance.legacy-tree",
+        "scripts/verify-import-provenance",
+    ] {
+        let source = repository.join(relative);
+        let target = checkout.join(relative);
+        fs::create_dir_all(target.parent().expect("proof artifact has a parent"))
+            .map_err(|error| fail(format!("create parent of {}: {error}", target.display())))?;
+        fs::copy(&source, &target).map_err(|error| {
+            fail(format!(
+                "copy historical proof artifact {}: {error}",
+                source.display()
+            ))
+        })?;
+        let permissions = fs::metadata(&source)
+            .map_err(|error| fail(format!("inspect {}: {error}", source.display())))?
+            .permissions()
+            .mode()
+            & 0o777;
+        fs::set_permissions(&target, fs::Permissions::from_mode(permissions))
+            .map_err(|error| fail(format!("set mode on {}: {error}", target.display())))?;
+    }
+    verify_provenance(&checkout, record)
+}
+
+fn checkout_commit(
+    repository: &Path,
+    revision: &str,
+    destination: &Path,
+) -> Result<(), ExecutionError> {
+    let clone = Command::new("git")
+        .args(["clone", "--shared", "--no-checkout", "--quiet"])
+        .arg(repository)
+        .arg(destination)
+        .output()
+        .map_err(|error| fail(format!("clone {}: {error}", repository.display())))?;
+    if !clone.status.success() {
+        return Err(fail(format!(
+            "clone {}: {}",
+            repository.display(),
+            String::from_utf8_lossy(&clone.stderr)
+        )));
+    }
+    let checkout = Command::new("git")
+        .args(["checkout", "--detach", "--quiet", revision])
+        .current_dir(destination)
+        .output()
+        .map_err(|error| fail(format!("check out historical revision {revision}: {error}")))?;
+    if !checkout.status.success() {
+        return Err(fail(format!(
+            "check out historical revision {revision}: {}",
+            String::from_utf8_lossy(&checkout.stderr)
+        )));
+    }
+    Ok(())
+}
+
+fn verify_import_manifest_objects(
+    repository: &Path,
+    manifest_path: &Path,
+) -> Result<(), ExecutionError> {
+    let manifest = read_text(manifest_path)?;
+    for row in parse_import_manifest(&manifest)? {
+        let listing = git_text(repository, &["ls-tree", SOURCE_CHECKPOINT, "--", row.path])?;
+        let (metadata, path) = listing
+            .trim_end()
+            .split_once('\t')
+            .ok_or_else(|| fail(format!("historical import path is absent: {}", row.path)))?;
+        let mut columns = metadata.split_whitespace();
+        let (Some(mode), Some(_kind), Some(object_id), None) = (
+            columns.next(),
+            columns.next(),
+            columns.next(),
+            columns.next(),
+        ) else {
+            return Err(fail(format!(
+                "invalid historical import tree row for {}: {listing:?}",
+                row.path
+            )));
+        };
+        if path != row.path || mode != row.mode || object_id != row._object_id {
+            return Err(fail(format!(
+                "historical import object for {} is {mode} {object_id}, expected {} {}",
+                row.path, row.mode, row._object_id
+            )));
+        }
     }
     Ok(())
 }
@@ -738,7 +1187,133 @@ fn reproduce_execution(
             )));
         }
     }
+
+    let pair = temporary.path().join("historical-checkpoint");
+    fs::create_dir(&pair).map_err(|error| fail(format!("create {}: {error}", pair.display())))?;
+    let publication = pair.join("pg-sql");
+    materialize_commit(repository, MIGRATION_SOURCE_COMMIT, &publication)?;
+    overlay_tree(&combined_output, &publication)?;
+    for relative in OMITTED_PATHS {
+        let path = publication.join(relative);
+        fs::remove_file(&path).map_err(|error| {
+            fail(format!(
+                "remove historical omission {}: {error}",
+                path.display()
+            ))
+        })?;
+    }
+    write_historical_build_script(&publication)?;
+
+    let published =
+        published_source_digest(&publication, manifest_path, &record.output.omitted_paths)?;
+    if published != record.output.published_payload_tree_sha256 {
+        return Err(fail(format!(
+            "reproduced published payload tree digest is {published}, expected {}",
+            record.output.published_payload_tree_sha256
+        )));
+    }
+    let publication_digest = publication_tree_digest(&publication, manifest_path)?;
+    if publication_digest != record.output.publication_tree_sha256 {
+        return Err(fail(format!(
+            "reproduced publication tree digest is {publication_digest}, expected {}",
+            record.output.publication_tree_sha256
+        )));
+    }
+    verify_obsolete_artifacts(&publication)?;
+
+    let recursa = pair.join("recursa");
+    let recursa_repository = historical_recursa_repository(repository, &record.recursa_revision)?;
+    checkout_commit(&recursa_repository, &record.recursa_revision, &recursa)?;
+    verify_recursa_checkout(&publication)?;
+    verify_compile_checkpoint(&publication, &record.review.compile_checkpoint)?;
     Ok(())
+}
+
+fn historical_recursa_repository(
+    repository: &Path,
+    revision: &str,
+) -> Result<PathBuf, ExecutionError> {
+    let repository = fs::canonicalize(repository).map_err(|error| {
+        fail(format!(
+            "resolve repository root {}: {error}",
+            repository.display()
+        ))
+    })?;
+    let sibling = repository
+        .parent()
+        .ok_or_else(|| fail("repository has no parent for sibling Recursa checkout".into()))?
+        .join("recursa");
+    git_text(&sibling, &["cat-file", "-e", revision]).map_err(|_| {
+        fail(format!(
+            "sibling Recursa object store has no recorded revision {revision}"
+        ))
+    })?;
+    Ok(sibling)
+}
+
+fn overlay_tree(source: &Path, destination: &Path) -> Result<(), ExecutionError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut pending = vec![source.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(&directory)
+            .map_err(|error| fail(format!("read {}: {error}", directory.display())))?
+        {
+            let entry = entry.map_err(|error| {
+                fail(format!(
+                    "read directory entry in {}: {error}",
+                    directory.display()
+                ))
+            })?;
+            let path = entry.path();
+            let relative = path
+                .strip_prefix(source)
+                .expect("overlay traversal remains beneath source");
+            let target = destination.join(relative);
+            let metadata = fs::symlink_metadata(&path)
+                .map_err(|error| fail(format!("inspect {}: {error}", path.display())))?;
+            if metadata.is_dir() {
+                fs::create_dir_all(&target)
+                    .map_err(|error| fail(format!("create {}: {error}", target.display())))?;
+                pending.push(path);
+            } else if metadata.is_file() && !metadata.file_type().is_symlink() {
+                fs::create_dir_all(target.parent().expect("overlay path has a parent")).map_err(
+                    |error| fail(format!("create parent of {}: {error}", target.display())),
+                )?;
+                fs::copy(&path, &target).map_err(|error| {
+                    fail(format!(
+                        "copy {} to {}: {error}",
+                        path.display(),
+                        target.display()
+                    ))
+                })?;
+                fs::set_permissions(
+                    &target,
+                    fs::Permissions::from_mode(metadata.permissions().mode() & 0o777),
+                )
+                .map_err(|error| fail(format!("set mode on {}: {error}", target.display())))?;
+            } else {
+                return Err(fail(format!(
+                    "historical overlay contains a non-regular path: {}",
+                    path.display()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_historical_build_script(publication: &Path) -> Result<(), ExecutionError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = publication.join("build.rs");
+    fs::write(
+        &path,
+        include_bytes!("../fixtures/execution/build.rs").as_slice(),
+    )
+    .map_err(|error| fail(format!("write {}: {error}", path.display())))?;
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o644))
+        .map_err(|error| fail(format!("set mode on {}: {error}", path.display())))
 }
 
 fn materialize_commit(

@@ -3,13 +3,18 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use pg_sql_migrate::baseline::{
-    CaptureOptions, capture_baseline, to_canonical_json, write_baseline,
+    Baseline, CaptureOptions, capture_baseline, to_canonical_json, write_baseline,
 };
 use pg_sql_migrate::execution::{
     publication_tree_digest, published_source_digest, verify_execution,
+    verify_reviewed_semantic_changes,
 };
 use pg_sql_migrate::grammar_rewrite::{GeneratedWhitespaceCleanupPass, GrammarRewritePass};
 use pg_sql_migrate::rewrite::{RewriteTreeRequest, SourceRewritePass, rewrite_tree};
+use pg_sql_migrate::statement_spans::{
+    StatementSpanBaseline, capture_statement_spans, to_canonical_statement_spans,
+    validate_statement_sources, validate_statement_spans, write_statement_spans,
+};
 use pg_sql_migrate::test_call_rewrite::TestCallRewritePass;
 use pg_sql_migrate::{Mapping, inventory, to_canonical_inventory_json};
 
@@ -52,12 +57,19 @@ enum Command {
 
 #[derive(Subcommand)]
 enum ExecutionCommand {
-    /// Match the immutable identities and reviewed digest to the published tree.
+    /// Reproduce the reviewed historical publication from immutable inputs.
     Verify {
         #[arg(long, default_value = ".")]
         repository_root: PathBuf,
         #[arg(long, default_value = "migration/execution.json")]
         record: PathBuf,
+    },
+    /// Validate reviewed issue-9 semantic changes against frozen and live ASTs.
+    VerifySemanticChanges {
+        #[arg(long, default_value = ".")]
+        repository_root: PathBuf,
+        #[arg(long, default_value = "migration/reviewed-semantic-changes.json")]
+        ledger: PathBuf,
     },
     /// Print the canonical digest of a migrated pg-sql source tree.
     Digest {
@@ -115,6 +127,37 @@ enum BaselineCommand {
         #[arg(long, default_value = "baselines/postgresql-17.9.json")]
         baseline: PathBuf,
     },
+    /// Capture frozen statement byte ranges with the pinned legacy parser.
+    CaptureStatements {
+        #[arg(long, default_value = "../recursa-old")]
+        legacy_repository: PathBuf,
+        #[arg(long, default_value = "vendor/postgres")]
+        postgres_repository: PathBuf,
+        #[arg(long, default_value = "baselines/postgresql-17.9.json")]
+        baseline: PathBuf,
+        #[arg(long, default_value = "baselines/postgresql-17.9-statements.json")]
+        output: PathBuf,
+    },
+    /// Recapture and byte-compare the frozen statement byte ranges.
+    ReviewStatements {
+        #[arg(long, default_value = "../recursa-old")]
+        legacy_repository: PathBuf,
+        #[arg(long, default_value = "vendor/postgres")]
+        postgres_repository: PathBuf,
+        #[arg(long, default_value = "baselines/postgresql-17.9.json")]
+        baseline: PathBuf,
+        #[arg(long, default_value = "baselines/postgresql-17.9-statements.json")]
+        spans: PathBuf,
+    },
+    /// Validate span structure, provenance, and pinned PostgreSQL source blobs.
+    VerifyStatements {
+        #[arg(long, default_value = "vendor/postgres")]
+        postgres_repository: PathBuf,
+        #[arg(long, default_value = "baselines/postgresql-17.9.json")]
+        baseline: PathBuf,
+        #[arg(long, default_value = "baselines/postgresql-17.9-statements.json")]
+        spans: PathBuf,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -161,6 +204,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 println!("baseline matches fresh capture: {}", baseline.display());
             }
+            BaselineCommand::CaptureStatements {
+                legacy_repository,
+                postgres_repository,
+                baseline,
+                output,
+            } => {
+                let outcomes: Baseline = serde_json::from_slice(&fs::read(&baseline)?)?;
+                let options = CaptureOptions::new(legacy_repository, postgres_repository);
+                let spans = capture_statement_spans(&options, &outcomes)?;
+                write_statement_spans(&output, &spans, &outcomes)?;
+                println!("wrote {}", output.display());
+            }
+            BaselineCommand::ReviewStatements {
+                legacy_repository,
+                postgres_repository,
+                baseline,
+                spans,
+            } => {
+                let outcomes: Baseline = serde_json::from_slice(&fs::read(&baseline)?)?;
+                let expected = fs::read(&spans)?;
+                let options = CaptureOptions::new(legacy_repository, postgres_repository);
+                let captured = capture_statement_spans(&options, &outcomes)?;
+                let actual = to_canonical_statement_spans(&captured, &outcomes)?;
+                if expected != actual.as_bytes() {
+                    return Err(format!(
+                        "statement spans differ from fresh capture: {}",
+                        spans.display()
+                    )
+                    .into());
+                }
+                println!("statement spans match fresh capture: {}", spans.display());
+            }
+            BaselineCommand::VerifyStatements {
+                postgres_repository,
+                baseline,
+                spans,
+            } => {
+                let outcomes: Baseline = serde_json::from_slice(&fs::read(&baseline)?)?;
+                let spans: StatementSpanBaseline = serde_json::from_slice(&fs::read(&spans)?)?;
+                validate_statement_spans(&spans, &outcomes)?;
+                validate_statement_sources(&spans, &postgres_repository)?;
+                println!("statement spans and source blobs are valid: {}", spans.name);
+            }
         },
         Command::Execution { command } => match command {
             ExecutionCommand::Verify {
@@ -168,7 +254,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 record,
             } => {
                 verify_execution(&repository_root, &record)?;
-                println!("migration execution matches {}", record.display());
+                println!("migration execution reproduces {}", record.display());
+            }
+            ExecutionCommand::VerifySemanticChanges {
+                repository_root,
+                ledger,
+            } => {
+                verify_reviewed_semantic_changes(&repository_root, &ledger)?;
+                println!("reviewed semantic changes are valid: {}", ledger.display());
             }
             ExecutionCommand::Digest {
                 tree_root,

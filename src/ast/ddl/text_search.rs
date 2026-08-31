@@ -1,17 +1,12 @@
 //! TEXT SEARCH DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use recursa::seq::{Seq0, Seq1};
-
 use crate::ast::ddl::role::DefList;
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
-use crate::tokens::keyword::*;
-use crate::tokens::soft_keyword::*;
 use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
 
 /// `CREATE TEXT SEARCH { PARSER | DICTIONARY | TEMPLATE | CONFIGURATION }
 /// name (def_list)`.
@@ -26,10 +21,14 @@ pub struct CreateTextSearchStmt<'input> {
 /// The object kind after `DROP TEXT SEARCH`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum TextSearchObjectKind {
-    #[tok(CONFIGURATION)] Configuration,
-    #[tok(DICTIONARY)] Dictionary,
-    #[tok(PARSER)] Parser,
-    #[tok(TEMPLATE)] Template,
+    #[tok(CONFIGURATION)]
+    Configuration,
+    #[tok(DICTIONARY)]
+    Dictionary,
+    #[tok(PARSER)]
+    Parser,
+    #[tok(TEMPLATE)]
+    Template,
 }
 
 /// `DROP TEXT SEARCH {CONFIGURATION | DICTIONARY | PARSER | TEMPLATE}
@@ -50,7 +49,7 @@ pub struct DropTextSearchStmt<'input> {
 pub struct TextSearchTokenList<'input> {
     #[tok(FOR, this)]
     #[sep(COMMA)]
-    pub tokens: recursa::Vec1<crate::tokens::ColId<'input> >,
+    pub tokens: recursa::Vec1<crate::tokens::ColId<'input>>,
 }
 
 /// `WITH any_name_list` — dictionary list on `ALTER TEXT SEARCH
@@ -72,12 +71,12 @@ pub struct TextSearchWithDicts<'input> {
 /// would extend its first-set through both `FOR` and the trailing `WITH`,
 /// assuming the two are adjacent — but they're separated by the token
 /// list, so the prefix-driven parse path fails and the whole statement
-/// surfaces as a [`crate::ast::FileItem::ParseError`].
+/// surfaces as a file-level parse error.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct TSConfigAddMapping<'input> {
     #[tok(ADD, MAPPING, FOR, this)]
     #[sep(COMMA)]
-    pub tokens: recursa::Vec1<crate::tokens::ColId<'input> >,
+    pub tokens: recursa::Vec1<crate::tokens::ColId<'input>>,
     #[tok(WITH, this)]
     pub dicts: NameList<'input>,
 }
@@ -138,8 +137,8 @@ pub struct TSConfigAlterMapping<'input> {
 /// `DROP MAPPING [IF EXISTS] FOR name_list` — Postgres'
 /// `ALTER_TSCONFIG_DROP_MAPPING` branch (with optional `IF EXISTS`).
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, MAPPING, this)]
 pub struct TSConfigDropMapping<'input> {
-    #[tok(DROP, MAPPING, this)]
     pub if_exists: Option<IfExists>,
     pub tokens: TextSearchTokenList<'input>,
 }
@@ -245,69 +244,7 @@ pub struct AlterTextSearchStmt<'input> {
     pub body: AlterTextSearchBody<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn parse_drop_text_search_configuration() {
-        let lexed = crate::tokens::lex("DROP TEXT SEARCH CONFIGURATION IF EXISTS tsc1");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropTextSearchStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.kind, TextSearchObjectKind::Configuration(_)));
-        assert!(stmt.if_exists.is_some());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_text_search_dictionary() {
-        let lexed = crate::tokens::lex("CREATE TEXT SEARCH DICTIONARY alt_ts_dict1 (template=simple)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTextSearchStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_text_search_configuration_rename() {
-        let lexed = crate::tokens::lex("ALTER TEXT SEARCH CONFIGURATION alt_ts_conf1 RENAME TO alt_ts_conf2");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTextSearchStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_text_search_parser() {
-        let lexed = crate::tokens::lex("DROP TEXT SEARCH PARSER my_parser");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = DropTextSearchStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_text_search_dictionary_structured() {
-        let lexed = crate::tokens::lex("CREATE TEXT SEARCH DICTIONARY ispell (Template=ispell, DictFile=ispell_sample)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTextSearchStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.kind, TextSearchObjectKind::Dictionary(_)));
-        assert_eq!(stmt.name.object(), "ispell");
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_text_search_configuration() {
-        let lexed = crate::tokens::lex("CREATE TEXT SEARCH CONFIGURATION ispell_tst (PARSER = default)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTextSearchStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.kind, TextSearchObjectKind::Configuration(_)));
-        assert!(input.is_eof());
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/text_search.tests.rs"
+));

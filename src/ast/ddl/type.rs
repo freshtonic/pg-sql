@@ -1,18 +1,13 @@
 //! TYPE  DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use recursa::seq::{Seq0, Seq1};
-
 use crate::ast::ddl::publication::SetDefinitionClause;
 use crate::ast::ddl::role::DefList;
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
-use crate::tokens::keyword::*;
-use crate::tokens::soft_keyword::*;
 use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
 
 /// A single column in `CREATE TYPE name AS (col_list)` — Postgres'
 /// `TableFuncElement`: `ColId Typename [COLLATE name]`.
@@ -32,21 +27,19 @@ pub struct CompositeTypeCollate<'input> {
 
 /// `AS (col_list)` — composite-type definition body.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(AS, LPAREN, this, RPAREN)]
 pub struct CreateTypeComposite<'input> {
-    #[tok(AS, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub columns:
-         Vec<CompositeTypeColumn<'input> > ,
+    pub columns: Vec<CompositeTypeColumn<'input>>,
 }
 
 /// `AS ENUM ('label', ...)` — enum-type definition body. The label list may
 /// be empty (Postgres allows `AS ENUM ()` to create a shell-only enum).
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(AS, ENUM, LPAREN, this, RPAREN)]
 pub struct CreateTypeEnum<'input> {
-    #[tok(AS, ENUM, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub labels:
-         Vec<literal::StringLit<'input> > ,
+    pub labels: Vec<literal::StringLit<'input>>,
 }
 
 /// `AS RANGE (def_list)` — range-type definition body.
@@ -86,8 +79,8 @@ pub struct CreateTypeStmt<'input> {
 
 /// `DROP TYPE [IF EXISTS] type [, ...] [CASCADE | RESTRICT]`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, TYPE, this)]
 pub struct DropTypeStmt<'input> {
-    #[tok(DROP, TYPE, this)]
     pub if_exists: Option<IfExists>,
     pub types: TypeNameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -141,8 +134,8 @@ pub struct AlterEnumValueAfter<'input> {
 /// `ADD VALUE [IF NOT EXISTS] 'val' [{BEFORE|AFTER} 'neighbour']` —
 /// Postgres' `AlterEnumStmt` ADD VALUE branch.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(ADD, VALUE, this)]
 pub struct AlterTypeAddValue<'input> {
-    #[tok(ADD, VALUE, this)]
     pub if_not_exists: Option<IfNotExists>,
     pub new_value: literal::StringLit<'input>,
     pub position: Option<AlterEnumValuePosition<'input>>,
@@ -162,8 +155,8 @@ pub struct AlterTypeAddAttribute<'input> {
 /// `DROP ATTRIBUTE [IF EXISTS] name [CASCADE | RESTRICT]` — one
 /// `alter_type_cmd` in Postgres.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, ATTRIBUTE, this)]
 pub struct AlterTypeDropAttribute<'input> {
-    #[tok(DROP, ATTRIBUTE, this)]
     pub if_exists: Option<IfExists>,
     pub name: crate::tokens::ColId<'input>,
     pub behavior: Option<DropBehavior>,
@@ -173,7 +166,10 @@ pub struct AlterTypeDropAttribute<'input> {
 /// `ALTER ATTRIBUTE name [SET DATA] TYPE typename`. Postgres'
 /// `opt_set_data`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum SetDataClause { #[tok(SET, DATA)] Value, }
+pub enum SetDataClause {
+    #[tok(SET, DATA)]
+    Value,
+}
 
 /// `ALTER ATTRIBUTE name [SET DATA] TYPE typename [COLLATE qual] [CASCADE
 /// | RESTRICT]` — one `alter_type_cmd` in Postgres. The typename uses the
@@ -208,7 +204,7 @@ pub enum AlterTypeCmd<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTypeCmdList<'input> {
     #[sep(COMMA)]
-    pub cmds: recursa::Vec1<AlterTypeCmd<'input> >,
+    pub cmds: recursa::Vec1<AlterTypeCmd<'input>>,
 }
 
 /// One action on `ALTER TYPE any_name action` — covers Postgres'
@@ -247,170 +243,7 @@ pub struct AlterTypeStmt<'input> {
     pub action: AlterTypeAction<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn parse_drop_type_list() {
-        let lexed = crate::tokens::lex("DROP TYPE IF EXISTS t1, t2");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.if_exists.is_some());
-        assert_eq!(stmt.types.types.len(), 2);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_rename_to() {
-        let lexed = crate::tokens::lex("ALTER TYPE bogus RENAME TO bogon");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_set_schema() {
-        let lexed = crate::tokens::lex("ALTER TYPE alter1.ctype SET SCHEMA alter2");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_set_def() {
-        let lexed = crate::tokens::lex("ALTER TYPE myvarchar SET (storage = extended)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_add_value() {
-        let lexed = crate::tokens::lex("ALTER TYPE planets ADD VALUE 'uranus'");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_add_value_if_not_exists_after() {
-        let lexed = crate::tokens::lex("ALTER TYPE planets ADD VALUE IF NOT EXISTS 'pluto' AFTER 'neptune'");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_rename_value() {
-        let lexed = crate::tokens::lex("ALTER TYPE rainbow RENAME VALUE 'red' TO 'crimson'");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_add_attribute() {
-        let lexed = crate::tokens::lex("ALTER TYPE test_type ADD ATTRIBUTE b text");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_drop_attribute_cascade() {
-        let lexed = crate::tokens::lex("ALTER TYPE test_type2 DROP ATTRIBUTE b CASCADE");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_alter_attribute_set_data_type() {
-        let lexed = crate::tokens::lex("ALTER TYPE test_type ALTER ATTRIBUTE b SET DATA TYPE varchar");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_multi_cmd() {
-        let lexed = crate::tokens::lex("ALTER TYPE test_type DROP ATTRIBUTE a, ADD ATTRIBUTE d boolean");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_type_rename_attribute() {
-        let lexed = crate::tokens::lex("ALTER TYPE test_type RENAME ATTRIBUTE a TO aa");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_type_shell() {
-        let lexed = crate::tokens::lex("CREATE TYPE shell");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.body.is_none());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_type_composite() {
-        let lexed = crate::tokens::lex("CREATE TYPE row1 AS (f1 text, f2 int)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.body, Some(CreateTypeBody::Composite(_))));
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_type_enum() {
-        let lexed = crate::tokens::lex("CREATE TYPE color AS ENUM ('red', 'green', 'blue')");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.body, Some(CreateTypeBody::Enum(_))));
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_type_range() {
-        let lexed = crate::tokens::lex("CREATE TYPE intrange AS RANGE (subtype = int)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.body, Some(CreateTypeBody::Range(_))));
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_type_base() {
-        let lexed = crate::tokens::lex("CREATE TYPE widget (internallength = 24, input = widget_in, output = widget_out)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTypeStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.body, Some(CreateTypeBody::Base(_))));
-        assert!(input.is_eof());
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/type.tests.rs"
+));

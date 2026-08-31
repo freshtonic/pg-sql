@@ -5,6 +5,7 @@ pub mod execution;
 pub mod grammar_rewrite;
 pub mod migration_contract;
 pub mod rewrite;
+pub mod statement_spans;
 pub mod test_call_rewrite;
 
 use std::collections::{BTreeMap, BTreeSet};

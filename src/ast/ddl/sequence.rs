@@ -1,16 +1,11 @@
 //! SEQUENCE DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use recursa::seq::{Seq0, Seq1};
-
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
-use crate::tokens::keyword::*;
-use crate::tokens::soft_keyword::*;
 use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
 
 /// `AS TypeName` sequence option.
 #[derive(recursa::Node, Debug, Clone)]
@@ -56,12 +51,12 @@ pub struct SeqCacheOption<'input> {
 
 /// `OWNED BY { NONE | qualified_name }` sequence option.
 ///
-/// Variant ordering: `None` (a single keyword) before `Name` (a dotted
-/// identifier path) — they are disambiguated by first token, but the
-/// declaration order matches the gram.y rule ordering.
+/// `NONE` is an unreserved identifier in this position, so
+/// [`QualifiedName`] already accepts both grammar branches. Keeping a
+/// separate fixed-token `None` arm would describe the same token stream
+/// twice and leave the generated dispatcher ambiguous.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum OwnedByTarget<'input> {
-    #[tok(NONE)] None,
     Name(QualifiedName<'input>),
 }
 
@@ -75,8 +70,9 @@ pub struct SeqOwnedByOption<'input> {
 /// `RESTART` keyword is a soft keyword so it remains reclaimable as an
 /// identifier in non-sequence positions.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(RESTART, this)]
 pub struct SeqRestartOption<'input> {
-    #[tok(RESTART, optional(WITH), this)]
+    #[tok(optional(WITH), this)]
     pub with: Option<NumericOnly<'input>>,
 }
 
@@ -95,9 +91,12 @@ pub struct SeqSequenceNameOption<'input> {
 /// token with so longest-match-wins picks the longer spelling.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum SeqOption<'input> {
-    #[tok(NO, CYCLE)] NoCycle,
-    #[tok(NO, MINVALUE)] NoMinvalue,
-    #[tok(NO, MAXVALUE)] NoMaxvalue,
+    #[tok(NO, CYCLE)]
+    NoCycle,
+    #[tok(NO, MINVALUE)]
+    NoMinvalue,
+    #[tok(NO, MAXVALUE)]
+    NoMaxvalue,
     As(SeqAsOption<'input>),
     Increment(SeqIncrementOption<'input>),
     Minvalue(SeqMinValueOption<'input>),
@@ -107,24 +106,33 @@ pub enum SeqOption<'input> {
     OwnedBy(SeqOwnedByOption<'input>),
     Restart(SeqRestartOption<'input>),
     SequenceName(SeqSequenceNameOption<'input>),
-    #[tok(CYCLE)] Cycle,
-    #[tok(UNLOGGED)] Unlogged,
+    #[tok(CYCLE)]
+    Cycle,
+    #[tok(UNLOGGED)]
+    Unlogged,
     // `LOGGED` is in Postgres' SeqOptElem but no corpus statement uses it
     // (it is the default); a `LOGGED` keyword token does not yet exist in
     // pg-sql. Add when first needed.
 }
 
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(CREATE, this)]
 pub struct CreateSequenceStmt<'input> {
-    #[tok(CREATE, this)]
     /// Optional temporary persistence modifier: `TEMP`, `TEMPORARY`, or
     /// `UNLOGGED`. Postgres' `OptTemp` covers all three between `CREATE` and
     /// `SEQUENCE`.
     pub persistence: Option<CreatePersistence>,
-    #[tok(SEQUENCE, this)]
+    pub sequence: SequenceKeyword,
     pub if_not_exists: Option<IfNotExists>,
     pub name: QualifiedName<'input>,
     pub options: Vec<SeqOption<'input>>,
+}
+
+/// Required `SEQUENCE` keyword after the optional persistence modifier.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum SequenceKeyword {
+    #[tok(SEQUENCE)]
+    Sequence,
 }
 
 /// Persistence modifier between `CREATE` and an object keyword: `TEMP`,
@@ -137,15 +145,18 @@ pub struct CreateSequenceStmt<'input> {
 /// `Temp`, `Unlogged` are modelled.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CreatePersistence {
-    #[tok(TEMPORARY)] Temporary,
-    #[tok(TEMP)] Temp,
-    #[tok(UNLOGGED)] Unlogged,
+    #[tok(TEMPORARY)]
+    Temporary,
+    #[tok(TEMP)]
+    Temp,
+    #[tok(UNLOGGED)]
+    Unlogged,
 }
 
 /// `DROP SEQUENCE [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, SEQUENCE, this)]
 pub struct DropSequenceStmt<'input> {
-    #[tok(DROP, SEQUENCE, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -154,12 +165,18 @@ pub struct DropSequenceStmt<'input> {
 /// `SET LOGGED` — Postgres' `alter_table_cmd` SET LOGGED branch. Used by
 /// ALTER SEQUENCE in the corpus (and by ALTER TABLE, modelled separately).
 #[derive(recursa::Node, Debug, Clone)]
-pub enum SetLoggedClause { #[tok(SET, LOGGED)] Value, }
+pub enum SetLoggedClause {
+    #[tok(SET, LOGGED)]
+    Value,
+}
 
 /// `SET UNLOGGED` — Postgres' `alter_table_cmd` SET UNLOGGED branch.
 /// `UNLOGGED` is the existing hard keyword token; `SET` precedes it here.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum SetUnloggedClause { #[tok(SET, UNLOGGED)] Value, }
+pub enum SetUnloggedClause {
+    #[tok(SET, UNLOGGED)]
+    Value,
+}
 
 /// One action on `ALTER SEQUENCE [IF EXISTS] name action` — Postgres'
 /// `AlterSeqStmt` (`SeqOptList`), the sequence-specific subset of
@@ -203,73 +220,14 @@ pub struct SeqOptList<'input> {
 /// the sequence-applicable subset of ALTER TABLE's `alter_table_cmds`,
 /// and `RenameStmt` / `AlterObjectSchemaStmt` branches for sequences.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(ALTER, SEQUENCE, this)]
 pub struct AlterSequenceStmt<'input> {
-    #[tok(ALTER, SEQUENCE, this)]
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
     pub action: AlterSequenceAction<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn parse_create_sequence_plain() {
-        let lexed = crate::tokens::lex("CREATE SEQUENCE s1");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateSequenceStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.persistence.is_none());
-        assert!(stmt.options.is_empty());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_sequence_options() {
-        let lexed = crate::tokens::lex("CREATE SEQUENCE s1 AS integer INCREMENT BY 2 MINVALUE 1 MAXVALUE 100 START WITH 5 CACHE 10 CYCLE");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateSequenceStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.options.len(), 7);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_sequence_no_minvalue_owned_by() {
-        let lexed = crate::tokens::lex("CREATE SEQUENCE s1 NO MINVALUE NO MAXVALUE NO CYCLE OWNED BY t.col");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateSequenceStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.options.len(), 4);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_sequence_temp_if_not_exists() {
-        let lexed = crate::tokens::lex("CREATE TEMPORARY SEQUENCE IF NOT EXISTS s1");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateSequenceStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(
-            stmt.persistence,
-            Some(CreatePersistence::Temporary(_))
-        ));
-        assert!(stmt.if_not_exists.is_some());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_sequence_owned_by_none() {
-        let lexed = crate::tokens::lex("CREATE SEQUENCE s1 OWNED BY NONE");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateSequenceStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.options.len(), 1);
-        assert!(matches!(stmt.options[0], SeqOption::OwnedBy(_)));
-        assert!(input.is_eof());
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/sequence.tests.rs"
+));

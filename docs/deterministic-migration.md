@@ -41,7 +41,7 @@ SHA-256 digest.
 commands, immutable Git identities, each pass digest, the complete semantic-row
 review, all omitted legacy generated/CLI/profiling paths, and the
 compile-checkpoint result.
-Verify that record against the current published files with:
+Reproduce and verify that historical publication from its immutable inputs with:
 
 ```sh
 cargo run -p pg-sql-migrate -- execution verify \
@@ -49,12 +49,15 @@ cargo run -p pg-sql-migrate -- execution verify \
   --record migration/execution.json
 ```
 
-Verification resolves the recorded Git objects, requires the immutable
-non-publication inputs and detached Recursa checkout to be clean, regenerates
-the full canonical inventory from the frozen commit, and directly reruns the
-grammar-only, test-call-only, combined, and repeated-combined passes. It then
-reproduces the pinned-Recursa compile checkpoint and checks the exact diagnostic
-code and count.
+Verification resolves the recorded Git objects, checks the source checkpoint in
+a clean temporary checkout, regenerates the full canonical inventory from the
+frozen commit, and directly reruns the grammar-only, test-call-only, combined,
+and repeated-combined passes. It reconstructs the issue-8 publication and the
+recorded Recursa revision together in a temporary paired checkout, then checks
+the exact payload and publication digests, obsolete-artifact exclusions, and
+compile-checkpoint diagnostic code and count. Later changes to the live pg-sql
+tree, its `.recursa-revision`, or the live sibling Recursa checkout do not alter
+that historical proof.
 
 The published migrated-payload digest is
 `bb71971012f8f17b1068882885fb473556fd6ca6d98da5d0336ea191cb01e039`.
@@ -76,10 +79,69 @@ formatting or hand-editing the transformed declarations. The same public
 grammar command also removes the exact reviewed Cargo binary blocks whose
 source files are omitted, and fails closed if those manifest blocks drift.
 
-The issue-8 compile checkpoint invokes current Recursa generation and reaches
-stable discovery diagnostic `RCA1013` at the imported embedded `#[cfg(test)]`
-modules (64 occurrences). Issue 9 owns restructuring and reconciling that
-complete embedded test inventory while compiling the migrated PostgreSQL
-statement grammar. This
-checkpoint therefore does not claim strict-statement parity or a compiling root
-crate.
+The issue-8 compile checkpoint invokes the recorded Recursa generation and
+reaches stable discovery diagnostic `RCA1013` at the imported embedded
+`#[cfg(test)]` modules (64 occurrences). Issue 9 owns restructuring and
+reconciling that complete embedded test inventory while compiling the migrated
+PostgreSQL statement grammar. This checkpoint therefore does not claim
+strict-statement parity or a compiling root crate.
+
+Issue 9 relocates 1,083 tests into `embedded-tests/` so Recursa does not
+discover test-only syntax as grammar. The executable checker compares them to
+all 1,318 immutable `tests.literal_tests` identities in
+`migration/contract/inventory.json`; matching source-path/function identities
+are direct relocations, not a new count baseline. Every remaining identity is
+reviewed in `embedded-tests/reconciliation.tsv`:
+
+- `file-recovery-scope` is limited to the 238 tests formerly under
+  `src/ast/file.rs`, whose replacement belongs to ADR 0005 rather than the
+  strict-statement issue;
+- `migration-tooling-scope` is limited to test sources in issue 8's immutable
+  `output.omitted_paths` (the deferred flamegraph tools);
+- `retained-integration` is accepted only when the original integration test
+  or macro test template is still present outside `embedded-tests/`;
+- `renamed` and `superseded` require a real immutable source identity, and any
+  declared relocated target must exist; and
+- `introduced` requires a relocated target with no legacy source identity.
+
+Disposition rationales are a closed vocabulary rather than free-form notes.
+The checker binds the issue/ADR reason to its disposition and, for introduced
+or superseded rows, to the reviewed target path or immutable source identity.
+Changing a reason therefore requires changing the executable reconciliation
+contract, not merely replacing it with another nonempty string.
+
+The checker rejects duplicate sources or targets, omissions, targets absent
+from the live modules, and misuse of either scoped exclusion. It also derives
+the expected ignored set from the immutable identities, preserving
+`parse_select_func_table_bare_alias_col_def` and `report_ast_sizes` without a
+self-referential ignored-count assertion. Run it with:
+
+```sh
+cargo test --locked -p pg-sql --test embedded_inventory
+```
+
+## Reviewed semantic changes after publication
+
+Issue 8's [`migration/execution.json`](../migration/execution.json) and
+[`migration/contract/inventory.json`](../migration/contract/inventory.json)
+remain immutable historical evidence. Later issues do not rewrite that inventory
+to describe their evolving AST. Instead, reviewed rehomings are appended to
+[`migration/reviewed-semantic-changes.json`](../migration/reviewed-semantic-changes.json).
+Each entry cites semantic IDs from the frozen issue-8 inventory and explicit
+destination declarations in the live AST.
+
+Validate the ledger independently with:
+
+```sh
+cargo run -p pg-sql-migrate -- execution verify-semantic-changes \
+  --repository-root . \
+  --ledger migration/reviewed-semantic-changes.json
+```
+
+The validator pins the two historical file digests, rejects duplicate or
+unknown frozen source IDs, and parses the declared live Rust files to prove each
+destination type, field, or variant exists. The ledger header records the entry
+count and canonical-JSON SHA-256 digest of its frozen prefix; the verifier pins
+both values independently. Deleting, reordering, or rewriting any frozen entry
+therefore fails verification, while strictly ordered new reviews may append
+after that prefix.

@@ -1,13 +1,13 @@
 /// Numeric-literal helpers shared across statement families.
-use recursa_diagram::railroad;
-
-use crate::tokens::{literal, punct};
+use crate::tokens::literal;
 
 /// Leading `+` or `-` sign on a number.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum NumericSignToken {
-    #[tok(MINUS)] Neg,
-    #[tok(PLUS)] Pos,
+    #[tok(MINUS)]
+    Neg,
+    #[tok(PLUS)]
+    Pos,
 }
 
 /// Either an integer or a numeric (decimal/exponent) literal.

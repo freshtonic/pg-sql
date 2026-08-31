@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "name": "postgresql-17.9",
+  "legacy_commit": "1e71421d66baac15c8c5264e8f29b5f80122f50e",
+  "postgres_gitlink": "6d396980fc5aed4f1a525e0bd75cb16b25ed40ca",
+  "entries": [
+    {
+      "file": "amutils.sql",
+      "statement_index": 6,
+      "byte_range": "3458:3536",
+      "outcome": "pass"
+    },
+    {
+      "file": "create_index.sql",
+      "statement_index": 330,
+      "byte_range": "23939:24022",
+      "outcome": "pass"
+    },
+    {
+      "file": "create_view.sql",
+      "statement_index": 263,
+      "byte_range": "20937:21006",
+      "outcome": "pass"
+    },
+    {
+      "file": "create_view.sql",
+      "statement_index": 266,
+      "byte_range": "21066:21128",
+      "outcome": "pass"
+    },
+    {
+      "file": "join.sql",
+      "statement_index": 169,
+      "byte_range": "16655:16708",
+      "outcome": "pass"
+    },
+    {
+      "file": "join.sql",
+      "statement_index": 171,
+      "byte_range": "16727:16787",
+      "outcome": "diagnostic",
+      "diagnostic": {
+        "code": "RCA4100",
+        "region": "29:31",
+        "anchor": "29:31"
+      }
+    },
+    {
+      "file": "join.sql",
+      "statement_index": 173,
+      "byte_range": "16806:16885",
+      "outcome": "pass"
+    },
+    {
+      "file": "join.sql",
+      "statement_index": 610,
+      "byte_range": "77747:77811",
+      "outcome": "pass"
+    },
+    {
+      "file": "join.sql",
+      "statement_index": 611,
+      "byte_range": "77812:77880",
+      "outcome": "pass"
+    },
+    {
+      "file": "join.sql",
+      "statement_index": 612,
+      "byte_range": "77881:78098",
+      "outcome": "pass"
+    },
+    {
+      "file": "returning.sql",
+      "statement_index": 12,
+      "byte_range": "1097:1197",
+      "outcome": "pass"
+    },
+    {
+      "file": "returning.sql",
+      "statement_index": 25,
+      "byte_range": "1669:1740",
+      "outcome": "pass"
+    },
+    {
+      "file": "rules.sql",
+      "statement_index": 134,
+      "byte_range": "10040:10126",
+      "outcome": "pass"
+    },
+    {
+      "file": "select.sql",
+      "statement_index": 24,
+      "byte_range": "3583:3763",
+      "outcome": "pass"
+    },
+    {
+      "file": "with.sql",
+      "statement_index": 114,
+      "byte_range": "21647:21780",
+      "outcome": "pass"
+    },
+    {
+      "file": "with.sql",
+      "statement_index": 278,
+      "byte_range": "42604:42704",
+      "outcome": "pass"
+    },
+    {
+      "file": "with.sql",
+      "statement_index": 280,
+      "byte_range": "42729:42856",
+      "outcome": "pass"
+    },
+    {
+      "file": "with.sql",
+      "statement_index": 282,
+      "byte_range": "42933:43143",
+      "outcome": "pass"
+    }
+  ],
+  "verification": {
+    "oracle": "PostgreSQL 17.9 raw_parser",
+    "command": "cargo test --locked -p pg-sql --features postgres-oracle --test accepted_legacy_gaps frozen_accepted_legacy_gap_contracts_are_exact -- --exact"
+  }
+}

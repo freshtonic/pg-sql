@@ -1,8 +1,6 @@
 //! SUBSCRIPTION DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use recursa::seq::{Seq0, Seq1};
-
 use crate::ast::ddl::publication::{SetDefinitionClause, WithDefinition};
 use crate::ast::ddl::role::DefElem;
 use crate::ast::shared::expr::*;
@@ -10,10 +8,7 @@ use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
 use crate::ast::utility::copy::CopySconst;
-use crate::tokens::keyword::*;
-use crate::tokens::soft_keyword::*;
 use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
 
 /// `CONNECTION sconst` clause on CREATE SUBSCRIPTION.
 #[derive(recursa::Node, Debug, Clone)]
@@ -26,10 +21,10 @@ pub struct SubscriptionConnectionClause<'input> {
 /// `PUBLICATION name_list`. Each name is an identifier (publication
 /// names are not qualified).
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(PUBLICATION, this)]
 pub struct SubscriptionPublicationClause<'input> {
-    #[tok(PUBLICATION, this)]
     #[sep(COMMA)]
-    pub names: recursa::Vec1<crate::tokens::ColId<'input> >,
+    pub names: recursa::Vec1<crate::tokens::ColId<'input>>,
 }
 
 /// `CREATE SUBSCRIPTION name CONNECTION sconst PUBLICATION name_list
@@ -47,8 +42,8 @@ pub struct CreateSubscriptionStmt<'input> {
 ///
 /// Postgres' `DropSubscriptionStmt` rule takes a single `name`, not a list.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, SUBSCRIPTION, this)]
 pub struct DropSubscriptionStmt<'input> {
-    #[tok(DROP, SUBSCRIPTION, this)]
     pub if_exists: Option<IfExists>,
     pub name: crate::tokens::ColId<'input>,
     pub behavior: Option<DropBehavior>,
@@ -60,28 +55,28 @@ pub struct DropSubscriptionStmt<'input> {
 ///
 /// pg-sql reuses [`SubscriptionConnectionClause`] for this branch.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(REFRESH, PUBLICATION, this)]
 pub struct AlterSubscriptionRefresh<'input> {
-    #[tok(REFRESH, PUBLICATION, this)]
     pub with: Option<WithDefinition<'input>>,
 }
 
 /// `ADD PUBLICATION name_list [WITH (def_list)]` — Postgres'
 /// `ALTER SUBSCRIPTION ... ADD PUBLICATION ...` form.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(ADD, PUBLICATION, this)]
 pub struct AlterSubscriptionAddPublication<'input> {
-    #[tok(ADD, PUBLICATION, this)]
     #[sep(COMMA)]
-    pub names: recursa::Vec1<crate::tokens::ColId<'input> >,
+    pub names: recursa::Vec1<crate::tokens::ColId<'input>>,
     pub with: Option<WithDefinition<'input>>,
 }
 
 /// `DROP PUBLICATION name_list [WITH (def_list)]` — Postgres'
 /// `ALTER SUBSCRIPTION ... DROP PUBLICATION ...` form.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, PUBLICATION, this)]
 pub struct AlterSubscriptionDropPublication<'input> {
-    #[tok(DROP, PUBLICATION, this)]
     #[sep(COMMA)]
-    pub names: recursa::Vec1<crate::tokens::ColId<'input> >,
+    pub names: recursa::Vec1<crate::tokens::ColId<'input>>,
     pub with: Option<WithDefinition<'input>>,
 }
 
@@ -90,19 +85,19 @@ pub struct AlterSubscriptionDropPublication<'input> {
 /// `SET CONNECTION sconst` (kept separate variant) and from
 /// `SET (def_list)` (modelled via [`SetDefinitionClause`]).
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(SET, PUBLICATION, this)]
 pub struct AlterSubscriptionSetPublication<'input> {
-    #[tok(SET, PUBLICATION, this)]
     #[sep(COMMA)]
-    pub names: recursa::Vec1<crate::tokens::ColId<'input> >,
+    pub names: recursa::Vec1<crate::tokens::ColId<'input>>,
     pub with: Option<WithDefinition<'input>>,
 }
 
 /// `SKIP (def_list)` — Postgres' `ALTER SUBSCRIPTION ... SKIP definition`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(SKIP, LPAREN, this, RPAREN)]
 pub struct AlterSubscriptionSkip<'input> {
-    #[tok(SKIP, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub items:  recursa::Vec1<DefElem<'input> > ,
+    pub items: recursa::Vec1<DefElem<'input>>,
 }
 
 /// One action on `ALTER SUBSCRIPTION name action` — covers Postgres'
@@ -125,8 +120,10 @@ pub enum AlterSubscriptionAction<'input> {
     AddPublication(AlterSubscriptionAddPublication<'input>),
     DropPublication(AlterSubscriptionDropPublication<'input>),
     Skip(AlterSubscriptionSkip<'input>),
-    #[tok(ENABLE)] Enable,
-    #[tok(DISABLE)] Disable,
+    #[tok(ENABLE)]
+    Enable,
+    #[tok(DISABLE)]
+    Disable,
     SetPublication(AlterSubscriptionSetPublication<'input>),
     SetDef(SetDefinitionClause<'input>),
 }
@@ -140,64 +137,7 @@ pub struct AlterSubscriptionStmt<'input> {
     pub action: AlterSubscriptionAction<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn parse_drop_subscription() {
-        let lexed = crate::tokens::lex("DROP SUBSCRIPTION sub1 CASCADE");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropSubscriptionStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.text(), "sub1");
-        assert!(stmt.behavior.is_some());
-        assert!(input.is_eof());
-    }
-
-    /// `ALTER SUBSCRIPTION name SET (origin = 'value')` — string-valued
-    /// def_arg, sanity test for the SetDef path.
-    #[test]
-    fn parse_alter_subscription_set_origin_string() {
-        let lexed = crate::tokens::lex("ALTER SUBSCRIPTION regress_testsub4 SET (origin = 'none')");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterSubscriptionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// `ALTER SUBSCRIPTION name SET (origin = any)` — `any` is a reserved
-    /// keyword used as a `def_arg` value (gram.y `def_arg` accepts
-    /// `reserved_keyword`). subscription.sql corpus uses this.
-    #[test]
-    fn parse_alter_subscription_set_origin_any() {
-        let lexed = crate::tokens::lex("ALTER SUBSCRIPTION regress_testsub4 SET (origin = any)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterSubscriptionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn create_subscription_connection_publication_roundtrips() {
-        let stmt: CreateSubscriptionStmt = parse_stmt(
-            "CREATE SUBSCRIPTION regress_testsub CONNECTION 'testconn' PUBLICATION testpub WITH (connect = false)",
-        );
-        assert_eq!(stmt.name.text(), "regress_testsub");
-        assert_eq!(stmt.publication_clause.names.len(), 1);
-        assert!(stmt.with.is_some());
-        reparse_stable::<CreateSubscriptionStmt>(
-            "CREATE SUBSCRIPTION regress_testsub CONNECTION 'testconn' PUBLICATION testpub WITH (connect = false)",
-        );
-    }
-
-    #[test]
-    fn create_subscription_multi_publication_roundtrips() {
-        reparse_stable::<CreateSubscriptionStmt>(
-            "CREATE SUBSCRIPTION s CONNECTION 'dbname=x' PUBLICATION p1, p2, p3 WITH (connect = false)",
-        );
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/subscription.tests.rs"
+));

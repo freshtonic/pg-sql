@@ -1,13 +1,9 @@
 /// CREATE TABLE statement AST.
-use recursa::seq::{OptionalTrailing, Seq0, Seq1};
-use recursa_diagram::railroad;
-
 use crate::ast::shared::expr::{Expr, TypeName};
 use crate::ast::shared::flags::DropBehavior;
 use crate::ast::shared::names::QualifiedName;
-use crate::tokens::{literal, punct};
+use crate::tokens::literal;
 
-use crate::tokens::keyword::*;
 // ---------------------------------------------------------------------------
 // Additional imports for the ALTER/DROP types appended to this file as part
 // of the DDL physical-extraction migration. Glob imports keep cross-batch
@@ -29,7 +25,6 @@ use crate::ast::shared::names::*;
 #[allow(unused_imports)]
 use crate::ast::shared::numbers::*;
 #[allow(unused_imports)]
-use crate::tokens::soft_keyword::*;
 // ---------------------------------------------------------------------------
 /// `USING INDEX TABLESPACE name` — tablespace for the index backing a PRIMARY
 /// KEY or UNIQUE column constraint.
@@ -41,8 +36,8 @@ pub struct UsingIndexTablespace<'input> {
 
 /// PRIMARY KEY column constraint.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(PRIMARY, KEY, this)]
 pub struct PrimaryKeyConstraint<'input> {
-    #[tok(PRIMARY, KEY, this)]
     pub index_tablespace: Option<UsingIndexTablespace<'input>>,
     /// Optional `[NOT] DEFERRABLE [INITIALLY {DEFERRED|IMMEDIATE}]` suffix.
     pub attrs: ConstraintAttrs,
@@ -50,8 +45,8 @@ pub struct PrimaryKeyConstraint<'input> {
 
 /// UNIQUE column constraint.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(UNIQUE, this)]
 pub struct UniqueConstraint<'input> {
-    #[tok(UNIQUE, this)]
     /// Optional `NULLS [NOT] DISTINCT` qualifier (Postgres 15+).
     pub nulls: Option<NullsDistinctQualifier>,
     pub index_tablespace: Option<UsingIndexTablespace<'input>>,
@@ -73,29 +68,30 @@ pub struct NullsDistinctQualifier {
 /// come before single-word ones to satisfy longest-match.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ReferentialAction<'input> {
-    #[tok(NO, ACTION)] NoAction,
+    #[tok(NO, ACTION)]
+    NoAction,
     SetNull(SetNullKw<'input>),
     SetDefault(SetDefaultKw<'input>),
-    #[tok(CASCADE)] Cascade,
-    #[tok(RESTRICT)] Restrict,
+    #[tok(CASCADE)]
+    Cascade,
+    #[tok(RESTRICT)]
+    Restrict,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(SET, NULL, this)]
 pub struct SetNullKw<'input> {
-    #[tok(SET, NULL, LPAREN, this, RPAREN)]
+    #[tok(LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub cols: Option<
-         Vec<crate::tokens::ColId<'input> > ,
-    >,
+    pub cols: Option<recursa::Vec1<crate::tokens::ColId<'input>>>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(SET, DEFAULT, this)]
 pub struct SetDefaultKw<'input> {
-    #[tok(SET, DEFAULT, LPAREN, this, RPAREN)]
+    #[tok(LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub cols: Option<
-         Vec<crate::tokens::ColId<'input> > ,
-    >,
+    pub cols: Option<recursa::Vec1<crate::tokens::ColId<'input>>>,
 }
 
 /// `ON DELETE action`.
@@ -115,9 +111,12 @@ pub struct OnUpdateAction<'input> {
 /// Match type for a foreign key: `MATCH FULL | PARTIAL | SIMPLE`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum MatchKind {
-    #[tok(FULL)] Full,
-    #[tok(PARTIAL)] Partial,
-    #[tok(SIMPLE)] Simple,
+    #[tok(FULL)]
+    Full,
+    #[tok(PARTIAL)]
+    Partial,
+    #[tok(SIMPLE)]
+    Simple,
 }
 
 /// `MATCH FULL | MATCH PARTIAL | MATCH SIMPLE`.
@@ -132,8 +131,10 @@ pub struct MatchClause {
 /// Variant ordering: `NotDeferrable` (two keywords) before `Deferrable`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum DeferrableKind {
-    #[tok(NOT, DEFERRABLE)] NotDeferrable,
-    #[tok(DEFERRABLE)] Deferrable,
+    #[tok(NOT, DEFERRABLE)]
+    NotDeferrable,
+    #[tok(DEFERRABLE)]
+    Deferrable,
 }
 
 /// `INITIALLY DEFERRED | INITIALLY IMMEDIATE`.
@@ -145,8 +146,10 @@ pub struct InitiallyClause {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub enum InitiallyMode {
-    #[tok(DEFERRED)] Deferred,
-    #[tok(IMMEDIATE)] Immediate,
+    #[tok(DEFERRED)]
+    Deferred,
+    #[tok(IMMEDIATE)]
+    Immediate,
 }
 
 /// `ON DELETE ...` or `ON UPDATE ...` trailing action on a REFERENCES
@@ -168,9 +171,7 @@ pub struct ReferencesConstraint<'input> {
     pub table: crate::ast::shared::names::QualifiedName<'input>,
     #[tok(LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub columns: Option<
-         Vec<literal::AliasName<'input> > ,
-    >,
+    pub columns: Option<recursa::Vec1<literal::AliasName<'input>>>,
     pub match_clause: Option<MatchClause>,
     pub actions: Vec<OnAction<'input>>,
     pub deferrable: Option<DeferrableKind>,
@@ -183,7 +184,7 @@ pub struct ReferencesConstraint<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CheckConstraint<'input> {
     #[tok(CHECK, LPAREN, this, RPAREN)]
-    pub expr:  crate::ast::shared::expr::Expr<'input> ,
+    pub expr: crate::ast::shared::expr::Expr<'input>,
     #[presence(NO, INHERIT)]
     pub no_inherit: bool,
     #[presence(NOT, VALID)]
@@ -196,8 +197,10 @@ pub struct CheckConstraint<'input> {
 /// (`ALWAYS` vs `BY`), so order is cosmetic.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum GeneratedIdentityMode {
-    #[tok(ALWAYS)] Always,
-    #[tok(BY, DEFAULT)] ByDefault,
+    #[tok(ALWAYS)]
+    Always,
+    #[tok(BY, DEFAULT)]
+    ByDefault,
 }
 
 /// GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY column constraint, with
@@ -206,9 +209,16 @@ pub enum GeneratedIdentityMode {
 pub struct GeneratedIdentityConstraint<'input> {
     #[tok(GENERATED, this)]
     pub mode: GeneratedIdentityMode,
-    #[tok(AS, IDENTITY, LPAREN, this, RPAREN)]
-    pub seq_options:
-        Option< Vec<IdentitySeqOption<'input>> >,
+    pub identity: AsIdentity,
+    #[tok(LPAREN, this, RPAREN)]
+    pub seq_options: Option<recursa::Vec1<IdentitySeqOption<'input>>>,
+}
+
+/// Required `AS IDENTITY` marker after the generation mode.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum AsIdentity {
+    #[tok(AS, IDENTITY)]
+    Value,
 }
 
 /// One option inside an `IDENTITY ( ... )` sequence option list.
@@ -220,42 +230,46 @@ pub enum IdentitySeqOption<'input> {
     StartWith(SeqOptStartWith<'input>),
     IncrementBy(SeqOptIncrementBy<'input>),
     MinValue(SeqOptMinValue<'input>),
-    #[tok(NO, MINVALUE)] NoMinValue,
+    #[tok(NO, MINVALUE)]
+    NoMinValue,
     MaxValue(SeqOptMaxValue<'input>),
-    #[tok(NO, MAXVALUE)] NoMaxValue,
+    #[tok(NO, MAXVALUE)]
+    NoMaxValue,
     Cache(SeqOptCache<'input>),
-    #[tok(CYCLE)] Cycle,
-    #[tok(NO, CYCLE)] NoCycle,
+    #[tok(CYCLE)]
+    Cycle,
+    #[tok(NO, CYCLE)]
+    NoCycle,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptStartWith<'input> {
     #[tok(START, optional(WITH), this)]
-    pub value: crate::ast::shared::expr::Expr<'input>,
+    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptIncrementBy<'input> {
     #[tok(INCREMENT, optional(BY), this)]
-    pub value: crate::ast::shared::expr::Expr<'input>,
+    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptMinValue<'input> {
     #[tok(MINVALUE, this)]
-    pub value: crate::ast::shared::expr::Expr<'input>,
+    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptMaxValue<'input> {
     #[tok(MAXVALUE, this)]
-    pub value: crate::ast::shared::expr::Expr<'input>,
+    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptCache<'input> {
     #[tok(CACHE, this)]
-    pub value: crate::ast::shared::expr::Expr<'input>,
+    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
 }
 
 /// `GENERATED {ALWAYS | BY DEFAULT} AS (expr) STORED` column constraint.
@@ -264,7 +278,7 @@ pub struct GeneratedStoredConstraint<'input> {
     #[tok(GENERATED, this)]
     pub mode: GeneratedIdentityMode,
     #[tok(AS, LPAREN, this, RPAREN, STORED)]
-    pub expr:  crate::ast::shared::expr::Expr<'input> ,
+    pub expr: crate::ast::shared::expr::Expr<'input>,
 }
 
 /// `COMPRESSION method` column clause. Sets the compression method
@@ -294,8 +308,10 @@ pub enum ColumnConstraintKind<'input> {
     GeneratedStored(GeneratedStoredConstraint<'input>),
     GeneratedIdentity(GeneratedIdentityConstraint<'input>),
     PrimaryKey(PrimaryKeyConstraint<'input>),
-    #[tok(NOT, NULL)] NotNull,
-    #[tok(NULL)] /// Bare `NULL` — redundant (columns are nullable by default) but
+    #[tok(NOT, NULL)]
+    NotNull,
+    #[tok(NULL)]
+    /// Bare `NULL` — redundant (columns are nullable by default) but
     /// syntactically accepted.
     Null,
     Unique(UniqueConstraint<'input>),
@@ -309,11 +325,16 @@ pub enum ColumnConstraintKind<'input> {
 /// Column STORAGE mode: `STORAGE { PLAIN | EXTERNAL | EXTENDED | MAIN | DEFAULT }`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ColumnStorageMode {
-    #[tok(PLAIN)] Plain,
-    #[tok(EXTERNAL)] External,
-    #[tok(EXTENDED)] Extended,
-    #[tok(MAIN)] Main,
-    #[tok(DEFAULT)] Default,
+    #[tok(PLAIN)]
+    Plain,
+    #[tok(EXTERNAL)]
+    External,
+    #[tok(EXTENDED)]
+    Extended,
+    #[tok(MAIN)]
+    Main,
+    #[tok(DEFAULT)]
+    Default,
 }
 
 /// `STORAGE mode` column-level storage specifier (used inline in CREATE
@@ -362,10 +383,10 @@ pub struct GenericOption<'input> {
 /// CREATE USER MAPPING, IMPORT FOREIGN SCHEMA, and column-level options on
 /// foreign-table columns.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(OPTIONS, LPAREN, this, RPAREN)]
 pub struct CreateGenericOptions<'input> {
-    #[tok(OPTIONS, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub list:  recursa::Vec1<GenericOption<'input> > ,
+    pub list: recursa::Vec1<GenericOption<'input>>,
 }
 
 /// A column definition: `name type [COLLATE "..."] [OPTIONS (...)] [constraints...]`.
@@ -374,11 +395,11 @@ pub struct CreateGenericOptions<'input> {
 /// `columnDef` — used in CREATE FOREIGN TABLE column lists.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ColumnDef<'input> {
-    pub name: literal::Ident<'input>,
+    pub name: crate::tokens::ColId<'input>,
     pub type_name: crate::ast::shared::expr::CastType<'input>,
     pub collate: Option<CollateClause<'input>>,
     pub column_options: Option<CreateGenericOptions<'input>>,
-    pub constraints: Vec<ColumnConstraint<'input>  >,
+    pub constraints: Vec<ColumnConstraint<'input>>,
 }
 
 impl<'input> ColumnDef<'input> {
@@ -423,16 +444,22 @@ pub enum IndexedConstraintBody<'input> {
     Columns(IndexedConstraintColumns<'input>),
 }
 
+/// Parenthesized column list in a PRIMARY KEY or UNIQUE constraint.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct IndexedConstraintColumnList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<crate::tokens::ColId<'input>>,
+);
+
 /// `(cols) [INCLUDE (…)] [WITH (...)] [USING INDEX TABLESPACE name]` — the
 /// column-list branch of a PK/UNIQUE constraint body. Per gram.y
 /// `ConstraintElem`'s `UNIQUE … '(' columnList ')' opt_c_include
 /// opt_definition OptConsTableSpace ConstraintAttributeSpec` rule.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct IndexedConstraintColumns<'input> {
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub columns:
-         Vec<crate::tokens::ColId<'input> > ,
+    pub columns: IndexedConstraintColumnList<'input>,
     pub include: Option<IncludeColumns<'input>>,
     /// `WITH (storage_param = value, ...)` — gram.y's `opt_definition`.
     pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
@@ -454,11 +481,10 @@ pub struct TablePrimaryKey<'input> {
 /// `INCLUDE (col, ...)` covering-index clause used on PRIMARY KEY / UNIQUE
 /// table constraints and on CREATE INDEX.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(INCLUDE, LPAREN, this, RPAREN)]
 pub struct IncludeColumns<'input> {
-    #[tok(INCLUDE, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub columns:
-         Vec<crate::tokens::ColId<'input> > ,
+    pub columns: Vec<crate::tokens::ColId<'input>>,
 }
 
 /// `UNIQUE {(cols) [INCLUDE (…)] | USING INDEX name}` — table-level
@@ -468,8 +494,8 @@ pub struct IncludeColumns<'input> {
 /// branch has no `NULLS [NOT] DISTINCT` qualifier (PG infers it from the
 /// existing index definition).
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(UNIQUE, this)]
 pub struct TableUnique<'input> {
-    #[tok(UNIQUE, this)]
     /// `NULLS [NOT] DISTINCT` qualifier — only meaningful for the
     /// `(cols)` branch but accepted before either body for parsing
     /// simplicity. If present alongside `USING INDEX`, PG rejects at
@@ -479,13 +505,20 @@ pub struct TableUnique<'input> {
     pub attrs: ConstraintAttrs,
 }
 
+/// Parenthesized local-column list in a table-level foreign-key constraint.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct ForeignKeyColumnList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<crate::tokens::ColId<'input>>,
+);
+
 /// `FOREIGN KEY (col, ...) REFERENCES table [(col, ...)] [MATCH ...] [ON ...] [DEFERRABLE ...] [INITIALLY ...]`
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(FOREIGN, KEY, this)]
 pub struct TableForeignKey<'input> {
-    #[tok(FOREIGN, KEY, LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub columns:
-         Vec<crate::tokens::ColId<'input> > ,
+    pub columns: ForeignKeyColumnList<'input>,
     pub references: ReferencesConstraint<'input>,
 }
 
@@ -519,11 +552,7 @@ pub enum ExclusionOperator<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ExclusionOperatorDecorated<'input> {
     #[tok(OPERATOR, LPAREN, this, RPAREN)]
-    pub name:
-
-        crate::ast::shared::names::QualifiedOperatorName<'input>
-
-    ,
+    pub name: crate::ast::shared::names::QualifiedOperatorName<'input>,
 }
 
 /// `WHERE (predicate)` clause on an EXCLUDE constraint — Postgres'
@@ -532,8 +561,17 @@ pub struct ExclusionOperatorDecorated<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ExclusionWhereClause<'input> {
     #[tok(WHERE, LPAREN, this, RPAREN)]
-    pub expr:  crate::ast::shared::expr::Expr<'input> ,
+    pub expr: crate::ast::shared::expr::Expr<'input>,
 }
+
+/// Parenthesized, non-empty list of exclusion-constraint elements.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct ExclusionConstraintList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<ExclusionConstraintElem<'input>>,
+);
 
 /// `EXCLUDE [USING method] (index_elem WITH op [, ...]) [INCLUDE (...)]
 ///         [WITH (storage_params)] [USING INDEX TABLESPACE name] [WHERE (expr)]
@@ -546,17 +584,11 @@ pub struct ExclusionWhereClause<'input> {
 ///     ConstraintAttributeSpec
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(EXCLUDE, this)]
 pub struct TableExclude<'input> {
-    #[tok(EXCLUDE, this)]
     /// `access_method_clause` — `USING method` is optional (defaults to gist).
     pub using: Option<crate::ast::ddl::index::UsingMethod<'input>>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub exclusions:
-
-        recursa::Vec1<ExclusionConstraintElem<'input> >
-
-    ,
+    pub exclusions: ExclusionConstraintList<'input>,
     /// `INCLUDE (col, ...)` covering-index clause.
     pub include: Option<IncludeColumns<'input>>,
     /// `WITH (param = value, ...)` storage parameters (`opt_definition`).
@@ -592,16 +624,26 @@ pub struct TableConstraint<'input> {
 /// A single `INCLUDING` / `EXCLUDING` option on a `LIKE` source table clause.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum LikeOptionKind {
-    #[tok(ALL)] All,
-    #[tok(DEFAULTS)] Defaults,
-    #[tok(CONSTRAINTS)] Constraints,
-    #[tok(INDEXES)] Indexes,
-    #[tok(STORAGE)] Storage,
-    #[tok(COMMENTS)] Comments,
-    #[tok(STATISTICS)] Statistics,
-    #[tok(GENERATED)] Generated,
-    #[tok(IDENTITY)] Identity,
-    #[tok(COMPRESSION)] Compression,
+    #[tok(ALL)]
+    All,
+    #[tok(DEFAULTS)]
+    Defaults,
+    #[tok(CONSTRAINTS)]
+    Constraints,
+    #[tok(INDEXES)]
+    Indexes,
+    #[tok(STORAGE)]
+    Storage,
+    #[tok(COMMENTS)]
+    Comments,
+    #[tok(STATISTICS)]
+    Statistics,
+    #[tok(GENERATED)]
+    Generated,
+    #[tok(IDENTITY)]
+    Identity,
+    #[tok(COMPRESSION)]
+    Compression,
 }
 
 /// `INCLUDING what`.
@@ -654,17 +696,18 @@ pub enum ColumnOrConstraint<'input> {
 /// Optional TEMP or TEMPORARY keyword.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum TempKw {
-    #[tok(TEMP)] Temp,
-    #[tok(TEMPORARY)] Temporary,
+    #[tok(TEMP)]
+    Temp,
+    #[tok(TEMPORARY)]
+    Temporary,
 }
 
 /// INHERITS clause: `INHERITS (parent, ...)`
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(INHERITS, LPAREN, this, RPAREN)]
 pub struct InheritsClause<'input> {
-    #[tok(INHERITS, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub parents:
-         Vec<crate::tokens::ColId<'input> > ,
+    pub parents: Vec<crate::tokens::ColId<'input>>,
 }
 
 /// `TABLESPACE name` clause on CREATE TABLE / CREATE INDEX, placing the
@@ -675,16 +718,41 @@ pub struct TablespaceClause<'input> {
     pub name: literal::Ident<'input>,
 }
 
-/// Legacy `WITH OIDS` / `WITHOUT OIDS` clause on CREATE TABLE. Kept for
-/// backward-compat parsing of pre-12 dumps; Postgres now rejects it at
-/// execution time but still accepts the syntax.
-///
-/// Variant ordering: `WithoutOids` (WITHOUT token) is disjoint from `WithOids`
-/// (WITH OIDS) — distinct first tokens, listed in declaration order.
-#[derive(recursa::Node, Debug, Clone)]
+/// Legacy OIDS choice exposed by [`ColumnsBody::with_oids`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WithOidsClause {
-    #[tok(WITH, OIDS)] WithOids,
-    #[tok(WITHOUT, OIDS)] WithoutOids,
+    WithOids,
+    WithoutOids,
+}
+
+/// Parenthesized storage parameters following `WITH` on CREATE TABLE.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct ColumnsStorageParams<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<crate::ast::ddl::index::StorageParam<'input>>,
+);
+
+/// Payload after the common CREATE TABLE `WITH` prefix.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum ColumnsWithValue<'input> {
+    #[tok(OIDS)]
+    Oids,
+    Storage(ColumnsStorageParams<'input>),
+}
+
+/// CREATE TABLE's mutually exclusive `WITH OIDS`, `WITH (...)`, and
+/// `WITHOUT OIDS` clauses.
+///
+/// Factoring `WITH` before choosing `OIDS` or `(` lets the parser use the
+/// second token for disambiguation instead of committing one optional field
+/// before it can try the other.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum ColumnsWithClause<'input> {
+    With(#[tok(WITH, this)] ColumnsWithValue<'input>),
+    #[tok(WITHOUT, OIDS)]
+    WithoutOids,
 }
 
 /// `USING access_method` clause on CREATE TABLE, selecting a non-default
@@ -698,18 +766,46 @@ pub struct UsingAccessMethodClause<'input> {
 /// Column-based table body: `(cols_and_constraints) [INHERITS (...)] [PARTITION BY ...]`
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ColumnsBody<'input> {
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub columns:
-         Vec<ColumnOrConstraint<'input> > ,
+    pub columns: TableElementList<'input>,
     pub inherits: Option<InheritsClause<'input>>,
     pub partition_by: Option<PartitionByClause<'input>>,
     pub using: Option<UsingAccessMethodClause<'input>>,
-    pub with_oids: Option<WithOidsClause>,
-    pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
+    pub with: Option<ColumnsWithClause<'input>>,
     pub on_commit: Option<OnCommitClause>,
     pub tablespace: Option<TablespaceClause<'input>>,
 }
+
+impl<'input> ColumnsBody<'input> {
+    /// Legacy OIDS clause, when present.
+    pub fn with_oids(&self) -> Option<WithOidsClause> {
+        match self.with.as_ref() {
+            Some(ColumnsWithClause::With(ColumnsWithValue::Oids)) => Some(WithOidsClause::WithOids),
+            Some(ColumnsWithClause::WithoutOids) => Some(WithOidsClause::WithoutOids),
+            Some(ColumnsWithClause::With(ColumnsWithValue::Storage(_))) | None => None,
+        }
+    }
+
+    /// Storage parameters from `WITH (...)`, when present.
+    pub fn with_storage(&self) -> Option<&[crate::ast::ddl::index::StorageParam<'input>]> {
+        match self.with.as_ref() {
+            Some(ColumnsWithClause::With(ColumnsWithValue::Storage(params))) => {
+                Some(params.0.as_slice())
+            }
+            Some(ColumnsWithClause::With(ColumnsWithValue::Oids))
+            | Some(ColumnsWithClause::WithoutOids)
+            | None => None,
+        }
+    }
+}
+
+/// Parenthesized list of zero or more table elements.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct TableElementList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<ColumnOrConstraint<'input>>,
+);
 
 /// `ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP }` for temp tables.
 ///
@@ -723,9 +819,12 @@ pub struct OnCommitClause {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub enum OnCommitAction {
-    #[tok(PRESERVE, ROWS)] PreserveRows,
-    #[tok(DELETE, ROWS)] DeleteRows,
-    #[tok(DROP)] Drop,
+    #[tok(PRESERVE, ROWS)]
+    PreserveRows,
+    #[tok(DELETE, ROWS)]
+    DeleteRows,
+    #[tok(DROP)]
+    Drop,
 }
 
 /// One entry inside a `PARTITION OF parent (...)` column-option list.
@@ -754,8 +853,17 @@ pub struct PartitionColumnOptionDef<'input> {
     #[presence(WITH, OPTIONS)]
     pub with_options: bool,
     pub collate: Option<CollateClause<'input>>,
-    pub constraints: Vec<ColumnConstraint<'input>  >,
+    pub constraints: Vec<ColumnConstraint<'input>>,
 }
+
+/// Optional parenthesized column-option list on typed and partition tables.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct PartitionColumnOptionList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<PartitionColumnOption<'input>>,
+);
 
 /// Partition-of table body: `PARTITION OF parent [(col_options, ...)] FOR VALUES IN (...) [PARTITION BY ...]`
 ///
@@ -767,11 +875,7 @@ pub struct PartitionColumnOptionDef<'input> {
 pub struct PartitionOfBody<'input> {
     #[tok(PARTITION, OF, this)]
     pub parent: crate::ast::shared::names::QualifiedName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub column_options: Option<
-         Vec<PartitionColumnOption<'input> > ,
-    >,
+    pub column_options: Option<PartitionColumnOptionList<'input>>,
     pub for_values: Option<ForValuesClause<'input>>,
     #[presence(DEFAULT)]
     pub default: bool,
@@ -790,11 +894,7 @@ pub struct PartitionOfBody<'input> {
 pub struct OfTypeBody<'input> {
     #[tok(OF, this)]
     pub type_name: crate::ast::shared::names::QualifiedName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub column_options: Option<
-         Vec<PartitionColumnOption<'input> > ,
-    >,
+    pub column_options: Option<PartitionColumnOptionList<'input>>,
 }
 
 /// AS-query table body: `AS SELECT ... [WITH [NO] DATA]`.
@@ -814,21 +914,28 @@ pub struct AsQueryBody<'input> {
 /// Variant ordering: `NoData` (`WITH NO DATA`, longer) before `Data`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum WithDataClause {
-    #[tok(WITH, NO, DATA)] NoData,
-    #[tok(WITH, DATA)] Data,
+    #[tok(WITH, NO, DATA)]
+    NoData,
+    #[tok(WITH, DATA)]
+    Data,
 }
 
 /// `(col, col, ...) [ON COMMIT ...] AS query [WITH [NO] DATA]` — CTAS with column list.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ColumnsAsQueryBody<'input> {
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub columns:
-         Vec<crate::tokens::ColId<'input> > ,
+    pub columns: CtasColumnList<'input>,
     pub on_commit: Option<OnCommitClause>,
     #[tok(AS, this)]
     pub query: Box<crate::ast::Statement<'input>>,
     pub with_data: Option<WithDataClause>,
+}
+
+/// Required, non-empty CTAS output-column list.
+#[derive(recursa::Node, Debug, Clone)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct CtasColumnList<'input> {
+    #[sep(COMMA)]
+    pub columns: recursa::Vec1<crate::tokens::ColId<'input>>,
 }
 
 /// The body of a CREATE TABLE statement after `CREATE [TEMP] TABLE name`.
@@ -853,8 +960,8 @@ pub enum CreateTableBody<'input> {
 /// CREATE [TEMP] TABLE statement.
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(CREATE, this)]
 pub struct CreateTableStmt<'input> {
-    #[tok(CREATE, this)]
     pub temp: Option<TempKw>,
     #[tok(this, TABLE)]
     #[presence(UNLOGGED)]
@@ -873,11 +980,9 @@ pub struct CreateTableStmt<'input> {
 impl<'input> CreateTableStmt<'input> {
     /// Returns all items (columns + table-level constraints) of a
     /// columns-based CREATE TABLE.
-    pub fn items(
-        &self,
-    ) -> Option<&Vec<ColumnOrConstraint<'input>>> {
+    pub fn items(&self) -> Option<&[ColumnOrConstraint<'input>]> {
         match &self.body {
-            CreateTableBody::Columns(b) => Some(&b.columns),
+            CreateTableBody::Columns(b) => Some(b.columns.0.as_slice()),
             CreateTableBody::PartitionOf(_)
             | CreateTableBody::AsQuery(_)
             | CreateTableBody::ColumnsAsQuery(_)
@@ -927,36 +1032,42 @@ pub struct PartitionByClause<'input> {
     #[sep(COMMA)]
     /// Partition key items — may be plain column names or expressions like
     /// `((a+b)/2)`, optionally followed by a trailing opclass name.
-    pub columns:
-         Vec<PartitionKeyItem<'input> > ,
+    pub columns: Vec<PartitionKeyItem<'input>>,
 }
 
 /// FOR VALUES IN (val, ...) clause — legacy name kept for backward compat
 /// with partition.rs own tests; the general form lives in `ForValuesClause`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(FOR, VALUES, IN, LPAREN, this, RPAREN)]
 pub struct ForValuesInClause<'input> {
-    #[tok(FOR, VALUES, IN, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub values:  Vec<Expr<'input> > ,
+    pub values: Vec<Expr<'input>>,
 }
 
 /// `FROM (...) TO (...)` range partition spec.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FromToSpec<'input> {
-    #[tok(FROM, LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub from_values:  Vec<Expr<'input> > ,
-    #[tok(TO, LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub to_values:  Vec<Expr<'input> > ,
+    #[tok(FROM, this)]
+    pub from_values: PartitionValues<'input>,
+    #[tok(TO, this)]
+    pub to_values: PartitionValues<'input>,
 }
+
+/// Parenthesized value list in a partition bound.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct PartitionValues<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<Expr<'input>>,
+);
 
 /// `IN (val, ...)` list partition spec.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(IN, LPAREN, this, RPAREN)]
 pub struct InListSpec<'input> {
-    #[tok(IN, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub values:  Vec<Expr<'input> > ,
+    pub values: Vec<Expr<'input>>,
 }
 
 /// `MODULUS n` entry.
@@ -982,10 +1093,10 @@ pub enum HashPartItem<'input> {
 
 /// `WITH (MODULUS n, REMAINDER m)` hash partition spec.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(WITH, LPAREN, this, RPAREN)]
 pub struct WithModulusSpec<'input> {
-    #[tok(WITH, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub items:  Vec<HashPartItem<'input> > ,
+    pub items: Vec<HashPartItem<'input>>,
 }
 
 /// Body after `FOR VALUES` in a PARTITION OF clause. Variant ordering:
@@ -1012,15 +1123,21 @@ pub struct PartitionColumnDef<'input> {
     pub type_name: TypeName<'input>,
 }
 
+/// Parenthesized column-definition list of a standalone partitioned table.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct PartitionColumnDefList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<PartitionColumnDef<'input>>,
+);
+
 /// CREATE TABLE with PARTITION BY: `CREATE TABLE name (cols) PARTITION BY strategy (cols)`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CreatePartitionedTableStmt<'input> {
     #[tok(CREATE, TABLE, this)]
     pub name: literal::Ident<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub columns:
-         Vec<PartitionColumnDef<'input> > ,
+    pub columns: PartitionColumnDefList<'input>,
     pub partition_by: PartitionByClause<'input>,
 }
 
@@ -1048,717 +1165,14 @@ pub struct DropTableStmt<'input> {
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
     #[sep(COMMA)]
-    pub names: Vec<QualifiedName<'input> >,
+    pub names: Vec<QualifiedName<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-
-    #[test]
-    fn parse_create_table_identity_seq_options() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (id int GENERATED ALWAYS AS IDENTITY (START WITH 44))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_temp_table_on_commit() {
-        for src in [
-            "CREATE TEMP TABLE t (a int) ON COMMIT PRESERVE ROWS",
-            "CREATE TEMP TABLE t (a int) ON COMMIT DELETE ROWS",
-            "CREATE TEMP TABLE t (a int) ON COMMIT DROP",
-        ] {
-            let lexed = crate::tokens::lex(src);
-            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-            let mut input = lexed.input();
-            let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-            assert!(input.is_eof(), "leftover for {src:?}");
-        }
-    }
-
-    #[test]
-    fn parse_create_table_single_column() {
-        let lexed = crate::tokens::lex("CREATE TABLE BOOLTBL1 (f1 bool)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.object(), "BOOLTBL1");
-        assert_eq!(stmt.items().unwrap().len(), 1);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_multiple_columns() {
-        let lexed = crate::tokens::lex("CREATE TABLE BOOLTBL3 (d text, b bool, o int)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.object(), "BOOLTBL3");
-        assert_eq!(stmt.items().unwrap().len(), 3);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_ctas_with_column_list() {
-        // Regression: matview.sql uses `CREATE TABLE foo(a, b) AS VALUES(1, 10)`.
-        let lexed = crate::tokens::lex("CREATE TABLE mvtest_foo(a, b) AS VALUES(1, 10)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(
-            stmt.body,
-            super::CreateTableBody::ColumnsAsQuery(_)
-        ));
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_time_zone_types() {
-        // Regression: brin.sql brintest table uses `time without time zone`,
-        // `timestamp with time zone`, `bit varying(16)` as column types.
-        let lexed = crate::tokens::lex("CREATE TABLE t (a time without time zone, b timestamp with time zone, c time with time zone, d timestamp without time zone, e bit varying(16), f bit(10), g character)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.items().unwrap().len(), 7);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_array_column_types() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int2[], b int4[][][], c varchar(5)[], d text[])");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.items().unwrap().len(), 4);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_boolean_type() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (f1 boolean)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.items().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn parse_create_temp_table() {
-        let lexed = crate::tokens::lex("CREATE TEMP TABLE foo (f1 int)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.temp.is_some());
-        assert_eq!(stmt.name.object(), "foo");
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_partitioned_table() {
-        let lexed = crate::tokens::lex("create table list_parted_tbl (a int,b int) partition by list (a)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.object(), "list_parted_tbl");
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_partition_of() {
-        let lexed = crate::tokens::lex("create table list_parted_tbl1 partition of list_parted_tbl for values in (1) partition by list(b)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.object(), "list_parted_tbl1");
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_column_check_constraint() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int CHECK (a > 0))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_column_references_full() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int REFERENCES other(id) MATCH FULL ON DELETE CASCADE ON UPDATE NO ACTION DEFERRABLE INITIALLY DEFERRED)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_column_named_constraint() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int CONSTRAINT pos CHECK (a > 0))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_column_default_constraint() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int DEFAULT 0)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_table_primary_key() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int, b int, PRIMARY KEY (a, b))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_table_unique() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int, UNIQUE (a))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_table_foreign_key() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES other(id) ON DELETE SET NULL)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_table_foreign_key_set_null_columns() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int, b int, FOREIGN KEY (a, b) REFERENCES p ON DELETE SET NULL (b))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_table_foreign_key_set_default_columns() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES p ON UPDATE SET DEFAULT (a))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_table_check() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int, CHECK (a > 0))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_table_named_constraint() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int, b int, CONSTRAINT pk PRIMARY KEY (a, b) DEFERRABLE INITIALLY IMMEDIATE)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_table_check_no_inherit() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int, CHECK (a > 0) NO INHERIT)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_like_bare() {
-        let lexed = crate::tokens::lex("CREATE TABLE foo (LIKE bar)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_like_including_all() {
-        let lexed = crate::tokens::lex("CREATE TABLE foo (LIKE bar INCLUDING ALL)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_like_including_excluding() {
-        let lexed = crate::tokens::lex("CREATE TABLE foo (LIKE bar INCLUDING DEFAULTS EXCLUDING CONSTRAINTS)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_like_mixed_with_columns() {
-        let lexed = crate::tokens::lex("CREATE TABLE foo (a int, LIKE bar INCLUDING ALL, b text)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_table_check_no_inherit_not_valid() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (d date, CHECK (false) NO INHERIT NOT VALID)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_table_check_not_valid() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int, CHECK (a > 0) NOT VALID)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_with_storage_params() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int) WITH (fillfactor = 70)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_temp_table_empty_columns() {
-        let lexed = crate::tokens::lex("CREATE TEMP TABLE nocols()");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.items().unwrap().len(), 0);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_unlogged_table() {
-        let lexed = crate::tokens::lex("CREATE UNLOGGED TABLE t (a int)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.unlogged.is_some());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_unlogged_table_qualified() {
-        let lexed = crate::tokens::lex("CREATE UNLOGGED TABLE public.t (a int)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        // This uses unqualified Ident only; restrict to the unqualified form.
-        let _stmt = CreateTableStmt::parse(&mut input);
-    }
-
-    #[test]
-    fn parse_column_with_collate() {
-        let lexed = crate::tokens::lex("CREATE TABLE foo (a text COLLATE \"C\")");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_partition_of_range_from_to() {
-        let lexed = crate::tokens::lex("CREATE TABLE p1 PARTITION OF p FOR VALUES FROM (0) TO (10)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_partition_of_list_in() {
-        let lexed = crate::tokens::lex("CREATE TABLE p2 PARTITION OF p FOR VALUES IN (1, 2, 3)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_partition_of_hash_with_modulus() {
-        let lexed = crate::tokens::lex("CREATE TABLE p3 PARTITION OF p FOR VALUES WITH (MODULUS 4, REMAINDER 0)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_partition_of_default() {
-        let lexed = crate::tokens::lex("CREATE TABLE p4 PARTITION OF p DEFAULT");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_primary_key_using_index_tablespace() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int PRIMARY KEY USING INDEX TABLESPACE pg_default) PARTITION BY LIST (a)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// Sanity check: ALTER TABLE ... ADD CONSTRAINT ... PRIMARY KEY (col)
-    /// must parse (existing functionality).
-    #[test]
-    fn parse_alter_table_add_pk_cols_sanity() {
-        let lexed = crate::tokens::lex("ALTER TABLE t ADD PRIMARY KEY (a)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// Table-level `PRIMARY KEY USING INDEX existing_idx` constraint form
-    /// (gram.y `ConstraintElem: PRIMARY KEY ExistingIndex …`). Distinct
-    /// from the `PRIMARY KEY (cols)` form modelled by `TablePrimaryKey`.
-    #[test]
-    fn parse_table_constraint_primary_key_using_index() {
-        let lexed = crate::tokens::lex("ALTER TABLE t ADD PRIMARY KEY USING INDEX my_idx");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// Table-level `UNIQUE USING INDEX existing_idx` form (gram.y
-    /// `ConstraintElem: UNIQUE ExistingIndex …`).
-    #[test]
-    fn parse_table_constraint_unique_using_index() {
-        let lexed = crate::tokens::lex("ALTER TABLE t ADD UNIQUE USING INDEX my_idx");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// `ADD CONSTRAINT name PRIMARY KEY USING INDEX existing_idx` — the
-    /// named-constraint form.
-    #[test]
-    fn parse_table_constraint_named_primary_key_using_index() {
-        let lexed = crate::tokens::lex("ALTER TABLE t ADD CONSTRAINT my_pkey PRIMARY KEY USING INDEX my_idx");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_ctas_on_commit_delete_rows() {
-        let lexed = crate::tokens::lex("CREATE TEMP TABLE temptest(col) ON COMMIT DELETE ROWS AS SELECT 1");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_ctas_on_commit_drop() {
-        let lexed = crate::tokens::lex("CREATE TEMP TABLE temptest(col) ON COMMIT DROP AS SELECT 1");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_partition_of_on_commit() {
-        for src in [
-            "CREATE TEMP TABLE t1 PARTITION OF p FOR VALUES IN (1) ON COMMIT DELETE ROWS",
-            "CREATE TEMP TABLE t2 PARTITION OF p FOR VALUES IN (2) ON COMMIT DROP",
-            "CREATE TEMP TABLE t3 PARTITION OF p FOR VALUES IN (1) ON COMMIT PRESERVE ROWS",
-        ] {
-            let lexed = crate::tokens::lex(src);
-            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-            let mut input = lexed.input();
-            let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-            assert!(input.is_eof(), "leftover for {src:?}");
-        }
-    }
-
-    #[test]
-    fn parse_create_table_of_type() {
-        let lexed = crate::tokens::lex("CREATE TABLE persons OF person_type");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.body, super::CreateTableBody::OfType(_)));
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_of_type_with_options() {
-        let lexed = crate::tokens::lex("CREATE TABLE personsx OF person_type (myname WITH OPTIONS NOT NULL)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_of_type_constraints() {
-        let lexed = crate::tokens::lex("CREATE TABLE persons2 OF person_type (id WITH OPTIONS PRIMARY KEY, UNIQUE (name))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_of_type_default() {
-        let lexed = crate::tokens::lex("CREATE TABLE persons3 OF person_type (PRIMARY KEY (id), name WITH OPTIONS DEFAULT '')");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_table_of_type_not_null_default() {
-        let lexed = crate::tokens::lex("CREATE TABLE persons3 OF person_type (PRIMARY KEY (id), name NOT NULL DEFAULT '')");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// EXCLUDE table constraint, simplest form: `EXCLUDE (col WITH op)`.
-    #[test]
-    fn parse_table_exclude_bare() {
-        let lexed = crate::tokens::lex("CREATE TABLE deferred_excl (f1 int, EXCLUDE (f1 WITH =))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// EXCLUDE table constraint with explicit access method: `EXCLUDE USING gist (col WITH op)`.
-    #[test]
-    fn parse_table_exclude_using_gist() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int4range, EXCLUDE USING GIST (a WITH =))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// EXCLUDE constraint with multiple index elements: `EXCLUDE USING GIST (a WITH =, b WITH =)`.
-    #[test]
-    fn parse_table_exclude_multi_elements() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int4range, b int4range, EXCLUDE USING GIST (a WITH =, b WITH =))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// EXCLUDE constraint with a custom operator like `&&` or `-|-`.
-    #[test]
-    fn parse_table_exclude_custom_op() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (a int4range, EXCLUDE USING GIST (a WITH -|-))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// EXCLUDE constraint with `WHERE (predicate)` partial-index clause.
-    #[test]
-    fn parse_table_exclude_with_where() {
-        let lexed = crate::tokens::lex("CREATE TABLE t (f4 int, EXCLUDE USING btree (f4 WITH =) WHERE (f4 IS NOT NULL))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    // -------------------------------------------------------------------
-    // Tests folded in from the former `ast/partition.rs`.
-    // -------------------------------------------------------------------
-
-    #[test]
-    fn parse_partitioned_table_standalone() {
-        use crate::ast::ddl::table::CreatePartitionedTableStmt;
-        let lexed = crate::tokens::lex("create table list_parted_tbl (a int,b int) partition by list (a)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreatePartitionedTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.text(), "list_parted_tbl");
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_partition_of_standalone() {
-        use crate::ast::ddl::table::CreatePartitionOfStmt;
-        let lexed = crate::tokens::lex("create table list_parted_tbl1 partition of list_parted_tbl for values in (1) partition by list(b)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreatePartitionOfStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.text(), "list_parted_tbl1");
-        assert_eq!(stmt.parent.text(), "list_parted_tbl");
-        assert!(stmt.partition_by.is_some());
-        assert!(input.is_eof());
-    }
-
-    // -------------------------------------------------------------------
-    // Tests folded in from the former `ast/drop_table.rs`.
-    // -------------------------------------------------------------------
-
-    #[test]
-    fn parse_drop_table() {
-        use crate::ast::ddl::table::DropTableStmt;
-        let lexed = crate::tokens::lex("DROP TABLE BOOLTBL1");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.names.len(), 1);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_table_lowercase() {
-        use crate::ast::ddl::table::DropTableStmt;
-        let lexed = crate::tokens::lex("drop table my_table");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.names.len(), 1);
-    }
-
-    #[test]
-    fn parse_drop_table_if_exists() {
-        use crate::ast::ddl::table::DropTableStmt;
-        let lexed = crate::tokens::lex("DROP TABLE IF EXISTS foo");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.if_exists.is_some());
-    }
-
-    #[test]
-    fn parse_drop_table_multi_cascade() {
-        use crate::ast::ddl::table::DropTableStmt;
-        let lexed = crate::tokens::lex("DROP TABLE IF EXISTS a, b, c CASCADE");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.if_exists.is_some());
-        assert_eq!(stmt.names.len(), 3);
-        assert!(stmt.behavior.is_some());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_table_qualified() {
-        use crate::ast::ddl::table::DropTableStmt;
-        let lexed = crate::tokens::lex("DROP TABLE schema1.foo RESTRICT");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.behavior.is_some());
-        assert!(input.is_eof());
-    }
-    /// Multi-element `alter_identity_column_option_list` (gram.y) — the
-    /// `SET GENERATED …`, `SET seq_option`, and `RESTART …` clauses can
-    /// chain in a single `ALTER COLUMN` action. identity.sql corpus uses
-    /// this.
-    #[test]
-    fn parse_alter_table_set_generated_set_increment_restart() {
-        let lexed = crate::tokens::lex("ALTER TABLE pitest2 ALTER COLUMN f3 SET GENERATED BY DEFAULT SET INCREMENT BY 2 RESTART");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_table_identity_single_set_generated_still_works() {
-        let lexed = crate::tokens::lex("ALTER TABLE t ALTER COLUMN c SET GENERATED ALWAYS");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_table_identity_set_seq_option_alone() {
-        let lexed = crate::tokens::lex("ALTER TABLE t ALTER COLUMN c SET INCREMENT BY 2");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_table_identity_restart_alone() {
-        let lexed = crate::tokens::lex("ALTER TABLE t ALTER COLUMN c RESTART");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// gram.y `reloption_elem` includes `ColLabel '=' def_arg`. PG accepts
-    /// `RESET (name = value)` even though it ignores the value. Reloptions.sql
-    /// has `ALTER TABLE reloptions_test RESET (fillfactor=12)` — must not
-    /// surface as a [`crate::ast::FileItem::ParseError`].
-    #[test]
-    fn parse_alter_table_reset_reloptions_with_value() {
-        let lexed = crate::tokens::lex("ALTER TABLE reloptions_test RESET (fillfactor=12)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// gram.y `Typename` accepts `expr_list` typmods, including negative
-    /// integers like `numeric(3, -6)`. numeric.sql corpus needs this.
-    #[test]
-    fn parse_create_table_numeric_negative_typmod() {
-        use crate::ast::ddl::table::CreateTableStmt;
-        let lexed = crate::tokens::lex("CREATE TABLE num_typemod_test (millions numeric(3, -6))");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/table.tests.rs"
+));
 
 // =========================================================================
 // ALTER/DROP TABLE — appended from simple_stmts.rs during physical extraction.
@@ -1856,7 +1270,7 @@ pub struct AlterTableRenameConstraint<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterTableCmds<'input> {
     #[sep(COMMA)]
-    pub cmds: recursa::Vec1<AlterTableCmd<'input> >,
+    pub cmds: recursa::Vec1<AlterTableCmd<'input>>,
 }
 
 /// Postgres' `partition_cmd`: a single `ATTACH PARTITION` or `DETACH
@@ -1893,8 +1307,10 @@ pub struct DetachPartitionCmd<'input> {
 /// detached partition).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum DetachPartitionMode {
-    #[tok(CONCURRENTLY)] Concurrently,
-    #[tok(FINALIZE)] Finalize,
+    #[tok(CONCURRENTLY)]
+    Concurrently,
+    #[tok(FINALIZE)]
+    Finalize,
 }
 
 /// Postgres' `PartitionBoundSpec` — the partition bound used by `ATTACH
@@ -1909,7 +1325,8 @@ pub enum DetachPartitionMode {
 /// `ForValues` (begins with `FOR`).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum PartitionBoundSpec<'input> {
-    #[tok(DEFAULT)] Default,
+    #[tok(DEFAULT)]
+    Default,
     ForValues(crate::ast::ddl::table::ForValuesClause<'input>),
 }
 
@@ -2042,7 +1459,10 @@ pub struct AddTableConstraintCmd<'input> {
 
 /// `NOT VALID` — the unverified-constraint marker.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum NotValid { #[tok(NOT, VALID)] Value, }
+pub enum NotValid {
+    #[tok(NOT, VALID)]
+    Value,
+}
 
 /// `ADD columnDef` (no `COLUMN` keyword, no `IF NOT EXISTS`).
 ///
@@ -2146,14 +1566,14 @@ pub enum AlterIdentityOption<'input> {
 /// [`AlterIdentityOption`] items in sequence, no separator.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterIdentityOpts<'input> {
-    pub items: recursa::Vec1<AlterIdentityOption<'input>  >,
+    pub items: recursa::Vec1<AlterIdentityOption<'input>>,
 }
 
 /// `SET EXPRESSION AS (expr)` — adjust a generated column's expression.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColSetExpression<'input> {
     #[tok(SET, EXPRESSION, AS, LPAREN, this, RPAREN)]
-    pub expr:  Box<Expr<'input>> ,
+    pub expr: Box<Expr<'input>>,
 }
 
 /// `[SET DATA] TYPE Typename [COLLATE name] [USING expr]` — change a column's
@@ -2192,7 +1612,10 @@ pub struct AlterColSetDefault<'input> {
 
 /// `DROP DEFAULT` — drop a column's default expression.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum AlterColDropDefault { #[tok(DROP, DEFAULT)] Value, }
+pub enum AlterColDropDefault {
+    #[tok(DROP, DEFAULT)]
+    Value,
+}
 
 /// `USING expr` clause on `ALTER COLUMN … TYPE …`.
 #[derive(recursa::Node, Debug, Clone)]
@@ -2229,7 +1652,10 @@ pub struct AlterColSetStorage {
 
 /// `SET NOT NULL` — add a NOT NULL marker on the column.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum AlterColSetNotNull { #[tok(SET, NOT, NULL)] Value, }
+pub enum AlterColSetNotNull {
+    #[tok(SET, NOT, NULL)]
+    Value,
+}
 
 /// One `SET seqOpt` action on an identity column —
 /// `SET { START WITH | INCREMENT BY | MINVALUE | MAXVALUE | CACHE | CYCLE |
@@ -2246,21 +1672,24 @@ pub struct AlterColSetSeqOption<'input> {
 /// `DROP EXPRESSION [IF EXISTS]` — remove a generated column's expression,
 /// turning it into a regular column.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, EXPRESSION, this)]
 pub struct AlterColDropExpression {
-    #[tok(DROP, EXPRESSION, this)]
     pub if_exists: Option<IfExists>,
 }
 
 /// `DROP IDENTITY [IF EXISTS]` — remove an identity-column property.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, IDENTITY, this)]
 pub struct AlterColDropIdentity {
-    #[tok(DROP, IDENTITY, this)]
     pub if_exists: Option<IfExists>,
 }
 
 /// `DROP NOT NULL` — remove a NOT NULL marker.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum AlterColDropNotNull { #[tok(DROP, NOT, NULL)] Value, }
+pub enum AlterColDropNotNull {
+    #[tok(DROP, NOT, NULL)]
+    Value,
+}
 
 /// `ADD GENERATED { ALWAYS | BY DEFAULT } AS IDENTITY [(seq_options)]` —
 /// add an identity property to an existing column.
@@ -2272,8 +1701,8 @@ pub struct AlterColAddIdentity<'input> {
 
 /// `RESTART [WITH NumericOnly]` — restart an identity column's sequence.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(RESTART, this)]
 pub struct AlterColRestart<'input> {
-    #[tok(RESTART, this)]
     pub value: Option<RestartWith<'input>>,
 }
 
@@ -2382,26 +1811,40 @@ pub struct DisableRuleCmd<'input> {
 /// since `ALL` and `USER` are hard keywords that won't lex as `Ident`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum TriggerOrRuleTarget<'input> {
-    #[tok(ALL)] All,
-    #[tok(USER)] User,
+    #[tok(ALL)]
+    All,
+    #[tok(USER)]
+    User,
     Name(literal::Ident<'input>),
 }
 
 /// `ENABLE ROW LEVEL SECURITY`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum EnableRowSecurityCmd { #[tok(ENABLE, ROW, LEVEL, SECURITY)] Value, }
+pub enum EnableRowSecurityCmd {
+    #[tok(ENABLE, ROW, LEVEL, SECURITY)]
+    Value,
+}
 
 /// `DISABLE ROW LEVEL SECURITY`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum DisableRowSecurityCmd { #[tok(DISABLE, ROW, LEVEL, SECURITY)] Value, }
+pub enum DisableRowSecurityCmd {
+    #[tok(DISABLE, ROW, LEVEL, SECURITY)]
+    Value,
+}
 
 /// `FORCE ROW LEVEL SECURITY`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum ForceRowSecurityCmd { #[tok(FORCE, ROW, LEVEL, SECURITY)] Value, }
+pub enum ForceRowSecurityCmd {
+    #[tok(FORCE, ROW, LEVEL, SECURITY)]
+    Value,
+}
 
 /// `NO FORCE ROW LEVEL SECURITY`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum NoForceRowSecurityCmd { #[tok(NO, FORCE, ROW, LEVEL, SECURITY)] Value, }
+pub enum NoForceRowSecurityCmd {
+    #[tok(NO, FORCE, ROW, LEVEL, SECURITY)]
+    Value,
+}
 
 /// `CLUSTER ON indexname`.
 #[derive(recursa::Node, Debug, Clone)]
@@ -2412,19 +1855,31 @@ pub struct ClusterOnCmd<'input> {
 
 /// `SET WITHOUT CLUSTER`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum SetWithoutClusterCmd { #[tok(SET, WITHOUT, CLUSTER)] Value, }
+pub enum SetWithoutClusterCmd {
+    #[tok(SET, WITHOUT, CLUSTER)]
+    Value,
+}
 
 /// `SET WITHOUT OIDS`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum SetWithoutOidsCmd { #[tok(SET, WITHOUT, OIDS)] Value, }
+pub enum SetWithoutOidsCmd {
+    #[tok(SET, WITHOUT, OIDS)]
+    Value,
+}
 
 /// `SET LOGGED`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum SetLoggedCmd { #[tok(SET, LOGGED)] Value, }
+pub enum SetLoggedCmd {
+    #[tok(SET, LOGGED)]
+    Value,
+}
 
 /// `SET UNLOGGED`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum SetUnloggedCmd { #[tok(SET, UNLOGGED)] Value, }
+pub enum SetUnloggedCmd {
+    #[tok(SET, UNLOGGED)]
+    Value,
+}
 
 /// `REPLICA IDENTITY { DEFAULT | NOTHING | FULL | USING INDEX name }`.
 #[derive(recursa::Node, Debug, Clone)]
@@ -2439,9 +1894,12 @@ pub struct ReplicaIdentityCmd<'input> {
 /// `UsingIndex` (`USING INDEX`) last — it has a unique `USING` prefix.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ReplicaIdentityKind<'input> {
-    #[tok(DEFAULT)] Default,
-    #[tok(NOTHING)] Nothing,
-    #[tok(FULL)] Full,
+    #[tok(DEFAULT)]
+    Default,
+    #[tok(NOTHING)]
+    Nothing,
+    #[tok(FULL)]
+    Full,
     UsingIndex(ReplicaIdentityUsingIndex<'input>),
 }
 
@@ -2475,7 +1933,10 @@ pub struct OfCmd<'input> {
 
 /// `NOT OF` — drop the typed-table relationship.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum NotOfCmd { #[tok(NOT, OF)] Value, }
+pub enum NotOfCmd {
+    #[tok(NOT, OF)]
+    Value,
+}
 
 /// `VALIDATE CONSTRAINT name`.
 #[derive(recursa::Node, Debug, Clone)]

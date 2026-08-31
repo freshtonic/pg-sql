@@ -1,8 +1,6 @@
 //! FOREIGN DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use recursa::seq::{Seq0, Seq1};
-
 use crate::ast::ddl::table::{AlterTableCmds, CreateGenericOptions};
 use crate::ast::ddl::view::RenameColumnClause;
 use crate::ast::shared::expr::*;
@@ -10,10 +8,7 @@ use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
 use crate::ast::utility::copy::CopySconst;
-use crate::tokens::keyword::*;
-use crate::tokens::soft_keyword::*;
 use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
 
 /// `LIMIT TO (table[, ...]) | EXCEPT (table[, ...])` — Postgres'
 /// `import_qualification`. Restricts the imported table set.
@@ -31,18 +26,18 @@ pub enum ImportQualification<'input> {
 /// statements use plain qualified names only, so we model the list as
 /// `Seq1` of `QualifiedName` separated by commas.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(LIMIT, TO, LPAREN, this, RPAREN)]
 pub struct ImportLimitTo<'input> {
-    #[tok(LIMIT, TO, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub names:  recursa::Vec1<QualifiedName<'input> > ,
+    pub names: recursa::Vec1<QualifiedName<'input>>,
 }
 
 /// `EXCEPT (table[, ...])` — exclude the named tables from the import.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(EXCEPT, LPAREN, this, RPAREN)]
 pub struct ImportExcept<'input> {
-    #[tok(EXCEPT, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub names:  recursa::Vec1<QualifiedName<'input> > ,
+    pub names: recursa::Vec1<QualifiedName<'input>>,
 }
 
 /// `IMPORT FOREIGN SCHEMA remote [LIMIT TO ... | EXCEPT ...] FROM SERVER
@@ -69,7 +64,8 @@ pub struct ServerTypeClause<'input> {
 /// `VERSION { sconst | NULL }` — Postgres' `foreign_server_version`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ServerVersionValue<'input> {
-    #[tok(NULL)] Null,
+    #[tok(NULL)]
+    Null,
     String(CopySconst<'input>),
 }
 
@@ -92,8 +88,8 @@ pub struct ForeignDataWrapperRef<'input> {
 /// [VERSION { sconst | NULL }] FOREIGN DATA WRAPPER fdw
 /// [OPTIONS (...)]` — Postgres' `CreateForeignServerStmt`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(CREATE, SERVER, this)]
 pub struct CreateServerStmt<'input> {
-    #[tok(CREATE, SERVER, this)]
     pub if_not_exists: Option<IfNotExists>,
     pub name: crate::tokens::ColId<'input>,
     pub server_type: Option<ServerTypeClause<'input>>,
@@ -104,8 +100,8 @@ pub struct CreateServerStmt<'input> {
 
 /// `DROP SERVER [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, SERVER, this)]
 pub struct DropServerStmt<'input> {
-    #[tok(DROP, SERVER, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -168,11 +164,10 @@ pub struct AlterGenericOptionDrop<'input> {
 /// [`CreateGenericOptions`]; differs only in that each element may
 /// carry an `ADD` / `SET` / `DROP` prefix.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(OPTIONS, LPAREN, this, RPAREN)]
 pub struct AlterGenericOptions<'input> {
-    #[tok(OPTIONS, LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub list:
-         recursa::Vec1<AlterGenericOption<'input> > ,
+    pub list: recursa::Vec1<AlterGenericOption<'input>>,
 }
 
 /// One action on `ALTER SERVER name action` — covers Postgres'
@@ -212,7 +207,7 @@ pub struct AlterServerVersionAction<'input> {
 /// `AlterForeignServerStmt` requires at least one of `version` or
 /// `options`, so the bare `ALTER SERVER name` is a syntax error in PG, but
 /// the parser accepts it to avoid a
-/// [`crate::ast::FileItem::ParseError`] (the differential oracle stays
+/// file-level parse error (the differential oracle stays
 /// valid because both sides round-trip rejected).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterServerStmt<'input> {
@@ -280,7 +275,7 @@ pub enum AlterFdwAction<'input> {
 /// so `ALTER FOREIGN DATA WRAPPER foo;` is a syntax error in PG.
 /// The `action` slot is `Option` so the bare form parses into the
 /// structured AST rather than surfacing as a
-/// [`crate::ast::FileItem::ParseError`]; the differential oracle still
+/// file-level parse error; the differential oracle still
 /// passes because the round-tripped output is also PG-rejected.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFdwBody<'input> {
@@ -330,8 +325,8 @@ pub enum AlterForeignTableAction<'input> {
 /// grammar fidelity — the same shape used by `AlterTableSingle` for
 /// regular tables.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(TABLE, this)]
 pub struct AlterForeignTableBody<'input> {
-    #[tok(TABLE, this)]
     pub if_exists: Option<IfExists>,
     #[presence(ONLY)]
     pub only: bool,
@@ -367,8 +362,10 @@ pub struct AlterForeignStmt<'input> {
 /// picks the `NO`-prefixed spelling first.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FdwOption<'input> {
-    #[tok(NO, HANDLER)] NoHandler,
-    #[tok(NO, VALIDATOR)] NoValidator,
+    #[tok(NO, HANDLER)]
+    NoHandler,
+    #[tok(NO, VALIDATOR)]
+    NoValidator,
     Handler(FdwHandlerOption<'input>),
     Validator(FdwValidatorOption<'input>),
 }
@@ -413,17 +410,22 @@ pub struct ForeignTableServerClause<'input> {
 /// [OPTIONS (...)]` — Postgres' columns form.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ForeignTableColumnsBody<'input> {
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub columns:
-
-        recursa::seq::Vec<crate::ast::ddl::table::ColumnOrConstraint<'input> >
-
-    ,
+    pub columns: ForeignTableColumnList<'input>,
     pub inherits: Option<crate::ast::ddl::table::InheritsClause<'input>>,
     pub server: ForeignTableServerClause<'input>,
     pub options: Option<CreateGenericOptions<'input>>,
 }
+
+/// Parenthesized, comma-separated column and constraint list on a foreign
+/// table. The legacy grammar used `Seq0`, so the empty `()` form remains
+/// accepted (notably before an `INHERITS` clause).
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct ForeignTableColumnList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<crate::ast::ddl::table::ColumnOrConstraint<'input>>,
+);
 
 /// Body of `CREATE FOREIGN TABLE name PARTITION OF parent [(opts)]
 /// { FOR VALUES ... | DEFAULT } SERVER name [OPTIONS (...)]` — Postgres'
@@ -434,21 +436,23 @@ pub struct ForeignTableColumnsBody<'input> {
 pub struct ForeignTablePartitionBody<'input> {
     #[tok(PARTITION, OF, this)]
     pub parent: QualifiedName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub column_options: Option<
-
-
-            recursa::seq::Vec<crate::ast::ddl::table::PartitionColumnOption<'input> >
-
-        ,
-    >,
+    pub column_options: Option<ForeignTablePartitionColumnOptions<'input>>,
     pub for_values: Option<crate::ast::ddl::table::ForValuesClause<'input>>,
     #[presence(DEFAULT)]
     pub default: bool,
     pub server: ForeignTableServerClause<'input>,
     pub options: Option<CreateGenericOptions<'input>>,
 }
+
+/// Optional parenthesized partition-column option list on a foreign table.
+/// This is a zero-or-more list to preserve the legacy `Seq0` cardinality.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct ForeignTablePartitionColumnOptions<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<crate::ast::ddl::table::PartitionColumnOption<'input>>,
+);
 
 /// The body of `CREATE FOREIGN TABLE name ...` — either the columns
 /// form `(cols) [INHERITS (...)] SERVER ...` or the partition form
@@ -465,8 +469,8 @@ pub enum CreateForeignTableBody<'input> {
 /// `TABLE [IF NOT EXISTS] name body` — the body of
 /// `CREATE FOREIGN TABLE ...` after the `CREATE FOREIGN` head.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(TABLE, this)]
 pub struct CreateForeignTableBodyStmt<'input> {
-    #[tok(TABLE, this)]
     pub if_not_exists: Option<IfNotExists>,
     pub name: QualifiedName<'input>,
     pub body: CreateForeignTableBody<'input>,
@@ -493,8 +497,10 @@ pub struct CreateForeignStmt<'input> {
 /// The object kind after `DROP FOREIGN`: `DATA WRAPPER` or `TABLE`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ForeignObjectKind {
-    #[tok(DATA, WRAPPER)] DataWrapper,
-    #[tok(TABLE)] Table,
+    #[tok(DATA, WRAPPER)]
+    DataWrapper,
+    #[tok(TABLE)]
+    Table,
 }
 
 /// `DROP FOREIGN {DATA WRAPPER | TABLE} [IF EXISTS] name [, ...]
@@ -508,151 +514,7 @@ pub struct DropForeignStmt<'input> {
     pub behavior: Option<DropBehavior>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn parse_drop_foreign_data_wrapper() {
-        let lexed = crate::tokens::lex("DROP FOREIGN DATA WRAPPER fdw1");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropForeignStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.kind, ForeignObjectKind::DataWrapper(_)));
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_foreign_table() {
-        let lexed = crate::tokens::lex("DROP FOREIGN TABLE IF EXISTS ft1, ft2");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = DropForeignStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(stmt.kind, ForeignObjectKind::Table(_)));
-        assert_eq!(stmt.names.len(), 2);
-        assert!(input.is_eof());
-    }
-
-    /// Bare `ALTER FOREIGN DATA WRAPPER name` — PG itself rejects this
-    /// (`AlterFdwStmt` requires at least one fdw_option or
-    /// alter_generic_options), but the parser is over-permissive to avoid
-    /// surfacing as a [`crate::ast::FileItem::ParseError`]; the differential
-    /// oracle accepts the PG-rejected case because pg-sql's reformat is
-    /// also PG-rejected.
-    #[test]
-    fn parse_alter_fdw_bare() {
-        let lexed = crate::tokens::lex("ALTER FOREIGN DATA WRAPPER foo");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterForeignStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// Bare `ALTER SERVER name` — similar over-permissive acceptance for
-    /// the bare form (gram.y `AlterForeignServerStmt` requires version,
-    /// options, or both).
-    #[test]
-    fn parse_alter_server_bare() {
-        let lexed = crate::tokens::lex("ALTER SERVER s0");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterServerStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn create_foreign_data_wrapper_bare_roundtrips() {
-        let stmt: CreateForeignStmt = parse_stmt("CREATE FOREIGN DATA WRAPPER foo");
-        if let CreateForeignBody::Fdw(b) = &stmt.body {
-            assert_eq!(b.name.text(), "foo");
-            assert!(b.fdw_options.is_empty());
-            assert!(b.options.is_none());
-        } else {
-            panic!("expected Fdw body");
-        }
-        reparse_stable::<CreateForeignStmt>("CREATE FOREIGN DATA WRAPPER foo");
-    }
-
-    #[test]
-    fn create_foreign_data_wrapper_handler_validator_options_roundtrips() {
-        reparse_stable::<CreateForeignStmt>(
-            "CREATE FOREIGN DATA WRAPPER test_fdw HANDLER test_fdw_handler VALIDATOR postgresql_fdw_validator OPTIONS (testing '1', another '2')",
-        );
-    }
-
-    #[test]
-    fn create_foreign_data_wrapper_no_handler_no_validator_roundtrips() {
-        reparse_stable::<CreateForeignStmt>(
-            "CREATE FOREIGN DATA WRAPPER foo NO HANDLER NO VALIDATOR",
-        );
-    }
-
-    #[test]
-    fn create_foreign_table_columns_roundtrips() {
-        reparse_stable::<CreateForeignStmt>(
-            "CREATE FOREIGN TABLE ft2 (c1 integer NOT NULL, c2 text, c3 date) SERVER s0 OPTIONS (delimiter ',', quote '\"', \"be quoted\" 'value')",
-        );
-    }
-
-    #[test]
-    fn create_foreign_table_with_column_options_roundtrips() {
-        reparse_stable::<CreateForeignStmt>(
-            "CREATE FOREIGN TABLE ft1 (c1 integer OPTIONS (\"param 1\" 'val1') NOT NULL, c2 text OPTIONS (param2 'val2') CHECK (c2 <> ''), c3 date) SERVER s0 OPTIONS (delimiter ',')",
-        );
-    }
-
-    #[test]
-    fn create_foreign_table_inherits_roundtrips() {
-        reparse_stable::<CreateForeignStmt>(
-            "CREATE FOREIGN TABLE ft2 () INHERITS (fd_pt1) SERVER s0 OPTIONS (delimiter ',')",
-        );
-    }
-
-    #[test]
-    fn create_foreign_table_partition_of_roundtrips() {
-        reparse_stable::<CreateForeignStmt>(
-            "CREATE FOREIGN TABLE ft_part1 PARTITION OF lt1 FOR VALUES FROM (0) TO (1000) SERVER s0",
-        );
-    }
-
-    #[test]
-    fn create_foreign_table_if_not_exists_roundtrips() {
-        reparse_stable::<CreateForeignStmt>(
-            "CREATE FOREIGN TABLE IF NOT EXISTS ft1 (a INT) SERVER s0",
-        );
-    }
-
-    #[test]
-    fn create_server_minimal_roundtrips() {
-        let stmt: CreateServerStmt = parse_stmt("CREATE SERVER s1 FOREIGN DATA WRAPPER foo");
-        assert_eq!(stmt.name.text(), "s1");
-        assert!(stmt.if_not_exists.is_none());
-        assert!(stmt.server_type.is_none());
-        assert!(stmt.version.is_none());
-        assert_eq!(stmt.fdw.name.text(), "foo");
-        assert!(stmt.options.is_none());
-        reparse_stable::<CreateServerStmt>("CREATE SERVER s1 FOREIGN DATA WRAPPER foo");
-    }
-
-    #[test]
-    fn create_server_if_not_exists_roundtrips() {
-        reparse_stable::<CreateServerStmt>(
-            "CREATE SERVER IF NOT EXISTS s1 FOREIGN DATA WRAPPER foo",
-        );
-    }
-
-    #[test]
-    fn create_server_type_version_options_roundtrips() {
-        reparse_stable::<CreateServerStmt>(
-            "CREATE SERVER s7 TYPE 'oracle' VERSION '17.0' FOREIGN DATA WRAPPER foo OPTIONS (host 'a', dbname 'b')",
-        );
-    }
-
-    #[test]
-    fn create_server_version_null_roundtrips() {
-        reparse_stable::<CreateServerStmt>("CREATE SERVER s VERSION NULL FOREIGN DATA WRAPPER foo");
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/foreign.tests.rs"
+));

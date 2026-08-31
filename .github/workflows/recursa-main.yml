@@ -20,10 +20,10 @@ jobs:
           repository: freshtonic/recursa
           ref: main
           path: recursa
-      # The imported grammar is intentionally not compiled until its auditable
-      # migration lands. These checks exercise the exact two path dependencies
-      # against main while retaining that phase boundary.
+      - uses: dtolnay/rust-toolchain@1.88.0
       - name: Resolve the pg-sql workspace against Recursa main
         run: cargo metadata --locked --no-deps --format-version 1
       - name: Check the Recursa packages consumed by pg-sql
         run: cargo check --manifest-path ../recursa/Cargo.toml --package recursa --package recursa-codegen
+      - name: Check the pg-sql PostgreSQL statement grammar against Recursa main
+        run: cargo check --locked --package pg-sql

@@ -1,17 +1,12 @@
 //! EXTENSION DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use recursa::seq::{Seq0, Seq1};
-
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
 use crate::ast::utility::copy::CopySconst;
-use crate::tokens::keyword::*;
-use crate::tokens::soft_keyword::*;
 use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
 
 /// `SCHEMA name` option on `CREATE EXTENSION`.
 #[derive(recursa::Node, Debug, Clone)]
@@ -42,12 +37,13 @@ pub struct ExtensionVersionOption<'input> {
 pub enum ExtensionOption<'input> {
     Schema(ExtensionSchemaOption<'input>),
     Version(ExtensionVersionOption<'input>),
-    #[tok(CASCADE)] Cascade,
+    #[tok(CASCADE)]
+    Cascade,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(CREATE, EXTENSION, this)]
 pub struct CreateExtensionStmt<'input> {
-    #[tok(CREATE, EXTENSION, this)]
     pub if_not_exists: Option<crate::ast::shared::flags::IfNotExists>,
     pub name: crate::tokens::ColId<'input>,
     #[tok(optional(WITH), this)]
@@ -56,8 +52,8 @@ pub struct CreateExtensionStmt<'input> {
 
 /// `DROP EXTENSION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, EXTENSION, this)]
 pub struct DropExtensionStmt<'input> {
-    #[tok(DROP, EXTENSION, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -76,8 +72,8 @@ pub struct AlterExtensionUpdateTo<'input> {
 
 /// `UPDATE [TO version]` — Postgres' `AlterExtensionStmt`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(UPDATE, this)]
 pub struct AlterExtensionUpdate<'input> {
-    #[tok(UPDATE, this)]
     pub to: Option<AlterExtensionUpdateTo<'input>>,
 }
 
@@ -89,19 +85,32 @@ pub struct AlterExtensionUpdate<'input> {
 /// `MATERIALIZED VIEW` before `VIEW`).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ExtensionObjectTypeAnyName {
-    #[tok(MATERIALIZED, VIEW)] MaterializedView,
-    #[tok(FOREIGN, TABLE)] ForeignTable,
-    #[tok(TEXT, SEARCH, PARSER)] TextSearchParser,
-    #[tok(TEXT, SEARCH, DICTIONARY)] TextSearchDictionary,
-    #[tok(TEXT, SEARCH, TEMPLATE)] TextSearchTemplate,
-    #[tok(TEXT, SEARCH, CONFIGURATION)] TextSearchConfiguration,
-    #[tok(TABLE)] Table,
-    #[tok(SEQUENCE)] Sequence,
-    #[tok(VIEW)] View,
-    #[tok(INDEX)] Index,
-    #[tok(COLLATION)] Collation,
-    #[tok(CONVERSION)] Conversion,
-    #[tok(STATISTICS)] Statistics,
+    #[tok(MATERIALIZED, VIEW)]
+    MaterializedView,
+    #[tok(FOREIGN, TABLE)]
+    ForeignTable,
+    #[tok(TEXT, SEARCH, PARSER)]
+    TextSearchParser,
+    #[tok(TEXT, SEARCH, DICTIONARY)]
+    TextSearchDictionary,
+    #[tok(TEXT, SEARCH, TEMPLATE)]
+    TextSearchTemplate,
+    #[tok(TEXT, SEARCH, CONFIGURATION)]
+    TextSearchConfiguration,
+    #[tok(TABLE)]
+    Table,
+    #[tok(SEQUENCE)]
+    Sequence,
+    #[tok(VIEW)]
+    View,
+    #[tok(INDEX)]
+    Index,
+    #[tok(COLLATION)]
+    Collation,
+    #[tok(CONVERSION)]
+    Conversion,
+    #[tok(STATISTICS)]
+    Statistics,
 }
 
 /// `ACCESS METHOD` / `EVENT TRIGGER` / `FOREIGN DATA WRAPPER` / etc. —
@@ -112,17 +121,28 @@ pub enum ExtensionObjectTypeAnyName {
 /// Variant ordering: longest multi-keyword forms first.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ExtensionObjectTypeName {
-    #[tok(FOREIGN, DATA, WRAPPER)] ForeignDataWrapper,
-    #[tok(ACCESS, METHOD)] AccessMethod,
-    #[tok(EVENT, TRIGGER)] EventTrigger,
-    #[tok(DATABASE)] Database,
-    #[tok(ROLE)] Role,
-    #[tok(SUBSCRIPTION)] Subscription,
-    #[tok(TABLESPACE)] Tablespace,
-    #[tok(EXTENSION)] Extension,
-    #[tok(PUBLICATION)] Publication,
-    #[tok(SCHEMA)] Schema,
-    #[tok(SERVER)] Server,
+    #[tok(FOREIGN, DATA, WRAPPER)]
+    ForeignDataWrapper,
+    #[tok(ACCESS, METHOD)]
+    AccessMethod,
+    #[tok(EVENT, TRIGGER)]
+    EventTrigger,
+    #[tok(DATABASE)]
+    Database,
+    #[tok(ROLE)]
+    Role,
+    #[tok(SUBSCRIPTION)]
+    Subscription,
+    #[tok(TABLESPACE)]
+    Tablespace,
+    #[tok(EXTENSION)]
+    Extension,
+    #[tok(PUBLICATION)]
+    Publication,
+    #[tok(SCHEMA)]
+    Schema,
+    #[tok(SERVER)]
+    Server,
 }
 
 /// `add_drop object_type_any_name any_name` — the dotted-name branch of
@@ -216,69 +236,7 @@ pub struct AlterExtensionStmt<'input> {
     pub action: AlterExtensionAction<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn parse_create_extension_plain() {
-        let lexed = crate::tokens::lex("CREATE EXTENSION hstore");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateExtensionStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.text(), "hstore");
-        assert!(stmt.if_not_exists.is_none());
-        assert!(stmt.options.is_empty());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_extension_if_not_exists_with_options() {
-        let lexed = crate::tokens::lex("CREATE EXTENSION IF NOT EXISTS hstore WITH SCHEMA public VERSION '1.6' CASCADE");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateExtensionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.if_not_exists.is_some());
-        assert_eq!(stmt.options.len(), 3);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_extension_update() {
-        let lexed = crate::tokens::lex("ALTER EXTENSION my_ext UPDATE TO '1.1'");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_extension_update_no_to() {
-        let lexed = crate::tokens::lex("ALTER EXTENSION my_ext UPDATE");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_extension_set_schema() {
-        let lexed = crate::tokens::lex("ALTER EXTENSION my_ext SET SCHEMA new_schema");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_alter_extension_add_table() {
-        let lexed = crate::tokens::lex("ALTER EXTENSION my_ext ADD TABLE my_table");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/extension.tests.rs"
+));

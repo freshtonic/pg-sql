@@ -25,6 +25,53 @@ The 18 captured skips are frozen by fixture: `amutils` 1, `create_index` 1,
 `create_view` 2, `join` 6, `returning` 2, `rules` 1, `select` 1, and `with` 4.
 Every other included fixture has zero skips.
 
+`baselines/postgresql-17.9-accepted-legacy-gaps.json` assigns those aggregate
+skips stable statement identities: fixture, zero-based statement index, and
+absolute source byte range. It also freezes their current strict-statement
+outcome so that a resolved legacy gap cannot silently regress. Seventeen now
+pass the generated parser and formatter comparison. The remaining permanent
+gap is `join.sql` statement 171 (`16727:16787`), whose strict parse diagnostic
+is `RCA4100` with statement-relative region and primary anchor `29:31`.
+
+The fast baseline test validates the ledger's provenance, ordering, unique
+identities, ranges, legacy parse-error classification, and per-file counts
+against both pinned baseline artifacts. The Linux differential test then
+re-derives PostgreSQL acceptance and compares every current outcome, including
+the permanent gap's exact diagnostic contract:
+
+```sh
+cargo test --locked -p pg-sql --test differential_baseline
+cargo test --locked -p pg-sql --features postgres-oracle --test accepted_legacy_gaps frozen_accepted_legacy_gap_contracts_are_exact -- --exact
+```
+
+`baselines/postgresql-17.9-statements.json` is the companion statement-span
+artifact. It freezes each included source blob, byte length, exact statement
+byte ranges, and whether the legacy extractor produced a statement or a parse
+error for that range. Validate its provenance, membership, counts, ranges, and
+the checked-out PostgreSQL source blobs without rebuilding the legacy parser:
+
+```sh
+cargo run --locked -p pg-sql-migrate -- baseline verify-statements
+```
+
+Fresh review and update commands are recorded in the artifact itself. Both use
+detached disposable clones and the pinned legacy statement-span capture fixture;
+updating the artifact is therefore an explicit baseline review rather than a
+normal test operation.
+
+CI also performs the full statement-span review from a full-history `pg-sql`
+checkout. The review command clones that checkout without hardlinks, detaches at
+legacy commit `1e71421d66baac15c8c5264e8f29b5f80122f50e`, recaptures every range,
+and byte-compares the canonical result with the committed artifact:
+
+```sh
+cargo run --locked -p pg-sql-migrate -- baseline review-statements --legacy-repository . --postgres-repository vendor/postgres --baseline baselines/postgresql-17.9.json --spans baselines/postgresql-17.9-statements.json
+```
+
+This gate is deliberately stronger than `verify-statements`: changing the
+artifact and its internally consistent metadata cannot pass without reproducing
+the same bytes from the immutable legacy parser and PostgreSQL corpus.
+
 Capture uses detached, no-hardlink disposable clones of both local source
 repositories. PostgreSQL is generated and built only inside that disposable
 clone, under Cargo's `OUT_DIR`, using the pinned capture-only build plumbing in

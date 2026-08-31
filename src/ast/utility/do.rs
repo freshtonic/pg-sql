@@ -1,16 +1,13 @@
 //! DO anonymous code block.
 
-use recursa_diagram::railroad;
-
-use crate::tokens::keyword::*;
 use crate::tokens::literal;
 
 // --- DO ---
 
 /// `DO [LANGUAGE lang] $$ ... $$` anonymous code block.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DO, this)]
 pub struct DoStmt<'input> {
-    #[tok(DO, this)]
     pub language: Option<DoLanguage<'input>>,
     #[lex(matcher)]
     pub body: literal::DollarStringLit<'input>,

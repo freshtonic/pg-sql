@@ -16,19 +16,37 @@ jobs:
         with:
           path: pg-sql
           submodules: true
+          fetch-depth: 0
       - uses: actions/checkout@v4
         with:
           repository: freshtonic/recursa
           path: recursa
           fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: clippy, rustfmt
       - name: Check out the reviewed Recursa revision
         run: git -C ../recursa checkout "$(tr -d '[:space:]' < .recursa-revision)"
       - name: Verify workspace and dependency revision
         run: |
           scripts/tests/verify-workspace.sh
           scripts/verify-recursa-revision
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check the pg-sql PostgreSQL statement grammar
+        run: cargo check --locked --package pg-sql
       - name: Check migration tooling
         run: cargo check --locked --package pg-sql-migrate
+      - name: Verify reviewed semantic changes
+        run: >-
+          cargo run --locked --package pg-sql-migrate --
+          execution verify-semantic-changes
+          --repository-root .
+          --ledger migration/reviewed-semantic-changes.json
+      - name: Test frozen statement-span contracts
+        run: cargo test --locked --package pg-sql-migrate --test statement_spans
+      - name: Reject warnings in migration tooling
+        run: cargo clippy --locked --package pg-sql-migrate --all-targets -- -D warnings
 
   oracle:
     runs-on: ubuntu-latest
@@ -40,18 +58,61 @@ jobs:
         with:
           path: pg-sql
           submodules: true
+          fetch-depth: 0
       - uses: actions/checkout@v4
         with:
           repository: freshtonic/recursa
           path: recursa
           fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: clippy
       - name: Check out the reviewed Recursa revision
         run: git -C ../recursa checkout "$(tr -d '[:space:]' < .recursa-revision)"
       - name: Install PostgreSQL build prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install --yes bison flex
-      - name: Check PostgreSQL oracle
-        run: cargo check --locked --package pg-oracle
+      - name: Test PostgreSQL oracle
+        run: cargo test --locked --package pg-oracle
+      - name: Verify frozen statement spans and PostgreSQL source blobs
+        run: cargo run --locked --package pg-sql-migrate -- baseline verify-statements
+      - name: Recapture and review frozen statement spans
+        run: >-
+          cargo run --locked --package pg-sql-migrate --
+          baseline review-statements
+          --legacy-repository .
+          --postgres-repository vendor/postgres
+          --baseline baselines/postgresql-17.9.json
+          --spans baselines/postgresql-17.9-statements.json
+      - name: Check the frozen differential baseline
+        run: cargo test --locked --package pg-sql --test differential_baseline
+      - name: Check accepted legacy gap outcomes and diagnostics
+        run: >-
+          cargo test --locked --package pg-sql
+          --features postgres-oracle --test accepted_legacy_gaps
+      - name: Check the strict PostgreSQL statement seam
+        run: cargo test --locked --package pg-sql --test strict_statement
+      - name: Check strict-statement formatting fixtures
+        run: cargo test --locked --package pg-sql --test fmt
+      - name: Check the imported embedded-test inventory
+        run: cargo test --locked --package pg-sql --test embedded_inventory
+      - name: Run imported embedded tests
+        run: cargo test --locked --package pg-sql --lib
+      - name: Run the PostgreSQL 17.9 differential baseline
+        run: >-
+          cargo test --locked --package pg-sql
+          --features postgres-oracle --test differential
+      - name: Reject warnings in the strict-statement acceptance targets
+        run: >-
+          cargo clippy --locked --package pg-sql --features postgres-oracle
+          --lib
+          --test strict_statement
+          --test fmt
+          --test embedded_inventory
+          --test differential_baseline
+          --test accepted_legacy_gaps
+          --test differential
+          -- -D warnings
       - name: Verify the PostgreSQL source stayed immutable
         run: test -z "$(git -C vendor/postgres status --porcelain)"

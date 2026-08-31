@@ -603,8 +603,7 @@ fn build_report(rows: &[Row], timestamp: &str, commit: &str) -> Report {
 
     // Charts use only the intersection — mixing in time-to-error rows would
     // mislead a quick read.
-    let chart_labels: Vec<String> =
-        intersection.iter().map(|r| r.name.clone()).collect();
+    let chart_labels: Vec<String> = intersection.iter().map(|r| r.name.clone()).collect();
     let pg_time: Vec<f64> = intersection.iter().map(|r| ms(r.pg_sql)).collect();
     let sp_time: Vec<f64> = intersection.iter().map(|r| ms(r.sqlparser)).collect();
     let po_time: Vec<f64> = intersection.iter().map(|r| ms(r.postgres)).collect();
@@ -663,17 +662,11 @@ fn build_report(rows: &[Row], timestamp: &str, commit: &str) -> Report {
     md.push('\n');
 
     // Two-table layout: intersection first, then rejected.
-    let _ = writeln!(
-        md,
-        "## Results — intersection (all three parsers accept)\n"
-    );
+    let _ = writeln!(md, "## Results — intersection (all three parsers accept)\n");
     write_results_table(&mut md, &intersection);
     md.push('\n');
     if !rejected.is_empty() {
-        let _ = writeln!(
-            md,
-            "## Results — rejected by ≥ 1 parser (time-to-error)\n"
-        );
+        let _ = writeln!(md, "## Results — rejected by ≥ 1 parser (time-to-error)\n");
         write_results_table(&mut md, &rejected);
         md.push('\n');
     }
@@ -699,15 +692,9 @@ fn build_report(rows: &[Row], timestamp: &str, commit: &str) -> Report {
 
     // The charts sit in the same per-run directory as this report, so they
     // are referenced by bare filename.
-    let _ = writeln!(
-        md,
-        "## Parse time (lower is better) — intersection only\n"
-    );
+    let _ = writeln!(md, "## Parse time (lower is better) — intersection only\n");
     let _ = writeln!(md, "![Parse time per benchmark](time.svg)\n");
-    let _ = writeln!(
-        md,
-        "## Throughput (higher is better) — intersection only\n"
-    );
+    let _ = writeln!(md, "## Throughput (higher is better) — intersection only\n");
     let _ = writeln!(md, "![Throughput per benchmark](throughput.svg)\n");
     let _ = writeln!(
         md,

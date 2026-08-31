@@ -1,17 +1,12 @@
 //! DOMAIN DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use recursa::seq::{Seq0, Seq1};
-
 use crate::ast::ddl::trigger::ConstraintAttributeElem;
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
-use crate::tokens::keyword::*;
-use crate::tokens::soft_keyword::*;
 use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
 
 /// `COLLATE name` clause on a domain.
 #[derive(recursa::Node, Debug, Clone)]
@@ -29,13 +24,16 @@ pub struct DomainConstraintName<'input> {
 
 /// `NOT NULL` domain constraint body.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum DomainNotNull { #[tok(NOT, NULL)] Value, }
+pub enum DomainNotNull {
+    #[tok(NOT, NULL)]
+    Value,
+}
 
 /// `CHECK (expr)` domain constraint body.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DomainCheckBody<'input> {
     #[tok(CHECK, LPAREN, this, RPAREN)]
-    pub expr:  Box<Expr<'input>> ,
+    pub expr: Box<Expr<'input>>,
 }
 
 /// `DEFAULT expr` clause — domain default value.
@@ -54,7 +52,8 @@ pub struct DomainDefault<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub enum DomainConstraintBody<'input> {
     NotNull(DomainNotNull),
-    #[tok(NULL)] Null,
+    #[tok(NULL)]
+    Null,
     Check(DomainCheckBody<'input>),
     Default(DomainDefault<'input>),
 }
@@ -79,8 +78,8 @@ pub struct CreateDomainStmt<'input> {
 
 /// `DROP DOMAIN [IF EXISTS] type [, ...] [CASCADE | RESTRICT]`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, DOMAIN, this)]
 pub struct DropDomainStmt<'input> {
-    #[tok(DROP, DOMAIN, this)]
     pub if_exists: Option<IfExists>,
     pub types: TypeNameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -93,7 +92,7 @@ pub struct DropDomainStmt<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainCheckConstraint<'input> {
     #[tok(CHECK, LPAREN, this, RPAREN)]
-    pub expr:  Box<Expr<'input>> ,
+    pub expr: Box<Expr<'input>>,
     pub attrs: Vec<ConstraintAttributeElem>,
 }
 
@@ -136,8 +135,8 @@ pub struct AlterDomainAdd<'input> {
 /// `DROP CONSTRAINT [IF EXISTS] name [CASCADE | RESTRICT]` — DROP CONSTRAINT
 /// action on ALTER DOMAIN.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, CONSTRAINT, this)]
 pub struct AlterDomainDropConstraint<'input> {
-    #[tok(DROP, CONSTRAINT, this)]
     pub if_exists: Option<IfExists>,
     pub name: crate::tokens::ColId<'input>,
     pub behavior: Option<DropBehavior>,
@@ -168,15 +167,24 @@ pub struct AlterDomainSetDefault<'input> {
 
 /// `DROP DEFAULT` — DROP DEFAULT action on ALTER DOMAIN.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum AlterDomainDropDefault { #[tok(DROP, DEFAULT)] Value, }
+pub enum AlterDomainDropDefault {
+    #[tok(DROP, DEFAULT)]
+    Value,
+}
 
 /// `SET NOT NULL` — SET NOT NULL action on ALTER DOMAIN.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum AlterDomainSetNotNull { #[tok(SET, NOT, NULL)] Value, }
+pub enum AlterDomainSetNotNull {
+    #[tok(SET, NOT, NULL)]
+    Value,
+}
 
 /// `DROP NOT NULL` — DROP NOT NULL action on ALTER DOMAIN.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum AlterDomainDropNotNull { #[tok(DROP, NOT, NULL)] Value, }
+pub enum AlterDomainDropNotNull {
+    #[tok(DROP, NOT, NULL)]
+    Value,
+}
 
 /// One action on `ALTER DOMAIN any_name action` — Postgres' `AlterDomainStmt`,
 /// `RenameStmt`, `AlterOwnerStmt` and `AlterObjectSchemaStmt` branches for
@@ -215,55 +223,7 @@ pub struct AlterDomainStmt<'input> {
     pub action: AlterDomainAction<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn parse_create_domain_simple() {
-        let lexed = crate::tokens::lex("CREATE DOMAIN domaintext text");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateDomainStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.object(), "domaintext");
-        assert!(stmt.r#as.is_none());
-        assert!(stmt.constraints.is_empty());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_domain_check_default_notnull() {
-        let lexed = crate::tokens::lex("CREATE DOMAIN dcheck varchar(15) NOT NULL DEFAULT 'a' CHECK (VALUE = 'a')");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateDomainStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.constraints.len(), 3);
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_domain_named_constraint() {
-        let lexed = crate::tokens::lex("CREATE DOMAIN testdomain1 AS int CONSTRAINT unsigned CHECK (value > 0)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateDomainStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.r#as.is_some());
-        assert_eq!(stmt.constraints.len(), 1);
-        assert!(stmt.constraints[0].name.is_some());
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_create_domain_array_with_size() {
-        // `int4[1]` — `[N]` array bound, exercised by domain.sql.
-        let lexed = crate::tokens::lex("CREATE DOMAIN domainint4arr int4[1]");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateDomainStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.type_name.array_suffixes.len(), 1);
-        assert!(input.is_eof());
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/domain.tests.rs"
+));

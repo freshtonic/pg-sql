@@ -14,6 +14,7 @@ default-members = ["pg-oracle", "migration-tool"]
 
 [features]
 arbitrary = ["dep:arbitrary", "recursa/arbitrary"]
+postgres-oracle = ["dep:pg-oracle"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -22,15 +23,14 @@ logos = "0.16"
 regex = "1"
 derive_more = { version = "2.1.1", features = ["deref"] }
 arbitrary = { version = "1", features = ["derive"], optional = true }
-# `Seq1` is backed by `vec1::Vec1`; the hand-rolled `StringLitSeq0::parse`
-# (see ast/expr.rs) builds a `Seq1` directly and needs `Vec1` to do so.
 vec1 = "1"
+pg-oracle = { path = "pg-oracle", optional = true }
 
 [dev-dependencies]
-pg-oracle = { path = "pg-oracle" }
 sqlparser = "0.52"
 tempfile = "3"
 serde_json = "1"
+syn = { version = "2", features = ["full"] }
 
 [[bin]]
 name = "gen-stress"
@@ -39,6 +39,17 @@ path = "src/bin/gen_stress.rs"
 [[bench]]
 name = "parse"
 harness = false
+required-features = ["postgres-oracle"]
+
+[[test]]
+name = "differential"
+path = "tests/differential.rs"
+required-features = ["postgres-oracle"]
+
+[[test]]
+name = "accepted_legacy_gaps"
+path = "tests/accepted_legacy_gaps.rs"
+required-features = ["postgres-oracle"]
 
 [package.metadata.recursa.ast]
 derives = ["Debug", "Clone", "FormatTokens", "Visit", "Transform"]

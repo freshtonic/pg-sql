@@ -1,11 +1,8 @@
 //! CLUSTER statement. The shared `VacuumOption`/`VacuumOptions` types live
 //! in `utility/vacuum.rs`.
 
-use recursa_diagram::railroad;
-
 use crate::ast::shared::names::QualifiedName;
 use crate::ast::utility::vacuum::VacuumOptions;
-use crate::tokens::keyword::*;
 
 // --- CLUSTER ---
 
@@ -59,55 +56,15 @@ pub enum ClusterTarget<'input> {
 /// (the option list expresses `VERBOSE` instead). In any legacy form,
 /// `options` is `None` and `verbose` may be `Some` or `None`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(CLUSTER, this)]
 pub struct ClusterStmt<'input> {
-    #[tok(CLUSTER, this)]
     pub options: Option<VacuumOptions<'input>>,
     #[presence(VERBOSE)]
     pub verbose: bool,
     pub target: Option<ClusterTarget<'input>>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn cluster_bare_is_modelled() {
-        let stmt: ClusterStmt = parse_stmt("CLUSTER");
-        assert!(stmt.options.is_none());
-        assert!(stmt.verbose.is_none());
-        assert!(stmt.target.is_none());
-        reparse_stable::<ClusterStmt>("CLUSTER");
-    }
-
-    #[test]
-    fn cluster_table_only_roundtrips() {
-        reparse_stable::<ClusterStmt>("CLUSTER clstr_2");
-    }
-
-    #[test]
-    fn cluster_table_using_index_roundtrips() {
-        reparse_stable::<ClusterStmt>("CLUSTER clstr_2 USING clstr_2_pkey");
-    }
-
-    #[test]
-    fn cluster_verbose_roundtrips() {
-        let stmt: ClusterStmt = parse_stmt("CLUSTER VERBOSE clstr_2");
-        assert!(stmt.verbose.is_some());
-        reparse_stable::<ClusterStmt>("CLUSTER VERBOSE clstr_2");
-    }
-
-    #[test]
-    fn cluster_options_roundtrips() {
-        let stmt: ClusterStmt = parse_stmt("CLUSTER (VERBOSE) clstr_2 USING clstr_2_pkey");
-        assert!(stmt.options.is_some());
-        reparse_stable::<ClusterStmt>("CLUSTER (VERBOSE) clstr_2 USING clstr_2_pkey");
-    }
-
-    #[test]
-    fn cluster_legacy_index_on_table_roundtrips() {
-        // pre-8.3 form: CLUSTER [VERBOSE] index ON table
-        reparse_stable::<ClusterStmt>("CLUSTER clstr_2_pkey ON clstr_2");
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/utility/cluster.tests.rs"
+));

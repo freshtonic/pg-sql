@@ -1,8 +1,6 @@
 //! MATERIALIZED VIEW DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use recursa::seq::{Seq0, Seq1};
-
 use crate::ast::ddl::database::SetTablespaceClause;
 use crate::ast::ddl::index::{AllInTablespaceBody, ResetReloptions, SetReloptions};
 use crate::ast::ddl::trigger::DependsOnExtension;
@@ -11,10 +9,18 @@ use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
-use crate::tokens::keyword::*;
-use crate::tokens::soft_keyword::*;
 use crate::tokens::{literal, punct};
-use recursa_diagram::railroad;
+
+/// Optional parenthesized materialized-view output-column list.
+///
+/// The wrapper owns the delimiters around the complete comma-separated list.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct CreateMatViewColumnList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<crate::tokens::ColId<'input>>,
+);
 
 /// `create_mv_target` — Postgres' materialized-view target clause:
 /// `qualified_name [(col_list)] [USING am] [WITH (opts)] [TABLESPACE name]`.
@@ -25,11 +31,7 @@ use recursa_diagram::railroad;
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CreateMatViewTarget<'input> {
     pub name: QualifiedName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub column_list: Option<
-         recursa::Vec1<crate::tokens::ColId<'input> > ,
-    >,
+    pub column_list: Option<CreateMatViewColumnList<'input>>,
     pub using: Option<crate::ast::ddl::table::UsingAccessMethodClause<'input>>,
     pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
     pub tablespace: Option<crate::ast::ddl::table::TablespaceClause<'input>>,
@@ -52,8 +54,8 @@ pub struct CreateMaterializedViewStmt<'input> {
 
 /// `DROP MATERIALIZED VIEW [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, MATERIALIZED, VIEW, this)]
 pub struct DropMaterializedViewStmt<'input> {
-    #[tok(DROP, MATERIALIZED, VIEW, this)]
     pub if_exists: Option<IfExists>,
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
@@ -66,8 +68,9 @@ pub struct DropMaterializedViewStmt<'input> {
 /// Variant ordering: `Default` (keyword) before `Name` (`Ident`).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum SetAccessMethodTarget<'input> {
-    #[tok(DEFAULT)] Default,
-    Name(literal::AliasName<'input>),
+    #[tok(DEFAULT)]
+    Default,
+    Name(crate::tokens::ColId<'input>),
 }
 
 /// `SET ACCESS METHOD { name | DEFAULT }` — Postgres' alter_table_cmd
@@ -83,8 +86,9 @@ pub struct SetAccessMethodClause<'input> {
 /// Variant ordering: `Default` (keyword) before `Name` (`AliasName`).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ColumnCompressionTarget<'input> {
-    #[tok(DEFAULT)] Default,
-    Name(literal::AliasName<'input>),
+    #[tok(DEFAULT)]
+    Default,
+    Name(crate::tokens::ColId<'input>),
 }
 
 /// `ALTER [COLUMN] name SET COMPRESSION cm` — Postgres' alter_table_cmd
@@ -126,7 +130,7 @@ pub enum AlterMatViewCmd<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterMatViewCmds<'input> {
     #[sep(COMMA)]
-    pub cmds: recursa::Vec1<AlterMatViewCmd<'input> >,
+    pub cmds: recursa::Vec1<AlterMatViewCmd<'input>>,
 }
 
 /// `[IF EXISTS] name action` — the per-matview branch of ALTER
@@ -158,62 +162,7 @@ pub struct AlterMaterializedViewStmt<'input> {
     pub body: AlterMatViewBody<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use recursa::Parse;
-
-    use super::*;
-    use crate::ast::test_support::*;
-
-    #[test]
-    fn parse_create_materialized_view_minimal() {
-        let stmt: CreateMaterializedViewStmt =
-            parse_stmt("CREATE MATERIALIZED VIEW mv AS SELECT 1");
-        assert_eq!(stmt.target.name.object(), "mv");
-        assert!(stmt.unlogged.is_none());
-        assert!(stmt.if_not_exists.is_none());
-        assert!(stmt.target.column_list.is_none());
-    }
-
-    #[test]
-    fn create_materialized_view_with_no_data_roundtrips() {
-        reparse_stable::<CreateMaterializedViewStmt>(
-            "CREATE MATERIALIZED VIEW mv AS SELECT * FROM t WITH NO DATA",
-        );
-    }
-
-    #[test]
-    fn create_materialized_view_if_not_exists_roundtrips() {
-        reparse_stable::<CreateMaterializedViewStmt>(
-            "CREATE MATERIALIZED VIEW IF NOT EXISTS mv AS SELECT 1",
-        );
-    }
-
-    #[test]
-    fn create_materialized_view_using_access_method_roundtrips() {
-        reparse_stable::<CreateMaterializedViewStmt>(
-            "CREATE MATERIALIZED VIEW mv USING heap2 AS SELECT * FROM t",
-        );
-    }
-
-    #[test]
-    fn create_materialized_view_column_list_roundtrips() {
-        reparse_stable::<CreateMaterializedViewStmt>(
-            "CREATE MATERIALIZED VIEW mv (ii, jj) AS SELECT i, j FROM t",
-        );
-    }
-
-    #[test]
-    fn create_unlogged_materialized_view_roundtrips() {
-        reparse_stable::<CreateMaterializedViewStmt>(
-            "CREATE UNLOGGED MATERIALIZED VIEW mv AS SELECT 1",
-        );
-    }
-
-    #[test]
-    fn create_materialized_view_with_storage_tablespace_roundtrips() {
-        reparse_stable::<CreateMaterializedViewStmt>(
-            "CREATE MATERIALIZED VIEW mv WITH (fillfactor = 50) TABLESPACE ts AS SELECT 1",
-        );
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/materialized_view.tests.rs"
+));

@@ -1,11 +1,6 @@
 /// CREATE PROCEDURE / DROP PROCEDURE / CALL statement AST.
-use recursa::seq::{OptionalTrailing, Seq0};
-
-use crate::ast::ddl::function::{FuncOption, FuncParam};
+use crate::ast::ddl::function::{FuncOption, FunctionParameters};
 use crate::ast::shared::expr::FuncArg;
-use crate::tokens::keyword::*;
-use crate::tokens::punct;
-use recursa_diagram::railroad;
 // ---------------------------------------------------------------------------
 // Additional imports for the ALTER/DROP types appended to this file as part
 // of the DDL physical-extraction migration. Glob imports keep cross-batch
@@ -20,8 +15,6 @@ use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 #[allow(unused_imports)]
 use crate::ast::shared::numbers::*;
-#[allow(unused_imports)]
-use crate::tokens::soft_keyword::*;
 // ---------------------------------------------------------------------------
 
 /// CREATE [OR REPLACE] PROCEDURE name ( [ parameters ] ) options...
@@ -35,20 +28,15 @@ pub struct CreateProcedureStmt<'input> {
     #[presence(OR, REPLACE)]
     pub or_replace: bool,
     pub name: crate::ast::shared::names::QualifiedName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub args:  Vec<FuncParam<'input> > ,
-    pub options: Vec<FuncOption<'input>  >,
+    pub args: FunctionParameters<'input>,
+    pub options: Vec<FuncOption<'input>>,
 }
 
 /// One target of `DROP PROCEDURE`: `name [(args)]`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DropProcedureTarget<'input> {
     pub name: crate::ast::shared::names::QualifiedName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub args:
-        Option< Vec<FuncParam<'input> > >,
+    pub args: Option<FunctionParameters<'input>>,
 }
 
 /// DROP PROCEDURE `name [(args)] [, name [(args)] ...] [CASCADE | RESTRICT]`.
@@ -61,97 +49,31 @@ pub struct DropProcedureStmt<'input> {
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
     #[sep(COMMA)]
-    pub targets: Vec<DropProcedureTarget<'input> >,
+    pub targets: Vec<DropProcedureTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
+
+/// Parenthesized argument list of a `CALL` statement.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct CallArguments<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<FuncArg<'input>>,
+);
 
 /// CALL name ( [ argument ] [, ...] )
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CallStmt<'input> {
     #[tok(CALL, this)]
     pub name: crate::tokens::type_function_name<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub args:  Vec<FuncArg<'input> > ,
+    pub args: CallArguments<'input>,
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::ast::test_support::*;
-    use recursa::Parse;
-
-    use super::*;
-
-    #[test]
-    fn parse_create_procedure_basic() {
-        let lexed = crate::tokens::lex("CREATE PROCEDURE ptest1(x text) LANGUAGE SQL AS $$ INSERT INTO cp_test VALUES (1, x); $$");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CreateProcedureStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_call_basic() {
-        let lexed = crate::tokens::lex("CALL ptest1('a')");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CallStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_call_concat_arg() {
-        let lexed = crate::tokens::lex("CALL ptest1('xy' || 'zzy')");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CallStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_call_no_args() {
-        let lexed = crate::tokens::lex("CALL nonexistent()");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = CallStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_drop_procedure() {
-        let lexed = crate::tokens::lex("DROP PROCEDURE ptest1");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt = DropProcedureStmt::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    /// CREATE PROCEDURE with a schema-qualified name (gram.y
-    /// `CreateFunctionStmt: … PROCEDURE func_name`, where `func_name` is
-    /// `type_function_name` accepting `schema.name`). privileges.sql
-    /// corpus uses `CREATE PROCEDURE testns.bar()`.
-    #[test]
-    fn parse_create_procedure_qualified_name() {
-        let lexed = crate::tokens::lex("CREATE PROCEDURE testns.bar() AS 'select 1' LANGUAGE sql");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let stmt = CreateProcedureStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.name.object(), "bar");
-        assert!(input.is_eof());
-    }
-    #[test]
-    fn alter_procedure_strict() {
-        let stmt: AlterProcedureStmt = parse_stmt("ALTER PROCEDURE ptest1(text) STRICT");
-        assert!(matches!(stmt.action, AlterFuncAction::Options(_)));
-        reparse_stable::<AlterProcedureStmt>("ALTER PROCEDURE ptest1(text) STRICT");
-    }
-
-    #[test]
-    fn alter_procedure_rename() {
-        reparse_stable::<AlterProcedureStmt>("ALTER PROCEDURE ptest1(text) RENAME TO ptest1a");
-    }
-}
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/embedded-tests/src/ast/ddl/procedure.tests.rs"
+));
 
 // =========================================================================
 // ALTER/DROP PROCEDURE — appended from simple_stmts.rs during physical extraction.
