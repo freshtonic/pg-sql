@@ -9,6 +9,3 @@ pub mod ast;
 pub mod bench_data;
 pub mod formatter;
 pub mod tokens;
-
-#[cfg(feature = "arbitrary")]
-pub use arbitrary;
