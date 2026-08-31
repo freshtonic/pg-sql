@@ -12,6 +12,11 @@ resolver = "3"
 members = ["pg-oracle", "migration-tool"]
 default-members = ["pg-oracle", "migration-tool"]
 
+# recursa-codegen runs a CPU-bound grammar analysis in the build script; at the
+# default build-override opt-level of 0 that run takes ~84s versus ~14s at 3.
+[profile.dev.build-override]
+opt-level = 3
+
 [features]
 arbitrary = ["dep:arbitrary", "recursa/arbitrary"]
 postgres-oracle = ["dep:pg-oracle"]

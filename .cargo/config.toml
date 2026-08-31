@@ -1,0 +1,6 @@
+# The global kache rustc-wrapper strips incremental compilation on cache
+# misses. This crate compiles ~45MB of generated grammar code, so a cache-miss
+# full rebuild costs ~60s per edit while an incremental rebuild costs ~13s.
+# Disable the wrapper for this workspace.
+[build]
+rustc-wrapper = ""
