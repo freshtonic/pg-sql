@@ -15,6 +15,12 @@ without promising compatibility with the legacy Rust API.
   against the PostgreSQL oracle.
 - **Grammar migration**: the reproducible transformation from the immutable
   legacy grammar into current Recursa declarations.
+- **Parity gate**: geomean of per-benchmark pg-sql/sqlparser medians at or
+  below 1.0 on the statement-level benchmark (ADR 0006).
+- **Canonical workloads**: the three profiling targets - corpus head-to-head,
+  select_list_10000, bool_chain - every profile and journal entry names one.
+- **Perf journal**: `docs/notes/perf.md`, appended per profile/change pair;
+  diagnostic result sections read newest-last.
 
 Use **PostgreSQL parser**, not the broader **SQL parser**, when referring to
 this grammar.
