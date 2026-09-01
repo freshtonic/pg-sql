@@ -109,7 +109,7 @@ pub struct DropServerStmt<'input> {
 
 /// One entry in an `alter_generic_options` (`OPTIONS (...)`) list on
 /// ALTER FOREIGN DATA WRAPPER / ALTER SERVER / ALTER USER MAPPING — the
-/// `ALTER`-side counterpart of [`GenericOption`].
+/// `ALTER`-side counterpart of [`GenericOption`](crate::ast::ddl::table::GenericOption).
 ///
 /// Postgres' `alter_generic_option_elem` adds three action prefixes
 /// (`ADD`, `SET`, `DROP`) to the plain `generic_option_elem`:
@@ -123,7 +123,8 @@ pub struct DropServerStmt<'input> {
 /// ```
 ///
 /// Variant ordering: the keyword-prefixed forms come first (`Set`,
-/// `Add`, `Drop`) before the bare [`GenericOption`] (which starts with
+/// `Add`, `Drop`) before the bare
+/// [`GenericOption`](crate::ast::ddl::table::GenericOption) (which starts with
 /// a `ColLabel` identifier). The three prefixed variants have disjoint
 /// first tokens, so order among them is for clarity only.
 #[derive(recursa::Node, Debug, Clone)]
@@ -291,12 +292,14 @@ pub struct AlterFdwBody<'input> {
 ///
 /// `gram.y` line 2284: `ALTER FOREIGN TABLE [IF EXISTS] relation_expr
 /// alter_table_cmds`. The `alter_table_cmd` grammar is the superset
-/// shared with ALTER TABLE — see [`AlterTableCmd`] for the full action
+/// shared with ALTER TABLE — see
+/// [`AlterTableCmd`](crate::ast::ddl::table::AlterTableCmd) for the full action
 /// set, including `ADD/DROP/ALTER COLUMN`, `ADD/DROP CONSTRAINT`,
 /// `OWNER TO`, `INHERIT`/`NO INHERIT`, `ENABLE/DISABLE TRIGGER`,
 /// `OPTIONS (...)`, etc. Foreign-table-specific actions like the
 /// column-level `OPTIONS (...)` (`AT_AlterColumnGenericOptions`,
-/// gram.y line 2623) are already modelled inside [`AlterColumnAction`].
+/// gram.y line 2623) are already modelled inside
+/// [`AlterColumnAction`](crate::ast::ddl::table::AlterColumnAction).
 ///
 /// Variant ordering: longer/more-specific prefixes first within the
 /// shared `RENAME …` family.

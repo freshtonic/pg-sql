@@ -17,7 +17,7 @@ use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
 // ---------------------------------------------------------------------------
 
-/// CREATE [OR REPLACE] PROCEDURE name ( [ parameters ] ) options...
+/// `CREATE [OR REPLACE] PROCEDURE name ( [ parameters ] ) options...`
 ///
 /// `name` is a `QualifiedName` (gram.y `CreateFunctionStmt: … PROCEDURE
 /// func_name`, where `func_name: type_function_name | ColId indirection`
@@ -62,7 +62,7 @@ pub struct CallArguments<'input>(
     pub Vec<FuncArg<'input>>,
 );
 
-/// CALL name ( [ argument ] [, ...] )
+/// `CALL name ( [ argument ] [, ...] )`
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CallStmt<'input> {
     #[tok(CALL, this)]
@@ -80,7 +80,8 @@ include!(concat!(
 // =========================================================================
 
 /// `ALTER PROCEDURE function_with_argtypes action` — same action shape
-/// as [`AlterFunctionStmt`]; gram.y treats `OBJECT_PROCEDURE` as a tag on
+/// as [`AlterFunctionStmt`](crate::ast::ddl::function::AlterFunctionStmt);
+/// gram.y treats `OBJECT_PROCEDURE` as a tag on
 /// the same `AlterFunctionStmt` node and runs the same
 /// `alterfunc_opt_list` rule. Semantic analysis (not parsing) rejects
 /// option items that don't apply to procedures.
