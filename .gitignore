@@ -3,3 +3,5 @@
 .claude/worktrees/
 # Per-run benchmark reports (benches/parse.rs); runs are not committed.
 /docs/benchmarks/
+# Per-run flame-harness profiles (scripts/flame-profile); runs are not committed.
+/docs/perf/flamegraphs/

@@ -46,6 +46,18 @@ name = "parse"
 harness = false
 required-features = ["postgres-oracle"]
 
+# The flame harness (performance-parity Track T, ADR 0006): profiler-friendly
+# parse loops over the canonical workloads. See docs/notes/perf.md.
+[[bench]]
+name = "flame"
+harness = false
+required-features = ["postgres-oracle"]
+
+# Bench binaries keep debug symbols so sampling profilers resolve parser
+# frames in the flame harness.
+[profile.bench]
+debug = true
+
 [[test]]
 name = "differential"
 path = "tests/differential.rs"

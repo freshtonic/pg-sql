@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Profile one canonical workload with the flame harness (benches/flame.rs).
+#
+# Runs the harness in a loop, samples it with macOS /usr/bin/sample, folds
+# the stacks with the FlameGraph scripts when a checkout is available, and
+# writes everything to docs/perf/flamegraphs/<date>-<sha>[-dirty]/.
+#
+# Usage:
+#   scripts/flame-profile <workload> [duration-seconds]
+#
+# Workloads: corpus | select_list_10000 | bool_chain (see benches/flame.rs).
+#
+# Environment:
+#   FLAMEGRAPH_DIR  checkout of https://github.com/brendangregg/FlameGraph
+#                   (default: ~/tools/FlameGraph); without it only the raw
+#                   sample report and the harness stats are written.
+#
+# Requires: macOS (/usr/bin/sample), jq. On Linux, run the same harness
+# binary under `perf record` instead; see docs/notes/perf.md.
+
+set -euo pipefail
+
+workload="${1:?usage: scripts/flame-profile <workload> [duration-seconds]}"
+duration="${2:-10}"
+flamegraph_dir="${FLAMEGRAPH_DIR:-$HOME/tools/FlameGraph}"
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$root"
+
+# Build (a no-op when fresh) and locate the harness binary.
+cargo bench -p pg-sql --features postgres-oracle --bench flame --no-run
+bin="$(
+  cargo bench -p pg-sql --features postgres-oracle --bench flame --no-run \
+    --message-format=json 2>/dev/null |
+    jq -r 'select(.reason == "compiler-artifact")
+           | select(.target.name == "flame")
+           | .executable // empty' |
+    tail -1
+)"
+[ -x "$bin" ] || { echo "flame-profile: cannot locate flame bench binary" >&2; exit 1; }
+
+# Run directory: <utc-date>-<sha>[-dirty], old flame_report style.
+sha="$(git rev-parse --short HEAD)"
+dirty=""
+git diff --quiet HEAD -- . ':(exclude)docs/perf' 2>/dev/null || dirty="-dirty"
+run_dir="docs/perf/flamegraphs/$(date -u +%Y-%m-%d)-${sha}${dirty}"
+mkdir -p "$run_dir"
+stem="$run_dir/$workload"
+
+# The harness loops a little longer than the sampling window so the sampler
+# never outlives the profilee.
+harness_duration=$((duration + 5))
+"$bin" "$workload" --duration "$harness_duration" > "$stem.stats.txt" &
+harness_pid=$!
+sleep 1 # let the workload load before sampling
+
+sample "$harness_pid" "$duration" -file "$stem.sample.txt"
+wait "$harness_pid"
+cat "$stem.stats.txt"
+
+if [ -x "$flamegraph_dir/flamegraph.pl" ]; then
+  awk -f "$flamegraph_dir/stackcollapse-sample.awk" "$stem.sample.txt" \
+    > "$stem.folded"
+  "$flamegraph_dir/flamegraph.pl" \
+    --title "pg-sql flame: $workload (${duration}s sample)" \
+    "$stem.folded" > "$stem.svg"
+  echo "flamegraph: $stem.svg"
+else
+  echo "flame-profile: no FlameGraph checkout at $flamegraph_dir;" \
+    "skipping fold/SVG (raw report: $stem.sample.txt)" >&2
+fi
+
+echo "sample report: $stem.sample.txt"
+echo "harness stats: $stem.stats.txt"
