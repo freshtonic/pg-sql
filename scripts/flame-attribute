@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Attribute folded flame stacks to the Track P cost buckets.
+
+Reads one or more `.folded` files produced by `scripts/flame-profile`
+(stackcollapse-sample output: `frame;frame;...;frame count` per line) and
+prints, per file, a bucket attribution table plus the top frames inside each
+bucket.
+
+Buckets (docs/plans/2026-09-01-performance-parity.md, Track P):
+
+  lex/classify        generated lexing, matcher compilation, regex execution
+  dispatch/decision   FOLLOW-set transport, frozen dispatch tables, Pratt
+                      selection, peeks
+  value construction  AST/provenance construction: occurrences, spans,
+                      ParsedNode assembly, input/record cloning
+  error/expected      ParseError construction and expected-set materialization
+  trivia              trivia records, source gaps
+  harness/support     the flame harness and test-support seam
+  other               unclassified (kernel, runtime, unresolved frames)
+
+Attribution is by *self time* (the leaf frame of each sample). Allocator and
+memory-primitive frames (`nanov2_*`, `_malloc*`, `_free`, `_platform_mem*`,
+`__rust_alloc*`, ...) are not a phase: each allocator sample is attributed to
+the nearest classifiable ancestor frame, and the table also reports how much
+of every bucket was allocator time (the `alloc%` column), so "who allocates"
+stays visible.
+
+Usage:
+  scripts/flame-attribute run-dir/bool_chain.folded [more.folded ...]
+  scripts/flame-attribute --top 12 run-dir/*.folded
+"""
+
+import argparse
+import re
+import sys
+from collections import defaultdict
+
+# Memory primitives: never a bucket of their own; carried to the nearest
+# classifiable caller.
+ALLOC_RE = re.compile(
+    r"nanov2_|_malloc|malloc_zone|_free$|^free$|_realloc|szone_"
+    r"|__rust_alloc|__rust_dealloc|__rust_realloc|__rdl_"
+    r"|_platform_memmove|_platform_memset|_platform_memcmp|_platform_bzero"
+    r"|alloc::alloc|alloc::raw_vec|RawVec"
+)
+
+# Ordered: the first matching class wins for a given frame name.
+BUCKETS = [
+    (
+        "lex/classify",
+        re.compile(
+            r"recursa_core::lex|CompiledLexMatcher|regex_automata|regex_syntax"
+            r"|aho_corasick|\bmemchr|memmem|pg_sql::lex\b|::lex\b|Lexed|logos"
+            r"|determinize|lazy::|hybrid::|meta::regex|Regex"
+        ),
+    ),
+    (
+        "dispatch/decision",
+        re.compile(
+            r"FollowSet|__recursa_dispatch|__recursa_decode|__recursa_pratt"
+            r"|next_is|pratt_boundary|with_caller|__recursa_parse_bpu"
+            r"|peek|GrammarInfo|kind_match|__RECURSA_EXPECTED"
+        ),
+    ),
+    (
+        "value construction",
+        re.compile(
+            r"ProvenanceCollector|Occurrence|ParsedNode|into_parts|finish"
+            r"|ContentText|retained_document|input_with_builder"
+            r"|LexResult.*::input|TokenRecord|matched_text|consumed_span"
+            r"|Span::new|::from_iter|extend|::push\b|into_boxed"
+        ),
+    ),
+    (
+        "error/expected",
+        re.compile(r"ParseError|unexpected|::expected|pratt_ambiguity|LexDiagnostic"),
+    ),
+    (
+        "trivia",
+        re.compile(r"TriviaRecord|source_gaps|SourceGap|trivia"),
+    ),
+    (
+        "harness/support",
+        re.compile(
+            r"flame::|load_workload|FrozenStatements|lex_statement_source"
+            r"|run_loop|baseline::|diff_check::|std::io|std::fs"
+        ),
+    ),
+    # Generated parser bodies that did not match a finer class above: the
+    # code between calls is branch selection plus value moves; counted as
+    # dispatch/decision and reported by name in the per-bucket frame list.
+    (
+        "dispatch/decision",
+        re.compile(r"__recursa_|::parse\b|GeneratedParse|ParseContext"),
+    ),
+]
+
+
+def classify(frame: str):
+    """Returns the bucket for one frame name, or None."""
+    for name, pattern in BUCKETS:
+        if pattern.search(frame):
+            return name
+    return None
+
+
+def attribute(path: str, top: int):
+    bucket_weight = defaultdict(int)
+    bucket_alloc_weight = defaultdict(int)
+    bucket_frames = defaultdict(lambda: defaultdict(int))
+    total = 0
+    with open(path, encoding="utf-8", errors="replace") as folded:
+        for line in folded:
+            line = line.strip()
+            if not line or " " not in line:
+                continue
+            stack, count_text = line.rsplit(" ", 1)
+            try:
+                count = int(count_text)
+            except ValueError:
+                continue
+            total += count
+            frames = stack.split(";")
+            leaf = frames[-1]
+            carried_alloc = bool(ALLOC_RE.search(leaf))
+            bucket = None
+            chosen = leaf
+            # Walk leaf -> root; skip allocator frames, take the first
+            # classifiable frame.
+            for frame in reversed(frames):
+                if ALLOC_RE.search(frame):
+                    continue
+                bucket = classify(frame)
+                chosen = frame
+                if bucket is not None:
+                    break
+            if bucket is None:
+                bucket = "other"
+                chosen = leaf
+            bucket_weight[bucket] += count
+            if carried_alloc:
+                bucket_alloc_weight[bucket] += count
+                chosen = f"{chosen} [alloc]"
+            bucket_frames[bucket][chosen] += count
+    return total, bucket_weight, bucket_alloc_weight, bucket_frames
+
+
+def report(path: str, top: int):
+    total, weights, alloc_weights, frames = attribute(path, top)
+    print(f"== {path} ({total} samples) ==")
+    print(f"{'bucket':<20} {'self%':>7} {'alloc%':>7}")
+    for bucket, weight in sorted(weights.items(), key=lambda kv: -kv[1]):
+        print(
+            f"{bucket:<20} {100 * weight / total:>6.1f}% "
+            f"{100 * alloc_weights[bucket] / total:>6.1f}%"
+        )
+    for bucket, weight in sorted(weights.items(), key=lambda kv: -kv[1]):
+        print(f"\n-- {bucket} ({100 * weight / total:.1f}%)")
+        ranked = sorted(frames[bucket].items(), key=lambda kv: -kv[1])[:top]
+        for frame, count in ranked:
+            print(f"   {100 * count / total:>6.2f}%  {frame}")
+    print()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("folded", nargs="+", help=".folded stack files")
+    parser.add_argument("--top", type=int, default=8, help="frames per bucket")
+    args = parser.parse_args()
+    for path in args.folded:
+        report(path, args.top)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

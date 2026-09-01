@@ -5,3 +5,5 @@
 /docs/benchmarks/
 # Per-run flame-harness profiles (scripts/flame-profile); runs are not committed.
 /docs/perf/flamegraphs/
+# Track P measurement scratch (temporary vendored recursa copies; never committed).
+/scratch/
