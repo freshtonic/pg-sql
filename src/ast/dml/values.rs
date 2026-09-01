@@ -7,8 +7,7 @@ pub struct TableStmt<'input> {
     #[tok(TABLE, this)]
     pub table_name: crate::ast::shared::names::QualifiedName<'input>,
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
-    pub limit_offset_1: Option<Box<crate::ast::dml::select::LimitOffsetItem<'input>>>,
-    pub limit_offset_2: Option<Box<crate::ast::dml::select::LimitOffsetItem<'input>>>,
+    pub limit_offset: Option<Box<crate::ast::dml::select::LimitOffsetClause<'input>>>,
 }
 
 /// Set operation type.
@@ -60,8 +59,7 @@ pub struct CompoundParen<'input> {
     pub set_op: Option<SetOpCombiner<'input>>,
     /// Optional trailing `ORDER BY ...` applied to the parenthesized query.
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
-    pub limit_offset_1: Option<Box<crate::ast::dml::select::LimitOffsetItem<'input>>>,
-    pub limit_offset_2: Option<Box<crate::ast::dml::select::LimitOffsetItem<'input>>>,
+    pub limit_offset: Option<Box<crate::ast::dml::select::LimitOffsetClause<'input>>>,
 }
 
 /// A SELECT or VALUES body with optional set operation continuation.

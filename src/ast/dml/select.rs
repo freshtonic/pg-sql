@@ -1131,16 +1131,43 @@ pub struct FetchFirstClause<'input> {
     pub body: FetchFirstBody<'input>,
 }
 
-/// An item in the limit/offset/fetch sequence. Allows any order of
-/// LIMIT, OFFSET, and FETCH FIRST clauses.
+/// A limiting clause: `LIMIT expr` or `FETCH FIRST ...`. PostgreSQL's
+/// `select_limit` production admits at most one limiting clause per query,
+/// so `Offset` is deliberately not part of this enum.
 ///
-/// `FetchFirst` must come before `Offset` and `Limit` since `FETCH` is
-/// a keyword that doesn't overlap with LIMIT/OFFSET.
+/// `FetchFirst` and `Limit` start on distinct keywords (`FETCH` vs `LIMIT`).
 #[derive(recursa::Node, Debug, Clone)]
-pub enum LimitOffsetItem<'input> {
+pub enum LimitingClause<'input> {
     FetchFirst(FetchFirstClause<'input>),
     Limit(LimitClause<'input>),
-    Offset(OffsetClause<'input>),
+}
+
+/// A limiting clause followed by an optional `OFFSET` clause.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct LimitThenOffset<'input> {
+    pub limit: LimitingClause<'input>,
+    #[pretty(break_before = soft)]
+    pub offset: Option<Box<OffsetClause<'input>>>,
+}
+
+/// An `OFFSET` clause followed by an optional limiting clause.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct OffsetThenLimit<'input> {
+    pub offset: OffsetClause<'input>,
+    #[pretty(break_before = soft)]
+    pub limit: Option<Box<LimitingClause<'input>>>,
+}
+
+/// The limit/offset tail of a query, restricted to the clause orders
+/// PostgreSQL's `select_limit` production accepts: a limiting clause with an
+/// optional `OFFSET` after it, or an `OFFSET` clause with an optional
+/// limiting clause after it. Duplicate same-kind clauses and `LIMIT` mixed
+/// with `FETCH FIRST` are structurally unrepresentable, and rendering
+/// preserves the written order via the variant.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum LimitOffsetClause<'input> {
+    LimitOffset(LimitThenOffset<'input>),
+    OffsetLimit(OffsetThenLimit<'input>),
 }
 
 /// FOR UPDATE / FOR SHARE / FOR NO KEY UPDATE / FOR KEY SHARE locking clause.
@@ -1335,13 +1362,10 @@ pub struct SelectStmt<'input> {
     pub window: Option<Box<WindowClause<'input>>>,
     #[pretty(break_before = soft)]
     pub order_by: Option<Box<OrderByClause<'input>>>,
-    /// First LIMIT / OFFSET / FETCH FIRST clause. Postgres allows both
-    /// `LIMIT x OFFSET y` and `OFFSET y LIMIT x` and `FETCH FIRST n ROWS ONLY`.
+    /// LIMIT / OFFSET / FETCH FIRST tail. Postgres allows one limiting
+    /// clause (`LIMIT` or `FETCH FIRST`) and one `OFFSET`, in either order.
     #[pretty(break_before = soft)]
-    pub limit_offset_1: Option<Box<LimitOffsetItem<'input>>>,
-    /// Optional second clause (e.g. OFFSET after LIMIT, or vice versa).
-    #[pretty(break_before = soft)]
-    pub limit_offset_2: Option<Box<LimitOffsetItem<'input>>>,
+    pub limit_offset: Option<Box<LimitOffsetClause<'input>>>,
     #[pretty(break_before = soft)]
     pub for_update: Option<Box<ForUpdateClause<'input>>>,
 }

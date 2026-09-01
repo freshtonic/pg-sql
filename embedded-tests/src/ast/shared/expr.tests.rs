@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::ast::shared::expr::{
-        CastType, CastTypeHead, DirectSubquery, Expr, FunctionCallBody, FunctionCallTail,
-        ParenContent, ParenthesizedDotStar, ParenthesizedExpr, ParenthesizedIndirection, TypeName,
+        CastType, CastTypeHead, DirectParenthesizedSet, DirectSubquery, Expr, FunctionCallBody,
+        FunctionCallTail, ParenContent, ParenthesizedDotStar, ParenthesizedExpr,
+        ParenthesizedIndirection, TypeName,
     };
 
     /// Parse `src` as an `Expr` through the logos lex pass.
@@ -1871,6 +1872,49 @@ mod tests {
                 && indirection.is_empty()
         ));
         assert!(input.is_eof());
+    }
+
+    /// The parenthesized set-operation query admitted inside expressions
+    /// accepts at most one limiting clause (`LIMIT` or `FETCH FIRST`) and at
+    /// most one `OFFSET` clause. The right-hand side is a `VALUES` body so no
+    /// nested query can absorb the first clause: the duplicates land on this
+    /// form's own limit/offset tail.
+    #[test]
+    fn reject_direct_parenthesized_set_duplicate_limit_offset_clauses() {
+        for src in [
+            "(SELECT 1) UNION VALUES(2) LIMIT 1 LIMIT 1",
+            "(SELECT 1) UNION VALUES(2) OFFSET 1 OFFSET 1",
+            "(SELECT 1) UNION VALUES(2) FETCH FIRST 1 ROWS ONLY FETCH FIRST 1 ROWS ONLY",
+            "(SELECT 1) UNION VALUES(2) LIMIT 1 FETCH FIRST 1 ROWS ONLY",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = DirectParenthesizedSet::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "invalid duplicate clause parsed to EOF: {src:?}"
+            );
+        }
+    }
+
+    /// Both PostgreSQL clause orders and each bare clause round-trip on the
+    /// parenthesized set-operation query with the written order preserved.
+    /// The right-hand side is a `VALUES` body so the clauses land on this
+    /// form's own limit/offset tail rather than a nested query.
+    #[test]
+    fn parse_direct_parenthesized_set_limit_offset_orders_roundtrip() {
+        use crate::ast::test_support::roundtrip;
+        for src in [
+            "(SELECT 1) UNION VALUES(2) LIMIT 2 OFFSET 3",
+            "(SELECT 1) UNION VALUES(2) OFFSET 3 LIMIT 2",
+            "(SELECT 1) UNION VALUES(2) OFFSET 3 FETCH FIRST 2 ROWS ONLY",
+            "(SELECT 1) UNION VALUES(2) LIMIT 2",
+            "(SELECT 1) UNION VALUES(2) OFFSET 3",
+            "(SELECT 1) UNION VALUES(2) FETCH FIRST 2 ROWS ONLY",
+        ] {
+            assert_eq!(roundtrip::<DirectParenthesizedSet>(src), src);
+        }
     }
 
     // --- Type cast function-style: bool 'foo' ---

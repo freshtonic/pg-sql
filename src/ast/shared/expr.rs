@@ -44,8 +44,7 @@ pub struct DirectParenthesizedSet<'input> {
     pub close: ParenthesizedClose,
     pub set_op: SetOpCombiner<'input>,
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
-    pub limit_offset_1: Option<Box<crate::ast::dml::select::LimitOffsetItem<'input>>>,
-    pub limit_offset_2: Option<Box<crate::ast::dml::select::LimitOffsetItem<'input>>>,
+    pub limit_offset: Option<Box<crate::ast::dml::select::LimitOffsetClause<'input>>>,
 }
 
 /// SELECT/WITH/VALUES query body with an optional set-operation continuation.

@@ -416,7 +416,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.limit_offset_1.is_some());
+        assert!(stmt.limit_offset.is_some());
         assert!(input.is_eof());
     }
 
@@ -426,8 +426,49 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.limit_offset_1.is_some());
+        assert!(stmt.limit_offset.is_some());
         assert!(input.is_eof());
+    }
+
+    /// PostgreSQL's `select_limit` accepts at most one limiting clause
+    /// (`LIMIT` or `FETCH FIRST`) and at most one `OFFSET` clause. Duplicate
+    /// same-kind clauses and `LIMIT` mixed with `FETCH FIRST` must not parse
+    /// to the end of the statement.
+    #[test]
+    fn reject_select_duplicate_limit_offset_clauses() {
+        for src in [
+            "SELECT 1 LIMIT 1 LIMIT 1",
+            "SELECT 1 OFFSET 1 OFFSET 1",
+            "SELECT 1 FETCH FIRST 1 ROWS ONLY FETCH FIRST 1 ROWS ONLY",
+            "SELECT 1 LIMIT 1 FETCH FIRST 1 ROWS ONLY",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = SelectStmt::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "invalid duplicate clause parsed to EOF: {src:?}"
+            );
+        }
+    }
+
+    /// Both PostgreSQL clause orders and each bare clause round-trip with the
+    /// written order preserved.
+    #[test]
+    fn parse_select_limit_offset_orders_roundtrip() {
+        use crate::ast::test_support::roundtrip;
+        for src in [
+            "SELECT 1 LIMIT 2 OFFSET 3",
+            "SELECT 1 OFFSET 3 LIMIT 2",
+            "SELECT 1 OFFSET 3 FETCH FIRST 2 ROWS ONLY",
+            "SELECT 1 FETCH FIRST 2 ROWS ONLY OFFSET 3",
+            "SELECT 1 LIMIT 2",
+            "SELECT 1 OFFSET 3",
+            "SELECT 1 FETCH FIRST 2 ROWS ONLY",
+        ] {
+            assert_eq!(roundtrip::<SelectStmt>(src), src);
+        }
     }
 
     // --- FOR UPDATE ---

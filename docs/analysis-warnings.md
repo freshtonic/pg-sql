@@ -3,14 +3,20 @@
 Reviewed classification of every advisory analysis finding the pg-sql build
 emits, recorded for the warning-free CI gate (#22) per issue #26. Baseline
 history: 318 raw directives, then 225 distinct findings after the transport
-deduplication, now 195 after suffix-proving viability decisions retire 30
+deduplication, then 195 after suffix-proving viability decisions retire 30
 `RCA0300` findings by consuming the frozen decision proof (an overlap kind is
 retired only when the frozen trie defers past it, so commitment requires the
-element's own deeper suffix).
+element's own deeper suffix), now 193 after the structural limit/offset tail
+(#27) replaces each optional clause pair with one ordered clause: the four
+pair findings retire (one duplicate row each at `SelectStmt`, `TableStmt`,
+and `CompoundParen`, plus the sole `DirectParenthesizedSet` row), the three
+statement sites keep one finding for the whole optional tail against nested
+caller FOLLOW, and the new `LimitThenOffset` / `OffsetThenLimit` shapes add
+one finding each for their optional second clause (net −4 +2).
 
 ## Verdict key
 
-- **`RCA0300` retained (166)** — the optional element's viability cannot be
+- **`RCA0300` retained (164)** — the optional element's viability cannot be
   proven by bounded suffix within `max_lookahead = 5`: the element language is
   open (expression-shaped or depth-cut), the element can fully end on the
   shared token (inherent ambiguity), the overlap is static and handled by the
@@ -121,15 +127,16 @@ its shape, is a maintainer decision.
 | RCA0300 | `ast::dml::select::JsonTableRef` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::JsonTableTypedColumn` | 7 kinds (TRUE, FALSE, NULL, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::LateralSubquery` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::dml::select::LimitThenOffset` | OFFSET | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::NamedFunctionTableTail` | 9 kinds (JOIN, LEFT, RIGHT, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::NamedInheritedTail` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::NamedTableRef` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::dml::select::OffsetThenLimit` | LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::OnlyTableRef` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::OrderByClause` | 18 kinds (NULL, CREATE, ORDER, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::ParenTableRef` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::RowsFromRef` | 9 kinds (JOIN, LEFT, RIGHT, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::SelectExprItem` | 405 kinds (NULL, TABLE, VALUES, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::dml::select::SelectStmt` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::SelectStmt` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::SelectStmt` | ORDER | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::SelectTargetList` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
@@ -143,17 +150,14 @@ its shape, is a maintainer decision.
 | RCA0300 | `ast::dml::update::UpdateStmt` | RETURNING | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::values::CompoundBody` | UNION, EXCEPT, INTERSECT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::values::CompoundParen` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::dml::values::CompoundParen` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::values::CompoundParen` | ORDER | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::values::CompoundParen` | UNION, EXCEPT, INTERSECT | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::dml::values::TableStmt` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::values::TableStmt` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::values::TableStmt` | ORDER | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::CaseSearched` | WHEN | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::CaseSimple` | WHEN | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::CastType` | ARRAY | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::CastType` | [ | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::shared::expr::DirectParenthesizedSet` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::Expr` | ESCAPE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::FunctionPlainTail` | FILTER | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::FunctionPlainTail` | OVER | unproven within lookahead 5 — greedy commitment retained |
