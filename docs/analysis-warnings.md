@@ -6,7 +6,7 @@ history: 318 raw directives, then 225 distinct findings after the transport
 deduplication, then 195 after suffix-proving viability decisions retire 30
 `RCA0300` findings by consuming the frozen decision proof (an overlap kind is
 retired only when the frozen trie defers past it, so commitment requires the
-element's own deeper suffix), now 193 after the structural limit/offset tail
+element's own deeper suffix), now 192 after the structural limit/offset tail
 (#27) replaces each optional clause pair with one ordered clause: the four
 pair findings retire (one duplicate row each at `SelectStmt`, `TableStmt`,
 and `CompoundParen`, plus the sole `DirectParenthesizedSet` row), the three
@@ -16,7 +16,7 @@ one finding each for their optional second clause (net −4 +2).
 
 ## Verdict key
 
-- **`RCA0300` retained (164)** — the optional element's viability cannot be
+- **`RCA0300` retained (163)** — the optional element's viability cannot be
   proven by bounded suffix within `max_lookahead = 5`: the element language is
   open (expression-shaped or depth-cut), the element can fully end on the
   shared token (inherent ambiguity), the overlap is static and handled by the
@@ -119,7 +119,6 @@ its shape, is a maintainer decision.
 | RCA0300 | `ast::dml::insert::OnConflictClause` | WHERE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::merge::MergeStmt` | RETURNING | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::ColNameTableRef` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::dml::select::FromClause` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::FuncTableRef` | 9 kinds (JOIN, LEFT, RIGHT, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::GroupByClause` | 17 kinds (NULL, CREATE, ORDER, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::JoinSuffix` | USING, ON | unproven within lookahead 5 — greedy commitment retained |
