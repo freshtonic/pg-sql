@@ -36,7 +36,11 @@ lex/classify, dispatch/decision, value construction (provenance: spans,
 occurrences, element metadata), error/expected-set paths, and trivia
 handling. Deliverable is a ranked cost table in the journal, each row mapped
 against the candidate menu below with an adopt/adapt/reject-with-reason
-verdict. If value construction's intrinsic floor is shown to exceed the
+verdict. Attribution includes the empirical lever: a provenance-free parse
+mode (spans, occurrences, and element metadata disabled; comments already
+absent for this non-opting grammar) benchmarked like-for-like against the
+old implementation's numbers, pricing the provenance layer directly rather
+than by profile inference alone. If value construction's intrinsic floor is shown to exceed the
 parity gate, stop and bring the finding back as a decision (ADR 0006).
 
 ### Track R — runtime to parity

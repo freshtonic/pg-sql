@@ -47,6 +47,12 @@ plain-struct AST never paid for.
 - The benchmark run must fit iteration: wall time at or under ten minutes via
   probe caching keyed to the frozen baselines and tuned iteration budgets,
   without changing what is measured.
-- If profiling shows the provenance model's intrinsic floor sits above
+- A provenance-free comparison mode (no span/occurrence/element-metadata
+  retention; comments are already opt-out via the non-opting trivia
+  capability) is authorized as a measurement instrument: it establishes the
+  like-for-like baseline against the old implementation and prices the
+  provenance layer empirically. Whether that mode ships as a caller-facing
+  feature is a separate future decision.
+- If measurement shows the provenance model's intrinsic floor sits above
   parity, that finding returns as an explicit decision (revisit this ADR)
   rather than a silent target miss.
