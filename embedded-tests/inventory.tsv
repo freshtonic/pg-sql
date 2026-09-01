@@ -499,6 +499,7 @@ embedded-tests/src/ast/dml/select.tests.rs	parse_stacked_on_joins	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_window_clause_standalone	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_xmltable_and_lateral	false
 embedded-tests/src/ast/dml/select.tests.rs	reject_select_duplicate_limit_offset_clauses	false
+embedded-tests/src/ast/dml/select.tests.rs	reject_select_from_without_from_list	false
 embedded-tests/src/ast/dml/update.tests.rs	parse_update_multiple_assignments_and_returning_items	false
 embedded-tests/src/ast/dml/update.tests.rs	parse_update_only	false
 embedded-tests/src/ast/dml/update.tests.rs	parse_update_plain_assignment_still_parses	false
@@ -514,6 +515,7 @@ embedded-tests/src/ast/dml/update.tests.rs	parse_update_tuple_set_with_indirecti
 embedded-tests/src/ast/dml/update.tests.rs	parse_update_with_from_where	false
 embedded-tests/src/ast/dml/update.tests.rs	parse_update_with_returning	false
 embedded-tests/src/ast/dml/update.tests.rs	reject_bare_set_as_update_alias	false
+embedded-tests/src/ast/dml/update.tests.rs	reject_update_from_without_from_list	false
 embedded-tests/src/ast/dml/values.tests.rs	parse_compound_paren_limit_offset_orders_roundtrip	false
 embedded-tests/src/ast/dml/values.tests.rs	parse_table_stmt	false
 embedded-tests/src/ast/dml/values.tests.rs	parse_table_stmt_limit_offset_orders_roundtrip	false

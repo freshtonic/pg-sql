@@ -453,6 +453,28 @@ mod tests {
         }
     }
 
+    /// PostgreSQL requires at least one from-list item after `FROM`: only
+    /// the target list may be empty (`SELECT FROM emp`), never the
+    /// from-list. None of these forms may parse to the end of the input.
+    #[test]
+    fn reject_select_from_without_from_list() {
+        for src in [
+            "SELECT FROM",
+            "SELECT FROM;",
+            "SELECT FROM emp,",
+            "SELECT 1 FROM",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = SelectStmt::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "empty from-list parsed to EOF: {src:?}"
+            );
+        }
+    }
+
     /// Both PostgreSQL clause orders and each bare clause round-trip with the
     /// written order preserved.
     #[test]

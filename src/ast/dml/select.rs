@@ -69,11 +69,14 @@ impl<'input> Alias<'input> {
 }
 
 /// FROM clause: `FROM table [, table ...]`.
+///
+/// PostgreSQL's `from_list` is nonempty: `FROM` commits to at least one
+/// `TableRef` (`SELECT FROM` must fail; only the target list may be empty).
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(FROM, this)]
 pub struct FromClause<'input> {
     #[sep(COMMA)]
-    pub tables: Vec<TableRef<'input>>,
+    pub tables: recursa::Vec1<TableRef<'input>>,
 }
 
 /// Table name with inheritance marker and optional alias: `person* p`

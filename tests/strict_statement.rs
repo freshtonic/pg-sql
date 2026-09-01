@@ -137,3 +137,28 @@ fn strict_parse_failure_does_not_construct_a_statement() {
         "strict failure must preserve the public input source"
     );
 }
+
+#[test]
+fn strict_parse_rejects_a_terminated_empty_from_list() {
+    let lexed = lex("SELECT FROM;");
+    assert!(lexed.errors().next().is_none());
+
+    let mut input = lexed.input();
+    assert!(
+        Statement::parse(&mut input).is_err(),
+        "PostgreSQL requires a from-list item before the terminator"
+    );
+}
+
+#[test]
+fn strict_parse_rejects_a_trailing_comma_from_list() {
+    let lexed = lex("SELECT FROM emp,");
+    assert!(lexed.errors().next().is_none());
+
+    let mut input = lexed.input();
+    let parsed = Statement::parse(&mut input);
+    assert!(
+        parsed.is_err() || !input.is_eof(),
+        "PostgreSQL requires a from-list item after the comma"
+    );
+}

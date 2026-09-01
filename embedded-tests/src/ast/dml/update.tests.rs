@@ -124,6 +124,20 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    /// PostgreSQL requires at least one from-list item after UPDATE's
+    /// `FROM`; the bare clause must not parse to the end of the input.
+    #[test]
+    fn reject_update_from_without_from_list() {
+        let lexed = crate::lex("UPDATE t SET a = 1 FROM");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let parsed = UpdateStmt::parse(&mut input);
+        assert!(
+            parsed.is_err() || !input.is_eof(),
+            "empty UPDATE from-list parsed to EOF"
+        );
+    }
+
     #[test]
     fn parse_update_subscript_assignment() {
         let lexed = crate::lex("UPDATE t SET e[0] = '1.1'");

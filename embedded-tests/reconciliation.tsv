@@ -281,10 +281,12 @@ tests::support::tests::skips_psql_interpolation	superseded	-	-	frozen-statement-
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_limit_offset_orders_roundtrip	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_plain_distinct_prefix_identifier	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	reject_select_duplicate_limit_offset_clauses	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/dml/select.tests.rs	reject_select_from_without_from_list	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/update.tests.rs	parse_update_multiple_assignments_and_returning_items	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/update.tests.rs	parse_update_set_as_assignment_target_not_alias	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/update.tests.rs	parse_update_target_aliases	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/update.tests.rs	reject_bare_set_as_update_alias	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/dml/update.tests.rs	reject_update_from_without_from_list	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/values.tests.rs	parse_compound_paren_limit_offset_orders_roundtrip	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/values.tests.rs	parse_table_stmt_limit_offset_orders_roundtrip	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/values.tests.rs	parse_table_stmt_order_by_multiple_items	issue-9-generated-statement
