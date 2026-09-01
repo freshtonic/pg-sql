@@ -1,31 +1,56 @@
-//! pg-sql benchmark harness.
+//! pg-sql interim benchmark harness (statement-level).
 //!
 //! A self-contained harness (no criterion): it times `pg-sql` against
-//! `sqlparser` on the PostgreSQL regression corpus and the generated stress
-//! fixtures, then writes a per-run report directory under `docs/benchmarks/`.
+//! `sqlparser` and PostgreSQL 17.9's raw parser (via `pg-oracle`) on the
+//! PostgreSQL regression corpus and the generated stress fixtures, then
+//! writes a per-run report directory under `docs/benchmarks/`.
+//!
+//! The ported crate has no file-level parse interface yet (#10), so this
+//! interim harness measures **statement-level** parsing: for each corpus
+//! file it takes the frozen per-file statement list that the differential
+//! suite pins (`tests/support/baseline.rs`, `FrozenStatements::pinned()`)
+//! and times each engine over the statements that *all three* engines
+//! accept. A statement rejected by any engine is excluded for every engine,
+//! and the exclusions are counted in the report. The full Criterion port
+//! and file-level corpus parsing are #20.
 //!
 //! Each run writes its own subdirectory `docs/benchmarks/<timestamp>-<commit>/`
 //! containing `report.md` (the human report), `time.svg` and `throughput.svg`
 //! (the charts, referenced from `report.md` by bare filename), and `data.json`
-//! (the run's raw benchmark data, consumed by `cargo xtask bench-report`).
+//! (the run's raw benchmark data, serialized by `pg_sql::bench_data`).
 //!
-//! Run with `cargo bench -p pg-sql`. The report path is printed on completion.
-//! See docs/plans/2026-04-14-benchmark-suite-design.md for the original design.
+//! Run with `cargo bench -p pg-sql --features postgres-oracle`. The feature
+//! flag is required: the bench target declares
+//! `required-features = ["postgres-oracle"]`, and without the flag cargo
+//! silently skips the target. The report path is printed on completion.
 
+// The differential test support module. Mounting it here keeps the bench on
+// the exact statement membership the differential suite pins, so the two
+// cannot drift. Only part of the module is used by the harness, and rustc
+// drops the module's `#[test]` functions in this `harness = false` build,
+// which strands its test-module imports.
+#[allow(dead_code, unused_imports)]
+#[path = "../tests/support/mod.rs"]
+mod support;
+
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use pg_sql::ast::parse_sql_file;
+use pg_sql::ast::Statement;
 use pg_sql::bench_data::{BenchRecord, serialize_data_json};
-use recursa::Input;
 use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::Parser as SqlParser;
+use support::baseline::FrozenStatements;
+use support::diff_check::lex_statement_source;
 
 // --- Paths ---
 
+/// The crate manifest directory — also the repository root, so the report is
+/// written under `<manifest>/docs/benchmarks/`.
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -40,22 +65,26 @@ fn stress_dir() -> PathBuf {
     manifest_dir().join("fixtures/stress")
 }
 
-/// Repository root — the report is written under `<root>/docs/benchmarks/`.
-fn repo_root() -> PathBuf {
-    manifest_dir()
-        .parent()
-        .expect("pg-sql crate has a parent directory")
-        .to_path_buf()
-}
-
 // --- Parsers under test ---
 
+/// Strict statement-level parse with pg-sql: the generated lex pass, the
+/// differential suite's document-terminator exclusion, then the generated
+/// `Statement` parser. The lex and rebuild are counted in the measured time,
+/// mirroring the "parse one SQL string from scratch" model used for the
+/// other two engines.
 fn parse_with_pg_sql(sql: &str) -> bool {
-    // Match production: run the `tokens!`-generated logos lex pass up front,
-    // then parse the borrowed token array.
-    let lexed = pg_sql::tokens::pg_lex(sql);
-    let mut input = Input::new(sql, &lexed);
-    parse_sql_file(&mut input).is_ok()
+    let lexed = lex_statement_source(sql);
+    if lexed.errors().next().is_some() {
+        return false;
+    }
+    let mut input = lexed.input();
+    match Statement::parse(&mut input) {
+        Ok(parsed) => {
+            std::hint::black_box(&parsed);
+            input.is_eof()
+        }
+        Err(_) => false,
+    }
 }
 
 fn parse_with_sqlparser(sql: &str) -> bool {
@@ -67,11 +96,9 @@ fn parse_with_sqlparser(sql: &str) -> bool {
 /// both overheads count toward this parser's measured time, mirroring the
 /// "parse one SQL string from scratch" model used for the other two.
 ///
-/// `pg_oracle::parse_ok` panics on a NUL byte (`CString::new`). We now
-/// benchmark the full regression corpus rather than the intersection so a
-/// stray NUL would crash the run; treat any NUL-containing input as a
-/// rejection — it's structurally invalid C-string input and the parser
-/// can't see it anyway.
+/// `pg_oracle::parse_ok` panics on a NUL byte (`CString::new`); treat any
+/// NUL-containing input as a rejection — it's structurally invalid C-string
+/// input and the parser can't see it anyway.
 fn parse_with_postgres(sql: &str) -> bool {
     if sql.as_bytes().contains(&0) {
         return false;
@@ -79,68 +106,56 @@ fn parse_with_postgres(sql: &str) -> bool {
     pg_oracle::parse_ok(sql)
 }
 
-// --- Corpus loading ---
-
-/// Load every `.sql` file under `dir` (non-recursive) into `(name, contents)`
-/// pairs, sorted by filename for determinism. Files that are not valid UTF-8
-/// (e.g. `collate.windows.win1252.sql`) are skipped with a warning.
-fn load_sql_dir(dir: &Path) -> Vec<(String, String)> {
-    let mut out: Vec<(String, String)> = fs::read_dir(dir)
-        .unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("sql"))
-        .filter_map(|e| {
-            let name = e.file_name().to_string_lossy().into_owned();
-            match fs::read_to_string(e.path()) {
-                Ok(contents) => Some((name, contents)),
-                Err(err) => {
-                    eprintln!("warning: skipping fixture {name}: {err}");
-                    None
-                }
-            }
-        })
-        .collect();
-    out.sort_by(|a, b| a.0.cmp(&b.0));
-    out
-}
-
 // --- Measurement ---
 
-/// One benchmark: a name, the SQL inputs to parse per iteration, and the total
-/// byte volume those inputs represent (for throughput).
+/// Per-engine statement rejection counts for one benchmark. A statement can
+/// be rejected by more than one engine, so the counts can sum past the
+/// number of excluded statements.
+#[derive(Clone, Copy, Default)]
+struct Rejections {
+    pg_sql: usize,
+    sqlparser: usize,
+    postgres: usize,
+}
+
+impl Rejections {
+    fn add(&mut self, other: Rejections) {
+        self.pg_sql += other.pg_sql;
+        self.sqlparser += other.sqlparser;
+        self.postgres += other.postgres;
+    }
+}
+
+/// One benchmark: a name, the SQL statements every engine accepts (timed per
+/// iteration), and the total byte volume those statements represent (for
+/// throughput).
 ///
-/// The three `*_ok` flags record whether each parser *accepted* the workload
-/// on a single up-front probe. They drive the table partition and the chart
-/// inclusion filter: rows in which all three parsers succeeded form the "fair
-/// head-to-head" set; the others surface as time-to-error and are reported
-/// but excluded from the charts.
+/// `stmts_total` counts the frozen statements the workload started from;
+/// `stmts_total - inputs.len()` of them were excluded because at least one
+/// engine rejected them, with the per-engine causes in `rejections`.
 struct Bench {
     name: String,
     inputs: Vec<String>,
     bytes: u64,
-    pg_sql_ok: bool,
-    sqlparser_ok: bool,
-    postgres_ok: bool,
+    stmts_total: usize,
+    rejections: Rejections,
+}
+
+impl Bench {
+    fn excluded(&self) -> usize {
+        self.stmts_total - self.inputs.len()
+    }
 }
 
 /// The timing result for the three parsers on one benchmark.
 struct Row {
     name: String,
     bytes: u64,
+    stmts_timed: usize,
+    stmts_excluded: usize,
     pg_sql: Duration,
     sqlparser: Duration,
     postgres: Duration,
-    pg_sql_ok: bool,
-    sqlparser_ok: bool,
-    postgres_ok: bool,
-}
-
-impl Row {
-    /// `true` when every parser accepted the workload — the row qualifies for
-    /// the head-to-head charts and the intersection table.
-    fn all_accept(&self) -> bool {
-        self.pg_sql_ok && self.sqlparser_ok && self.postgres_ok
-    }
 }
 
 /// Time a closure: warm up briefly, then collect samples until both a minimum
@@ -169,41 +184,44 @@ fn measure(mut f: impl FnMut()) -> Duration {
 }
 
 fn run_bench(b: &Bench) -> Row {
-    let pg_sql = measure(|| {
-        for sql in &b.inputs {
-            std::hint::black_box(parse_with_pg_sql(sql));
-        }
-    });
-    let sqlparser = measure(|| {
-        for sql in &b.inputs {
-            std::hint::black_box(parse_with_sqlparser(sql));
-        }
-    });
-    let postgres = measure(|| {
-        for sql in &b.inputs {
-            std::hint::black_box(parse_with_postgres(sql));
-        }
-    });
-    let tick = |ok| if ok { '✓' } else { '✗' };
+    // A workload whose statements were all excluded has nothing to time.
+    let (pg_sql, sqlparser, postgres) = if b.inputs.is_empty() {
+        (Duration::ZERO, Duration::ZERO, Duration::ZERO)
+    } else {
+        let pg_sql = measure(|| {
+            for sql in &b.inputs {
+                std::hint::black_box(parse_with_pg_sql(sql));
+            }
+        });
+        let sqlparser = measure(|| {
+            for sql in &b.inputs {
+                std::hint::black_box(parse_with_sqlparser(sql));
+            }
+        });
+        let postgres = measure(|| {
+            for sql in &b.inputs {
+                std::hint::black_box(parse_with_postgres(sql));
+            }
+        });
+        (pg_sql, sqlparser, postgres)
+    };
     println!(
-        "  {:<24} pg-sql {:>9.3} ms {}   sqlparser {:>9.3} ms {}   postgres {:>9.3} ms {}",
+        "  {:<28} {:>4} stmts ({:>3} excl)   pg-sql {:>9.3} ms   sqlparser {:>9.3} ms   postgres {:>9.3} ms",
         b.name,
+        b.inputs.len(),
+        b.excluded(),
         ms(pg_sql),
-        tick(b.pg_sql_ok),
         ms(sqlparser),
-        tick(b.sqlparser_ok),
         ms(postgres),
-        tick(b.postgres_ok),
     );
     Row {
         name: b.name.clone(),
         bytes: b.bytes,
+        stmts_timed: b.inputs.len(),
+        stmts_excluded: b.excluded(),
         pg_sql,
         sqlparser,
         postgres,
-        pg_sql_ok: b.pg_sql_ok,
-        sqlparser_ok: b.sqlparser_ok,
-        postgres_ok: b.postgres_ok,
     }
 }
 
@@ -257,55 +275,56 @@ fn stress_shapes() -> Vec<(&'static str, Vec<(usize, &'static str)>)> {
     ]
 }
 
-/// Build the benchmark set: one `corpus/<file>` benchmark for *every*
-/// regression SQL file (including those some parser rejects — the rejected
-/// rows are still timed as "time to error" and reported, but excluded from
-/// the head-to-head charts), plus one benchmark per stress fixture.
+/// Partition `statements` into the subset every engine accepts (returned as
+/// owned inputs plus their byte volume) and per-engine rejection counts.
+fn probe_statements(statements: &[&str]) -> (Vec<String>, u64, Rejections) {
+    let mut inputs = Vec::new();
+    let mut bytes = 0u64;
+    let mut rejections = Rejections::default();
+    for source in statements {
+        let a = parse_with_pg_sql(source);
+        let b = parse_with_sqlparser(source);
+        let c = parse_with_postgres(source);
+        rejections.pg_sql += usize::from(!a);
+        rejections.sqlparser += usize::from(!b);
+        rejections.postgres += usize::from(!c);
+        if a && b && c {
+            bytes += source.len() as u64;
+            inputs.push((*source).to_owned());
+        }
+    }
+    (inputs, bytes, rejections)
+}
+
+/// Build the benchmark set: one `corpus/<file>` benchmark per frozen corpus
+/// file (the exact membership the differential baseline pins), plus one
+/// `stress/<file>` benchmark per generated stress fixture (each is a single
+/// statement, so the statement-level model applies unchanged).
 fn build_benches() -> Vec<Bench> {
     let mut benches = Vec::new();
 
-    // Corpus: one benchmark per regression SQL file. We do a single up-front
-    // probe per parser to record acceptance; the timing pass that follows
-    // still calls each parser, so rejected rows are timed as "time to error"
-    // and surface in the report's non-intersection section. The
-    // partition (intersection vs non-intersection) is derived from the
-    // recorded `*_ok` flags at report-time.
-    let corpus = load_sql_dir(&corpus_sql_dir());
-    let total = corpus.len();
-    let mut pg_ok = 0usize;
-    let mut sp_ok = 0usize;
-    let mut pgo_ok = 0usize;
-    let mut intersection = 0usize;
-    for (name, sql) in corpus {
-        let a = parse_with_pg_sql(&sql);
-        let b = parse_with_sqlparser(&sql);
-        let c = parse_with_postgres(&sql);
-        pg_ok += a as usize;
-        sp_ok += b as usize;
-        pgo_ok += c as usize;
-        if a && b && c {
-            intersection += 1;
-        }
-        let bytes = sql.len() as u64;
-        let stem = name.strip_suffix(".sql").unwrap_or(&name);
+    let frozen = FrozenStatements::pinned();
+    let corpus_dir = corpus_sql_dir();
+    for name in frozen.file_names() {
+        let path = corpus_dir.join(name);
+        let text = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read corpus file {}: {e}", path.display()));
+        let statements = frozen
+            .file(name)
+            .statements(&text)
+            .unwrap_or_else(|error| panic!("{name}: cannot load frozen statements: {error}"));
+        let (inputs, bytes, rejections) = probe_statements(&statements);
+        let stem = name.strip_suffix(".sql").unwrap_or(name);
         benches.push(Bench {
             name: format!("corpus/{stem}"),
-            inputs: vec![sql],
+            stmts_total: statements.len(),
+            inputs,
             bytes,
-            pg_sql_ok: a,
-            sqlparser_ok: b,
-            postgres_ok: c,
+            rejections,
         });
     }
-    eprintln!(
-        "corpus: {total} files — pg-sql accepts {pg_ok}, sqlparser accepts {sp_ok}, \
-         postgres accepts {pgo_ok}; {intersection} accepted by all three (the \
-         intersection forms the head-to-head charts; the remaining \
-         {} are timed but excluded from the charts).",
-        total - intersection
-    );
 
-    // Stress fixtures: one `stress/<file>` benchmark per generated file. The
+    // Stress fixtures: one single-statement benchmark per generated file. The
     // filename stem (e.g. `insert_values_100`) already names the shape and
     // size; the `stress/` prefix groups them apart from the `corpus/` entries.
     let stress = stress_dir();
@@ -313,21 +332,39 @@ fn build_benches() -> Vec<Bench> {
         for (_, file) in sizes {
             let sql = fs::read_to_string(stress.join(file))
                 .unwrap_or_else(|e| panic!("read stress fixture {file}: {e}"));
-            let pg_sql_ok = parse_with_pg_sql(&sql);
-            let sqlparser_ok = parse_with_sqlparser(&sql);
-            let postgres_ok = parse_with_postgres(&sql);
-            let bytes = sql.len() as u64;
+            let (inputs, bytes, rejections) = probe_statements(&[sql.as_str()]);
             let stem = file.strip_suffix(".sql").unwrap_or(file);
             benches.push(Bench {
                 name: format!("stress/{stem}"),
-                inputs: vec![sql],
+                stmts_total: 1,
+                inputs,
                 bytes,
-                pg_sql_ok,
-                sqlparser_ok,
-                postgres_ok,
+                rejections,
             });
         }
     }
+
+    let totals = benches.iter().fold(
+        (0usize, 0usize, Rejections::default()),
+        |(total, timed, mut rejections), bench| {
+            rejections.add(bench.rejections);
+            (
+                total + bench.stmts_total,
+                timed + bench.inputs.len(),
+                rejections,
+            )
+        },
+    );
+    let (total, timed, rejections) = totals;
+    eprintln!(
+        "statement probe: {total} frozen statements — {timed} accepted by all three \
+         engines and timed, {} excluded (rejections: pg-sql {}, sqlparser {}, \
+         postgres {}).",
+        total - timed,
+        rejections.pg_sql,
+        rejections.sqlparser,
+        rejections.postgres,
+    );
 
     benches
 }
@@ -545,21 +582,14 @@ struct Report {
     throughput_svg: String,
 }
 
-/// Markdown character for a parser's acceptance result.
-fn mark(ok: bool) -> char {
-    if ok { '✓' } else { '✗' }
-}
-
-/// Render one results table — header plus one row per `Row`. Each per-parser
-/// time cell carries a trailing ✓/✗ telling the reader whether that parser
-/// accepted the workload; for rejected rows the timing is "time to error".
+/// Render one results table — header plus one row per `Row`.
 fn write_results_table(md: &mut String, rows: &[&Row]) {
     let _ = writeln!(
         md,
-        "| Benchmark | Bytes | pg-sql time | sqlparser time | postgres time \
-         | pg-sql throughput | sqlparser throughput | postgres throughput \
-         | pg-sql vs sqlparser | pg-sql vs postgres |\n\
-         |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|"
+        "| Benchmark | Stmts | Excluded | Bytes | pg-sql time | sqlparser time \
+         | postgres time | pg-sql throughput | sqlparser throughput \
+         | postgres throughput | pg-sql vs sqlparser | pg-sql vs postgres |\n\
+         |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|"
     );
     for r in rows {
         let sp_speedup = if r.pg_sql.as_secs_f64() > 0.0 {
@@ -574,16 +604,15 @@ fn write_results_table(md: &mut String, rows: &[&Row]) {
         };
         let _ = writeln!(
             md,
-            "| {} | {} | {:.3} ms {} | {:.3} ms {} | {:.3} ms {} \
+            "| {} | {} | {} | {} | {:.3} ms | {:.3} ms | {:.3} ms \
              | {:.1} MiB/s | {:.1} MiB/s | {:.1} MiB/s | {:.2}× | {:.2}× |",
             r.name,
+            r.stmts_timed,
+            r.stmts_excluded,
             r.bytes,
             ms(r.pg_sql),
-            mark(r.pg_sql_ok),
             ms(r.sqlparser),
-            mark(r.sqlparser_ok),
             ms(r.postgres),
-            mark(r.postgres_ok),
             mib_per_s(r.bytes, r.pg_sql),
             mib_per_s(r.bytes, r.sqlparser),
             mib_per_s(r.bytes, r.postgres),
@@ -593,35 +622,34 @@ fn write_results_table(md: &mut String, rows: &[&Row]) {
     }
 }
 
-fn build_report(rows: &[Row], timestamp: &str, commit: &str) -> Report {
-    // Partition: rows where all three parsers accepted (the head-to-head set)
-    // first, then everything else. Within each partition the input order
-    // (alphabetical from load_sql_dir + stress in declaration order) is
-    // preserved so the table is deterministic.
-    let intersection: Vec<&Row> = rows.iter().filter(|r| r.all_accept()).collect();
-    let rejected: Vec<&Row> = rows.iter().filter(|r| !r.all_accept()).collect();
+fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &str) -> Report {
+    // Partition: rows with at least one timed statement carry measurements;
+    // rows whose statements were all excluded have nothing to time. Within
+    // each partition the input order (alphabetical corpus files, then stress
+    // fixtures in declaration order) is preserved so the table is
+    // deterministic.
+    let timed: Vec<&Row> = rows.iter().filter(|r| r.stmts_timed > 0).collect();
+    let empty: Vec<&Row> = rows.iter().filter(|r| r.stmts_timed == 0).collect();
 
-    // Charts use only the intersection — mixing in time-to-error rows would
-    // mislead a quick read.
-    let chart_labels: Vec<String> = intersection.iter().map(|r| r.name.clone()).collect();
-    let pg_time: Vec<f64> = intersection.iter().map(|r| ms(r.pg_sql)).collect();
-    let sp_time: Vec<f64> = intersection.iter().map(|r| ms(r.sqlparser)).collect();
-    let po_time: Vec<f64> = intersection.iter().map(|r| ms(r.postgres)).collect();
-    let pg_tput: Vec<f64> = intersection
-        .iter()
-        .map(|r| mib_per_s(r.bytes, r.pg_sql))
-        .collect();
-    let sp_tput: Vec<f64> = intersection
+    let chart_labels: Vec<String> = timed.iter().map(|r| r.name.clone()).collect();
+    let pg_time: Vec<f64> = timed.iter().map(|r| ms(r.pg_sql)).collect();
+    let sp_time: Vec<f64> = timed.iter().map(|r| ms(r.sqlparser)).collect();
+    let po_time: Vec<f64> = timed.iter().map(|r| ms(r.postgres)).collect();
+    let pg_tput: Vec<f64> = timed.iter().map(|r| mib_per_s(r.bytes, r.pg_sql)).collect();
+    let sp_tput: Vec<f64> = timed
         .iter()
         .map(|r| mib_per_s(r.bytes, r.sqlparser))
         .collect();
-    let po_tput: Vec<f64> = intersection
+    let po_tput: Vec<f64> = timed
         .iter()
         .map(|r| mib_per_s(r.bytes, r.postgres))
         .collect();
 
     let mut md = String::new();
-    let _ = writeln!(md, "# pg-sql parser benchmark");
+    let _ = writeln!(
+        md,
+        "# pg-sql parser benchmark — statement-level interim results"
+    );
     md.push('\n');
     let _ = writeln!(md, "- **Generated:** {timestamp}");
     let _ = writeln!(md, "- **Commit:** `{commit}`");
@@ -629,45 +657,64 @@ fn build_report(rows: &[Row], timestamp: &str, commit: &str) -> Report {
         md,
         "- **Parsers:** pg-sql (this crate) vs \
          [`sqlparser`](https://crates.io/crates/sqlparser) vs PostgreSQL's \
-         raw parser (via [`pg-oracle`](../../pg-oracle/), linking the \
+         raw parser (via [`pg-oracle`](../../../pg-oracle/), linking the \
          vendored PostgreSQL 17.9 source)"
     );
     md.push('\n');
     let _ = writeln!(
         md,
-        "Every regression SQL file is benchmarked with all three parsers. Time \
-         is the median wall-clock per iteration; throughput is the workload's \
-         byte volume divided by that time. The **first table** lists rows in \
-         which all three parsers accepted the input (the fair head-to-head set \
-         — these are the rows the charts cover); the **second table** lists \
-         rows where at least one parser rejected — their timings still appear \
-         (as time-to-error), but the head-to-head speedup is no longer \
-         apples-to-apples. The per-parser ✓/✗ columns disambiguate. The \
-         postgres column measures `pg_oracle::parse_ok`, which includes a \
-         per-call `CString` allocation and a global-mutex acquisition on top \
-         of the underlying `raw_parser()` invocation — both overheads count \
-         toward the measured time, mirroring the end-to-end \"parse one SQL \
-         string from scratch\" model used for the other two parsers."
+        "**These are statement-level interim measurements.** The ported crate \
+         has no file-level parse interface yet, so each `corpus/<file>` \
+         benchmark parses the frozen per-file statement list pinned by the \
+         differential suite (`tests/support/baseline.rs`), one statement at a \
+         time, rather than the whole file in one call. The Criterion port and \
+         file-level corpus parsing are tracked in issue #20."
     );
     md.push('\n');
-
-    let total = rows.len();
-    let n_intersection = intersection.len();
-    let n_rejected = rejected.len();
     let _ = writeln!(
         md,
-        "- **Benchmarks:** {total} ({n_intersection} accepted by all three \
-         parsers, {n_rejected} rejected by ≥ 1)"
+        "All three engines time the **same statement set**: a statement \
+         rejected by any engine (or carrying a NUL byte, which the \
+         PostgreSQL C bridge cannot accept) is excluded for every engine, \
+         and counted in the Excluded column. Time is the median wall-clock \
+         per iteration over a benchmark's accepted statements; throughput is \
+         the accepted statements' byte volume divided by that time. The \
+         pg-sql column includes the generated lex pass and the differential \
+         suite's document-terminator exclusion; the postgres column measures \
+         `pg_oracle::parse_ok`, which includes a per-call `CString` \
+         allocation and a global-mutex acquisition on top of the underlying \
+         `raw_parser()` invocation — these overheads count toward the \
+         measured times, mirroring the end-to-end \"parse one SQL string \
+         from scratch\" model used for all engines."
     );
     md.push('\n');
 
-    // Two-table layout: intersection first, then rejected.
-    let _ = writeln!(md, "## Results — intersection (all three parsers accept)\n");
-    write_results_table(&mut md, &intersection);
+    let _ = writeln!(md, "- **Benchmarks:** {}", rows.len());
+    let _ = writeln!(
+        md,
+        "- **Frozen statements:** {} ({} timed by all three engines, {} \
+         excluded)",
+        totals.stmts_total,
+        totals.stmts_timed,
+        totals.stmts_total - totals.stmts_timed,
+    );
+    let _ = writeln!(
+        md,
+        "- **Per-engine rejections (causes of exclusion):** pg-sql {}, \
+         sqlparser {}, postgres {}",
+        totals.rejections.pg_sql, totals.rejections.sqlparser, totals.rejections.postgres,
+    );
     md.push('\n');
-    if !rejected.is_empty() {
-        let _ = writeln!(md, "## Results — rejected by ≥ 1 parser (time-to-error)\n");
-        write_results_table(&mut md, &rejected);
+
+    let _ = writeln!(md, "## Results\n");
+    write_results_table(&mut md, &timed);
+    md.push('\n');
+    if !empty.is_empty() {
+        let _ = writeln!(
+            md,
+            "## Workloads with no statement accepted by all three engines\n"
+        );
+        write_results_table(&mut md, &empty);
         md.push('\n');
     }
 
@@ -692,15 +739,16 @@ fn build_report(rows: &[Row], timestamp: &str, commit: &str) -> Report {
 
     // The charts sit in the same per-run directory as this report, so they
     // are referenced by bare filename.
-    let _ = writeln!(md, "## Parse time (lower is better) — intersection only\n");
+    let _ = writeln!(md, "## Parse time (lower is better)\n");
     let _ = writeln!(md, "![Parse time per benchmark](time.svg)\n");
-    let _ = writeln!(md, "## Throughput (higher is better) — intersection only\n");
+    let _ = writeln!(md, "## Throughput (higher is better)\n");
     let _ = writeln!(md, "![Throughput per benchmark](throughput.svg)\n");
     let _ = writeln!(
         md,
         "_Each benchmark shows three side-by-side bars — blue = **pg-sql**, \
          amber = **sqlparser**, green = **postgres** (PostgreSQL 17.9 raw \
-         parser via pg-oracle). Charts cover the intersection set only._"
+         parser via pg-oracle). All bars cover the same accepted-by-all \
+         statement set._"
     );
 
     Report {
@@ -710,12 +758,46 @@ fn build_report(rows: &[Row], timestamp: &str, commit: &str) -> Report {
     }
 }
 
+/// Whole-run statement accounting for the report header.
+struct BenchTotals {
+    stmts_total: usize,
+    stmts_timed: usize,
+    rejections: Rejections,
+}
+
+fn bench_totals(benches: &[Bench]) -> BenchTotals {
+    let mut totals = BenchTotals {
+        stmts_total: 0,
+        stmts_timed: 0,
+        rejections: Rejections::default(),
+    };
+    for bench in benches {
+        totals.stmts_total += bench.stmts_total;
+        totals.stmts_timed += bench.inputs.len();
+        totals.rejections.add(bench.rejections);
+    }
+    totals
+}
+
 fn main() {
-    println!("pg-sql benchmark harness");
+    println!("pg-sql benchmark harness (statement-level interim)");
     let benches = build_benches();
+    let totals = bench_totals(&benches);
 
     println!("running {} benchmarks...", benches.len());
     let rows: Vec<Row> = benches.iter().map(run_bench).collect();
+
+    // Aggregate engine totals over every timed benchmark, for a headline.
+    let sums: BTreeMap<&str, Duration> = [
+        ("pg-sql", rows.iter().map(|r| r.pg_sql).sum()),
+        ("sqlparser", rows.iter().map(|r| r.sqlparser).sum()),
+        ("postgres", rows.iter().map(|r| r.postgres).sum()),
+    ]
+    .into_iter()
+    .collect();
+    for (engine, total) in &sums {
+        println!("total median time, {engine}: {:.3} ms", ms(*total));
+    }
 
     // Identify the run: an ISO-8601 UTC timestamp (`:` swapped for `-` so it is
     // a safe filename) and the short commit SHA.
@@ -732,11 +814,11 @@ fn main() {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "unknown".to_string());
 
-    let report = build_report(&rows, &timestamp, &commit);
+    let report = build_report(&rows, &totals, &timestamp, &commit);
 
     // Each run gets its own subdirectory; the report references the charts by
     // bare filename, so report.md, the SVGs, and data.json all sit together.
-    let run_dir = repo_root()
+    let run_dir = manifest_dir()
         .join("docs/benchmarks")
         .join(format!("{timestamp}-{commit}"));
     fs::create_dir_all(&run_dir).unwrap_or_else(|e| panic!("create {}: {e}", run_dir.display()));
@@ -749,7 +831,7 @@ fn main() {
     write("throughput.svg", &report.throughput_svg);
     let md_path = write("report.md", &report.markdown);
 
-    // Raw data for trend analysis (`cargo xtask bench-report`).
+    // Raw data for trend analysis, serialized by `pg_sql::bench_data`.
     let records: Vec<BenchRecord> = rows
         .iter()
         .map(|r| BenchRecord {

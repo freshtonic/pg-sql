@@ -43,7 +43,10 @@ impl fmt::Display for StrictStatementFailure {
 /// source and every retained token span unchanged; only the final significant
 /// `SEMI` record is omitted. Lexically invalid input is returned verbatim so
 /// its mechanism-specific diagnostic and anchor are not weakened by rebuilding.
-fn lex_statement_source(source: &str) -> pg_sql::LexResult<'_> {
+///
+/// `pub(crate)` so the interim benchmark harness (`benches/parse.rs`, which
+/// mounts this module) times pg-sql through the same statement lexing seam.
+pub(crate) fn lex_statement_source(source: &str) -> pg_sql::LexResult<'_> {
     let lexed = pg_sql::lex(source);
     if lexed.errors().next().is_some() {
         return lexed;

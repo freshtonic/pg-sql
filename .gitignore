@@ -1,3 +1,5 @@
 /target/
 .DS_Store
 .claude/worktrees/
+# Per-run benchmark reports (benches/parse.rs); runs are not committed.
+/docs/benchmarks/
