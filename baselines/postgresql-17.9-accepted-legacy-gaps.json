@@ -38,12 +38,7 @@
       "file": "join.sql",
       "statement_index": 171,
       "byte_range": "16727:16787",
-      "outcome": "diagnostic",
-      "diagnostic": {
-        "code": "RCA4100",
-        "region": "29:31",
-        "anchor": "29:31"
-      }
+      "outcome": "pass"
     },
     {
       "file": "join.sql",

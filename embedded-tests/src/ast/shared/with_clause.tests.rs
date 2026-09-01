@@ -67,7 +67,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
         assert!(matches!(
-            stmt.with_clause.ctes.get(0).unwrap().materialized,
+            stmt.with_clause.ctes.first().materialized,
             Some(MaterializedOption::Materialized)
         ));
         assert!(input.is_eof());
@@ -92,7 +92,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.with_clause.ctes.get(0).unwrap().search.is_some());
+        assert!(stmt.with_clause.ctes.first().search.is_some());
         assert!(input.is_eof());
     }
 
@@ -103,7 +103,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.with_clause.ctes.get(0).unwrap().cycle.is_some());
+        assert!(stmt.with_clause.ctes.first().cycle.is_some());
         assert!(input.is_eof());
     }
 }

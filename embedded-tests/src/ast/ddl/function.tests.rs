@@ -32,7 +32,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(
-            stmt.targets.iter().next().unwrap().name.object(),
+            stmt.targets.first().unwrap().name.object(),
             "sillysrf"
         );
         assert!(input.is_eof());

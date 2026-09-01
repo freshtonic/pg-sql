@@ -197,14 +197,17 @@ mod tests {
 
     #[test]
     fn grammar_gap_reports_stable_parse_diagnostics() {
-        let failure = pgsql_format("DELETE FROM t3 USING t1 JOIN t2 USING (a) WHERE t3.x > t1.a;")
-            .expect_err("the frozen permanent grammar gap must fail");
+        // The former fixture here (`DELETE ... USING t1 JOIN t2 USING (a)`)
+        // resolved when suffix-proving optional viability landed; an invalid
+        // statement now carries the stable-diagnostic contract instead.
+        let failure = pgsql_format("DELETE FROM t3 USING t1 WHERE;")
+            .expect_err("an empty WHERE expression must fail");
         assert_eq!(
             failure.diagnostic(),
             Some(&StrictDiagnostic {
-                code: "RCA4100".into(),
-                region: 29..31,
-                anchor: 29..31,
+                code: "RCA4101".into(),
+                region: 30..30,
+                anchor: 30..30,
             })
         );
     }

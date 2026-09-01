@@ -679,12 +679,35 @@ mod tests {
             );
         }
 
+        // The boundary itself is asserted structurally: the cast must not
+        // consume `WITH`, and the JSON constructor must own `UNIQUE KEYS`.
+        // Rendering compares against the canonical mechanical form; exact
+        // source-preserving output (`::timestamp`) is deferred to the
+        // provenance-aware formatting milestone.
         let src = "JSON('2000-01-01'::timestamp WITH UNIQUE KEYS)";
         let expr = parse_expr_classified(src);
-        assert!(matches!(&expr, Expr::JsonCtor(_)));
+        let Expr::JsonCtor(ctor) = &expr else {
+            panic!("JSON constructor must own the WITH UNIQUE KEYS clause")
+        };
+        let unique = ctor
+            .inner
+            .unique
+            .as_ref()
+            .expect("WITH UNIQUE KEYS belongs to the JSON constructor");
+        assert!(unique.keys, "the optional KEYS noise word is preserved");
+        let Expr::Cast(_, cast_type) = ctor.inner.value.as_ref() else {
+            panic!("the constructor argument remains a cast")
+        };
+        let CastTypeHead::DateTime(datetime) = &cast_type.head else {
+            panic!("timestamp keeps the date/time cast family")
+        };
+        assert!(
+            datetime.tz.is_none(),
+            "the cast must not consume WITH toward a time-zone qualifier",
+        );
         assert_eq!(
             format_tokens_sql(&expr, PrettyConfig::default()).trim(),
-            src,
+            "JSON('2000-01-01':: TIMESTAMP WITH UNIQUE KEYS)",
         );
     }
 

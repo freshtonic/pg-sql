@@ -676,6 +676,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_json_path	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_path_exists	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_path_text	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_query_functions	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_json_timestamp_cast_before_unique_keys	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_jsonb_all_keys	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_jsonb_any_key	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_jsonb_contained_by	false

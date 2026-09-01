@@ -51,7 +51,7 @@ mod tests {
         let stmt = DropAggregateStmt::parse(&mut input).unwrap().into_ast();
         assert!(stmt.if_exists.is_some());
         assert!(matches!(
-            stmt.targets.iter().next().unwrap().args,
+            stmt.targets.first().unwrap().args,
             AggregateArgs::Star
         ));
         assert!(input.is_eof());

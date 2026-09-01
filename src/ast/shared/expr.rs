@@ -1969,8 +1969,12 @@ pub enum WithOrWithout {
 /// `JSON_OBJECT()`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct JsonUniqueKeys {
-    #[tok(this, UNIQUE, optional(KEYS))]
+    #[tok(this, UNIQUE)]
     pub with_or_without: WithOrWithout,
+    /// Whether the optional `KEYS` noise word occurred, preserved for
+    /// round-trip rendering.
+    #[presence(KEYS)]
+    pub keys: bool,
 }
 
 /// `NULL` / `ABSENT` lead-in of an `ON NULL` clause.
