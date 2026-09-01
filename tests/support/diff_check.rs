@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn grammar_gap_reports_stable_parse_diagnostics() {
+    fn invalid_statement_reports_stable_parse_diagnostics() {
         // The former fixture here (`DELETE ... USING t1 JOIN t2 USING (a)`)
         // resolved when suffix-proving optional viability landed; an invalid
         // statement now carries the stable-diagnostic contract instead.
