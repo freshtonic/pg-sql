@@ -429,3 +429,19 @@ Handoff to Track R (#33): land lever 1 first (recursa-side lexer-matcher
 sharing, re-pin pg-sql, re-run the corpus workload — expect the parity gate
 to fall on realistic SQL), then lever 2. Every wave journals the
 canonical-workload delta per ADR 0006.
+
+## Track R wave 1 landed: lexer-matcher sharing (2026-09-02)
+
+recursa 870ddfe (pinned at pg-sql 5a8ac95). `lex()` reuses its compiled
+matcher table per thread instead of rebuilding ~106 regexes per call.
+
+Verified on the real pinned tree, `flame -- corpus --duration 10`:
+- Before: ~830 statements/s (1.204 ms/statement).
+- After: 12,655 statements/s (0.0790 ms/statement) — **15.2× faster**,
+  matching the isolated 15.0× prediction and the prototype's 15.1×.
+- Corpus gap vs sqlparser: 230× → ~15×.
+
+Lexing output byte-identical (full recursa workspace suite green; pg-sql
+library suite 1092/0/2). Single-statement workloads (bool_chain,
+select_list_10000) lex once and are unaffected, as measured — their
+residual gap is parse-bound FOLLOW allocation, which is wave 2.
