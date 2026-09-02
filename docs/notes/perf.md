@@ -445,3 +445,31 @@ Lexing output byte-identical (full recursa workspace suite green; pg-sql
 library suite 1092/0/2). Single-statement workloads (bool_chain,
 select_list_10000) lex once and are unaffected, as measured — their
 residual gap is parse-bound FOLLOW allocation, which is wave 2.
+
+## Track R wave 2 REJECTED: FOLLOW inline-buffer (2026-09-02)
+
+Attempted FOLLOW-set allocation removal via an inline fixed buffer
+(`FollowWords::Inline { buffer: [u64; 16] }`, branch
+`perf/follow-set-allocation` at cec6e95, correctness verified — 52 recursa
+suites green, FOLLOW values byte-identical). Measured on the wave-1 pin
+before/after:
+
+| Workload | before | after | Δ |
+| --- | --: | --: | --: |
+| bool_chain | 21.24 ms | 25.30 ms | **−19.1% (slower)** |
+| select_list_10000 | 214.4 ms | 216.9 ms | −1.2% (noise) |
+| corpus | 0.0774 ms | 0.0774 ms | unchanged |
+
+**Rejected — net regression on the target workload.** The 128-byte inline
+buffer bloats every `FollowSet`; on the Pratt-heavy bool_chain path
+FollowSets are moved/cloned constantly, and copying 128 bytes costs more
+than the heap allocation it removes. Trading allocation for a large
+inline memcpy is the wrong shape here.
+
+Redesign direction for the next attempt (sub-lever 1, not tried): intern
+the ~749 static union RESULTS at build time in recursa-codegen — if the
+union of two constant FOLLOW operands is itself constant, emit it as a
+generated static so the runtime borrows it (zero alloc, zero copy) instead
+of composing per parse-site. Alternatively make composed sets `Rc`-shared
+(pointer-sized clone). The inline-buffer approach is preserved on the
+branch but must not land as-is. Reverted to wave-1 pin 870ddfe.
