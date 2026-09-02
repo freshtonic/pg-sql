@@ -1,10 +1,24 @@
-//! Semantic names retained at the strict-statement milestone.
+//! Semantic names retained at the strict-statement milestone, plus the
+//! document-framing island for the strict SQL document interface.
 //!
-//! Parsing SQL and psql documents is deliberately deferred to the general
-//! Recursa document-framing capability. These values therefore carry no
-//! parser annotations or generated parsing implementations.
+//! Parsing psql documents is deliberately deferred; the psql terminator
+//! values below therefore carry no parser annotations or generated parsing
+//! implementations. Strict SQL documents are framed through the generated
+//! Recursa document-framing adapter over [`SqlDocumentItem`].
 
 use crate::ast::Statement;
+
+/// One semicolon-separated item of a strict PostgreSQL document.
+///
+/// The framing island for `framing(island = ast::file::SqlDocumentItem,
+/// boundary = SEMI)`. The statement is optional because PostgreSQL's raw
+/// parser accepts empty statements (`;`, `;;`, leading and interior
+/// semicolons): an empty item remains a source and provenance occurrence in
+/// the framed document without entering the semantic statement list.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct SqlDocumentItem<'input> {
+    pub statement: Option<Statement<'input>>,
+}
 
 /// A psql meta-command that terminates a SQL statement in place of `;`.
 ///

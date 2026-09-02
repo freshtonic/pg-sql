@@ -23,7 +23,7 @@ postgres-oracle = ["dep:pg-oracle"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-recursa = { path = "../recursa/recursa", features = ["diagrams"] }
+recursa = { path = "../recursa/recursa", features = ["diagrams", "explorer"] }
 logos = "0.16"
 regex = "1"
 derive_more = { version = "2.1.1", features = ["deref"] }
@@ -75,4 +75,4 @@ railroad = true
 parser_rules = "SqlRules"
 
 [build-dependencies]
-recursa-codegen = { path = "../recursa/recursa-codegen", features = ["diagrams"] }
+recursa-codegen = { path = "../recursa/recursa-codegen", features = ["diagrams", "explorer"] }
