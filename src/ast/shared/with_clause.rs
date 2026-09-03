@@ -97,7 +97,7 @@ pub struct CteDefinition<'input> {
     pub r#as: CteAs,
     pub materialized: Option<MaterializedOption>,
     #[tok(LPAREN, this, RPAREN)]
-    pub query: Box<crate::ast::Statement<'input>>,
+    pub query: Box<crate::ast::tcl::prepared::PreparableStmt<'input>>,
     pub search: Option<SearchClause<'input>>,
     pub cycle: Option<CycleClause<'input>>,
 }
@@ -112,9 +112,38 @@ pub struct WithClause<'input> {
     pub ctes: recursa::Vec1<CteDefinition<'input>>,
 }
 
-/// WITH statement: WITH clause followed by a body statement.
+/// WITH statement: WITH clause followed by a query-shaped body.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct WithStatement<'input> {
     pub with_clause: WithClause<'input>,
-    pub body: Box<crate::ast::Statement<'input>>,
+    pub body: WithBody<'input>,
+}
+/// Query that follows a `WITH` clause. Mirrors `gram.y`: `with_clause` is
+/// followed by `select_clause` (with its set operations), `insert_rest`,
+/// `update`, `delete`, or `merge`. A second `WITH` clause is not admitted, so
+/// the `Statement` FOLLOW set no longer inherits every query continuation.
+///
+/// Variant order: `Query` leads with `SELECT`, `VALUES`, `TABLE`, or `(`;
+/// the four DML variants have disjoint leading keywords.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum WithBody<'input> {
+    Query(Box<WithQuery<'input>>),
+    Insert(Box<crate::ast::dml::insert::InsertStmt<'input>>),
+    Update(Box<crate::ast::dml::update::UpdateStmt<'input>>),
+    Delete(Box<crate::ast::dml::delete::DeleteStmt<'input>>),
+    Merge(Box<crate::ast::dml::merge::MergeStmt<'input>>),
+}
+
+/// `Subquery` without the `WITH` form, for the body of a `WithStatement`.
+/// A set operation after the body belongs to the enclosing compound body
+/// (`CompoundBody` or `DirectCompoundBody`), which always wraps a
+/// `WithStatement`, so `WITH x AS (...) SELECT ... UNION SELECT ...` keeps
+/// one owner for the `UNION`. `Select` comes before `Values` so the `SELECT`
+/// keyword wins, as in `SelectBody`.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum WithQuery<'input> {
+    Paren(crate::ast::dml::values::CompoundParen<'input>),
+    Table(crate::ast::dml::values::TableStmt<'input>),
+    Select(Box<crate::ast::dml::select::SelectStmt<'input>>),
+    Values(crate::ast::dml::select::ValuesBody<'input>),
 }

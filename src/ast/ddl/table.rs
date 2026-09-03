@@ -905,7 +905,7 @@ pub struct AsQueryBody<'input> {
     /// Optional `TABLESPACE name` before `AS`.
     pub tablespace: Option<TablespaceClause<'input>>,
     #[tok(AS, this)]
-    pub query: Box<crate::ast::Statement<'input>>,
+    pub query: Box<crate::ast::dml::values::Subquery<'input>>,
     pub with_data: Option<WithDataClause>,
 }
 
@@ -926,7 +926,7 @@ pub struct ColumnsAsQueryBody<'input> {
     pub columns: CtasColumnList<'input>,
     pub on_commit: Option<OnCommitClause>,
     #[tok(AS, this)]
-    pub query: Box<crate::ast::Statement<'input>>,
+    pub query: Box<crate::ast::dml::values::Subquery<'input>>,
     pub with_data: Option<WithDataClause>,
 }
 

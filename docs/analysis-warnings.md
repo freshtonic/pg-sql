@@ -12,11 +12,18 @@ pair findings retire (one duplicate row each at `SelectStmt`, `TableStmt`,
 and `CompoundParen`, plus the sole `DirectParenthesizedSet` row), the three
 statement sites keep one finding for the whole optional tail against nested
 caller FOLLOW, and the new `LimitThenOffset` / `OffsetThenLimit` shapes add
-one finding each for their optional second clause (net −4 +2).
+one finding each for their optional second clause (net −4 +2). Now 160 after the CTE, `WITH`, and CTAS bodies embed
+query-shaped types instead of the whole `Statement` enum: the `Statement`
+FOLLOW set no longer inherits `WITH [NO] DATA`, set operators, and the other
+continuations of a subquery position, so 31 `RCA0300` findings retire (every
+`WITH`-overlap tail on DDL statements, the `ABSENT`/`NULL`/`ON` leaks into
+`DROP ...`, `COPY`, `ANALYZE`, `VACUUM`, `CLUSTER`, and `REINDEX`), and ten
+retained findings shrink to their inherent overlap (`RESTRICT, CASCADE` on the
+`DROP` statements, eight interval kinds on the function type tails).
 
 ## Verdict key
 
-- **`RCA0300` retained (163)** — the optional element's viability cannot be
+- **`RCA0300` retained (131)** — the optional element's viability cannot be
   proven by bounded suffix within `max_lookahead = 5`: the element language is
   open (expression-shaped or depth-cut), the element can fully end on the
   shared token (inherent ambiguity), the overlap is static and handled by the
@@ -45,10 +52,8 @@ its shape, is a maintainer decision.
 | RCA0300 | `ast::cursor::declare::DeclareStmt` | NO, SCROLL, BINARY, ASENSITIVE, INSENSITIVE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::cursor::fetch::FetchBackward` | ALL | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::cursor::fetch::FetchForward` | ALL | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::aggregate::DropAggregateStmt` | ABSENT, RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::aggregate::DropAggregateStmt` | RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::database::CreateDatabaseStmt` | 485 kinds (SELECT, FROM, WHERE, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::database::DropDatabaseOptions` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::database::DropDatabaseStmt` | WITH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::domain::AlterDomainCheckConstraint` | NOT, DEFERRABLE, INITIALLY, NO | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::domain::AlterDomainNotNullConstraint` | NOT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::domain::CreateDomainStmt` | NOT, NULL, DEFAULT, CONSTRAINT, CHECK | unproven within lookahead 5 — greedy commitment retained |
@@ -56,25 +61,19 @@ its shape, is a maintainer decision.
 | RCA0300 | `ast::ddl::foreign::AlterFdwOptsAction` | NO, HANDLER, VALIDATOR | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::foreign::CreateFdwBody` | NO, HANDLER, VALIDATOR | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::function::CreateFunctionStmt` | 21 kinds (AS, NOT, SET, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::function::DropFunctionStmt` | ABSENT, RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::function::DropRoutineStmt` | ABSENT, RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::function::FunctionBuiltinType` | 9 kinds (WITH, WITHOUT, YEAR, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::function::FunctionCastTypeTail` | 6 kinds (YEAR, MONTH, DAY, …) | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::function::DropFunctionStmt` | RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::function::DropRoutineStmt` | RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::function::FunctionBuiltinType` | 8 kinds (WITHOUT, YEAR, MONTH, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::function::FunctionCastTypeTail` | VARYING | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::function::FunctionCastTypeTail` | [ | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::function::FunctionIdentifierType` | 9 kinds (WITH, WITHOUT, YEAR, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::function::FunctionIdentifierTypeSuffix` | 9 kinds (WITH, WITHOUT, YEAR, …) | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::function::FunctionCastTypeTail` | 6 kinds (YEAR, MONTH, DAY, …) | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::function::FunctionIdentifierType` | 8 kinds (WITHOUT, YEAR, MONTH, …) | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::function::FunctionIdentifierTypeSuffix` | 8 kinds (WITHOUT, YEAR, MONTH, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::function::FunctionTypeName` | . | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::index::CreateIndexStmt` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::index::DropIndexStmt` | ABSENT, RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::index::DropIndexStmt` | RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::index::DropIndexStmt::__recursa_presence_envelope` | CONCURRENTLY | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::policy::AlterPolicyAction` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::policy::AlterPolicyModify` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::policy::AlterPolicyStmt` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::policy::CreatePolicyStmt` | WITH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::procedure::CreateProcedureStmt` | 21 kinds (AS, NOT, SET, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::procedure::DropProcedureStmt` | ABSENT, RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::publication::CreatePublicationStmt` | WITH | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::procedure::DropProcedureStmt` | RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::role::AlterRoleWithOptions` | 20 kinds (USER, INHERIT, VALID, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::role::CreateGroupStmt` | 25 kinds (IN, WITH, USER, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::role::CreateRoleStmt` | 25 kinds (IN, WITH, USER, …) | unproven within lookahead 5 — greedy commitment retained |
@@ -83,35 +82,23 @@ its shape, is a maintainer decision.
 | RCA0300 | `ast::ddl::schema::CreateSchemaStmt` | CREATE, GRANT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::sequence::CreateSequenceStmt` | 12 kinds (AS, CYCLE, UNLOGGED, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::sequence::SeqOptList` | 12 kinds (AS, CYCLE, UNLOGGED, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::statistics::CreateStatisticsStmt` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::statistics::CreateStatisticsStmt` | ON | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::subscription::AlterSubscriptionAddPublication` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::subscription::AlterSubscriptionDropPublication` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::subscription::AlterSubscriptionRefresh` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::subscription::AlterSubscriptionSetPublication` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::subscription::CreateSubscriptionStmt` | WITH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::ColumnDef` | 11 kinds (NOT, NULL, PRIMARY, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::table::ColumnsBody` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::table::DropTableStmt` | ABSENT, RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::table::DropTableStmt` | RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::GeneratedIdentityConstraint` | ( | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::table::IndexedConstraintColumns` | WITH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::LikeClause` | INCLUDING, EXCLUDING | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::PartitionColumnOptionDef` | 11 kinds (NOT, NULL, PRIMARY, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::table::PartitionOfBody` | WITH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::PrimaryKeyConstraint` | NOT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::ReferencesConstraint` | NOT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::ReferencesConstraint` | ON | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::TableExclude` | NOT | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::table::TableExclude` | WITH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::TablePrimaryKey` | NOT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::TableUnique` | NOT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::table::UniqueConstraint` | NOT | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::tablespace::CreateTablespaceStmt` | WITH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::trigger::CreateConstraintTriggerStmt` | NOT, DEFERRABLE, INITIALLY, NO | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::ddl::trigger::TriggerReferencing` | NEW, OLD | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::ddl::view::DropViewStmt` | ABSENT, RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::dml::delete::DeleteStmt` | NULL, ABSENT | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::ddl::view::DropViewStmt` | RESTRICT, CASCADE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::delete::DeleteStmt` | RETURNING | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::dml::delete::DeleteStmt` | NULL, ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::insert::InsertColumnItem` | ., [ | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::insert::InsertStmt` | ON | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::insert::InsertStmt` | RETURNING | unproven within lookahead 5 — greedy commitment retained |
@@ -136,8 +123,8 @@ its shape, is a maintainer decision.
 | RCA0300 | `ast::dml::select::ParenTableRef` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::RowsFromRef` | 9 kinds (JOIN, LEFT, RIGHT, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::SelectExprItem` | 405 kinds (NULL, TABLE, VALUES, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::dml::select::SelectStmt` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::SelectStmt` | ORDER | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::dml::select::SelectStmt` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::SelectTargetList` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::SpecialFuncTableRef` | 9 kinds (JOIN, LEFT, RIGHT, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::select::TableRef` | 7 kinds (JOIN, LEFT, RIGHT, …) | unproven within lookahead 5 — greedy commitment retained |
@@ -148,11 +135,11 @@ its shape, is a maintainer decision.
 | RCA0300 | `ast::dml::update::SingleAssignment` | ., [ | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::update::UpdateStmt` | RETURNING | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::values::CompoundBody` | UNION, EXCEPT, INTERSECT | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::dml::values::CompoundParen` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::values::CompoundParen` | ORDER | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::dml::values::CompoundParen` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::values::CompoundParen` | UNION, EXCEPT, INTERSECT | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::dml::values::TableStmt` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::dml::values::TableStmt` | ORDER | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::dml::values::TableStmt` | OFFSET, LIMIT, FETCH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::CaseSearched` | WHEN | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::CaseSimple` | WHEN | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::CastType` | ARRAY | unproven within lookahead 5 — greedy commitment retained |
@@ -176,7 +163,7 @@ its shape, is a maintainer decision.
 | RCA0300 | `ast::shared::expr::ParenthesizedExpr` | ., [ | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::PsqlVariableExpr` | 485 kinds (SELECT, FROM, WHERE, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::SubscriptSlice` | : | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::shared::expr::TrimValues` | ,  | unproven within lookahead 5 — greedy commitment retained |
+| RCA0300 | `ast::shared::expr::TrimValues` |  | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::expr::WindowPartitionBy` | ORDER, ROWS, RANGE, GROUPS | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::names::QualifiedOperatorPath` | 420 kinds (IS, VALUES, NULLS, …) | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::shared::with_clause::CycleClause` | SET | unproven within lookahead 5 — greedy commitment retained |
@@ -184,24 +171,12 @@ its shape, is a maintainer decision.
 | RCA0300 | `ast::tcl::prepared::DeallocateStmt::__recursa_presence_envelope` | PREPARE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::tcl::savepoint::ReleaseStmt::__recursa_presence_envelope` | SAVEPOINT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::tcl::transaction::RollbackToClause::__recursa_presence_envelope` | SAVEPOINT | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::analyze::AnalyzeStmt` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::utility::analyze::AnalyzeStmt` | VERBOSE | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::cluster::ClusterStmt` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::utility::cluster::ClusterStmt` | VERBOSE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::utility::comment::CommentConstraintObject::__recursa_presence_envelope` | DOMAIN | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::utility::copy::CopyLegacyOptions` | 11 kinds (NULL, ENCODING, ESCAPE, …) | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::copy::CopyOptions` | NULL | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::copy::CopyQueryBody` | NULL, WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::copy::CopyQueryBody::__recursa_attachment` | NULL | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::copy::CopyQueryBody::__recursa_attachment` | WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::copy::CopyTableBody` | NULL, WITH | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::copy::CopyTableBody::__recursa_attachment` | NULL | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::copy::CopyTableBody::__recursa_attachment` | WITH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::utility::grant::AlterDefaultPrivilegesStmt` | FOR, IN | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::grant::GrantRoleBody` | WITH | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::utility::refresh::RefreshStmt::__recursa_presence_envelope` | CONCURRENTLY | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::reindex::ReindexAllTarget` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
-| RCA0300 | `ast::utility::vacuum::VacuumStmt` | ABSENT | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::utility::vacuum::VacuumStmt` | FREEZE | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::utility::vacuum::VacuumStmt` | FULL | unproven within lookahead 5 — greedy commitment retained |
 | RCA0300 | `ast::utility::vacuum::VacuumStmt` | VERBOSE | unproven within lookahead 5 — greedy commitment retained |
@@ -216,8 +191,14 @@ its shape, is a maintainer decision.
 | RCA0301 | `ast::dml::select::XmlTableColumnDefault::__recursa_attachment` | NOT | strict-Pratt preserved ambiguity — by design |
 | RCA0301 | `ast::dml::select::XmlTableColumnPath::__recursa_attachment` | NOT | strict-Pratt preserved ambiguity — by design |
 | RCA0301 | `ast::shared::expr::EscapeClause::__recursa_attachment` | 15 kinds (AND, OR, NOT, …) | strict-Pratt preserved ambiguity — by design |
-| RCA0301 | `ast::shared::expr::Expr` | 15 kinds (AND, OR, NOT, …) | strict-Pratt preserved ambiguity — by design |
 | RCA0301 | `ast::shared::expr::Expr` | COLLATE, AT | strict-Pratt preserved ambiguity — by design |
+| RCA0301 | `ast::shared::expr::Expr` | 15 kinds (AND, OR, NOT, …) | strict-Pratt preserved ambiguity — by design |
+| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE | strict-Pratt preserved ambiguity — by design |
+| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE | strict-Pratt preserved ambiguity — by design |
+| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE | strict-Pratt preserved ambiguity — by design |
+| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE | strict-Pratt preserved ambiguity — by design |
+| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE | strict-Pratt preserved ambiguity — by design |
+| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE, AT | strict-Pratt preserved ambiguity — by design |
 | RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | 11 kinds (NOT, IS, IN, …) | strict-Pratt preserved ambiguity — by design |
 | RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | 11 kinds (NOT, IS, IN, …) | strict-Pratt preserved ambiguity — by design |
 | RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | 11 kinds (NOT, IS, IN, …) | strict-Pratt preserved ambiguity — by design |
@@ -226,11 +207,5 @@ its shape, is a maintainer decision.
 | RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | 13 kinds (NOT, IS, IN, …) | strict-Pratt preserved ambiguity — by design |
 | RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | 13 kinds (NOT, IS, IN, …) | strict-Pratt preserved ambiguity — by design |
 | RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | 14 kinds (AND, NOT, IS, …) | strict-Pratt preserved ambiguity — by design |
-| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE | strict-Pratt preserved ambiguity — by design |
-| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE | strict-Pratt preserved ambiguity — by design |
-| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE | strict-Pratt preserved ambiguity — by design |
-| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE | strict-Pratt preserved ambiguity — by design |
-| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE | strict-Pratt preserved ambiguity — by design |
-| RCA0301 | `ast::shared::expr::Expr::__recursa_attachment` | COLLATE, AT | strict-Pratt preserved ambiguity — by design |
 | RCA0301 | `ast::shared::expr::PositionInner` | IN | strict-Pratt preserved ambiguity — by design |
 | RCA0301 | `ast::shared::expr::SubstringInner` | SIMILAR | strict-Pratt preserved ambiguity — by design |
