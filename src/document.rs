@@ -23,7 +23,9 @@ use recursa::{NodeView, Parsed, Span, Visit, VisitBreak, Visitor};
 use crate::ast::Statement;
 use crate::ast::file::SqlDocumentItem;
 use crate::tokens::literal::PsqlVariableValue;
-use crate::{CompleteFrame, CompletePart, FrameDiagnostic, FrameError, FrameFailure, FrameRejection};
+use crate::{
+    CompleteFrame, CompletePart, FrameDiagnostic, FrameError, FrameFailure, FrameRejection,
+};
 
 /// Parses one strict PostgreSQL document.
 ///

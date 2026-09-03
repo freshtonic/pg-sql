@@ -250,7 +250,10 @@ fn invalid_input_is_rejected_at_its_first_failing_statement() {
         !rejection.diagnostics().is_empty(),
         "the failed statement carries its strict diagnostics"
     );
-    assert!(rejection.framing().is_none(), "a syntax failure has no framing cause");
+    assert!(
+        rejection.framing().is_none(),
+        "a syntax failure has no framing cause"
+    );
     let failure = rejection.span();
     assert!(failure.start() >= rejection.island().start());
     assert!(failure.end() <= rejection.island().end());
@@ -331,7 +334,11 @@ fn missing_boundary_between_statements_fails_closed() {
     let framing = rejection
         .framing()
         .expect("a missing boundary names its framing cause");
-    assert_eq!(framing.code(), "RCA5002", "the missing boundary fails closed");
+    assert_eq!(
+        framing.code(),
+        "RCA5002",
+        "the missing boundary fails closed"
+    );
     assert_eq!(&source[framing.span().range()], "CREATE");
     assert_eq!(&source[rejection.diagnostics()[0].span().range()], "CREATE");
 }
