@@ -3,7 +3,7 @@
 //! `document::parse_sql` accepts zero or more semicolon-separated PostgreSQL
 //! statements with an optional final semicolon and no psql-only syntax. The
 //! tests cover the reviewed happy-path matrix, the exact source-ownership
-//! partition, the grammar-erased recovery projection, and psql rejection.
+//! partition, the strict rejection of invalid input, and psql rejection.
 
 use pg_sql::ast::{Statement, dml::select::SelectBody, dml::values::Subquery};
 use pg_sql::document::{self, SqlParseError};
@@ -230,91 +230,67 @@ fn exact_rendering_preserves_crlf_missing_newline_and_utf8() {
     }
 }
 
-// --- Recovery projection ----------------------------------------------------
+// --- Strict rejection --------------------------------------------------------
 
-fn recover(source: &str) -> document::SqlRecovery<'_> {
+fn reject(source: &str) -> document::SqlRejection<'_> {
     match document::parse_sql(source) {
         Ok(_) => panic!("{source:?} must be rejected"),
-        Err(SqlParseError::Recovered(recovery)) => recovery,
-        Err(other) => panic!("{source:?} must reject through recovery, got {other}"),
+        Err(SqlParseError::Rejected(rejection)) => rejection,
+        Err(other) => panic!("{source:?} must reject as invalid input, got {other}"),
     }
 }
 
 #[test]
-fn invalid_input_returns_a_nonempty_source_covering_recovery() {
+fn invalid_input_is_rejected_at_its_first_failing_statement() {
     let source = "SELECT FROM;";
-    let recovery = recover(source);
-    assert_eq!(recovery.source(), source);
-    assert_eq!(recovery.render_exact(), source);
-    assert!(recovery.parts().count() >= 1, "nonempty projection");
-    assert_eq!(recovery.islands().count(), 1);
-    let island = recovery.islands().next().expect("one recovered island");
+    let rejection = reject(source);
+    assert_eq!(rejection.source(), source);
+    assert_eq!(&source[rejection.island().range()], "SELECT FROM;");
     assert!(
-        !island.diagnostics().is_empty(),
-        "the failed island carries diagnostics"
+        !rejection.diagnostics().is_empty(),
+        "the failed statement carries its strict diagnostics"
     );
-    assert_owned_once(source, recovery.parts().map(|part| part.span()));
+    assert!(rejection.framing().is_none(), "a syntax failure has no framing cause");
+    let failure = rejection.span();
+    assert!(failure.start() >= rejection.island().start());
+    assert!(failure.end() <= rejection.island().end());
 }
 
 #[test]
-fn recovery_is_grammar_erased_and_covers_later_valid_islands() {
+fn a_later_valid_statement_does_not_rescue_an_earlier_failure() {
     let source = "SELECT FROM;\nSELECT 1;";
-    let recovery = recover(source);
-    let islands = recovery.islands().collect::<Vec<_>>();
-    assert_eq!(islands.len(), 2, "every island is erased after one failure");
-    assert!(
-        islands
-            .iter()
-            .all(|island| island.root().schema().name() == "SqlDocumentItem"),
-        "recovered islands expose only the erased grammar projection"
+    let rejection = reject(source);
+    assert_eq!(
+        &source[rejection.island().range()],
+        "SELECT FROM;",
+        "the rejection names the first failing statement only"
     );
-    assert!(
-        !islands[0].diagnostics().is_empty(),
-        "the failed island keeps its diagnostics"
-    );
-    assert!(
-        islands[1].diagnostics().is_empty(),
-        "a strictly valid erased island gains no spurious diagnostic"
-    );
-    assert!(
-        islands
-            .iter()
-            .all(|island| island.progress_trace().is_within_bound()),
-        "every replay keeps hard bounded progress"
-    );
-    assert_owned_once(source, recovery.parts().map(|part| part.span()));
+    assert!(!rejection.diagnostics().is_empty());
 }
 
 #[test]
-fn recovery_diagnostics_are_stable_across_parses() {
+fn rejection_diagnostics_are_stable_across_parses() {
     let source = "SELECT FROM;\nSELECT 1 1;";
-    let first = recover(source);
-    let second = recover(source);
-    let collect = |recovery: &document::SqlRecovery<'_>| {
-        recovery
-            .islands()
-            .flat_map(|island| {
-                island
-                    .diagnostics()
-                    .iter()
-                    .map(|diagnostic| {
-                        (
-                            diagnostic.kind(),
-                            diagnostic.span(),
-                            diagnostic.message().to_owned(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
+    let collect = |rejection: &document::SqlRejection<'_>| {
+        rejection
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| {
+                (
+                    diagnostic.kind(),
+                    diagnostic.span(),
+                    diagnostic.message().to_owned(),
+                )
             })
             .collect::<Vec<_>>()
     };
-    let diagnostics = collect(&first);
+    let diagnostics = collect(&reject(source));
     assert!(!diagnostics.is_empty(), "stable diagnostics exist");
-    assert_eq!(diagnostics, collect(&second));
+    assert_eq!(diagnostics, collect(&reject(source)));
 }
 
 #[test]
-fn lexical_failures_and_unclosed_regions_recover() {
+fn lexical_failures_and_unclosed_regions_are_rejected() {
     for source in [
         "SELECT 'unterminated;",
         "SELECT /* never closed;",
@@ -322,9 +298,12 @@ fn lexical_failures_and_unclosed_regions_recover() {
         "SELECT (1;",
         "SELECT 'é side of an unterminated multibyte literal;",
     ] {
-        let recovery = recover(source);
-        assert_eq!(recovery.render_exact(), source, "exact for {source:?}");
-        assert_owned_once(source, recovery.parts().map(|part| part.span()));
+        let rejection = reject(source);
+        assert_eq!(rejection.source(), source, "source retained for {source:?}");
+        assert!(
+            !rejection.diagnostics().is_empty(),
+            "strict diagnostics exist for {source:?}"
+        );
     }
 }
 
@@ -332,62 +311,51 @@ fn lexical_failures_and_unclosed_regions_recover() {
 fn missing_boundary_between_statements_fails_closed() {
     // `SELECT` is a bare-label keyword, so the second `SELECT` is absorbed
     // as a column alias before the strict failure at `2`: the whole
-    // candidate stays one fail-closed island rather than guessing a split.
+    // candidate is one rejected statement rather than a guessed split, and
+    // the complete prefix before `2` makes the failure a missing boundary.
     let source = "SELECT 1 SELECT 2";
-    let recovery = recover(source);
-    assert_eq!(recovery.render_exact(), source);
-    let codes = recovery
-        .diagnostics()
-        .iter()
-        .map(pg_sql::FrameDiagnostic::code)
-        .collect::<Vec<_>>();
-    assert_eq!(codes, ["RCA5002"], "ambiguous ownership fails closed");
-    assert_eq!(recovery.islands().count(), 1);
-    assert!(
-        !recovery
-            .parts()
-            .any(|part| matches!(part, pg_sql::RecoveredPart::Unresolved(_))),
-        "no restart evidence, so recovery owns the whole candidate"
+    let rejection = reject(source);
+    assert_eq!(rejection.island(), Span::new(0, source.len()).unwrap());
+    assert_eq!(
+        rejection.framing().map(pg_sql::FrameDiagnostic::code),
+        Some("RCA5002"),
+        "ambiguous ownership fails closed"
     );
-    assert_owned_once(source, recovery.parts().map(|part| part.span()));
+    assert_eq!(&source[rejection.diagnostics()[0].span().range()], "2");
 
-    // A token that can only begin a new statement is generated restart
-    // evidence: framing retains the suffix explicitly instead of guessing.
+    // A reserved keyword cannot continue the statement, so the statement
+    // parses completely and the leftover token names the missing boundary.
     let source = "SELECT 1 CREATE TABLE t (a int)";
-    let recovery = recover(source);
-    assert_eq!(recovery.render_exact(), source);
-    let codes = recovery
-        .diagnostics()
-        .iter()
-        .map(pg_sql::FrameDiagnostic::code)
-        .collect::<Vec<_>>();
-    assert_eq!(codes, ["RCA5002"], "the missing boundary fails closed");
-    assert!(
-        recovery
-            .parts()
-            .any(|part| matches!(part, pg_sql::RecoveredPart::Unresolved(_))),
-        "the unassignable suffix is retained explicitly"
-    );
-    assert_owned_once(source, recovery.parts().map(|part| part.span()));
+    let rejection = reject(source);
+    assert_eq!(rejection.island(), Span::new(0, source.len()).unwrap());
+    let framing = rejection
+        .framing()
+        .expect("a missing boundary names its framing cause");
+    assert_eq!(framing.code(), "RCA5002", "the missing boundary fails closed");
+    assert_eq!(&source[framing.span().range()], "CREATE");
+    assert_eq!(&source[rejection.diagnostics()[0].span().range()], "CREATE");
 }
 
 // --- Psql rejections --------------------------------------------------------
 
-fn assert_recovered_rejection(source: &str) {
+fn assert_strict_rejection(source: &str) {
     match document::parse_sql(source) {
         Ok(_) => panic!("{source:?} is psql-only and must be rejected"),
-        Err(SqlParseError::Recovered(recovery)) => {
-            assert_eq!(recovery.render_exact(), source);
-            assert_owned_once(source, recovery.parts().map(|part| part.span()));
+        Err(SqlParseError::Rejected(rejection)) => {
+            assert_eq!(rejection.source(), source);
+            assert!(
+                !rejection.diagnostics().is_empty() || rejection.framing().is_some(),
+                "{source:?} names its strict or framing cause"
+            );
         }
-        Err(other) => panic!("{source:?} must reject through recovery, got {other}"),
+        Err(other) => panic!("{source:?} must reject as invalid input, got {other}"),
     }
 }
 
 #[test]
 fn psql_directives_are_rejected() {
     for source in ["\\d users", "\\set foo 1", "\\connect mydb", "\\timing on"] {
-        assert_recovered_rejection(source);
+        assert_strict_rejection(source);
     }
 }
 
@@ -400,7 +368,7 @@ fn psql_send_commands_are_rejected() {
         "SELECT 1 \\gexec",
         "SELECT 1 \\crosstabview",
     ] {
-        assert_recovered_rejection(source);
+        assert_strict_rejection(source);
     }
 }
 
@@ -413,7 +381,7 @@ fn psql_query_buffer_escapes_are_rejected() {
         "\\r",
         "\\w file.sql",
     ] {
-        assert_recovered_rejection(source);
+        assert_strict_rejection(source);
     }
 }
 
@@ -474,7 +442,7 @@ fn copy_payload_text_is_rejected() {
         "COPY t FROM STDIN;\n\\.\n",
         "\\.\n",
     ] {
-        assert_recovered_rejection(source);
+        assert_strict_rejection(source);
     }
 }
 

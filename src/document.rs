@@ -10,9 +10,10 @@
 //!
 //! Success is a [`SqlDocument`]: a fully strict, provenance-bearing
 //! partition of the complete source. Ordinary invalid input is rejected with
-//! a grammar-erased, source-covering [`SqlRecovery`] projection that cannot
-//! contain or convert into a PostgreSQL statement. Fatal failure is limited
-//! to violated framing invariants ([`FrameError`]).
+//! a [`SqlRejection`]: the first failing statement island, its strict parse
+//! diagnostics, and the framing cause when the statement itself parsed. A
+//! rejection cannot contain or convert into a PostgreSQL statement. Fatal
+//! failure is limited to violated framing invariants ([`FrameError`]).
 
 use std::fmt;
 use std::ops::ControlFlow;
@@ -22,7 +23,7 @@ use recursa::{NodeView, Parsed, Span, Visit, VisitBreak, Visitor};
 use crate::ast::Statement;
 use crate::ast::file::SqlDocumentItem;
 use crate::tokens::literal::PsqlVariableValue;
-use crate::{CompleteFrame, CompletePart, FrameError, FrameResult, RecoveredFrame};
+use crate::{CompleteFrame, CompletePart, FrameDiagnostic, FrameError, FrameFailure, FrameRejection};
 
 /// Parses one strict PostgreSQL document.
 ///
@@ -31,14 +32,16 @@ use crate::{CompleteFrame, CompletePart, FrameError, FrameResult, RecoveredFrame
 /// every island strictly, and fails closed on any ordinary failure. A final
 /// statement does not need a trailing semicolon. Psql-only syntax is
 /// rejected: directives, send commands, query-buffer escapes, and COPY
-/// payload text are not SQL and select [`SqlParseError::Recovered`], while
+/// payload text are not SQL and select [`SqlParseError::Rejected`], while
 /// psql interpolation (`:name`, `:'name'`, `:"name"`) parses lexically but
 /// is rejected as [`SqlParseError::Psql`].
 pub fn parse_sql(source: &str) -> Result<SqlDocument<'_>, SqlParseError<'_>> {
     match SqlDocumentItem::frame(source) {
-        Err(fatal) => Err(SqlParseError::Fatal(fatal)),
-        Ok(FrameResult::Recovered(frame)) => Err(SqlParseError::Recovered(SqlRecovery(frame))),
-        Ok(FrameResult::Complete(frame)) => match first_psql_use(&frame) {
+        Err(FrameFailure::Fatal(fatal)) => Err(SqlParseError::Fatal(fatal)),
+        Err(FrameFailure::Rejected(rejection)) => {
+            Err(SqlParseError::Rejected(SqlRejection(rejection)))
+        }
+        Ok(frame) => match first_psql_use(&frame) {
             Some(rejection) => Err(SqlParseError::Psql(rejection)),
             None => {
                 // The generated view accessors do not declare precise
@@ -116,9 +119,9 @@ impl fmt::Debug for SqlDocument<'_> {
 
 /// Rejection of one strict-parse request.
 pub enum SqlParseError<'input> {
-    /// Ordinary invalid input: a nonempty, grammar-erased, source-covering
-    /// recovery projection with stable diagnostics.
-    Recovered(SqlRecovery<'input>),
+    /// Ordinary invalid input: the first failing statement island with its
+    /// strict diagnostics and optional framing cause.
+    Rejected(SqlRejection<'input>),
     /// Psql interpolation inside an otherwise-parseable document.
     Psql(PsqlSyntaxError),
     /// Violated grammar, framing, partition, plan, or progress invariants.
@@ -128,11 +131,13 @@ pub enum SqlParseError<'input> {
 impl fmt::Display for SqlParseError<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Recovered(recovery) => {
+            Self::Rejected(rejection) => {
                 write!(
                     formatter,
-                    "invalid SQL document: {} recovered island(s)",
-                    recovery.islands().count()
+                    "invalid SQL document (statement at {}..{}): {}",
+                    rejection.island().start(),
+                    rejection.island().end(),
+                    rejection.0,
                 )
             }
             Self::Psql(psql) => psql.fmt(formatter),
@@ -144,10 +149,11 @@ impl fmt::Display for SqlParseError<'_> {
 impl fmt::Debug for SqlParseError<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Recovered(recovery) => formatter
-                .debug_struct("Recovered")
-                .field("source", &recovery.source())
-                .field("islands", &recovery.islands().count())
+            Self::Rejected(rejection) => formatter
+                .debug_struct("Rejected")
+                .field("island", &rejection.island())
+                .field("diagnostics", &rejection.diagnostics().len())
+                .field("framing", &rejection.framing().map(FrameDiagnostic::code))
                 .finish_non_exhaustive(),
             Self::Psql(psql) => psql.fmt(formatter),
             Self::Fatal(fatal) => fatal.fmt(formatter),
@@ -157,14 +163,16 @@ impl fmt::Debug for SqlParseError<'_> {
 
 impl std::error::Error for SqlParseError<'_> {}
 
-/// A grammar-erased, source-covering recovery projection.
+/// The strict rejection of one document at its first failing statement.
 ///
-/// Wraps the [`RecoveredFrame`] partition. Every strict authored value is
-/// erased: islands expose only their recovery roots, diagnostics, and
-/// progress traces, so a recovery cannot contain or convert into a
-/// PostgreSQL statement, parsed statement, or authored document.
+/// Wraps the [`FrameRejection`]: the rejected statement extent, that
+/// statement's strict parse diagnostics with their stable codes, and the
+/// framing cause (`RCA5001` missing COPY terminator, `RCA5002` missing `;`)
+/// when the statement itself parsed. No authored value is retained, so a
+/// rejection cannot contain or convert into a PostgreSQL statement, parsed
+/// statement, or authored document.
 #[derive(derive_more::Deref)]
-pub struct SqlRecovery<'input>(RecoveredFrame<'input>);
+pub struct SqlRejection<'input>(FrameRejection<'input>);
 
 /// Psql interpolation found inside an otherwise-parseable document.
 ///

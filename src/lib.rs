@@ -13,4 +13,4 @@ pub mod document;
 pub mod formatter;
 pub mod tokens;
 
-pub use document::{PsqlSyntaxError, SqlDocument, SqlParseError, SqlRecovery};
+pub use document::{PsqlSyntaxError, SqlDocument, SqlParseError, SqlRejection};
