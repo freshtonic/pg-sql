@@ -73,8 +73,3 @@ pub struct AlterCollationStmt<'input> {
     pub name: QualifiedName<'input>,
     pub action: AlterCollationAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/collation.tests.rs"
-));

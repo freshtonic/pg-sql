@@ -147,8 +147,3 @@ pub struct AlterRuleStmt<'input> {
     pub table: QualifiedName<'input>,
     pub rename_to: RenameTo<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/rule.tests.rs"
-));

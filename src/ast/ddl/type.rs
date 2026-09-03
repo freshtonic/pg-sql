@@ -242,8 +242,3 @@ pub struct AlterTypeStmt<'input> {
     pub name: QualifiedName<'input>,
     pub action: AlterTypeAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/type.tests.rs"
-));

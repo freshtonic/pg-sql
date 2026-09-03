@@ -219,8 +219,3 @@ pub struct AlterPublicationStmt<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub action: AlterPublicationAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/publication.tests.rs"
-));

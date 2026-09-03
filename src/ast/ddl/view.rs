@@ -94,11 +94,6 @@ pub struct DropViewStmt<'input> {
     pub behavior: Option<DropBehavior>,
 }
 
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/view.tests.rs"
-));
-
 // =========================================================================
 // ALTER/DROP VIEW — appended from simple_stmts.rs during physical extraction.
 // =========================================================================

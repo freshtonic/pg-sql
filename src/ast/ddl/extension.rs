@@ -235,8 +235,3 @@ pub struct AlterExtensionStmt<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub action: AlterExtensionAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/extension.tests.rs"
-));

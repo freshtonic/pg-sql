@@ -924,11 +924,6 @@ pub enum BareColLabel<'input> {
     ),
 }
 
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/tokens.test_input.rs"
-));
-
 // Re-exports preserving the legacy `keyword::` / `punct::` / `literal::` paths
 // used throughout the rest of pg-sql. The `tokens!` macro emits every token
 // struct at this module's top level; these sub-modules expose them under the
@@ -1333,13 +1328,3 @@ pub mod literal {
         }
     }
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/tokens.tests.rs"
-));
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/tokens.ident_enum_tests.rs"
-));

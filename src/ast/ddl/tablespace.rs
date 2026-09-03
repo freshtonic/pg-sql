@@ -89,8 +89,3 @@ pub struct DropTablespaceStmt<'input> {
     pub if_exists: bool,
     pub name: crate::tokens::ColId<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/tablespace.tests.rs"
-));

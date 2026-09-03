@@ -349,8 +349,3 @@ pub struct AlterOperatorStmt<'input> {
     pub target: OperatorWithArgtypes<'input>,
     pub action: AlterOperatorAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/operator.tests.rs"
-));

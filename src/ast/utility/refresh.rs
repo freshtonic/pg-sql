@@ -18,8 +18,3 @@ pub struct RefreshStmt<'input> {
     pub name: QualifiedName<'input>,
     pub with_data: Option<crate::ast::ddl::table::WithDataClause>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/refresh.tests.rs"
-));

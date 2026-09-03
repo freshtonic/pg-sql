@@ -516,8 +516,3 @@ pub struct DropForeignStmt<'input> {
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/foreign.tests.rs"
-));

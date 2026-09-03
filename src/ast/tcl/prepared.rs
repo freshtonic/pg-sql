@@ -114,8 +114,3 @@ pub struct DeallocateStmt<'input> {
     pub prepare: bool,
     pub target: DeallocateTarget<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/tcl/prepared.tests.rs"
-));

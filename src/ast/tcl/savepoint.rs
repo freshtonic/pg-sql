@@ -17,8 +17,3 @@ pub struct ReleaseStmt<'input> {
     pub savepoint: bool,
     pub name: crate::tokens::ColId<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/tcl/savepoint.tests.rs"
-));

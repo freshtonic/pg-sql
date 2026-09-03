@@ -135,8 +135,3 @@ pub struct AlterPolicyStmt<'input> {
     pub table: QualifiedName<'input>,
     pub action: AlterPolicyAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/policy.tests.rs"
-));

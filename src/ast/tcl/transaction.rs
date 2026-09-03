@@ -229,8 +229,3 @@ pub enum RollbackBody<'input> {
 pub struct RollbackStmt<'input> {
     pub body: Option<RollbackBody<'input>>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/tcl/transaction.tests.rs"
-));

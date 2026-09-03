@@ -222,8 +222,3 @@ pub struct AlterDomainStmt<'input> {
     pub name: QualifiedName<'input>,
     pub action: AlterDomainAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/domain.tests.rs"
-));

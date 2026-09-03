@@ -74,8 +74,3 @@ pub struct ReindexStmt<'input> {
     pub options: Option<VacuumOptions<'input>>,
     pub target: ReindexTarget<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/reindex.tests.rs"
-));

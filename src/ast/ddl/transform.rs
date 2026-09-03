@@ -77,8 +77,3 @@ pub struct DropTransformStmt<'input> {
     pub lang_name: crate::ast::ddl::function::LanguageName<'input>,
     pub behavior: Option<DropBehavior>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/transform.tests.rs"
-));

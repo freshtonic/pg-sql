@@ -82,8 +82,3 @@ impl<'input> ExplainStmt<'input> {
         }
     }
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/explain.tests.rs"
-));

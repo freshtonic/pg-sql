@@ -243,8 +243,3 @@ pub struct AlterTextSearchStmt<'input> {
     #[tok(ALTER, TEXT, SEARCH, this)]
     pub body: AlterTextSearchBody<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/text_search.tests.rs"
-));

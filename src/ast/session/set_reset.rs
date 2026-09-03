@@ -238,8 +238,3 @@ pub struct LoadStmt<'input> {
     #[tok(LOAD, this)]
     pub filename: literal::StringLit<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/session/set_reset.tests.rs"
-));

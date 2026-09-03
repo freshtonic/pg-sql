@@ -66,8 +66,3 @@ pub struct LockStmt<'input> {
     #[presence(NOWAIT)]
     pub nowait: bool,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/lock.tests.rs"
-));

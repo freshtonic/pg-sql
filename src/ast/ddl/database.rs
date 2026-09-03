@@ -155,8 +155,3 @@ pub struct AlterDatabaseStmt<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub action: AlterDatabaseAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/database.tests.rs"
-));

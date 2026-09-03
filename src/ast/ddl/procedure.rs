@@ -70,11 +70,6 @@ pub struct CallStmt<'input> {
     pub args: CallArguments<'input>,
 }
 
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/procedure.tests.rs"
-));
-
 // =========================================================================
 // ALTER/DROP PROCEDURE — appended from simple_stmts.rs during physical extraction.
 // =========================================================================

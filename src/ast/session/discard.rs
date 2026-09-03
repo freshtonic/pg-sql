@@ -26,8 +26,3 @@ pub struct DiscardStmt {
     #[tok(DISCARD, this)]
     pub target: DiscardTarget,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/session/discard.tests.rs"
-));

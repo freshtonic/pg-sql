@@ -37,8 +37,3 @@ pub struct DropAccessMethodStmt<'input> {
     pub names: NameList<'input>,
     pub behavior: Option<DropBehavior>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/access_method.tests.rs"
-));

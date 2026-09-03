@@ -226,8 +226,3 @@ pub struct AlterSequenceStmt<'input> {
     pub name: QualifiedName<'input>,
     pub action: AlterSequenceAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/sequence.tests.rs"
-));

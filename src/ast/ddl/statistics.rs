@@ -158,8 +158,3 @@ pub struct AlterStatisticsStmt<'input> {
     pub name: QualifiedName<'input>,
     pub action: AlterStatisticsAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/statistics.tests.rs"
-));

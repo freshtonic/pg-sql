@@ -388,8 +388,3 @@ pub struct AlterEventTriggerStmt<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub action: AlterEventTriggerAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/trigger.tests.rs"
-));

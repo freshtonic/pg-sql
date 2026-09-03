@@ -315,8 +315,3 @@ pub struct CopyWhereClause<'input> {
     #[tok(WHERE, this)]
     pub condition: Expr<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/copy.tests.rs"
-));

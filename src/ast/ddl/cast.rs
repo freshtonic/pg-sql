@@ -99,8 +99,3 @@ pub struct DropCastStmt<'input> {
     pub signature: CastSignature<'input>,
     pub behavior: Option<DropBehavior>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/cast.tests.rs"
-));

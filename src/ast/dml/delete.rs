@@ -63,8 +63,3 @@ pub struct DeleteStmt<'input> {
     #[pretty(break_before = soft)]
     pub returning: Option<Box<ReturningClause<'input>>>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/dml/delete.tests.rs"
-));

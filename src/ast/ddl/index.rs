@@ -238,11 +238,6 @@ pub struct DropIndexStmt<'input> {
     pub behavior: Option<DropBehavior>,
 }
 
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/index.tests.rs"
-));
-
 // =========================================================================
 // ALTER/DROP INDEX — appended from simple_stmts.rs during physical extraction.
 // =========================================================================

@@ -161,8 +161,3 @@ pub struct AlterMaterializedViewStmt<'input> {
     #[tok(ALTER, MATERIALIZED, VIEW, this)]
     pub body: AlterMatViewBody<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/materialized_view.tests.rs"
-));

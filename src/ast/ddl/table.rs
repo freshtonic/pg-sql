@@ -1169,11 +1169,6 @@ pub struct DropTableStmt<'input> {
     pub behavior: Option<DropBehavior>,
 }
 
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/table.tests.rs"
-));
-
 // =========================================================================
 // ALTER/DROP TABLE — appended from simple_stmts.rs during physical extraction.
 // =========================================================================

@@ -63,8 +63,3 @@ pub struct ClusterStmt<'input> {
     pub verbose: bool,
     pub target: Option<ClusterTarget<'input>>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/cluster.tests.rs"
-));

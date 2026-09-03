@@ -43,8 +43,3 @@ pub struct TruncateStmt<'input> {
     pub restart_seqs: Option<RestartSeqs>,
     pub behavior: Option<DropBehavior>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/truncate.tests.rs"
-));

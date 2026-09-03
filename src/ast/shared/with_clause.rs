@@ -118,8 +118,3 @@ pub struct WithStatement<'input> {
     pub with_clause: WithClause<'input>,
     pub body: Box<crate::ast::Statement<'input>>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/shared/with_clause.tests.rs"
-));

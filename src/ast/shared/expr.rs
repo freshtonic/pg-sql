@@ -2993,8 +2993,3 @@ pub enum Expr<'input> {
     /// psql client variable substitution: `:foo`, `:'foo'`, `:"foo"`.
     PsqlVar(PsqlVariableExpr<'input>),
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/shared/expr.tests.rs"
-));

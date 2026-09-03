@@ -1495,8 +1495,3 @@ pub struct ValuesBody<'input> {
     #[sep(COMMA)]
     pub rows: Vec<ValuesRow<'input>>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/dml/select.tests.rs"
-));

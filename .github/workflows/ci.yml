@@ -98,7 +98,7 @@ jobs:
       - name: Check the imported embedded-test inventory
         run: cargo test --locked --package pg-sql --test embedded_inventory
       - name: Run imported embedded tests
-        run: cargo test --locked --package pg-sql --lib
+        run: cargo test --locked --package pg-sql --test embedded
       - name: Run the PostgreSQL 17.9 differential baseline
         run: >-
           cargo test --locked --package pg-sql
@@ -107,6 +107,7 @@ jobs:
         run: >-
           cargo clippy --locked --package pg-sql --features postgres-oracle
           --lib
+          --test embedded
           --test strict_statement
           --test fmt
           --test embedded_inventory

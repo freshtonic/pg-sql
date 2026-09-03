@@ -30,8 +30,3 @@ pub struct DropOwnedStmt<'input> {
     pub roles: RoleList<'input>,
     pub behavior: Option<DropBehavior>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/ownership.tests.rs"
-));

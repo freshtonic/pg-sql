@@ -262,7 +262,7 @@ fn discovered_test_modules(root: &Path) -> BTreeSet<String> {
 
 fn included_test_modules(root: &Path, discovered: &BTreeSet<String>) -> BTreeMap<String, usize> {
     let mut included = BTreeMap::new();
-    for path in rust_files_below(&root.join("src")) {
+    for path in rust_files_below(&root.join("tests/embedded")) {
         let source = fs::read_to_string(&path).expect("read Rust source");
         let parsed = syn::parse_file(&source).expect("parse Rust source");
         let mut pending = vec![parsed.items.as_slice()];
@@ -644,7 +644,7 @@ fn all_imported_embedded_tests_and_ignored_statuses_are_accounted_for() {
             .iter()
             .map(|path| (path.clone(), 1))
             .collect::<BTreeMap<_, _>>(),
-        "every relocated test module must be included exactly once from src"
+        "every relocated test module must be included exactly once from the embedded target"
     );
     let missing = expected.difference(&actual).take(20).collect::<Vec<_>>();
     let unexpected = actual.difference(&expected).take(20).collect::<Vec<_>>();

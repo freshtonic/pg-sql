@@ -68,8 +68,3 @@ pub struct CompoundBody<'input> {
     pub body: SelectBody<'input>,
     pub set_op: Option<SetOpCombiner<'input>>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/dml/values.tests.rs"
-));

@@ -56,8 +56,3 @@ pub enum CursorKeyword {
     #[tok(CURSOR)]
     Cursor,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/cursor/declare.tests.rs"
-));

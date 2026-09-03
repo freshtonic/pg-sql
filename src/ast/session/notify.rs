@@ -42,8 +42,3 @@ pub struct UnlistenStmt<'input> {
     #[tok(UNLISTEN, this)]
     pub target: UnlistenTarget<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/session/notify.tests.rs"
-));

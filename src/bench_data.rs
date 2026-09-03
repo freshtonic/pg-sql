@@ -44,8 +44,3 @@ pub fn serialize_data_json(timestamp: &str, commit: &str, records: &[BenchRecord
     s.push_str("}\n");
     s
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/bench_data.tests.rs"
-));

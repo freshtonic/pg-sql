@@ -114,8 +114,3 @@ pub struct MoveStmt<'input> {
     pub source: Option<FetchSource>,
     pub cursor: literal::AliasName<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/cursor/fetch.tests.rs"
-));

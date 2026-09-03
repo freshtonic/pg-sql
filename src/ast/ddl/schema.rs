@@ -102,8 +102,3 @@ pub struct AlterSchemaStmt<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub action: AlterSchemaAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/schema.tests.rs"
-));

@@ -154,8 +154,3 @@ pub struct MergeStmt<'input> {
     pub when_clauses: recursa::Vec1<WhenClause<'input>>,
     pub returning: Option<Box<ReturningClause<'input>>>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/dml/merge.tests.rs"
-));

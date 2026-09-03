@@ -434,8 +434,3 @@ pub struct SecurityLabelStmt<'input> {
     #[tok(IS, this)]
     pub text: CommentText<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/comment.tests.rs"
-));

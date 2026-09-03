@@ -17,6 +17,13 @@ default-members = ["pg-oracle", "migration-tool"]
 [profile.dev.build-override]
 opt-level = 3
 
+# The library carries no unit tests and no doctests: the embedded test bodies
+# compile as the `embedded` integration target, so `cargo test` builds the
+# generated crate once and skips the rustdoc pass over it.
+[lib]
+test = false
+doctest = false
+
 [features]
 arbitrary = ["dep:arbitrary", "recursa/arbitrary"]
 postgres-oracle = ["dep:pg-oracle"]

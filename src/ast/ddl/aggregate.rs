@@ -138,8 +138,3 @@ pub struct AlterAggregateStmt<'input> {
     pub args: CreateAggregateArgs<'input>,
     pub action: AlterAggregateAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/aggregate.tests.rs"
-));

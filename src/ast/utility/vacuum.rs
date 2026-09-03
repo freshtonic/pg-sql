@@ -77,8 +77,3 @@ pub struct VacuumStmt<'input> {
     #[sep(COMMA)]
     pub relations: Option<recursa::Vec1<VacuumRelation<'input>>>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/vacuum.tests.rs"
-));

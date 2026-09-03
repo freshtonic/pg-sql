@@ -17,8 +17,3 @@ pub struct AlterLargeObjectStmt<'input> {
     pub oid: NumericOnly<'input>,
     pub owner_to: OwnerTo<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/large_object.tests.rs"
-));

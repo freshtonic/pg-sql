@@ -52,8 +52,3 @@ pub struct AlterConversionStmt<'input> {
     pub name: QualifiedName<'input>,
     pub action: AlterConversionAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/conversion.tests.rs"
-));

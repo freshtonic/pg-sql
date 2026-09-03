@@ -61,8 +61,3 @@ pub struct AnalyzeTarget<'input> {
     pub table_name: crate::ast::shared::names::QualifiedName<'input>,
     pub columns: Option<AnalyzeColumnList<'input>>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/utility/analyze.tests.rs"
-));

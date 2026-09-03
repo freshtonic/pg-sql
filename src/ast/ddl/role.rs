@@ -605,8 +605,3 @@ pub struct AlterUserStmt<'input> {
     pub target: AlterRoleTarget<'input>,
     pub action: AlterRoleAction<'input>,
 }
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/role.tests.rs"
-));

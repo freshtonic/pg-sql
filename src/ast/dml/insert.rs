@@ -173,8 +173,3 @@ pub struct ValueList<'input>(
     #[deref]
     pub Vec<Expr<'input>>,
 );
-
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/dml/insert.tests.rs"
-));

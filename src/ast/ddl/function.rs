@@ -615,11 +615,6 @@ pub struct DropRoutineStmt<'input> {
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
 
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/ddl/function.tests.rs"
-));
-
 // =========================================================================
 // ALTER/DROP FUNCTION — appended from simple_stmts.rs during physical extraction.
 // =========================================================================

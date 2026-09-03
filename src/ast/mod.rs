@@ -7,13 +7,6 @@ pub mod shared;
 pub mod tcl;
 pub mod utility;
 
-// Keep invocation-only support outside the build script's selected grammar
-// tree while compiling it at this original module position for unit tests.
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/test_support.module.rs"
-));
-
 pub use self::file::{PsqlTerminator, StatementTerminator, TerminatedStatement};
 
 // The `Statement` enum references ~170 *Stmt types defined across every
@@ -299,7 +292,3 @@ pub enum Statement<'input> {
     // does not compare duplicate languages for WITH/SELECT/VALUES/TABLE.
     Query(Box<Subquery<'input>>),
 }
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/embedded-tests/src/ast/mod.tests.rs"
-));
