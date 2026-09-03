@@ -1,0 +1,6 @@
+# The dev loop uses the parallel rustc front end (`-Z threads`, see
+# .cargo/config.toml), which needs a nightly compiler. Pin a dated nightly so
+# every checkout and CI job compiles with the same rustc.
+[toolchain]
+channel = "nightly-2026-09-02"
+components = ["rustfmt", "clippy"]

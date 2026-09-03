@@ -13,6 +13,14 @@ Postgres-flavoured SQL parser based on `recursa`.
 - [x] Benchmark (runnable in CI to catch regressions)
 - [ ] Support "super flat" ASTs https://jhwlr.io/super-flat-ast/
 
+## Toolchain
+
+`rust-toolchain.toml` pins a dated nightly. The dev loop compiles the
+generated grammar with the parallel rustc front end (`-Z threads` in
+`.cargo/config.toml`), which stable rustc does not accept. If your shell
+exports `RUSTUP_TOOLCHAIN`, it overrides the file; unset it in this
+workspace.
+
 ## Benchmarks
 
 The `parse` Criterion bench measures pg-sql parser throughput and compares

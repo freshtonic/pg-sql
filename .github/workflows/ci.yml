@@ -22,9 +22,8 @@ jobs:
           repository: freshtonic/recursa
           path: recursa
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@1.88.0
-        with:
-          components: clippy, rustfmt
+      - name: Install the pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
       - name: Check out the reviewed Recursa revision
         run: git -C ../recursa checkout "$(tr -d '[:space:]' < .recursa-revision)"
       - name: Verify workspace and dependency revision
@@ -64,9 +63,8 @@ jobs:
           repository: freshtonic/recursa
           path: recursa
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@1.88.0
-        with:
-          components: clippy
+      - name: Install the pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
       - name: Check out the reviewed Recursa revision
         run: git -C ../recursa checkout "$(tr -d '[:space:]' < .recursa-revision)"
       - name: Install PostgreSQL build prerequisites
