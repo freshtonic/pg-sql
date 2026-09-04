@@ -46,8 +46,8 @@ pub struct DropTextSearchStmt<'input> {
 /// ... { ADD | ALTER | DROP } MAPPING FOR ...`. Tokens are plain `name`s
 /// (Postgres' `ColId`), not dotted `any_name`s.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(FOR, this)]
 pub struct TextSearchTokenList<'input> {
-    #[tok(FOR, this)]
     #[sep(COMMA)]
     pub tokens: recursa::Vec1<crate::tokens::ColId<'input>>,
 }
@@ -73,8 +73,8 @@ pub struct TextSearchWithDicts<'input> {
 /// list, so the prefix-driven parse path fails and the whole statement
 /// surfaces as a file-level parse error.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(ADD, MAPPING, FOR, this)]
 pub struct TSConfigAddMapping<'input> {
-    #[tok(ADD, MAPPING, FOR, this)]
     #[sep(COMMA)]
     pub tokens: recursa::Vec1<crate::tokens::ColId<'input>>,
     #[tok(WITH, this)]

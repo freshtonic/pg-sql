@@ -26,10 +26,21 @@ pub struct CreateCastSignature<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CastFunctionRef<'input> {
     pub name: QualifiedName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub args: Vec<crate::ast::ddl::function::FuncParam<'input>>,
+    pub args: CastFunctionArgs<'input>,
 }
+
+/// Parenthesized argument list of a `CREATE CAST` function reference —
+/// gram.y's `func_args`, which admits the empty `()` form.
+///
+/// The parentheses belong to the whole list: a field-level attachment would
+/// bind to each element and declare `(int), (text)`.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct CastFunctionArgs<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<crate::ast::ddl::function::FuncParam<'input>>,
+);
 
 /// `WITH FUNCTION function_with_argtypes` — the function-coercion branch of
 /// `CREATE CAST`.

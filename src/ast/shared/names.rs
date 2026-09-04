@@ -85,12 +85,20 @@ pub enum AggregateArgs<'input> {
     /// `(*)` — the zero-argument aggregate (spelled like `COUNT(*)`).
     Star,
     /// `(type, ...)` — explicit argument type list.
-    Types(
-        #[tok(LPAREN, this, RPAREN)]
-        #[sep(COMMA)]
-        recursa::Vec1<TypeName<'input>>,
-    ),
+    Types(AggregateArgTypeList<'input>),
 }
+
+/// The parenthesized type list of `aggregate_with_argtypes`.
+///
+/// The parentheses surround the whole list; a field-level attachment would
+/// bind to each element and declare `(int), (text)`.
+#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct AggregateArgTypeList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<TypeName<'input>>,
+);
 
 /// A dotted name: `name`, `schema.name`, or `catalog.schema.name`.
 ///
