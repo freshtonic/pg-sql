@@ -20,6 +20,9 @@ names one of them.
 | `select_list_10000` | `fixtures/stress/select_list_10000.sql` | One SELECT with a 10,000-item select list; repetition and value construction |
 | `bool_chain` | `fixtures/stress/bool_chain_1000.sql` | One WHERE clause with 1,000 `AND` terms; the Pratt loop |
 
+A fourth, document-level workload is tracked as issue #61; see the blind-spot
+subsection below for why it is not defined here.
+
 The stress fixtures are checked in and regenerable with
 `cargo run --bin gen-stress -p pg-sql`. The `corpus` workload is the
 statement set that `benches/parse.rs` calls the "corpus head-to-head"; the
@@ -67,6 +70,13 @@ removed.
 A document-level canonical workload still belongs in this table and is
 tracked separately, so that neither the session that found the quadratic nor
 the one that fixed it shapes the workload around it.
+
+The analysis that produced this — what PostgreSQL's parser does to be fast,
+the phase split of the benchmark seam, and the attribution that reached
+`framing.rs` — is
+[`docs/research/postgres-parser-performance.md`](../research/postgres-parser-performance.md).
+Its section 7 is a ranked list of recursa work items; the quadratic above was
+item 7.7 and is the only one closed so far.
 
 ## Running the flame harness
 
