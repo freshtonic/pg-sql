@@ -379,7 +379,6 @@ dependencies = [
  "arbitrary",
  "clap",
  "derive_more",
- "logos",
  "pg-oracle",
  "recursa",
  "recursa-codegen",
@@ -539,8 +538,8 @@ name = "recursa-core"
 version = "0.1.0"
 dependencies = [
  "arbitrary",
+ "logos",
  "phf",
- "regex-automata",
 ]
 
 [[package]]
