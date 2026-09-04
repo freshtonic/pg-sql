@@ -1065,9 +1065,7 @@ impl<'input> CreateTableStmt<'input> {
 /// operator class for the partition strategy.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct PartitionKeyItem<'input> {
-    /// Greedy: the expression keeps extending on every shared extender instead of yielding to what may follow `PartitionKeyItem`.
-    #[greedy(all)]
-    pub expr: Expr<'input>,
+    pub target: crate::ast::ddl::index::IndexTarget<'input>,
     #[tok(COLLATE, this)]
     pub collate: Option<literal::AliasName<'input>>,
     pub opclass: Option<literal::AliasName<'input>>,

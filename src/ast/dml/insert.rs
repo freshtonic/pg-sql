@@ -81,9 +81,7 @@ pub enum ConflictAction<'input> {
 /// followed by a `COLLATE "name"` clause and an optional opclass ident.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ConflictTargetItem<'input> {
-    /// Greedy: the expression keeps extending on AT, BETWEEN, COLLATE, OPERATOR instead of yielding to what may follow `ConflictTargetItem`.
-    #[greedy(AT, BETWEEN, COLLATE, OPERATOR)]
-    pub expr: Expr<'input>,
+    pub target: crate::ast::ddl::index::IndexTarget<'input>,
     pub collate: Option<crate::ast::ddl::table::CollateClause<'input>>,
     pub opclass: Option<crate::tokens::ColId<'input>>,
 }
