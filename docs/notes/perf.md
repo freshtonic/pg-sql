@@ -473,3 +473,82 @@ generated static so the runtime borrows it (zero alloc, zero copy) instead
 of composing per parse-site. Alternatively make composed sets `Rc`-shared
 (pointer-sized clone). The inline-buffer approach is preserved on the
 branch but must not land as-is. Reverted to wave-1 pin 870ddfe.
+
+## Track R wave 3 landed: per-site FOLLOW caches and a static Pratt guard (2026-09-04)
+
+recursa `perf/follow-site-cache` (protocol 20), pinned by
+`.recursa-revision`. Wave 2's interner (ca9e386) removed the allocation but
+kept a hashed memo lookup on every composition. Fresh profiles still showed
+9-16% of parse time in `LocalKey::with` for `compose` plus `FollowSet::union`.
+This wave removes those lookups.
+
+Three changes:
+
+1. **The composition memo is now process-global.** `recursa-core`
+   `grammar.rs` replaced the `thread_local! RefCell<Interner>` with a
+   `LazyLock<Mutex<Interner>>`. Interned sets are leaked and immutable and
+   `FollowSet` is `Send + Sync` (asserted at compile time), so one table
+   serves every thread. The lock is off the hot path because of change 3.
+
+2. **The Pratt ambiguity guard is composed at generation time.** The
+   generated `__recursa_parse_bp` body used to build a guard chain on EVERY
+   entry: about 100 blocks of `if bp >= min_bp { guard = guard.union(SET) }`
+   whose only consumer is the `pratt_ambiguity` error path. The guard content
+   depends only on which distinct left binding powers are at or above
+   `min_bp`, so `recursa-codegen` now composes one cumulative expectation per
+   distinct threshold and emits them in the expected-set pool. The entry path
+   composes nothing; the error path selects the right static with one
+   comparison chain. For pg-sql's `Expr` the chain fell from ~100 runtime
+   unions to 11 static arms.
+
+3. **Every remaining composition site has a one-entry inline cache.** New
+   `recursa-core` type `FollowSiteCache` holds an `AtomicPtr` to a leaked
+   `(nearer, caller, result)` record. Generated code declares one
+   block-scoped `static` per site and calls
+   `SITE.with_caller(&EXPECTED_SETS[k], context.follow())`. A repeat caller
+   costs one acquire load and one pointer comparison. A miss goes through the
+   global memo, which interns one record per distinct operand pair, so misses
+   reuse records instead of leaking. pg-sql generates 925 site caches
+   (724 `with_caller`, 201 `union`).
+
+### Canonical workloads (flame, 10 s, interleaved before/after)
+
+Both bench binaries were kept in one worktree and run alternately, so
+thermal drift affects both. Best of three to five runs; the machine throttles
+and the slow runs are noise.
+
+| Workload | before | after | Δ |
+| --- | --: | --: | --: |
+| `bool_chain` | 11.83 ms/stmt (84.5 stmt/s) | 10.10 ms/stmt (99.0 stmt/s) | **−14.6% time** |
+| `corpus` | 0.0529 ms/stmt (18,894 stmt/s) | 0.0491 ms/stmt (20,361 stmt/s) | **−7.2% time** |
+| `select_list_10000` | 97.1 ms/stmt (10.3 stmt/s) | 78.7 ms/stmt (12.7 stmt/s) | **−18.9% time** |
+
+### Allocations and interner size (`--count-allocs`, one pass)
+
+| Workload | parse allocs before | after | interned sets | memoized pairs |
+| --- | --: | --: | --: | --: |
+| `bool_chain` | 2,720 | 2,112 | 139 → 15 | 201 → 17 |
+| `select_list_10000` | 489 | 183 | 81 → 17 | 111 → 17 |
+| `corpus` | 758,402 | 759,832 | 1,951 → 1,733 | 2,632 → 2,321 |
+
+The interner shrinks because the guard cumulatives are now generated statics
+instead of runtime compositions. The corpus parse allocation count is flat:
+it is dominated by provenance, and the composition path there was already
+allocation-free after wave 2.
+
+### Suites
+
+- recursa `cargo test --workspace`: 56 suites, 0 failed.
+- pg-sql `cargo test -p pg-sql --test embedded`: 1092 passed, 0 failed,
+  2 ignored.
+- pg-sql `cargo test -p pg-sql --test document`: 27 passed, 0 failed.
+- pg-sql `cargo test -p pg-sql --features postgres-oracle --test differential`:
+  160 passed, 74 failed — byte-identical to the same command on `main`, so
+  the failures pre-date this change and are not caused by it.
+
+The diagnostic content is unchanged. The Pratt fixture
+(`recursa-codegen/tests/fixtures/generation/pratt`) now asserts the exact
+expected-atom list for both ambiguity cases: `Followed` at `min_bp` 0 (9
+atoms) and `NestedFollowed` at a raised `min_bp` (6 atoms). Both lists are
+identical before and after the change, checked by running the fixture with
+the codegen edit stashed.
