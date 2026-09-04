@@ -1023,12 +1023,17 @@ pub enum ArrayExpr<'input> {
     Subquery(ArraySubquery<'input>),
 }
 
-/// ROW constructor: `ROW(expr, ...)`
+/// ROW constructor: `ROW(expr, ...)` or the empty `ROW()`.
+///
+/// PostgreSQL's `row` production keeps `ROW '(' expr_list ')'` and
+/// `ROW '(' ')'` as separate alternatives, so the field list is nullable
+/// here. The `ROW` keyword still leads the node, so the empty form does not
+/// hide the opening parenthesis from FIRST-k analysis.
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ROW, LPAREN, this, RPAREN)]
 pub struct RowExpr<'input> {
     #[sep(COMMA)]
-    pub values: recursa::Vec1<Expr<'input>>,
+    pub values: Option<recursa::Vec1<Expr<'input>>>,
 }
 
 /// `WHEN cond THEN result` arm of a CASE expression.

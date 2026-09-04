@@ -297,6 +297,7 @@ tests::support::tests::skips_psql_interpolation	superseded	-	-	frozen-statement-
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	custom_infix_does_not_consume_lower_precedence_comparison	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_cast_parenthesized_field_access	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_direct_parenthesized_set_limit_offset_orders_roundtrip	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_empty_row_constructor	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_function_calls_with_required_delimiters	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_json_timestamp_cast_before_unique_keys	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_parenthesized_chained_fields_and_star	issue-9-generated-expression
