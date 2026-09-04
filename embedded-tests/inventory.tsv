@@ -830,6 +830,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	position_needle_rejects_unparenthesi
 embedded-tests/src/ast/shared/expr.tests.rs	position_needle_uses_postgres_restricted_expression_extensions	false
 embedded-tests/src/ast/shared/expr.tests.rs	positional_param_preserves_digits	false
 embedded-tests/src/ast/shared/expr.tests.rs	pratt_peek_classified_covers_identifier_atoms	false
+embedded-tests/src/ast/shared/expr.tests.rs	qualified_ref_qualifier_is_a_col_id	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_direct_parenthesized_set_duplicate_limit_offset_clauses	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_invalid_function_application_states	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_wildcard_as_an_ordinary_function_argument	false
