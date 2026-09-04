@@ -998,12 +998,17 @@ pub struct NestedArrayElements<'input> {
 }
 
 /// ARRAY bracket constructor: `ARRAY[expr, ...]`, including the
-/// multi-dimensional form `ARRAY[[1,2],[3,4]]`.
+/// multi-dimensional form `ARRAY[[1,2],[3,4]]` and the empty `ARRAY[]`.
+///
+/// PostgreSQL's `array_expr` keeps `'[' ']'` as its own alternative, so the
+/// element list is nullable. The `ARRAY` keyword still leads the node, which
+/// keeps the opening bracket visible to FIRST-k analysis, exactly as the
+/// nested `NestedArrayElements` list above already relies on.
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ARRAY, LBRACKET, this, RBRACKET)]
 pub struct ArrayBracket<'input> {
     #[sep(COMMA)]
-    pub elements: recursa::Vec1<ArrayElement<'input>>,
+    pub elements: Vec<ArrayElement<'input>>,
 }
 
 /// ARRAY subquery constructor: `ARRAY(subquery)`

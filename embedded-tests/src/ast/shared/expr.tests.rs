@@ -3220,6 +3220,28 @@ mod tests {
         }
     }
 
+    /// `ARRAY[]` — the empty array constructor (`array_expr: '[' ']'` in
+    /// gram.y). It appears bare, cast, as a VARIADIC argument and as a
+    /// function-parameter default.
+    #[test]
+    fn parse_empty_array_constructor() {
+        for src in [
+            "ARRAY[]",
+            "ARRAY[]::int[]",
+            "array[]::oidvector",
+            "ARRAY[1]",
+            "ARRAY[[1, 2], [3, 4]]",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
     /// `ROW()` — the empty row constructor (`row: ROW '(' ')'` in gram.y).
     /// It must work bare, as an `IS NULL` operand and on both sides of `=`.
     #[test]

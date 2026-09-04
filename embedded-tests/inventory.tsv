@@ -627,6 +627,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_direct_parenthesized_set_limit
 embedded-tests/src/ast/shared/expr.tests.rs	parse_distance	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_dollar_string_literal_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_double_precision_type_cast	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_empty_array_constructor	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_empty_row_constructor	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_eq_all_array	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_eq_any_subquery	false
