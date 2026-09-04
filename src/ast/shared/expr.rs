@@ -2486,7 +2486,12 @@ pub enum Expr<'input> {
     // starter and retains the operator text plus its expression operand.
     CustomPrefix(
         literal::CustomOp<'input>,
-        #[pretty(break_before = soft)] Box<Self>,
+        /// Greedy: the operand of a custom prefix operator is a whole expression, so it
+        /// keeps extending on every shared extender, including the symbolic ones the
+        /// enum-level acceptance does not name, instead of yielding to what may follow.
+        #[greedy(all)]
+        #[pretty(break_before = soft)]
+        Box<Self>,
     ),
 
     // --- Postfix ---
