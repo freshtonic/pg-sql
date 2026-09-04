@@ -902,6 +902,25 @@ pub enum SubscriptClose {
     Value,
 }
 
+/// A subscript followed by the field selectors that continue PostgreSQL's
+/// `opt_indirection` chain: `arr[i]`, `arr[i].field`, `arr[i].f.g`.
+///
+/// Further subscripts are not repeated here — the postfix `Expr::Subscript`
+/// operator already re-applies to the result, so `a[1].b[2]` is a subscript
+/// carrying `.b` followed by a second subscript. Keeping brackets out of
+/// this tail leaves the two forms with disjoint continuations.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct SubscriptIndirection<'input> {
+    pub subscript: BracketSubscript<'input>,
+    /// Greedy: a leading DOT starts this element instead of ending
+    /// `SubscriptIndirection` (bison shift preference). PostgreSQL's
+    /// `indirection_el` is left-recursive on the subscripted value, so a `.`
+    /// after a subscript is always the next chain element — no other
+    /// production resumes on `.` at that point.
+    #[greedy(DOT)]
+    pub fields: Vec<IndirectionField<'input>>,
+}
+
 /// `.field` accessor in an indirection chain.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct IndirectionField<'input> {
@@ -2508,10 +2527,11 @@ pub enum Expr<'input> {
     /// Postgres-style cast: `expr::type`
     #[parse(postfix, bp = 20)]
     Cast(Box<Self>, #[tok(COLONCOLON, this)] Box<CastType<'input>>),
-    /// Array index or slice: `expr[idx]`, `expr[low:high]`, `expr[:high]`,
-    /// `expr[low:]`, or `expr[:]`.
+    /// Array index or slice, plus the field selectors that may follow it:
+    /// `expr[idx]`, `expr[low:high]`, `expr[:high]`, `expr[low:]`, `expr[:]`,
+    /// and `expr[idx].field`.
     #[parse(postfix, bp = 20)]
-    Subscript(Box<Self>, BracketSubscript<'input>),
+    Subscript(Box<Self>, SubscriptIndirection<'input>),
     /// `expr COLLATE "collation"` — collation specifier. Binds tighter than
     /// comparisons (bp 5) but looser than `::` cast (bp 20).
     #[parse(postfix, bp = 18)]

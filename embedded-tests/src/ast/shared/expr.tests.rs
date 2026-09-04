@@ -3220,6 +3220,32 @@ mod tests {
         }
     }
 
+    /// `arr[i].field` — PostgreSQL's `opt_indirection` chains subscripts and
+    /// attribute names freely, so a `.field` selector must be able to follow
+    /// a subscript.
+    #[test]
+    fn parse_field_selection_after_subscript() {
+        for src in [
+            "c2[2].f2",
+            "d1[1].r + 1",
+            "value[1].r",
+            "a.b[1].c",
+            "d1[1].r.s",
+            "d1[1].r[2]",
+            "a[1]",
+            "a[1][2]",
+            "a[1:2]",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
     /// `ARRAY[]` — the empty array constructor (`array_expr: '[' ']'` in
     /// gram.y). It appears bare, cast, as a VARIADIC argument and as a
     /// function-parameter default.

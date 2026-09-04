@@ -639,6 +639,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_extract_century_from_ident	fal
 embedded-tests/src/ast/shared/expr.tests.rs	parse_extract_epoch_from_date	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_extract_string_field	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_extract_year_from_now	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_field_selection_after_subscript	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_four_part_string_concat	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_func_all_named_args	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_func_call_filter	false
