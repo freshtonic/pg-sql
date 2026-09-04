@@ -765,6 +765,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_string_literal	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_subquery_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_subscript_unchanged	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_subset_eq	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_substring_comma_argument_form	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_substring_for_only	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_substring_from	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_substring_from_for	false

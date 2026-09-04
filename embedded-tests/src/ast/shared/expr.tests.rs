@@ -3220,6 +3220,30 @@ mod tests {
         }
     }
 
+    /// `substring(x, 3, 1)` — the ordinary function-call spelling that
+    /// gram.y keeps as `SUBSTRING '(' func_arg_list_opt ')'`, alongside the
+    /// SQL-standard FROM/FOR and SIMILAR forms.
+    #[test]
+    fn parse_substring_comma_argument_form() {
+        for src in [
+            "substring(good, 3, 1)",
+            "substring(indtoasttest::text, 1, 200)",
+            "substring(VALUE, 1, 1)",
+            "SUBSTRING(x FROM 3 FOR 1)",
+            "SUBSTRING(x FROM 3)",
+            "SUBSTRING(x SIMILAR 'p' ESCAPE '#')",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(matches!(expr, Expr::Substring(_)), "expected Substring for {src:?}");
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
     /// The legacy ordinary-function spelling of `json_object`
     /// (`JSON_OBJECT '(' func_arg_list ')'` in gram.y) alongside the SQL/JSON
     /// constructor forms, which must keep winning where they apply.

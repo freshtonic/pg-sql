@@ -1805,11 +1805,29 @@ pub struct SubstringSimilar<'input> {
 ///
 /// Variant ordering: `Similar` (`SIMILAR`) before `FromFor` (`FROM`) — distinct
 /// first tokens, so order is not strictly required, but listed by length.
+/// One `, arg` of the ordinary function-call spelling of `SUBSTRING`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct SubstringMoreArg<'input> {
+    #[tok(COMMA, this)]
+    pub value: Box<Expr<'input>>,
+}
+
+/// The tail of `SUBSTRING(...)` after its first argument.
+///
+/// Besides the SQL-standard FROM/FOR and SIMILAR forms, gram.y keeps
+/// `SUBSTRING '(' func_arg_list_opt ')'` so that a function named
+/// `substring` can be called without the special syntax — the
+/// `substring(x, 3, 1)` spelling. `SUBSTRING` is a `COL_NAME` keyword and
+/// can never be an ordinary `FuncCall` name, so that form belongs here.
+///
+/// Variant ordering is immaterial: the four alternatives lead with SIMILAR,
+/// FROM, FOR and COMMA respectively.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum SubstringTail<'input> {
     Similar(SubstringSimilar<'input>),
     FromFor(SubstringFromFor<'input>),
     For(ForCount<'input>),
+    Args(recursa::Vec1<SubstringMoreArg<'input>>),
 }
 
 /// Inner of `SUBSTRING(...)`: `source` followed by FROM/SIMILAR tail.

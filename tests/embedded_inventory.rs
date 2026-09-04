@@ -636,7 +636,7 @@ fn all_imported_embedded_tests_and_ignored_statuses_are_accounted_for() {
     let included_paths = included_test_modules(root, &discovered_paths);
     let actual = actual_inventory(root, &discovered_paths);
 
-    assert_eq!(expected.len(), 1_098);
+    assert_eq!(expected.len(), 1_099);
     assert_eq!(discovered_paths, expected_paths);
     assert_eq!(
         included_paths,
@@ -674,7 +674,7 @@ fn every_frozen_legacy_test_and_new_relocated_test_has_a_disposition() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
 
     assert_eq!(legacy.len(), 1_318);
-    assert_eq!(current.len(), 1_098);
+    assert_eq!(current.len(), 1_099);
     validate_reconciliation(
         &legacy,
         &current,

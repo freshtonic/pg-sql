@@ -310,6 +310,7 @@ tests::support::tests::skips_psql_interpolation	superseded	-	-	frozen-statement-
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_parenthesized_mixed_indirection	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_parenthesized_row_expr	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_parenthesized_star_then_cast	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_substring_comma_argument_form	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	position_needle_rejects_unparenthesized_a_expr_only_extensions	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	position_needle_uses_postgres_restricted_expression_extensions	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	reject_direct_parenthesized_set_duplicate_limit_offset_clauses	issue-9-generated-expression
