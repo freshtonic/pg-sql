@@ -84,7 +84,7 @@ fn parses_explain_without_optional_settings_as_a_guarded_statement() {
     assert!(explain.options().is_none());
     assert!(matches!(
         explain.statement(),
-        Statement::Query(query)
+        pg_sql::ast::utility::explain::ExplainableStmt::Query(query)
             if matches!(
                 query.as_ref(),
                 Subquery::Body(body) if matches!(&body.body, SelectBody::Select(_))

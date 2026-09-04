@@ -40,6 +40,29 @@ pub struct ExplainOptions<'input>(
     pub recursa::Vec1<ExplainOption<'input>>,
 );
 
+/// A statement that `EXPLAIN` accepts: gram.y `ExplainableStmt`.
+///
+/// Variant order mirrors `Statement`: `CREATE MATERIALIZED VIEW` before
+/// `CREATE TABLE`, the DML and utility forms have disjoint leading keywords,
+/// and `Query` (`SELECT`, `WITH`, `VALUES`, `TABLE`, parenthesized, and set
+/// operations) comes last as the shared-prefix form. gram.y's `CreateAsStmt`
+/// maps to `CreateTableStmt`, whose body carries the CTAS forms.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum ExplainableStmt<'input> {
+    CreateMaterializedView(
+        Box<crate::ast::ddl::materialized_view::CreateMaterializedViewStmt<'input>>,
+    ),
+    CreateTable(Box<crate::ast::ddl::table::CreateTableStmt<'input>>),
+    Insert(Box<crate::ast::dml::insert::InsertStmt<'input>>),
+    Update(Box<crate::ast::dml::update::UpdateStmt<'input>>),
+    Merge(Box<crate::ast::dml::merge::MergeStmt<'input>>),
+    Delete(Box<crate::ast::dml::delete::DeleteStmt<'input>>),
+    Execute(crate::ast::tcl::prepared::ExecuteStmt<'input>),
+    Refresh(crate::ast::utility::refresh::RefreshStmt<'input>),
+    Declare(crate::ast::cursor::declare::DeclareStmt<'input>),
+    Query(Box<crate::ast::dml::values::Subquery<'input>>),
+}
+
 /// An EXPLAIN option list followed by the statement being explained.
 ///
 /// Keeping the optional prefix and required statement in one enum branch lets
@@ -48,14 +71,14 @@ pub struct ExplainOptions<'input>(
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ExplainOptionsAndStatement<'input> {
     pub options: ExplainOptions<'input>,
-    pub statement: Box<crate::ast::Statement<'input>>,
+    pub statement: Box<ExplainableStmt<'input>>,
 }
 
 /// The input following `EXPLAIN`, with or without an option list.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ExplainInput<'input> {
     WithOptions(ExplainOptionsAndStatement<'input>),
-    Statement(Box<crate::ast::Statement<'input>>),
+    Statement(Box<ExplainableStmt<'input>>),
 }
 
 /// EXPLAIN statement: `EXPLAIN [(options)] statement`.
@@ -75,7 +98,7 @@ impl<'input> ExplainStmt<'input> {
     }
 
     /// Returns the statement being explained.
-    pub fn statement(&self) -> &crate::ast::Statement<'input> {
+    pub fn statement(&self) -> &ExplainableStmt<'input> {
         match &self.input {
             ExplainInput::WithOptions(value) => &value.statement,
             ExplainInput::Statement(statement) => statement,
