@@ -227,18 +227,23 @@ mod tests {
         assert!(input.is_eof());
     }
 
-    /// A targetless `SELECT` composes as a set-operation operand wherever the
-    /// generated decision can still reach the absent head: as the right
-    /// operand, and as a parenthesized left operand.
+    /// A targetless `SELECT` composes as a set-operation operand in every
+    /// spelling, including the bare left operand (`union.sql:110`-`112`,
+    /// issue #55).
     ///
-    /// The bare left operand (`select union select`, `union.sql:110`-`112`)
-    /// is the one spelling that stays out of reach — see the note on
-    /// `SelectStmt::head` and issue #55.
+    /// The bare left operand works because no reserved keyword is in
+    /// FIRST(`SelectHead`): `QualifiedRef` qualifies with a `ColId`, so
+    /// `UNION`/`INTERSECT`/`EXCEPT` cannot start a target item and the
+    /// generated decision reaches the absent head.
     #[test]
     fn parse_targetless_select_set_operations() {
         use crate::ast::dml::values::Subquery;
 
         for src in [
+            "select union select",
+            "select intersect select",
+            "select except select",
+            "select union select 1",
             "select 1 union select",
             "select 1 intersect select",
             "select 1 except select",

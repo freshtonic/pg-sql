@@ -301,10 +301,20 @@ pub struct IsNotFormNormalizedTail {
 
 /// Qualified column reference: `table.column`
 ///
-/// Uses AliasName for the table part to allow keywords like EXCLUDED, NEW, OLD.
+/// gram.y spells this `columnref: ColId indirection`, so the qualifier is a
+/// `ColId`: unreserved and column-name keywords (`EXCLUDED`, `NEW`, `OLD`, ...)
+/// but never a reserved one. The attribute after the dot stays `AliasName`,
+/// matching gram.y's `attr_name: ColLabel`.
+///
+/// The qualifier's admission set is load-bearing beyond this node. `Expr` is
+/// the head of every SELECT target list, so FIRST(`Expr`) is the selector that
+/// decides whether a `SelectStmt` has a target list at all. A qualifier that
+/// admitted every keyword would put `UNION`, `EXCEPT`, `INTERSECT` and every
+/// other reserved word into that selector and make a targetless `SELECT`
+/// unusable as a set-operation operand (issue #55).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct QualifiedRef<'input> {
-    pub table: literal::AliasName<'input>,
+    pub table: crate::tokens::ColId<'input>,
     #[tok(DOT, this)]
     pub column: literal::AliasName<'input>,
 }
@@ -313,7 +323,7 @@ pub struct QualifiedRef<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct QualifiedWildcard<'input> {
     #[tok(this, DOT, STAR)]
-    pub table: literal::AliasName<'input>,
+    pub table: crate::tokens::ColId<'input>,
 }
 
 /// Window specification: `OVER window_name` or `OVER (inline_spec)`.
@@ -353,8 +363,10 @@ pub struct InlineWindowSpec<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(PARTITION, BY, this)]
 pub struct WindowPartitionBy<'input> {
-    /// Greedy: a leading GROUPS, ORDER, RANGE, ROWS starts this element instead of ending `WindowPartitionBy` (bison shift preference).
-    #[greedy(GROUPS, ORDER, RANGE, ROWS)]
+    /// Greedy: a leading GROUPS, RANGE, ROWS starts this element instead of ending `WindowPartitionBy` (bison shift preference).
+    /// `ORDER` is reserved, so a `ColId`-qualified `QualifiedRef` cannot begin
+    /// an expression with it and the overlap no longer contains it.
+    #[greedy(GROUPS, RANGE, ROWS)]
     #[sep(COMMA)]
     pub exprs: Vec<Expr<'input>>,
 }

@@ -1408,18 +1408,16 @@ pub struct SelectStmt<'input> {
     /// `opt_target_list` is nullable, so a bare `SELECT` with no targets,
     /// no `INTO` and no `FROM` is a complete `simple_select` (`select;`).
     ///
-    /// Greedy: a target list begins with an identifier, whose lexical shape
-    /// covers every SQL word, so any word-shaped kind that may also follow
-    /// `SelectStmt` starts this element rather than ending the statement.
-    /// The generated multi-token decision still resolves every kind a later
-    /// field of this statement can start (`WHERE`, `GROUP`, `ORDER`, `LIMIT`,
-    /// `OFFSET`, `FETCH`, `FOR`, and `INTO`/`FROM` inside the head itself),
-    /// so the absent head is reached for all of those; the commitment only
-    /// stands for kinds that reach this site purely through a caller's
-    /// FOLLOW. `UNION`/`EXCEPT`/`INTERSECT` are exactly that, which is why a
-    /// targetless `SELECT` is not yet usable as the left operand of a set
-    /// operation (issue #55).
-    #[greedy(all)]
+    /// Greedy: a target list begins with an identifier, and the identifier
+    /// admission sets reachable from a target item (`ColId`, the function and
+    /// type-name families, `BareColLabel`) cover the unreserved keyword
+    /// classes. Only `NULL` and `ABSENT` are both startable here and able to
+    /// follow `SelectStmt`, so the commitment is named exactly rather than
+    /// with `all`. A reserved keyword such as `UNION`, `EXCEPT` or
+    /// `INTERSECT` is not in FIRST(`SelectHead`) at all, so a targetless
+    /// `SELECT` is reached for it and composes as a set-operation operand
+    /// (issue #55).
+    #[greedy(NULL, ABSENT)]
     #[pretty(break_before = soft)]
     pub head: Option<SelectHead<'input>>,
     #[pretty(break_before = soft)]
