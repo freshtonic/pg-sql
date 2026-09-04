@@ -55,10 +55,10 @@ pub enum InsertSource<'input> {
 
 /// DO UPDATE SET ... [WHERE ...] action.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DO, UPDATE, SET, this)]
 pub struct DoUpdateAction<'input> {
-    #[tok(DO, UPDATE, SET, this)]
     #[sep(COMMA)]
-    pub assignments: Vec<SetAssignment<'input>>,
+    pub assignments: recursa::Vec1<SetAssignment<'input>>,
     pub where_clause: Option<WhereClause<'input>>,
 }
 
@@ -95,6 +95,15 @@ pub struct OnConflictConstraint<'input> {
     pub name: crate::tokens::ColId<'input>,
 }
 
+/// Parenthesized `index_params` arbiter list on `ON CONFLICT`.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct ConflictTargetList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<ConflictTargetItem<'input>>,
+);
+
 /// Arbiter specification for `ON CONFLICT` — Postgres' `opt_conf_expr`.
 ///
 /// Variant ordering: each variant has a distinct first token (`(` vs `ON`),
@@ -102,11 +111,7 @@ pub struct OnConflictConstraint<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ConflictTarget<'input> {
     /// `( index_params )` — the inferring-by-columns form.
-    Index(
-        #[tok(LPAREN, this, RPAREN)]
-        #[sep(COMMA)]
-        Vec<ConflictTargetItem<'input>>,
-    ),
+    Index(ConflictTargetList<'input>),
     /// `ON CONSTRAINT name` — the named-constraint form.
     Constraint(OnConflictConstraint<'input>),
 }
@@ -116,11 +121,7 @@ pub enum ConflictTarget<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ON, CONFLICT, this)]
 pub struct OnConflictClause<'input> {
-    /// Greedy: a leading ON starts this element instead of ending `OnConflictClause` (bison shift preference).
-    #[greedy(ON)]
     pub target: Option<ConflictTarget<'input>>,
-    /// Greedy: a leading WHERE starts this element instead of ending `OnConflictClause` (bison shift preference).
-    #[greedy(WHERE)]
     /// `WHERE predicate` after the arbiter target list, restricting the
     /// partial-index arbiter to matching rows. Only valid for the
     /// index-params form (gram.y attaches `where_clause` to that branch

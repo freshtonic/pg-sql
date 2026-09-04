@@ -31,10 +31,10 @@ pub enum NotMatchedBy {
 
 /// `UPDATE SET col = expr, ...` action body (the part after THEN).
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(UPDATE, SET, this)]
 pub struct UpdateAction<'input> {
-    #[tok(UPDATE, SET, this)]
     #[sep(COMMA)]
-    pub assignments: Vec<SetAssignment<'input>>,
+    pub assignments: recursa::Vec1<SetAssignment<'input>>,
 }
 
 /// Action allowed after `WHEN MATCHED ... THEN`.
@@ -82,14 +82,21 @@ pub struct InsertInto<'input> {
     pub name: crate::tokens::ColId<'input>,
 }
 
+/// Parenthesized `insert_column_list` on a MERGE `INSERT` action.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct MergeInsertColumnList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<literal::AliasName<'input>>,
+);
+
 /// `INSERT [INTO target] [(cols)] { VALUES ... | DEFAULT VALUES }`
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(INSERT, this)]
 pub struct InsertAction<'input> {
     pub into: Option<InsertInto<'input>>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub columns: Option<recursa::Vec1<literal::AliasName<'input>>>,
+    pub columns: Option<MergeInsertColumnList<'input>>,
     /// `OVERRIDING {SYSTEM|USER} VALUE` between the columns and the body.
     pub overriding: Option<crate::ast::dml::insert::OverridingClause>,
     pub body: InsertBody<'input>,

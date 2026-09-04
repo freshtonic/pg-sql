@@ -1159,8 +1159,6 @@ pub enum DateTimeCastTypeName {
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
 #[tok(INTERVAL, this)]
 pub struct IntervalCastType<'input> {
-    /// Greedy: a leading token from any of 6 kinds starts this element instead of ending `IntervalCastType` (bison shift preference).
-    #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, YEAR)]
     pub modifier: Option<IntervalCastTypeModifier<'input>>,
 }
 
@@ -1174,8 +1172,6 @@ pub enum IntervalCastTypeModifier<'input> {
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
 pub struct GeneralCastType<'input> {
     pub base: GeneralCastTypeName<'input>,
-    /// Greedy: a leading VARYING starts this element instead of ending `GeneralCastType` (bison shift preference).
-    #[greedy(VARYING)]
     #[presence(VARYING)]
     /// `VARYING` modifier (e.g., `BIT VARYING`, `CHARACTER VARYING`).
     /// Always precedes the precision parens.
@@ -1385,8 +1381,6 @@ pub struct IntervalLit<'input> {
     /// Optional precision, e.g. `interval(2)` or `interval(0)`.
     pub precision: Option<TypePrecision<'input>>,
     pub value: literal::StringLit<'input>,
-    /// Greedy: a leading token from any of 6 kinds starts this element instead of ending `IntervalLit` (bison shift preference).
-    #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, YEAR)]
     pub qualifier: Option<IntervalQualifier<'input>>,
 }
 
@@ -2361,11 +2355,7 @@ pub struct JsonObjectAggInner<'input> {
 pub struct JsonObjectAgg<'input> {
     #[tok(JSON_OBJECTAGG, LPAREN, this, RPAREN)]
     pub inner: JsonObjectAggInner<'input>,
-    /// Greedy: a leading FILTER starts this element instead of ending `JsonObjectAgg` (bison shift preference).
-    #[greedy(FILTER)]
     pub filter: Option<FilterClause<'input>>,
-    /// Greedy: a leading OVER starts this element instead of ending `JsonObjectAgg` (bison shift preference).
-    #[greedy(OVER)]
     pub window: Option<WindowSpec<'input>>,
 }
 
@@ -2384,11 +2374,7 @@ pub struct JsonArrayAggInner<'input> {
 pub struct JsonArrayAgg<'input> {
     #[tok(JSON_ARRAYAGG, LPAREN, this, RPAREN)]
     pub inner: JsonArrayAggInner<'input>,
-    /// Greedy: a leading FILTER starts this element instead of ending `JsonArrayAgg` (bison shift preference).
-    #[greedy(FILTER)]
     pub filter: Option<FilterClause<'input>>,
-    /// Greedy: a leading OVER starts this element instead of ending `JsonArrayAgg` (bison shift preference).
-    #[greedy(OVER)]
     pub window: Option<WindowSpec<'input>>,
 }
 
@@ -2449,10 +2435,7 @@ pub enum JsonFuncExpr<'input> {
 /// yielding to whatever may follow the enclosing expression, which is
 /// PostgreSQL's precedence resolution; `ESCAPE` starts the tail instead of
 /// ending the pattern operand.
-#[greedy(
-    AND, AT, BETWEEN, ESCAPE, ILIKE, IN, IS, ISNULL, LIKE, NOT, NOTNULL, OPERATOR, OVERLAPS,
-    SIMILAR
-)]
+#[greedy(AND, ESCAPE, IN, NOT, SIMILAR)]
 #[pratt]
 pub enum Expr<'input> {
     // --- Prefix ---

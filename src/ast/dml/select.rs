@@ -18,8 +18,6 @@ pub enum SelectStar {
 /// An expression target with its optional output alias.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SelectExprItem<'input> {
-    /// Greedy: the expression keeps extending on these shared extenders instead of yielding to what may follow `SelectExprItem`.
-    #[greedy(IS, LIKE, ILIKE, NOTNULL, ISNULL, SIMILAR, BETWEEN, OPERATOR, AT, OVERLAPS)]
     pub expr: Expr<'input>,
     /// Greedy: any kind that can start this element continues it instead of ending `SelectExprItem` (bison shift preference).
     #[greedy(all)]
@@ -1376,8 +1374,8 @@ pub enum SelectIntoPersistence {
 /// `INTO [TEMP|TEMPORARY|UNLOGGED] [TABLE] target` clause for the
 /// Postgres `SELECT ... INTO new_table` statement form.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(INTO, this)]
 pub struct SelectIntoClause<'input> {
-    #[tok(INTO, this)]
     pub persistence: Option<SelectIntoPersistence>,
     #[tok(optional(TABLE), this)]
     pub target: crate::ast::shared::names::QualifiedName<'input>,
@@ -1483,8 +1481,6 @@ pub enum SelectTargets<'input> {
 pub struct SelectTargetList<'input> {
     #[sep(COMMA)]
     pub items: recursa::Vec1<SelectItem<'input>>,
-    /// Greedy: a leading ABSENT starts this element instead of ending `SelectTargetList` (bison shift preference).
-    #[greedy(ABSENT)]
     #[pretty(break_before = soft)]
     pub into: Option<Box<SelectIntoClause<'input>>>,
     /// No break hint here: `FromClause` owns the break before `FROM` inside

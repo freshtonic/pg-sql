@@ -82,20 +82,25 @@ pub enum ReferentialAction<'input> {
     Restrict,
 }
 
+/// Parenthesized column list on `ON DELETE SET NULL` / `SET DEFAULT`.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct ReferentialActionColumnList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<crate::tokens::ColId<'input>>,
+);
+
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(SET, NULL, this)]
 pub struct SetNullKw<'input> {
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub cols: Option<recursa::Vec1<crate::tokens::ColId<'input>>>,
+    pub cols: Option<ReferentialActionColumnList<'input>>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(SET, DEFAULT, this)]
 pub struct SetDefaultKw<'input> {
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub cols: Option<recursa::Vec1<crate::tokens::ColId<'input>>>,
+    pub cols: Option<ReferentialActionColumnList<'input>>,
 }
 
 /// `ON DELETE action`.
@@ -167,15 +172,22 @@ pub enum OnAction<'input> {
     OnUpdate(OnUpdateAction<'input>),
 }
 
+/// Parenthesized referenced-column list on a `REFERENCES` clause.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct ReferencedColumnList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<literal::AliasName<'input>>,
+);
+
 /// REFERENCES constraint:
 /// `REFERENCES table [(col, ...)] [MATCH ...] [ON DELETE|UPDATE ...]* [DEFERRABLE | NOT DEFERRABLE] [INITIALLY ...]`
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ReferencesConstraint<'input> {
     #[tok(REFERENCES, this)]
     pub table: crate::ast::shared::names::QualifiedName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub columns: Option<recursa::Vec1<literal::AliasName<'input>>>,
+    pub columns: Option<ReferencedColumnList<'input>>,
     pub match_clause: Option<MatchClause>,
     /// Greedy: a leading ON starts this element instead of ending `ReferencesConstraint` (bison shift preference).
     #[greedy(ON)]
@@ -1076,12 +1088,19 @@ pub struct PartitionKeyItem<'input> {
 pub struct PartitionByClause<'input> {
     #[tok(PARTITION, BY, this)]
     pub strategy: literal::AliasName<'input>,
-    #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
     /// Partition key items — may be plain column names or expressions like
     /// `((a+b)/2)`, optionally followed by a trailing opclass name.
-    pub columns: Vec<PartitionKeyItem<'input>>,
+    pub columns: PartitionKeyList<'input>,
 }
+
+/// Parenthesized, comma-separated partition key list (`part_params`).
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct PartitionKeyList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub Vec<PartitionKeyItem<'input>>,
+);
 
 /// FOR VALUES IN (val, ...) clause — legacy name kept for backward compat
 /// with partition.rs own tests; the general form lives in `ForValuesClause`.

@@ -77,8 +77,8 @@ pub struct PrepareStmt<'input> {
 /// `( expr [, ...] )` argument list on an `EXECUTE` statement
 /// (`execute_param_clause` in `gram.y`).
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(LPAREN, this, RPAREN)]
 pub struct ExecuteParams<'input> {
-    #[tok(LPAREN, this, RPAREN)]
     #[sep(COMMA)]
     pub params: Vec<Expr<'input>>,
 }

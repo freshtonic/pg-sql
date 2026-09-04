@@ -66,8 +66,8 @@ pub struct ViewUsing<'input> {
 
 /// `WITH [CASCADED | LOCAL] CHECK OPTION` trailer on CREATE VIEW.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(WITH, this, CHECK, OPTION)]
 pub struct ViewCheckOption {
-    #[tok(WITH, this, CHECK, OPTION)]
     pub mode: Option<ViewCheckMode>,
 }
 
