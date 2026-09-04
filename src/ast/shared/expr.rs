@@ -1333,13 +1333,32 @@ pub struct NamedTypeCastFunc<'input> {
     pub value: literal::StringLit<'input>,
 }
 
+/// Function-style typed literal for `json`: `json '{"a": 1}'`.
+///
+/// `JSON` is a `COL_NAME` keyword with its own `JsonType` production in
+/// gram.y, so it reaches neither `NamedTypeCastFunc` (whose name is a
+/// `type_function_name`) nor the typmod form. `JsonType` takes no type
+/// modifiers, so none are modelled here — which also keeps this node
+/// disjoint from the `JSON ( ... )` SQL/JSON value constructor at the second
+/// token.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct JsonTypeCastFunc<'input> {
+    #[tok(JSON, this)]
+    pub value: TypeCastValue<'input>,
+}
+
 /// Function-style typed literal. Fixed-keyword type names can carry typmods
 /// directly; identifier-spelled types with typmods use
 /// [`FunctionCallTail::TypedLiteral`], where the complete call/typmod prefix
 /// is shared.
+///
+/// Variant ordering is immaterial: `Fixed` leads with one of its own
+/// keywords, `Json` with `JSON`, and `Named` with a `type_function_name`,
+/// which admits neither.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum TypeCastFunc<'input> {
     Fixed(FixedTypeCastFunc<'input>),
+    Json(JsonTypeCastFunc<'input>),
     Named(NamedTypeCastFunc<'input>),
 }
 

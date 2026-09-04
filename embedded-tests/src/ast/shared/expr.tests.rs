@@ -3220,6 +3220,44 @@ mod tests {
         }
     }
 
+    /// `json '…'` — PostgreSQL's `JsonType` as a function-style typed
+    /// literal. `JSON` is a COL_NAME keyword, so it reaches neither the
+    /// identifier-named nor the typmod typed-literal form, and it must stay
+    /// disjoint from the `JSON ( … )` SQL/JSON value constructor.
+    #[test]
+    fn parse_json_typed_literal() {
+        for src in [
+            r#"json '{"a": 1}'"#,
+            r#"json '"foo"'"#,
+            r#"jsonb 'null'"#,
+        ] {
+            assert!(
+                matches!(parse_expr_classified(src), Expr::CastFunc(_)),
+                "expected a typed literal for {src:?}",
+            );
+        }
+        for src in ["JSON('{}' FORMAT JSON)", "JSON('1'::json WITH UNIQUE KEYS)"] {
+            assert!(
+                matches!(parse_expr_classified(src), Expr::JsonCtor(_)),
+                "expected the JSON value constructor for {src:?}",
+            );
+        }
+        // The typed literal composes as a JSON_OBJECT key and as an element.
+        for src in [
+            r#"JSON_OBJECT(json '[1]': 123)"#,
+            r#"JSON_ARRAY('aaa', json '{"a": [1]}', jsonb '["a",3]')"#,
+            r#"json '{ "a": 1 }' -> 'a'"#,
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
     /// `JSON_OBJECTAGG(k: v)` and `JSON_OBJECT(k: v)` with an identifier key.
     ///
     /// pg-sql models psql's `:name` interpolation in the expression grammar,
