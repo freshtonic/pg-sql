@@ -18,8 +18,8 @@ pub enum SelectStar {
 /// An expression target with its optional output alias.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SelectExprItem<'input> {
-    /// Greedy: the expression keeps extending on every shared extender instead of yielding to what may follow `SelectExprItem`.
-    #[greedy(all)]
+    /// Greedy: the expression keeps extending on these shared extenders instead of yielding to what may follow `SelectExprItem`.
+    #[greedy(IS, LIKE, ILIKE, NOTNULL, ISNULL, SIMILAR, BETWEEN, OPERATOR, AT, OVERLAPS)]
     pub expr: Expr<'input>,
     /// Greedy: any kind that can start this element continues it instead of ending `SelectExprItem` (bison shift preference).
     #[greedy(all)]

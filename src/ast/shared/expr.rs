@@ -1117,8 +1117,6 @@ pub struct CastType<'input> {
     /// Greedy: a leading LBRACKET starts this element instead of ending `CastType` (bison shift preference).
     #[greedy(LBRACKET)]
     pub array_suffixes: Vec<ArraySuffix<'input>>,
-    /// Greedy: a leading ARRAY starts this element instead of ending `CastType` (bison shift preference).
-    #[greedy(ARRAY)]
     /// PG gram.y also accepts `SimpleTypename ARRAY` and
     /// `SimpleTypename ARRAY '[' Iconst ']'` — the keyword form for
     /// declaring an array type (e.g. `integer ARRAY[4]`, `text ARRAY`).
@@ -2416,8 +2414,8 @@ pub struct IsJsonTail {
     #[tok(this, JSON)]
     #[presence(NOT)]
     pub not: bool,
-    /// Greedy: a leading ARRAY, OBJECT, SCALAR, VALUE starts this element instead of ending `IsJsonTail` (bison shift preference).
-    #[greedy(ARRAY, OBJECT, SCALAR, VALUE)]
+    /// Greedy: a leading OBJECT, SCALAR, VALUE starts this element instead of ending `IsJsonTail` (bison shift preference).
+    #[greedy(OBJECT, SCALAR, VALUE)]
     pub type_kind: Option<JsonTypeKind>,
     pub unique: Option<JsonUniqueKeys>,
 }
@@ -2452,8 +2450,8 @@ pub enum JsonFuncExpr<'input> {
 /// PostgreSQL's precedence resolution; `ESCAPE` starts the tail instead of
 /// ending the pattern operand.
 #[greedy(
-    AND, AT, BETWEEN, COLLATE, ESCAPE, ILIKE, IN, IS, ISNULL, LIKE, NOT, NOTNULL, OPERATOR, OR,
-    OVERLAPS, SIMILAR
+    AND, AT, BETWEEN, ESCAPE, ILIKE, IN, IS, ISNULL, LIKE, NOT, NOTNULL, OPERATOR, OVERLAPS,
+    SIMILAR
 )]
 #[pratt]
 pub enum Expr<'input> {

@@ -813,7 +813,8 @@ recursa::tokens! {
         WindowRefName = ColId - { PARTITION, ORDER, ROWS, RANGE, GROUPS },
         TableFunctionName = type_function_name - { COLLATION },
         UpdateAliasName = ColId - { SET },
-        SelectBareAliasName = bare_label - { IS },
+        SelectBareAliasName = bare_label
+            - { AND, OR, NOT, IS, IN, LIKE, ILIKE, COLLATE, SIMILAR, BETWEEN, OPERATOR, AT },
         PsqlVariableName = AllWordKinds - { NULL, TRUE, FALSE },
         UnquotedIdent = NonReservedWord,
         BareAliasName = AllWordKinds,

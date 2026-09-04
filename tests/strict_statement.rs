@@ -162,3 +162,83 @@ fn strict_parse_rejects_a_trailing_comma_from_list() {
         "PostgreSQL requires a from-list item after the comma"
     );
 }
+
+/// A Pratt extender that PostgreSQL's shift preference makes unreachable as a
+/// bare output alias must extend the target expression, not end it.
+///
+/// `target_el: a_expr BareColLabel` lists AND, OR, NOT, IN, COLLATE and the
+/// rest of the extender keywords in `bare_label_keyword`, but bison always
+/// shifts them into `a_expr`, so no PostgreSQL statement can reach them as a
+/// bare alias. `SelectBareAliasName` therefore excludes them, which removes
+/// the caller-FOLLOW overlap that made the Pratt loop report `RCA4102`.
+#[test]
+fn select_targets_extend_on_every_operator_keyword() {
+    for source in [
+        "SELECT a OR b",
+        "SELECT a AND b",
+        "SELECT a COLLATE \"C\"",
+        "SELECT a NOT LIKE 'b'",
+        "SELECT a IN (1, 2)",
+        "SELECT 'abc' LIKE 'a%'",
+        "SELECT 'abc' ILIKE 'A%'",
+        "SELECT 'abc' SIMILAR TO 'a%'",
+        "SELECT 1 BETWEEN 0 AND 2",
+        "SELECT t AT TIME ZONE 'GMT'",
+        "SELECT a ISNULL",
+        "SELECT a NOTNULL",
+        "SELECT bool 't' or bool 'f' AS true",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        Statement::parse(&mut input)
+            .unwrap_or_else(|error| panic!("strict statement {source:?}: {error}"));
+        assert!(input.is_eof(), "strict parse left input for {source:?}");
+    }
+}
+
+/// A bare output alias still accepts every keyword PostgreSQL can reach there.
+#[test]
+fn select_targets_keep_every_reachable_bare_alias() {
+    for source in [
+        "SELECT a alias",
+        "SELECT a value",
+        "SELECT a true",
+        "SELECT a AS between",
+        "SELECT a AS collate",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        Statement::parse(&mut input)
+            .unwrap_or_else(|error| panic!("strict statement {source:?}: {error}"));
+        assert!(input.is_eof(), "strict parse left input for {source:?}");
+    }
+}
+
+/// `index_elem` and `part_elem` take a column, a windowless function call, or a
+/// parenthesized expression — never a bare `a_expr` — so `COLLATE` belongs to
+/// the element rather than to an expression that would swallow it.
+#[test]
+fn index_shaped_elements_take_a_restricted_target() {
+    for source in [
+        "CREATE TABLE t (a text) PARTITION BY RANGE (a COLLATE \"POSIX\")",
+        "INSERT INTO t VALUES (0) ON CONFLICT (fruit COLLATE \"C\" text_pattern_ops) DO NOTHING",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        Statement::parse(&mut input)
+            .unwrap_or_else(|error| panic!("strict statement {source:?}: {error}"));
+        assert!(input.is_eof(), "strict parse left input for {source:?}");
+    }
+}

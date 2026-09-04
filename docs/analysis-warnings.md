@@ -27,14 +27,14 @@ analysis warning and the gate is the attribute's own exactness check.
 
 ## Verdict key
 
-- **`RCA0300` accepted (130 sites)** — the optional element's viability cannot
+- **`RCA0300` accepted (128 sites)** — the optional element's viability cannot
   be proven by bounded suffix within `max_lookahead = 5`: the element language
   is open (expression-shaped or depth-cut), the element can fully end on the
   shared token (inherent ambiguity), the overlap is static and handled by the
   differential trie, or the site is a repetition rather than an optional. The
   generated parser keeps the greedy commitment, matching PostgreSQL bison's
   shift preference.
-- **`RCA0301` accepted (14 sites)** — a Pratt extender shares a kind with
+- **`RCA0301` accepted (12 sites)** — a Pratt extender shares a kind with
   caller FOLLOW. Strict Pratt deliberately preserves this ambiguity rather
   than resolving it by convention (the recursa#97 principle); the operand keeps
   extending, which is PostgreSQL's precedence resolution.
@@ -58,7 +58,7 @@ the note costs the drawing no space. The enum-level acceptance on
 `ast::shared::expr::Expr` covers every left-denotation operand and the
 `ESCAPE` tails of the LIKE family in one declaration.
 
-Counts: 143 attributes (16 `all`, 1 enum-level, the rest
+Counts: 139 attributes (15 `all`, 1 enum-level, the rest
 exact kind lists).
 
 ## Accepted sites
@@ -107,7 +107,6 @@ exact kind lists).
 | RCA0300 | `ast::ddl::table::GeneratedIdentityConstraint` `seq_options` | LPAREN | A leading LPAREN starts this element instead of ending `GeneratedIdentityConstraint` (bison shift preference). |
 | RCA0300 | `ast::ddl::table::LikeClause` `options` | EXCLUDING, INCLUDING | A leading EXCLUDING, INCLUDING starts this element instead of ending `LikeClause` (bison shift preference). |
 | RCA0300 | `ast::ddl::table::PartitionColumnOptionDef` `constraints` | 11 kinds (CHECK, COMPRESSION, CONSTRAINT, …) | A leading token from any of 11 kinds starts this element instead of ending `PartitionColumnOptionDef` (bison shift preference). |
-| RCA0301 | `ast::ddl::table::PartitionKeyItem` `expr` | `all` | The expression keeps extending on every shared extender instead of yielding to what may follow `PartitionKeyItem`. |
 | RCA0300 | `ast::ddl::table::PrimaryKeyConstraint` `attrs` | NOT | A leading NOT starts this element instead of ending `PrimaryKeyConstraint` (bison shift preference). |
 | RCA0300 | `ast::ddl::table::ReferencesConstraint` `actions` | ON | A leading ON starts this element instead of ending `ReferencesConstraint` (bison shift preference). |
 | RCA0300 | `ast::ddl::table::ReferencesConstraint` `deferrable` | NOT | A leading NOT starts this element instead of ending `ReferencesConstraint` (bison shift preference). |
@@ -120,7 +119,6 @@ exact kind lists).
 | RCA0300 | `ast::ddl::view::DropViewStmt` `names` | CASCADE, RESTRICT | A leading CASCADE, RESTRICT starts this element instead of ending `DropViewStmt` (bison shift preference). |
 | RCA0300 | `ast::dml::delete::DeleteStmt` `alias` | ABSENT, NULL | A leading ABSENT, NULL starts this element instead of ending `DeleteStmt` (bison shift preference). |
 | RCA0300 | `ast::dml::delete::DeleteStmt` `returning` | RETURNING | A leading RETURNING starts this element instead of ending `DeleteStmt` (bison shift preference). |
-| RCA0301 | `ast::dml::insert::ConflictTargetItem` `expr` | AT, BETWEEN, COLLATE, OPERATOR | The expression keeps extending on AT, BETWEEN, COLLATE, OPERATOR instead of yielding to what may follow `ConflictTargetItem`. |
 | RCA0300 | `ast::dml::insert::InsertColumnItem` `indirection` | DOT, LBRACKET | A leading DOT, LBRACKET starts this element instead of ending `InsertColumnItem` (bison shift preference). |
 | RCA0300 | `ast::dml::insert::InsertStmt` `on_conflict` | ON | A leading ON starts this element instead of ending `InsertStmt` (bison shift preference). |
 | RCA0300 | `ast::dml::insert::InsertStmt` `returning` | RETURNING | A leading RETURNING starts this element instead of ending `InsertStmt` (bison shift preference). |
@@ -145,7 +143,7 @@ exact kind lists).
 | RCA0300 | `ast::dml::select::ParenTableRef` `alias` | ABSENT | A leading ABSENT starts this element instead of ending `ParenTableRef` (bison shift preference). |
 | RCA0300 | `ast::dml::select::RowsFromRef` `alias` | 9 kinds (ABSENT, CROSS, FULL, …) | A leading token from any of 9 kinds starts this element instead of ending `RowsFromRef` (bison shift preference). |
 | RCA0300 | `ast::dml::select::SelectExprItem` `alias` | `all` | Any kind that can start this element continues it instead of ending `SelectExprItem` (bison shift preference). |
-| RCA0301 | `ast::dml::select::SelectExprItem` `expr` | `all` | The expression keeps extending on every shared extender instead of yielding to what may follow `SelectExprItem`. |
+| RCA0301 | `ast::dml::select::SelectExprItem` `expr` | IS, LIKE, ILIKE, NOTNULL, ISNULL, SIMILAR, BETWEEN, OPERATOR, AT, OVERLAPS | The expression keeps extending on these shared extenders instead of yielding to what may follow `SelectExprItem`. Only the non-`bare_label` extenders remain: `SelectBareAliasName` now excludes every extender keyword PostgreSQL's shift preference makes unreachable as a bare alias. |
 | RCA0300 | `ast::dml::select::SelectStmt` `limit_offset` | FETCH, LIMIT, OFFSET | A leading FETCH, LIMIT, OFFSET starts this element instead of ending `SelectStmt` (bison shift preference). |
 | RCA0300 | `ast::dml::select::SelectStmt` `order_by` | ORDER | A leading ORDER starts this element instead of ending `SelectStmt` (bison shift preference). |
 | RCA0300 | `ast::dml::select::SelectTargetList` `into` | ABSENT | A leading ABSENT starts this element instead of ending `SelectTargetList` (bison shift preference). |
@@ -167,10 +165,9 @@ exact kind lists).
 | RCA0300 | `ast::dml::values::TableStmt` `order_by` | ORDER | A leading ORDER starts this element instead of ending `TableStmt` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::CaseSearched` `rest_arms` | WHEN | A leading WHEN starts this element instead of ending `CaseSearched` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::CaseSimple` `rest_arms` | WHEN | A leading WHEN starts this element instead of ending `CaseSimple` (bison shift preference). |
-| RCA0300 | `ast::shared::expr::CastType` `array_kw_suffix` | ARRAY | A leading ARRAY starts this element instead of ending `CastType` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::CastType` `array_suffixes` | LBRACKET | A leading LBRACKET starts this element instead of ending `CastType` (bison shift preference). |
 | RCA0301 | `ast::shared::expr::EscapeClause` `char` | `all` | The expression keeps extending on every shared extender instead of yielding to what may follow `EscapeClause`. |
-| RCA0300/RCA0301 | `ast::shared::expr::Expr` (enum) | 16 kinds (AND, AT, BETWEEN, …) | This enum-level acceptance covers every left-denotation operand inside `Expr` (the right operands of infix and postfix variants and the operands of prefix forms) plus the optional `ESCAPE` tails of the LIKE family. An operand keeps extending on a shared extender instead of yielding to whatever may follow the enclosing expression, which is PostgreSQL's precedence resolution; `ESCAPE` starts the tail instead of ending the pattern operand. |
+| RCA0300/RCA0301 | `ast::shared::expr::Expr` (enum) | 14 kinds (AND, AT, BETWEEN, …) | This enum-level acceptance covers every left-denotation operand inside `Expr` (the right operands of infix and postfix variants and the operands of prefix forms) plus the optional `ESCAPE` tails of the LIKE family. An operand keeps extending on a shared extender instead of yielding to whatever may follow the enclosing expression, which is PostgreSQL's precedence resolution; `ESCAPE` starts the tail instead of ending the pattern operand. |
 | RCA0300 | `ast::shared::expr::FunctionPlainTail` `filter` | FILTER | A leading FILTER starts this element instead of ending `FunctionPlainTail` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::FunctionPlainTail` `window` | OVER | A leading OVER starts this element instead of ending `FunctionPlainTail` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::FunctionWithinGroupTail` `filter` | FILTER | A leading FILTER starts this element instead of ending `FunctionWithinGroupTail` (bison shift preference). |
@@ -178,7 +175,7 @@ exact kind lists).
 | RCA0300 | `ast::shared::expr::GeneralCastType` `varying` | VARYING | A leading VARYING starts this element instead of ending `GeneralCastType` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::IntervalCastType` `modifier` | DAY, HOUR, MINUTE, MONTH, SECOND, YEAR | A leading token from any of 6 kinds starts this element instead of ending `IntervalCastType` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::IntervalLit` `qualifier` | DAY, HOUR, MINUTE, MONTH, SECOND, YEAR | A leading token from any of 6 kinds starts this element instead of ending `IntervalLit` (bison shift preference). |
-| RCA0300 | `ast::shared::expr::IsJsonTail` `type_kind` | ARRAY, OBJECT, SCALAR, VALUE | A leading ARRAY, OBJECT, SCALAR, VALUE starts this element instead of ending `IsJsonTail` (bison shift preference). |
+| RCA0300 | `ast::shared::expr::IsJsonTail` `type_kind` | OBJECT, SCALAR, VALUE | A leading OBJECT, SCALAR, VALUE starts this element instead of ending `IsJsonTail` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::JsonArrayAgg` `filter` | FILTER | A leading FILTER starts this element instead of ending `JsonArrayAgg` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::JsonArrayAgg` `window` | OVER | A leading OVER starts this element instead of ending `JsonArrayAgg` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::JsonObjectAgg` `filter` | FILTER | A leading FILTER starts this element instead of ending `JsonObjectAgg` (bison shift preference). |
