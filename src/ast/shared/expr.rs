@@ -1271,7 +1271,7 @@ pub struct NotInSuffix<'input> {
 
 /// Payload for function-style type cast: either a string literal (common
 /// case `bool 'value'`) or a psql client variable substitution
-/// (`bigint :'txid_current'`).
+/// (`numeric :'txid_current'`).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum TypeCastValue<'input> {
     String(literal::StringLit<'input>),
@@ -1314,14 +1314,23 @@ pub struct FixedTypeCastFunc<'input> {
 }
 
 /// Function-style typed literal for an identifier-spelled type without
-/// typmods: `bool 'value'`, `text 'hello'`, `bigint :'var'`, or
-/// `double precision 'value'`.
+/// typmods: `bool 'value'`, `text 'hello'`, or `double precision 'value'`.
+///
+/// The payload is PostgreSQL's `Sconst` and nothing else. pg-sql admits
+/// psql's `:'var'` interpolation as a stand-in for a string constant
+/// elsewhere, but not after a bare identifier: `ident : …` is also the
+/// SQL/JSON `key : value` entry of `JSON_OBJECT` and `JSON_OBJECTAGG`, and
+/// the atom dispatcher commits on the identifier and colon alone. Since
+/// PostgreSQL's own `AexprConst: func_name Sconst` has no colon at all, the
+/// pg-sql-only spelling is the one that yields. The keyword-named form
+/// (`numeric :'var'`) and the typmod form (`name(10) :'var'`) keep it —
+/// neither can be mistaken for an unquoted column name.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct NamedTypeCastFunc<'input> {
     pub type_name: crate::tokens::type_function_name<'input>,
     #[presence(PRECISION)]
     pub precision: bool,
-    pub value: TypeCastValue<'input>,
+    pub value: literal::StringLit<'input>,
 }
 
 /// Function-style typed literal. Fixed-keyword type names can carry typmods

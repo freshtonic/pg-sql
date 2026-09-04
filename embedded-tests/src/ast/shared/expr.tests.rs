@@ -3,7 +3,7 @@ mod tests {
     use crate::ast::shared::expr::{
         CastType, CastTypeHead, DirectParenthesizedSet, DirectSubquery, Expr, FunctionCallBody,
         FunctionCallTail, ParenContent, ParenthesizedDotStar, ParenthesizedExpr,
-        ParenthesizedIndirection, TypeName,
+        JsonObject, ParenthesizedIndirection, TypeName,
     };
 
     /// Parse `src` as an `Expr` through the logos lex pass.
@@ -3218,6 +3218,47 @@ mod tests {
                 "non-exact round-trip for {src:?}: {formatted:?}",
             );
         }
+    }
+
+    /// `JSON_OBJECTAGG(k: v)` and `JSON_OBJECT(k: v)` with an identifier key.
+    ///
+    /// pg-sql models psql's `:name` interpolation in the expression grammar,
+    /// where PostgreSQL has no such production. An identifier followed by a
+    /// colon therefore also reads as the typed literal `type_function_name
+    /// :'var'`, and that reading swallowed the SQL/JSON key/value separator.
+    #[test]
+    fn parse_json_object_entry_with_identifier_key() {
+        for src in [
+            "JSON_OBJECTAGG(k: v)",
+            "JSON_OBJECTAGG(i: i RETURNING jsonb)",
+            "JSON_OBJECTAGG(k: v ABSENT ON NULL)",
+            "JSON_OBJECTAGG(k: v WITH UNIQUE KEYS)",
+            "JSON_OBJECTAGG(i: ('111' || i)::bytea FORMAT JSON WITH UNIQUE RETURNING text)",
+        ] {
+            assert!(
+                matches!(parse_expr_classified(src), Expr::JsonObjectAgg(_)),
+                "expected JsonObjectAgg for {src:?}",
+            );
+        }
+        // The constructor form must read `k: v` as an entry, not as one
+        // legacy `json_object(text[])` argument.
+        let Expr::JsonObject(object) = parse_expr_classified("JSON_OBJECT(k: v)") else {
+            panic!("expected the SQL/JSON constructor");
+        };
+        let JsonObject::Entries(args) = *object else {
+            panic!("expected the entry form");
+        };
+        assert!(args.entries.first().value.is_some(), "expected a key/value entry");
+        // psql's typed-literal interpolation keeps its keyword-named and
+        // typmod spellings, which no column name can be mistaken for.
+        assert!(matches!(
+            parse_expr_classified("numeric :'txid'"),
+            Expr::CastFunc(_)
+        ));
+        assert!(matches!(
+            parse_expr_classified("bigint 'txid'"),
+            Expr::CastFunc(_)
+        ));
     }
 
     /// `GROUPING(a, b)` — gram.y's `func_expr_common_subexpr:

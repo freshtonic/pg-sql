@@ -400,7 +400,12 @@ fn psql_interpolation_is_rejected() {
         "SELECT :\"var\";",
         "SELECT * FROM t WHERE a = :filter;",
         "COPY t FROM :'filename';",
-        "SELECT bigint :'txid';",
+        // The typed-literal payload keeps psql interpolation in its
+        // keyword-named spelling. The identifier-named form (`bigint :'x'`)
+        // is not a pg-sql production: `ident : …` is the SQL/JSON
+        // `key : value` entry, and PostgreSQL's own `AexprConst` has no
+        // colon there.
+        "SELECT numeric :'txid';",
     ] {
         match document::parse_sql(source) {
             Ok(_) => panic!("{source:?} is psql interpolation and must be rejected"),

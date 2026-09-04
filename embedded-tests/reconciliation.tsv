@@ -302,6 +302,7 @@ tests::support::tests::skips_psql_interpolation	superseded	-	-	frozen-statement-
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_field_selection_after_subscript	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_function_calls_with_required_delimiters	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_grouping_function	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_json_object_entry_with_identifier_key	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_json_object_ordinary_function_form	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_json_timestamp_cast_before_unique_keys	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_parenthesized_chained_fields_and_star	issue-9-generated-expression
