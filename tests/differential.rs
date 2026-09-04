@@ -1,5 +1,3 @@
-#![cfg(target_os = "linux")]
-
 //! Differential parser test: pg-sql vs PostgreSQL 17.9's raw_parser.
 //! See docs/plans/2026-05-21-differential-parser-testing-design.md.
 
