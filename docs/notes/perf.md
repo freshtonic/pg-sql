@@ -770,3 +770,81 @@ lex_identity` 2/0/0. `--features postgres-oracle --test differential` reports
 statement mismatches, positions stripped, sorted) is byte-identical to the
 pre-change capture from main — those 74 are a pre-existing local condition,
 not this change.
+
+## Benchmark: 2026-09-04 `eb16f47` — parity gate met (geomean 0.687x sqlparser)
+
+Full statement-level head-to-head (`cargo bench -p pg-sql --features
+postgres-oracle --bench parse`) on local `main`: pg-sql `eb16f47`, recursa
+`52eaf18` (the pin in `.recursa-revision`). This is the first run that carries
+**both** of today's last two changes together — the decoded, kind-indexed
+frozen dispatch tables (recursa `52eaf18`, pinned by pg-sql `750bb7f`) and the
+bare-alias Pratt grammar fix (pg-sql `0c3005f`). The previous report,
+`34685f7` at 06:26:50Z, still pinned recursa `d23e105`, so it measured the
+tree **before** the dispatch change.
+
+| Metric | 2026-09-01 baseline | `34685f7` (06:26:50Z) | `eb16f47` (09:12:51Z) |
+|---|--:|--:|--:|
+| pg-sql total median time | 50,881.7 ms | 640.7 ms | **150.6 ms** |
+| sqlparser 0.52 total | 216.1 ms | 217.5 ms | 218.8 ms |
+| PostgreSQL 17.9 total | 40.8 ms | 40.0 ms | 40.8 ms |
+| total ratio pg-sql / sqlparser | 235.5x | 2.95x | **0.69x** |
+| total ratio pg-sql / postgres | 1,247x | 16.0x | **3.69x** |
+| geomean pg-sql / sqlparser | not recorded | 2.748x | **0.687x** |
+| geomean pg-sql / postgres | not recorded | 13.50x | **3.41x** |
+| groups above the 1.0x gate | — | 235 of 236 | **0 of 236** |
+| statements timed by all three | 33,168 | 33,168 | 33,382 |
+| rejections: pg-sql | 1,026 | 1,026 | **805** |
+| rejections: sqlparser | 9,613 | 9,613 | 9,613 |
+| rejections: postgres | 484 | 484 | 484 |
+
+**The parity gate of ADR 0006 is met.** The geomean over the 236 benchmarks
+that all three engines time is **0.687x** sqlparser, and **every** benchmark
+group is at or below 1.0x — the closest are `stress/nested_subquery_5` 0.993x,
+`stress/nested_subquery_10` 0.992x and `corpus/create_misc` 0.987x. The
+reference ceiling remains recursa-old's 0.525x, so there is still headroom;
+the gate itself (geomean <= 1.0x) no longer binds. Split by fixture family the
+geomean is 0.696x over the 221 `corpus/` groups and 0.568x over the 15
+`stress/` groups. Against PostgreSQL's raw parser pg-sql is 3.41x geomean,
+down from 13.50x.
+
+Canonical and stress workloads, `34685f7` -> `eb16f47` (pg-sql median per
+statement, and the ratio to sqlparser):
+
+| Workload | before | after | ratio before | ratio after |
+| --- | --: | --: | --: | --: |
+| `stress/bool_chain_1000` | 3.907 ms | 0.425 ms | 3.79x | **0.41x** |
+| `stress/select_list_10000` | 34.621 ms | 4.115 ms | 4.72x | **0.58x** |
+| `stress/in_list_10000` | 16.387 ms | 2.272 ms | 3.18x | **0.45x** |
+| `stress/insert_values_10000` | 86.039 ms | 12.897 ms | 3.29x | **0.47x** |
+| `stress/nested_subquery_15` | 0.068 ms | 0.030 ms | 2.17x | **0.97x** |
+
+These agree with the flame-harness numbers recorded for the dispatch change
+(bool_chain 0.406 ms, select_list_10000 3.705 ms per statement).
+
+**Rejections.** pg-sql now rejects **805** of the 43,489 frozen statements,
+down from 1,026 — the bare-alias Pratt fix (`0c3005f`) recovered 221
+statements, and the set timed by all three engines grew 33,168 -> 33,382. So
+the two total-time columns are not membership-identical; the geomean and the
+per-group ratios are the like-for-like comparison. PostgreSQL rejects 484 and
+sqlparser 9,613, both unchanged. The gap to postgres is still 321 statements.
+One workload, `corpus/oidjoins`, has no statement accepted by all three
+engines — its single frozen statement is rejected by at least one of them —
+and is reported separately, as it was in the previous two runs.
+
+**Wall time.** The bench ran in **206 s** (3 min 26 s), comfortably inside the
+ten-minute target of issue #31.
+
+**Load conditions.** Other agents were compiling in sibling worktrees
+throughout, and the machine never went quiet within a 20-minute bounded wait:
+a `cargo test -p pg-sql --test fmt` in `../pg-sql-wt-fmt` held rustc at ~200%
+for most of it, and macOS `XprotectService`, `mediaanalysisd` and
+`spotlightknowledged` were each taking tens of percent. No rustc or cargo
+process was running at the moment the bench started, but the one-minute load
+average was 8.03 before the run and 8.48 after (CPU idle 70% just after). The
+bench is single-threaded, so the direction of any contention error is toward
+**over**-stating pg-sql's time; the parity verdict is not at risk from it, but
+the absolute milliseconds should be treated as an upper bound.
+
+Report: `docs/benchmarks/2026-09-04T09-12-51Z-eb16f47/` (`report.md`,
+`data.json`, `time.svg`, `throughput.svg`). Run directories stay untracked
+(`.gitignore` line 5), so only this journal entry is committed.
