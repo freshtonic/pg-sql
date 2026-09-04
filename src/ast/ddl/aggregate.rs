@@ -49,13 +49,48 @@ pub struct CreateAggregateOrderByInner<'input> {
     pub args: recursa::Vec1<crate::ast::ddl::function::FuncParam<'input>>,
 }
 
+/// `= def_arg` — the value half of an old-style aggregate definition entry.
+///
+/// `aggr_arg` is gram.y's `func_arg`, which — unlike `func_arg_with_default`
+/// — carries no default, so an `=` in this group is always an
+/// `old_aggr_elem` value and never a parameter default. That makes
+/// `def_arg`'s wider value language available here: an array type
+/// (`STYPE = int[]`), a bare operator, a string, a signed number.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct CreateAggregateDefValue<'input> {
+    #[tok(EQ, this)]
+    pub value: crate::ast::ddl::role::DefArg<'input>,
+}
+
+/// One entry of `CREATE AGGREGATE`'s first parenthesized group — an
+/// `aggr_arg`, or an `old_aggr_elem` when it carries a `= value` tail.
+///
+/// gram.y keeps the two apart in separate productions (`DefineStmt: CREATE
+/// AGGREGATE func_name aggr_args definition` versus `... func_name
+/// old_aggr_definition`), but on the surface both are one comma-separated
+/// group directly after the aggregate name, and they are told apart only by
+/// the `=` that follows the first name. Parse the shared `[mode] [name]
+/// type` prefix once and let the optional tail decide, rather than asking
+/// bounded lookahead to choose between two arbitrarily long alternatives.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct CreateAggregateArg<'input> {
+    pub mode: Option<crate::ast::ddl::function::ArgMode>,
+    pub first: crate::ast::ddl::function::FuncArgType<'input>,
+    /// `name mode type` — gram.y's `func_arg` also admits the mode after
+    /// the parameter name.
+    pub name_mode: Option<crate::ast::ddl::function::ArgMode>,
+    pub named_type: Option<crate::ast::ddl::function::FuncArgType<'input>>,
+    pub value: Option<CreateAggregateDefValue<'input>>,
+}
+
 /// `(aggr_args_list [ORDER BY aggr_args_list])` — regular arguments with an
-/// optional ordered-set tail.
+/// optional ordered-set tail, or the old-style `(name = value, ...)`
+/// definition list, which occupies the same position.
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct CreateAggregateArgLists<'input> {
     #[sep(COMMA)]
-    pub direct: recursa::Vec1<crate::ast::ddl::function::FuncParam<'input>>,
+    pub direct: recursa::Vec1<CreateAggregateArg<'input>>,
     pub ordered: Option<CreateAggregateOrderedTail<'input>>,
 }
 
