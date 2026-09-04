@@ -929,21 +929,18 @@ pub struct JoinOn<'input> {
     pub condition: Box<Expr<'input>>,
 }
 
-/// `AS alias` form of a JOIN USING alias.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct JoinUsingAliasWithAs<'input> {
-    #[tok(AS, this)]
-    pub name: literal::AliasName<'input>,
-}
-
-/// `[AS] alias` suffix on a JOIN ... USING column list.
+/// `AS alias` suffix on a JOIN ... USING column list.
 ///
-/// Variant ordering: `WithAs` (`AS name`) is longer than `Bare`
-/// (`ident`); list it first.
+/// gram.y `opt_alias_clause_for_join_using` is `AS ColId | /*EMPTY*/`: there
+/// is no bare-identifier spelling here, unlike every other alias position.
+/// Keeping `AS` mandatory is what lets a following `JOIN` (or `LEFT`,
+/// `NATURAL`, ...) continue the join chain instead of being taken as the
+/// alias name — those words are `type_func_name` keywords, which a bare
+/// `Ident` would admit.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum JoinUsingAlias<'input> {
-    WithAs(JoinUsingAliasWithAs<'input>),
-    Bare(literal::Ident<'input>),
+#[tok(AS, this)]
+pub struct JoinUsingAlias<'input> {
+    pub name: literal::AliasName<'input>,
 }
 
 /// Parenthesized comma-separated column list in a JOIN USING clause.
@@ -955,13 +952,11 @@ pub struct JoinUsingColumns<'input>(
     pub Vec<literal::AliasName<'input>>,
 );
 
-/// USING clause for JOIN: `USING (col, ...) [[AS] alias]`
+/// USING clause for JOIN: `USING (col, ...) [AS alias]`
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(USING, this)]
 pub struct JoinUsing<'input> {
     pub columns: JoinUsingColumns<'input>,
-    /// Greedy: a leading token from any of 8 kinds starts this element instead of ending `JoinUsing` (bison shift preference).
-    #[greedy(ABSENT, CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT)]
     pub alias: Option<JoinUsingAlias<'input>>,
 }
 
@@ -1409,8 +1404,24 @@ pub struct SelectDistinctOn<'input> {
 #[pretty(group = consistent, indent)]
 #[tok(SELECT, this)]
 pub struct SelectStmt<'input> {
+    /// gram.y `simple_select: SELECT opt_all_clause opt_target_list ...`.
+    /// `opt_target_list` is nullable, so a bare `SELECT` with no targets,
+    /// no `INTO` and no `FROM` is a complete `simple_select` (`select;`).
+    ///
+    /// Greedy: a target list begins with an identifier, whose lexical shape
+    /// covers every SQL word, so any word-shaped kind that may also follow
+    /// `SelectStmt` starts this element rather than ending the statement.
+    /// The generated multi-token decision still resolves every kind a later
+    /// field of this statement can start (`WHERE`, `GROUP`, `ORDER`, `LIMIT`,
+    /// `OFFSET`, `FETCH`, `FOR`, and `INTO`/`FROM` inside the head itself),
+    /// so the absent head is reached for all of those; the commitment only
+    /// stands for kinds that reach this site purely through a caller's
+    /// FOLLOW. `UNION`/`EXCEPT`/`INTERSECT` are exactly that, which is why a
+    /// targetless `SELECT` is not yet usable as the left operand of a set
+    /// operation (issue #55).
+    #[greedy(all)]
     #[pretty(break_before = soft)]
-    pub head: SelectHead<'input>,
+    pub head: Option<SelectHead<'input>>,
     #[pretty(break_before = soft)]
     pub where_clause: Option<Box<WhereClause<'input>>>,
     #[pretty(break_before = soft)]
@@ -1462,13 +1473,29 @@ pub struct SelectDistinctTargets<'input> {
 
 /// SELECT targets together with their optional INTO/FROM clauses.
 ///
-/// `FROM` is a reserved exact prefix for the zero-target PostgreSQL form.
-/// Keeping that alternative beside the required nonempty target list avoids a
-/// nullable expression-list decision on the same token.
+/// `INTO` and `FROM` are reserved exact prefixes for the zero-target
+/// PostgreSQL forms. Keeping those alternatives beside the required nonempty
+/// target list avoids a nullable expression-list decision on the same token:
+/// a target item can never start with either keyword, so the three
+/// alternatives stay disjoint on their first token.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum SelectTargets<'input> {
+    Into(SelectIntoTargets<'input>),
     Empty(FromClause<'input>),
     Items(SelectTargetList<'input>),
+}
+
+/// A zero-target `SELECT INTO tbl [FROM ...]`.
+///
+/// gram.y reaches this through the nullable `opt_target_list` followed by a
+/// present `into_clause`; `create_am.sql` exercises the spelling.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct SelectIntoTargets<'input> {
+    pub into: Box<SelectIntoClause<'input>>,
+    /// No break hint here: `FromClause` owns the break before `FROM` inside
+    /// its own group, so the boundary is measured with the clause it belongs
+    /// to.
+    pub from_clause: Option<Box<FromClause<'input>>>,
 }
 
 /// A nonempty SELECT target list and the clauses that immediately follow it.
@@ -1492,19 +1519,20 @@ pub struct SelectTargetList<'input> {
 impl<'input> SelectStmt<'input> {
     /// Return an owned semantic projection of the optional DISTINCT qualifier.
     pub fn distinct(&self) -> Option<SelectDistinct<'input>> {
-        match &self.head {
+        match self.head.as_ref()? {
             SelectHead::DistinctOn(head) => Some(SelectDistinct::On(head.qualifier.clone())),
             SelectHead::Distinct(_) => Some(SelectDistinct::All),
             SelectHead::Plain(_) => None,
         }
     }
 
-    /// Return the targets from either SELECT-head form.
-    pub fn targets(&self) -> &SelectTargets<'input> {
-        match &self.head {
-            SelectHead::DistinctOn(head) => &head.targets,
-            SelectHead::Distinct(head) => &head.targets,
-            SelectHead::Plain(targets) => targets,
+    /// Return the targets from either SELECT-head form, or `None` for the
+    /// targetless `SELECT` that has no `INTO` and no `FROM` either.
+    pub fn targets(&self) -> Option<&SelectTargets<'input>> {
+        match self.head.as_ref()? {
+            SelectHead::DistinctOn(head) => Some(&head.targets),
+            SelectHead::Distinct(head) => Some(&head.targets),
+            SelectHead::Plain(targets) => Some(targets),
         }
     }
 
@@ -1512,26 +1540,36 @@ impl<'input> SelectStmt<'input> {
     /// e.g. the regression-test form `SELECT FROM tbl`).
     pub fn item_count(&self) -> usize {
         match self.targets() {
-            SelectTargets::Empty(_) => 0,
-            SelectTargets::Items(targets) => targets.items.len(),
+            Some(SelectTargets::Items(targets)) => targets.items.len(),
+            Some(SelectTargets::Into(_)) | Some(SelectTargets::Empty(_)) | None => 0,
         }
     }
 
     /// Iterate over the SELECT items.
     pub fn items(&self) -> impl Iterator<Item = &SelectItem<'input>> {
         match self.targets() {
-            SelectTargets::Empty(_) => None,
-            SelectTargets::Items(targets) => Some(targets.items.as_slice()),
+            Some(SelectTargets::Items(targets)) => Some(targets.items.as_slice()),
+            Some(SelectTargets::Into(_)) | Some(SelectTargets::Empty(_)) | None => None,
         }
         .into_iter()
         .flatten()
     }
 
-    /// Return the FROM clause from either target-list form.
+    /// Return the FROM clause from any target-list form.
     pub fn from_clause(&self) -> Option<&FromClause<'input>> {
-        match self.targets() {
+        match self.targets()? {
+            SelectTargets::Into(targets) => targets.from_clause.as_deref(),
             SelectTargets::Empty(from_clause) => Some(from_clause),
             SelectTargets::Items(targets) => targets.from_clause.as_deref(),
+        }
+    }
+
+    /// Return the `INTO` clause from any target-list form.
+    pub fn into_clause(&self) -> Option<&SelectIntoClause<'input>> {
+        match self.targets()? {
+            SelectTargets::Into(targets) => Some(&targets.into),
+            SelectTargets::Empty(_) => None,
+            SelectTargets::Items(targets) => targets.into.as_deref(),
         }
     }
 }
