@@ -473,3 +473,75 @@ generated static so the runtime borrows it (zero alloc, zero copy) instead
 of composing per parse-site. Alternatively make composed sets `Rc`-shared
 (pointer-sized clone). The inline-buffer approach is preserved on the
 branch but must not land as-is. Reverted to wave-1 pin 870ddfe.
+
+## Keyword classifier: perfect hash replaces the linear if-chain (2026-09-04)
+
+The generated word-keyword classifier (`__recursa_classify_words`, called once
+per word-shaped token from `__recursa_classify`) was a flat, sharded chain of
+`if text.eq_ignore_ascii_case("...") { return Some(kind); }` comparisons —
+484 comparisons for pg-sql's 466 keywords, spread across `#[64]`-wide helper
+functions. Every non-keyword identifier (the common case in real SQL) paid a
+scan across the whole chain before falling through to `None`.
+
+recursa-codegen (`recursa-codegen/src/generation/generated_output.rs`) now
+emits a `phf::Map<&'static [u8], u16>` perfect-hash table instead. Lookup
+folds the candidate text into a fixed `[u8; MAX_KEYWORD_LEN]` stack buffer
+(lowercasing only ASCII bytes for `ascii_insensitive` grammars, leaving
+non-ASCII bytes untouched so multi-byte UTF-8 keywords still round-trip
+correctly), rejects immediately on an empty or over-length buffer without
+touching the map, and otherwise does one `phf` probe:
+
+```rust
+static __RECURSA_WORD_KEYWORDS: recursa::__private::phf::Map<&'static [u8], u16> = /* 466 entries */;
+
+fn __recursa_classify_words(text: &str) -> Option<u16> {
+    const MAX_KEYWORD_LEN: usize = 15usize;
+    let bytes = text.as_bytes();
+    if bytes.is_empty() || bytes.len() > MAX_KEYWORD_LEN {
+        return None;
+    }
+    let mut folded = [0_u8; MAX_KEYWORD_LEN];
+    let mut index = 0_usize;
+    while index < bytes.len() {
+        folded[index] = bytes[index].to_ascii_lowercase();
+        index += 1;
+    }
+    __RECURSA_WORD_KEYWORDS.get(&folded[..bytes.len()]).copied()
+}
+```
+
+`phf`/`phf_codegen` are pinned at 0.11.3 and stay an internal implementation
+detail: `recursa-core` re-exports `phf` under `__private`, `recursa`'s
+facade re-export carries it through, and the map's `phf_path` is generated
+as `<facade>::__private::phf` so no pg-sql-side `Cargo.toml` ever names
+`phf` directly. Generation protocol bumped 19 -> 20 (a new facade re-export
+used by generated code); `EMITTER_IDENTITY` v40 -> v41.
+
+Measured on `flame -- <workload> --duration 5`, before (main, recursa
+aac09ef / pg-sql 0ec8716) vs after (this change):
+
+| Workload | before | after | Δ |
+| --- | --: | --: | --: |
+| bool_chain | 82.5 stmt/s | ~83.9 stmt/s | +1.6% (noise; few keyword-shaped tokens on this path) |
+| corpus | 17,488.2 stmt/s | ~19,453.4 stmt/s | **+11.2%** |
+| select_list_10000 | 9.7 stmt/s | ~10.35 stmt/s | +6.7% |
+
+`corpus` is the workload this change targets (real statement mix, keyword-
+and identifier-heavy) and shows the clearest win, consistent with the
+1.8-3.3% of total parse time the profiles previously attributed to
+`__recursa_classify_words`'s linear scan — most of that self-time is now a
+single hashed probe or an immediate length/emptiness rejection.
+`select_list_10000`'s modest gain matches its large word-token volume
+(10,000 repeated identifiers/values); `bool_chain`'s near-zero delta is
+expected — its hot loop is Pratt/`AND`-dominated with few word-shaped
+lookups per pass.
+
+Verification: recursa `cargo test --workspace` green (all suites, including
+a new `recursa-codegen` fixture (`tests/fixtures/generation/lexing`)
+exercising case variants (`select`/`SELECT`/`SeLeCt`), a non-keyword, a
+keyword prefix, a keyword-plus-trailing-character, and an empty word-shaped
+record). pg-sql `--test embedded` 1092/0/2, `--test document` 27/0. The
+`--features postgres-oracle --test differential` suite reproduces the exact
+same 160-passed/74-failed file-level result as an unmodified `main` build in
+this sandbox (byte-identical pass/fail set) — a pre-existing environment
+baseline unrelated to this change, not a regression.
