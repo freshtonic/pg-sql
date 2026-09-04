@@ -1663,6 +1663,37 @@ mod tests {
         assert!(matches!(expr, Expr::QualWild(_)));
     }
 
+    /// gram.y qualifies a `columnref` with a `ColId`, so unreserved and
+    /// column-name keywords qualify and reserved keywords do not.
+    ///
+    /// The negative half is load-bearing: `Expr` heads every SELECT target
+    /// list, so a qualifier admitting every keyword would put every reserved
+    /// word into FIRST(`SelectHead`) and break the targetless-`SELECT` set
+    /// operations of issue #55.
+    #[test]
+    fn qualified_ref_qualifier_is_a_col_id() {
+        for src in ["excluded.a", "new.a", "old.a", "value.a", "excluded.*"] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(
+                matches!(expr, Expr::QualRef(_) | Expr::QualWild(_)),
+                "{src:?} must qualify",
+            );
+        }
+        for src in ["union.a", "select.a", "grant.a", "create.*"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            assert!(
+                Expr::parse(&mut input).is_err(),
+                "a reserved keyword must not qualify a column reference: {src:?}",
+            );
+        }
+    }
+
     #[test]
     fn parse_star() {
         use crate::ast::dml::select::SelectItem;
