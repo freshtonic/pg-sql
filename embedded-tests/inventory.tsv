@@ -17,7 +17,10 @@ embedded-tests/src/ast/ddl/aggregate.tests.rs	alter_aggregate_star_args	false
 embedded-tests/src/ast/ddl/aggregate.tests.rs	alter_aggregate_variadic_order_by	false
 embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_funcname_def_arg	false
 embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_modern	false
+embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_modern_args_unchanged	false
 embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_old_style	false
+embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_old_style_array_stype	false
+embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_old_style_shape	false
 embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_or_replace	false
 embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_ordered_set	false
 embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_zero_args	false
@@ -41,6 +44,9 @@ embedded-tests/src/ast/ddl/database.tests.rs	parse_create_database_plain	false
 embedded-tests/src/ast/ddl/database.tests.rs	parse_create_database_with_equals_and_connection_limit	false
 embedded-tests/src/ast/ddl/database.tests.rs	parse_create_database_with_options	false
 embedded-tests/src/ast/ddl/database.tests.rs	parse_drop_database_force	false
+embedded-tests/src/ast/ddl/domain.tests.rs	parse_alter_domain_add_named_not_null	false
+embedded-tests/src/ast/ddl/domain.tests.rs	parse_alter_domain_add_not_null	false
+embedded-tests/src/ast/ddl/domain.tests.rs	parse_alter_domain_add_not_null_with_attrs	false
 embedded-tests/src/ast/ddl/domain.tests.rs	parse_create_domain_array_with_size	false
 embedded-tests/src/ast/ddl/domain.tests.rs	parse_create_domain_check_default_notnull	false
 embedded-tests/src/ast/ddl/domain.tests.rs	parse_create_domain_named_constraint	false
@@ -106,6 +112,7 @@ embedded-tests/src/ast/ddl/function.tests.rs	parse_create_function_array_arg_mul
 embedded-tests/src/ast/ddl/function.tests.rs	parse_create_function_basic	false
 embedded-tests/src/ast/ddl/function.tests.rs	parse_create_function_in_out_named	false
 embedded-tests/src/ast/ddl/function.tests.rs	parse_create_function_in_out_no_returns	false
+embedded-tests/src/ast/ddl/function.tests.rs	parse_create_function_json_param_and_return_type	false
 embedded-tests/src/ast/ddl/function.tests.rs	parse_create_function_multi_named_params	false
 embedded-tests/src/ast/ddl/function.tests.rs	parse_create_function_multiple_set_options	false
 embedded-tests/src/ast/ddl/function.tests.rs	parse_create_function_named_param	false
@@ -285,7 +292,11 @@ embedded-tests/src/ast/ddl/table.tests.rs	parse_column_with_collate	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_partition_of	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_partitioned_table	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_array_column_types	false
+embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_as_execute	false
+embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_as_execute_params_with_no_data	false
+embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_as_query_still_parses	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_boolean_type	false
+embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_columns_as_execute	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_ctas_with_column_list	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_identity_seq_options	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_legacy_oids_clauses	false
@@ -301,6 +312,7 @@ embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_of_type_default	fal
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_of_type_not_null_default	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_of_type_with_options	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_single_column	false
+embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_tablespace_as_execute	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_time_zone_types	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_with_storage_params	false
 embedded-tests/src/ast/ddl/table.tests.rs	parse_create_temp_table	false
@@ -442,6 +454,7 @@ embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_grouping_sets_nested	f
 embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_grouping_sets_simple	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_mixed_primitives	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_rollup	false
+embedded-tests/src/ast/dml/select.tests.rs	parse_join_chained_after_using	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_json_table	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_limit_before_offset	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_offset_before_limit	false
@@ -473,6 +486,7 @@ embedded-tests/src/ast/dml/select.tests.rs	parse_select_func_column_def_list	fal
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_func_table_bare_alias_col_def	true
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_func_with_ordinality	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_func_with_ordinality_unnest	false
+embedded-tests/src/ast/dml/select.tests.rs	parse_select_into_without_targets	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_join_using_alias	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_join_using_alias_where	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_left_outer_join_using	false
@@ -481,6 +495,7 @@ embedded-tests/src/ast/dml/select.tests.rs	parse_select_limit_offset_orders_roun
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_locking_variants	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_natural_join	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_natural_left_join	false
+embedded-tests/src/ast/dml/select.tests.rs	parse_select_no_targets_at_all	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_offset	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_order_by	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_over_named	false
@@ -496,6 +511,7 @@ embedded-tests/src/ast/dml/select.tests.rs	parse_select_window_clause	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_with_alias_keyword	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_simple_select	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_stacked_on_joins	false
+embedded-tests/src/ast/dml/select.tests.rs	parse_targetless_select_set_operations	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_window_clause_standalone	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_xmltable_and_lateral	false
 embedded-tests/src/ast/dml/select.tests.rs	reject_select_duplicate_limit_offset_clauses	false
@@ -530,8 +546,6 @@ embedded-tests/src/ast/mod.tests.rs	parse_bang_eq_minus_line_comment_split	false
 embedded-tests/src/ast/mod.tests.rs	parse_full_insert_with_type_cast	false
 embedded-tests/src/ast/mod.tests.rs	parse_is_normalized	false
 embedded-tests/src/ast/mod.tests.rs	parse_like_operator_aliases	false
-embedded-tests/src/ast/mod.tests.rs	parse_strict_statement_to_end_of_input	false
-embedded-tests/src/ast/mod.tests.rs	psql_directive_is_not_a_strict_statement	false
 embedded-tests/src/ast/mod.tests.rs	parse_select_with_where_and_bool_test	false
 embedded-tests/src/ast/mod.tests.rs	parse_set_as_function_name	false
 embedded-tests/src/ast/mod.tests.rs	parse_statement_create_table	false
@@ -539,7 +553,9 @@ embedded-tests/src/ast/mod.tests.rs	parse_statement_delete	false
 embedded-tests/src/ast/mod.tests.rs	parse_statement_drop_table	false
 embedded-tests/src/ast/mod.tests.rs	parse_statement_insert	false
 embedded-tests/src/ast/mod.tests.rs	parse_statement_select	false
+embedded-tests/src/ast/mod.tests.rs	parse_strict_statement_to_end_of_input	false
 embedded-tests/src/ast/mod.tests.rs	parse_subscript_assign_slice_null_bound	false
+embedded-tests/src/ast/mod.tests.rs	psql_directive_is_not_a_strict_statement	false
 embedded-tests/src/ast/mod.tests.rs	report_ast_sizes	true
 embedded-tests/src/ast/mod.tests.rs	statement_size_is_bounded	false
 embedded-tests/src/ast/session/discard.tests.rs	discard_all_roundtrips	false
@@ -818,9 +834,9 @@ embedded-tests/src/ast/shared/expr.tests.rs	reject_direct_parenthesized_set_dupl
 embedded-tests/src/ast/shared/expr.tests.rs	reject_invalid_function_application_states	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_wildcard_as_an_ordinary_function_argument	false
 embedded-tests/src/ast/shared/expr.tests.rs	type_name_preserves_legacy_fixed_variants_and_json_ident	false
-embedded-tests/src/ast/shared/with_clause.tests.rs	parse_simple_with	false
 embedded-tests/src/ast/shared/with_clause.tests.rs	immediate_recursive_is_the_clause_modifier	false
 embedded-tests/src/ast/shared/with_clause.tests.rs	parse_later_cte_named_recursive	false
+embedded-tests/src/ast/shared/with_clause.tests.rs	parse_simple_with	false
 embedded-tests/src/ast/shared/with_clause.tests.rs	parse_with_cycle	false
 embedded-tests/src/ast/shared/with_clause.tests.rs	parse_with_materialized	false
 embedded-tests/src/ast/shared/with_clause.tests.rs	parse_with_multiple_ctes	false
