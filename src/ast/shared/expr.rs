@@ -1047,6 +1047,19 @@ pub enum ArrayExpr<'input> {
     Subquery(ArraySubquery<'input>),
 }
 
+/// `GROUPING(expr, ...)` — the grouping-set membership function.
+///
+/// gram.y keeps this as `func_expr_common_subexpr: GROUPING '(' expr_list
+/// ')'`. `GROUPING` is a `COL_NAME` keyword, so it is a `ColId` but not a
+/// `type_function_name`: it can be a bare column reference, never an
+/// ordinary function name, and the call form needs its own production.
+#[derive(recursa::Node, Debug, Clone)]
+#[tok(GROUPING, LPAREN, this, RPAREN)]
+pub struct GroupingCall<'input> {
+    #[sep(COMMA)]
+    pub args: recursa::Vec1<Expr<'input>>,
+}
+
 /// ROW constructor: `ROW(expr, ...)` or the empty `ROW()`.
 ///
 /// PostgreSQL's `row` production keeps `ROW '(' expr_list ')'` and
@@ -2989,6 +3002,10 @@ pub enum Expr<'input> {
     Array(ArrayExpr<'input>),
     /// ROW constructor: `ROW(...)`
     RowExpr(RowExpr<'input>),
+    /// `GROUPING(...)` grouping-set membership function. Declared before
+    /// `ColumnRef`, which would otherwise claim the bare `GROUPING` keyword
+    /// and leave the argument list unparsed.
+    Grouping(GroupingCall<'input>),
     /// CASE expression: `CASE [expr] WHEN ... THEN ... [ELSE ...] END`
     Case(CaseExpr<'input>),
     /// Unicode string literal: `U&'...'` with optional `UESCAPE 'c'`. Must

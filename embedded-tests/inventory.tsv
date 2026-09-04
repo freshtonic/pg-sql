@@ -654,6 +654,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_function_call_booleq	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_function_call_no_args	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_function_call_with_args	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_function_calls_with_required_delimiters	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_grouping_function	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_gt_caret_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_hash_hash_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_horizontal	false

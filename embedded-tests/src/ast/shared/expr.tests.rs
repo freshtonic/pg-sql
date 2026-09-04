@@ -3220,6 +3220,25 @@ mod tests {
         }
     }
 
+    /// `GROUPING(a, b)` — gram.y's `func_expr_common_subexpr:
+    /// GROUPING '(' expr_list ')'`. `GROUPING` is a COL_NAME keyword, so it
+    /// can never be an ordinary function name, and it stays usable as a
+    /// bare column reference.
+    #[test]
+    fn parse_grouping_function() {
+        for src in ["grouping(a)", "grouping(a, b)", "grouping(v || 'a')"] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(matches!(expr, Expr::Grouping(_)), "expected Grouping for {src:?}");
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+        assert!(matches!(parse_expr_classified("grouping"), Expr::ColumnRef(_)));
+    }
+
     /// `substring(x, 3, 1)` — the ordinary function-call spelling that
     /// gram.y keeps as `SUBSTRING '(' func_arg_list_opt ')'`, alongside the
     /// SQL-standard FROM/FOR and SIMILAR forms.
