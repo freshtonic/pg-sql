@@ -211,6 +211,96 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    /// gram.y's `opt_target_list` is nullable, so a bare `SELECT` with no
+    /// targets, no `INTO` and no `FROM` is a complete `simple_select`.
+    /// `union.sql` and `errors.sql` both rely on it.
+    #[test]
+    fn parse_select_no_targets_at_all() {
+        let lexed = crate::lex("SELECT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        assert_eq!(stmt.item_count(), 0);
+        assert!(stmt.from_clause().is_none());
+        assert!(stmt.into_clause().is_none());
+        assert!(stmt.targets().is_none());
+        assert!(input.is_eof());
+    }
+
+    /// A targetless `SELECT` composes as a set-operation operand wherever the
+    /// generated decision can still reach the absent head: as the right
+    /// operand, and as a parenthesized left operand.
+    ///
+    /// The bare left operand (`select union select`, `union.sql:110`-`112`)
+    /// is the one spelling that stays out of reach — see the note on
+    /// `SelectStmt::head` and issue #55.
+    #[test]
+    fn parse_targetless_select_set_operations() {
+        use crate::ast::dml::values::Subquery;
+
+        for src in [
+            "select 1 union select",
+            "select 1 intersect select",
+            "select 1 except select",
+            "(select) union select",
+            "(select) union (select)",
+            "(select) intersect (select)",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _query = Subquery::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
+    /// `SELECT INTO tbl FROM src` — a nullable target list followed by a
+    /// present `into_clause` (`create_am.sql:124`).
+    #[test]
+    fn parse_select_into_without_targets() {
+        for src in [
+            "SELECT INTO dst FROM src",
+            "SELECT INTO TABLE dst FROM src",
+            "SELECT INTO TEMP TABLE dst FROM src",
+            "SELECT INTO dst",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let stmt = SelectStmt::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert_eq!(stmt.item_count(), 0, "{src:?}");
+            assert!(stmt.into_clause().is_some(), "{src:?}");
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
+    /// gram.y `opt_alias_clause_for_join_using` requires `AS`, so a `JOIN`
+    /// directly after `USING (...)` continues the join chain
+    /// (`create_view.sql:140`-`141`).
+    #[test]
+    fn parse_join_chained_after_using() {
+        for src in [
+            "select * from tt2 join tt3 using (b,c) join tt4 using (b)",
+            "select * from (tt2 join tt3 using (b,c) join tt4 using (b)) j",
+            "select * from tt2 join tt3 using (b) left join tt4 using (b)",
+            "select * from tt2 join tt3 using (b) natural join tt4",
+            "select * from tt2 join tt3 using (b) AS x join tt4 using (b) AS y",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _stmt = SelectStmt::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
+
     #[test]
     fn parse_select_paren_join_cross() {
         let lexed = crate::lex("SELECT * FROM (a CROSS JOIN b) AS tx");
