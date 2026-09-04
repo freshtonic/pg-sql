@@ -44,10 +44,29 @@ once per island and `Input::input_bounded` validating and cloning the whole
 record vector per island. None of the statement-seam work recorded below
 would have surfaced it, and none of it is affected by it.
 
-A document-level canonical workload belongs in this table. It is deliberately
-not added in the same change that discovered the defect, so that the fix can
-be measured against a workload defined independently of it; see the
-document-framing work for the proposal.
+**Fixed 2026-09-05** (recursa f134fad, f52e722, pinned here): framing lexes
+the document once and slices borrowed windows out of that single record
+array, instead of re-lexing the remainder per island and copying every
+record per candidate window. `input_bounded` and its whole-vector bounds
+scan are gone. Controlled A/B, same pg-sql commit and lockfile:
+
+| Measure | Before | After |
+|---|--:|--:|
+| 1,600 statements | 849.1 ms | 16.4 ms |
+| Growth exponent at 1,600 | 1.99 | 1.06 |
+| 113 corpus files | 2,517.4 ms | 129.2 ms |
+| Per file | 22.28 ms | 1.14 ms |
+
+The invariant the design turns on had nothing pinning it: framing still
+restarts its lex after a payload, because the grammar does not tokenize
+payload interiors, so an unbalanced quote, dollar tag or comment opener
+inside one would change how every later island lexes. f52e722 pins it with
+four leaking interiors, verified to fail when the post-payload re-lex is
+removed.
+
+A document-level canonical workload still belongs in this table and is
+tracked separately, so that neither the session that found the quadratic nor
+the one that fixed it shapes the workload around it.
 
 ## Running the flame harness
 
