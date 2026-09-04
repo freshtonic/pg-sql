@@ -671,3 +671,102 @@ The old matcher runtime is gone: `CompiledLexMatcher`, the thread-local
 compiled-table cache from wave 1, and recursa-core's `regex-automata`
 dependency were all removed (`regex-automata` stays a codegen-only
 dependency). The private generation protocol moved to 21.
+
+## Frozen dispatch: decode once, index edges by kind (2026-09-04)
+
+recursa `perf/dispatch-index` (pinned by pg-sql `perf/dispatch-index`). After
+the lexer, FOLLOW and keyword waves, the frozen dispatch walk was essentially
+the whole remaining parse cost: on the pre-change tree `flame-attribute` put
+bool_chain at 95.4% dispatch/decision with `ParseContext::select_pratt` alone
+at 87.6% **self** time (`DispatchTable::follow_edge` inlines into it), and
+corpus at 89.6% split `select_pratt` 36.9% / `select_predictive` 35.0%.
+
+The cost was mechanical, not semantic. Two things:
+
+1. **Every lookup re-decoded base64.** The frozen graph reaches the runtime as
+   fixed-width URL-safe base64 byte strings, and `state`, `follow_edge` and
+   the position test each decoded cells digit by digit — six cells per edge
+   tried, on every edge, on every lookup.
+2. **`follow_edge` scanned a state's edges linearly.** The Expr Pratt LED
+   table has 264 states and its root has on the order of 100 edges, so every
+   operator in a chain walked ~100 edges, each one a position decode plus a
+   FOLLOW-bitset test.
+
+`DispatchTable` now decodes itself exactly once, on first use, into `u32`
+cells held in a `OnceLock` on the table, and builds a per-state dense
+token-kind row for the states wide enough to pay for it. A table whose
+positions are all predicate mode 0 — every one of pg-sql's 532 tables —
+answers a lookup in a single array read: the row cell holds `next state + 1`.
+A table that carries spelling predicates (modes 1-7, which pg-sql does not
+use but other grammars may) uses the row to find the *earliest* edge admitting
+the kind and walks the predicate chain forward from there, so frozen order
+still decides which edge wins.
+
+| Workload | before | after | Δ |
+| --- | --: | --: | --: |
+| bool_chain | 3.928 ms/statement (254.6/s) | 0.406 ms/statement (2,462.9/s) | **9.68× faster** |
+| corpus | 0.01344 ms/statement (74,420/s) | 0.00378 ms/statement (264,671/s) | **3.56× faster** |
+| select_list_10000 | 33.00 ms/statement (30.3/s) | 3.705 ms/statement (269.9/s) | **8.91× faster** |
+
+Median of three interleaved 10 s runs per workload, the same `flame` bench
+binary alternated before/after on the same machine (pg-sql 34685f7 in both
+cases; only the recursa checkout under it changed, d23e105 → 52eaf18).
+
+**Why lazy decode and not typed static arrays.** Emitting `&[u32]` cells from
+codegen would remove the decode too, but the packed literal is chosen for the
+*generated source*: a byte string is one token to the compiler where a typed
+array is one token per cell, across hundreds of tables in a ~25 MB generated
+crate whose build loop we are already fighting. Decoding at first use keeps
+the compile-size win and pays a one-off cost per table actually reached. The
+price is runtime memory: peak RSS over the whole corpus workload — which
+touches essentially every table — moved 21.2 MB → 29.4 MB. Dense rows go to
+the widest states first (≥ 8 edges) under a per-table cell budget, so a
+pathological graph cannot allocate without bound; the budget is nowhere near
+binding for pg-sql.
+
+**No `match`-based Pratt emission.** The option was to emit a `match` on the
+token kind per Pratt state in generated code for the Expr LED root. Measured
+first, as required: after the indexed table, `select_pratt` is 9.4% self time
+on bool_chain (down from 87.6%) and 1.8% on corpus, so a second mechanism
+would buy little and cost generated code size. The table stays the only
+mechanism.
+
+`dispatch_table` now takes the state row shape (`state_cells`, `edge_field`)
+so the runtime can find a state's edge range itself, and `follow_edge` takes
+the state index rather than a pre-decoded `(edge start, edge count)`. The
+private generation protocol moved to 22. Nothing else moved: the
+caller-FOLLOW-conditioned terminal modes, the Pratt ambiguity check, depth
+accounting and the expected-set diagnostics are untouched.
+
+New top self-time frames, `scripts/flame-profile bool_chain 10` on the
+changed tree (bucket totals: dispatch/decision 69.7%, value construction
+13.8%, other 12.8%, lex/classify 2.2%):
+
+| self% | frame |
+| --: | --- |
+| 15.2% | `pg_sql::__recursa_lexical::__recursa_finalize` |
+| 9.4% | `recursa_core::parsed::ParseContext::select_pratt` |
+| 9.1% | `recursa_core::lex::lex::<__RecursaLexToken>` |
+| 8.2% + 5.6% alloc | `Expr::__recursa_parse_pratt_led_1166_81` |
+| 6.5% | `Expr::__recursa_parse_bp` |
+| 5.1% + 3.2% | `ProvenanceCollector::finish_repeated` (arity 1, arity 2) |
+| 2.9% | `recursa_core::parsed::ParseContext::select_predictive` |
+
+corpus is the same shape: `__recursa_finalize` 11.2%, `select_predictive`
+6.6%, `lex` 6.2% (+2.5% alloc), `LexBuilder::append` 1.9% alloc,
+`select_pratt` 1.8%, `FollowSet::compose_entry` 1.5%. So the next levers are
+the lexical **finalize** pass and record building (allocation-heavy), then
+provenance/occurrence construction — not dispatch.
+
+Suites: recursa workspace green (0 failed), including four new
+`recursa-core::dispatch` tests that check the decoded/indexed lookup against
+the pre-change linear walk, kept verbatim as an oracle, for every token kind
+and every spelling case over graphs with overlapping edges, predicate modes
+0-7 and multi-edge states (also re-run with the dense threshold forced to 1
+and to 9999, so both the dense and the scan path are proved against the
+oracle). pg-sql `--test embedded` 1092/0/2, `--test document` 27/0/0, `--test
+lex_identity` 2/0/0. `--features postgres-oracle --test differential` reports
+160 passed / 74 failed, and the normalised failure capture (74 files, 742
+statement mismatches, positions stripped, sorted) is byte-identical to the
+pre-change capture from main — those 74 are a pre-existing local condition,
+not this change.
