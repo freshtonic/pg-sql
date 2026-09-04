@@ -5,8 +5,10 @@
 //! PostgreSQL regression corpus and the generated stress fixtures, then
 //! writes a per-run report directory under `docs/benchmarks/`.
 //!
-//! The ported crate has no file-level parse interface yet (#10), so this
-//! interim harness measures **statement-level** parsing: for each corpus
+//! This harness measures **statement-level** parsing. A file-level seam
+//! now exists (`pg_sql::document::parse_sql`, #10 closed), but it is a
+//! different code path and is deliberately not what this harness times:
+//! for each corpus
 //! file it takes the frozen per-file statement list that the differential
 //! suite pins (`tests/support/baseline.rs`, `FrozenStatements::pinned()`)
 //! and times each engine over the statements that *all three* engines
@@ -663,8 +665,9 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
     md.push('\n');
     let _ = writeln!(
         md,
-        "**These are statement-level interim measurements.** The ported crate \
-         has no file-level parse interface yet, so each `corpus/<file>` \
+        "**These are statement-level measurements.** A file-level seam exists \
+         (`pg_sql::document::parse_sql`) but is a different code path and is \
+         not timed here, so each `corpus/<file>` \
          benchmark parses the frozen per-file statement list pinned by the \
          differential suite (`tests/support/baseline.rs`), one statement at a \
          time, rather than the whole file in one call. The Criterion port and \
