@@ -76,7 +76,13 @@ impl<'input> Alias<'input> {
 ///
 /// PostgreSQL's `from_list` is nonempty: `FROM` commits to at least one
 /// `TableRef` (`SELECT FROM` must fail; only the target list may be empty).
+///
+/// The clause owns a fit-or-break group so that `FROM <list>` is measured on
+/// its own. A statement that breaks its target list keeps `FROM` attached to
+/// the last item while it still fits, and moves `FROM` onto its own line only
+/// when the clause itself is too wide.
 #[derive(recursa::Node, Debug, Clone)]
+#[pretty(group = consistent)]
 #[tok(FROM, this)]
 pub struct FromClause<'input> {
     #[sep(COMMA)]
@@ -1397,8 +1403,12 @@ pub struct SelectDistinctOn<'input> {
 }
 
 /// SELECT statement.
+///
+/// `indent` covers the whole clause body, so every break the statement is
+/// forced to take — after `SELECT`, between target items, and before the
+/// trailing clauses — lands one level in from column zero.
 #[derive(recursa::Node, Debug, Clone)]
-#[pretty(group = consistent)]
+#[pretty(group = consistent, indent)]
 #[tok(SELECT, this)]
 pub struct SelectStmt<'input> {
     #[pretty(break_before = soft)]
@@ -1464,16 +1474,22 @@ pub enum SelectTargets<'input> {
 }
 
 /// A nonempty SELECT target list and the clauses that immediately follow it.
+///
+/// The group covers the target list together with the clauses that follow it,
+/// so the decision to put one target per line is made against the width of
+/// `<targets> FROM <tables>` rather than the targets alone.
 #[derive(recursa::Node, Debug, Clone)]
+#[pretty(group = consistent)]
 pub struct SelectTargetList<'input> {
     #[sep(COMMA)]
-    #[pretty(group = consistent, indent)]
     pub items: recursa::Vec1<SelectItem<'input>>,
     /// Greedy: a leading ABSENT starts this element instead of ending `SelectTargetList` (bison shift preference).
     #[greedy(ABSENT)]
     #[pretty(break_before = soft)]
     pub into: Option<Box<SelectIntoClause<'input>>>,
-    #[pretty(break_before = soft)]
+    /// No break hint here: `FromClause` owns the break before `FROM` inside
+    /// its own group, so the boundary is measured with the clause it belongs
+    /// to.
     pub from_clause: Option<Box<FromClause<'input>>>,
 }
 

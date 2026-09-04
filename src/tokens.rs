@@ -36,7 +36,11 @@ recursa::tokens! {
         SELECT       => r"SELECT" in RESERVED + bare_label,
         FROM         => r"FROM" in RESERVED,
         WHERE        => r"WHERE" in RESERVED,
-        AS           => r"AS" in RESERVED,
+        // `AS` always renders with a space on both sides. Without this the
+        // Auto word policy leaves the following `(` tight (`AS(SELECT 1)`),
+        // because an opening delimiter does not consume a pending word
+        // separator.
+        AS           => r"AS" in RESERVED, spacing = around,
         AND          => r"AND" in RESERVED + bare_label,
         OR           => r"OR" in RESERVED + bare_label,
         NOT          => r"NOT" in RESERVED + bare_label,
@@ -643,14 +647,14 @@ recursa::tokens! {
         DOT       => ".", spacing = tight,
         // 3-char `===` before 2-char `=>` and single-char `=`.
         TRIPLEEQ   => "===",
-        EQ        => "=",
+        EQ        => "=", spacing = around,
         FATARROW  => "=>",
         COLONEQUALS => ":=",
         // 3-char `!==` and `!=-` before 2-char `!=`.
         BANGEQEQ   => "!==",
         BANGEQMINUS => "!=-",
-        BANGEQ    => "!=",
-        NEQ       => "<>",
+        BANGEQ    => "!=", spacing = around,
+        NEQ       => "<>", spacing = around,
         // 3-char `<`-prefixed operators must come before 2-char `<=`/`<>`/`<<`
         // and before the single-char `<`.
         // 3-char `<<<` before 2-char `<<`.
@@ -659,7 +663,7 @@ recursa::tokens! {
         LTLTPIPE   => "<<|",
         LTMINUSGT  => "<->",
         LTLT       => "<<",
-        LTE       => "<=",
+        LTE       => "<=", spacing = around,
         // Geometric "below" `<^` before single-char `<`.
         LTCARET    => "<^",
         // 3-char `>>=` before `>>`, then `>=`, `>`.
@@ -667,11 +671,11 @@ recursa::tokens! {
         GTGTGT     => ">>>",
         GTGTEQ     => ">>=",
         GTGT       => ">>",
-        GTE       => ">=",
+        GTE       => ">=", spacing = around,
         // Geometric "above" `>^` before single-char `>`.
         GTCARET    => ">^",
-        LT        => "<",
-        GT        => ">",
+        LT        => "<", spacing = around,
+        GT        => ">", spacing = around,
         COLONCOLON => "::",
         COLON      => ":",
         // Psql meta-commands that can terminate a SQL statement in place of `;`.
