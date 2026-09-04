@@ -3,7 +3,7 @@ mod tests {
     use crate::ast::shared::expr::{
         CastType, CastTypeHead, DirectParenthesizedSet, DirectSubquery, Expr, FunctionCallBody,
         FunctionCallTail, ParenContent, ParenthesizedDotStar, ParenthesizedExpr,
-        ParenthesizedIndirection, TypeName,
+        JsonObject, ParenthesizedIndirection, TypeName,
     };
 
     /// Parse `src` as an `Expr` through the logos lex pass.
@@ -3217,6 +3217,224 @@ mod tests {
                 src,
                 "non-exact round-trip for {src:?}: {formatted:?}",
             );
+        }
+    }
+
+    /// `json '…'` — PostgreSQL's `JsonType` as a function-style typed
+    /// literal. `JSON` is a COL_NAME keyword, so it reaches neither the
+    /// identifier-named nor the typmod typed-literal form, and it must stay
+    /// disjoint from the `JSON ( … )` SQL/JSON value constructor.
+    #[test]
+    fn parse_json_typed_literal() {
+        for src in [
+            r#"json '{"a": 1}'"#,
+            r#"json '"foo"'"#,
+            r#"jsonb 'null'"#,
+        ] {
+            assert!(
+                matches!(parse_expr_classified(src), Expr::CastFunc(_)),
+                "expected a typed literal for {src:?}",
+            );
+        }
+        for src in ["JSON('{}' FORMAT JSON)", "JSON('1'::json WITH UNIQUE KEYS)"] {
+            assert!(
+                matches!(parse_expr_classified(src), Expr::JsonCtor(_)),
+                "expected the JSON value constructor for {src:?}",
+            );
+        }
+        // The typed literal composes as a JSON_OBJECT key and as an element.
+        for src in [
+            r#"JSON_OBJECT(json '[1]': 123)"#,
+            r#"JSON_ARRAY('aaa', json '{"a": [1]}', jsonb '["a",3]')"#,
+            r#"json '{ "a": 1 }' -> 'a'"#,
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
+    /// `JSON_OBJECTAGG(k: v)` and `JSON_OBJECT(k: v)` with an identifier key.
+    ///
+    /// pg-sql models psql's `:name` interpolation in the expression grammar,
+    /// where PostgreSQL has no such production. An identifier followed by a
+    /// colon therefore also reads as the typed literal `type_function_name
+    /// :'var'`, and that reading swallowed the SQL/JSON key/value separator.
+    #[test]
+    fn parse_json_object_entry_with_identifier_key() {
+        for src in [
+            "JSON_OBJECTAGG(k: v)",
+            "JSON_OBJECTAGG(i: i RETURNING jsonb)",
+            "JSON_OBJECTAGG(k: v ABSENT ON NULL)",
+            "JSON_OBJECTAGG(k: v WITH UNIQUE KEYS)",
+            "JSON_OBJECTAGG(i: ('111' || i)::bytea FORMAT JSON WITH UNIQUE RETURNING text)",
+        ] {
+            assert!(
+                matches!(parse_expr_classified(src), Expr::JsonObjectAgg(_)),
+                "expected JsonObjectAgg for {src:?}",
+            );
+        }
+        // The constructor form must read `k: v` as an entry, not as one
+        // legacy `json_object(text[])` argument.
+        let Expr::JsonObject(object) = parse_expr_classified("JSON_OBJECT(k: v)") else {
+            panic!("expected the SQL/JSON constructor");
+        };
+        let JsonObject::Entries(args) = *object else {
+            panic!("expected the entry form");
+        };
+        assert!(args.entries.first().value.is_some(), "expected a key/value entry");
+        // psql's typed-literal interpolation keeps its keyword-named and
+        // typmod spellings, which no column name can be mistaken for.
+        assert!(matches!(
+            parse_expr_classified("numeric :'txid'"),
+            Expr::CastFunc(_)
+        ));
+        assert!(matches!(
+            parse_expr_classified("bigint 'txid'"),
+            Expr::CastFunc(_)
+        ));
+    }
+
+    /// `GROUPING(a, b)` — gram.y's `func_expr_common_subexpr:
+    /// GROUPING '(' expr_list ')'`. `GROUPING` is a COL_NAME keyword, so it
+    /// can never be an ordinary function name, and it stays usable as a
+    /// bare column reference.
+    #[test]
+    fn parse_grouping_function() {
+        for src in ["grouping(a)", "grouping(a, b)", "grouping(v || 'a')"] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(matches!(expr, Expr::Grouping(_)), "expected Grouping for {src:?}");
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+        assert!(matches!(parse_expr_classified("grouping"), Expr::ColumnRef(_)));
+    }
+
+    /// `substring(x, 3, 1)` — the ordinary function-call spelling that
+    /// gram.y keeps as `SUBSTRING '(' func_arg_list_opt ')'`, alongside the
+    /// SQL-standard FROM/FOR and SIMILAR forms.
+    #[test]
+    fn parse_substring_comma_argument_form() {
+        for src in [
+            "substring(good, 3, 1)",
+            "substring(indtoasttest::text, 1, 200)",
+            "substring(VALUE, 1, 1)",
+            "SUBSTRING(x FROM 3 FOR 1)",
+            "SUBSTRING(x FROM 3)",
+            "SUBSTRING(x SIMILAR 'p' ESCAPE '#')",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(matches!(expr, Expr::Substring(_)), "expected Substring for {src:?}");
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
+    /// The legacy ordinary-function spelling of `json_object`
+    /// (`JSON_OBJECT '(' func_arg_list ')'` in gram.y) alongside the SQL/JSON
+    /// constructor forms, which must keep winning where they apply.
+    #[test]
+    fn parse_json_object_ordinary_function_form() {
+        for src in [
+            "json_object('{}')",
+            "json_object('{a,b}', '{1,2}')",
+            "json_object(array_agg(g))",
+            "json_object_keys(json_object(array_agg(g)))",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+        for src in [
+            "JSON_OBJECT('a': 1, 'b': 2)",
+            "JSON_OBJECT(KEY 'a' VALUE 2 + 3)",
+            "JSON_OBJECT()",
+            "JSON_OBJECT(RETURNING jsonb)",
+        ] {
+            assert!(
+                matches!(parse_expr_classified(src), Expr::JsonObject(_)),
+                "expected the SQL/JSON constructor for {src:?}",
+            );
+        }
+    }
+
+    /// `arr[i].field` — PostgreSQL's `opt_indirection` chains subscripts and
+    /// attribute names freely, so a `.field` selector must be able to follow
+    /// a subscript.
+    #[test]
+    fn parse_field_selection_after_subscript() {
+        for src in [
+            "c2[2].f2",
+            "d1[1].r + 1",
+            "value[1].r",
+            "a.b[1].c",
+            "d1[1].r.s",
+            "d1[1].r[2]",
+            "a[1]",
+            "a[1][2]",
+            "a[1:2]",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
+    /// `ARRAY[]` — the empty array constructor (`array_expr: '[' ']'` in
+    /// gram.y). It appears bare, cast, as a VARIADIC argument and as a
+    /// function-parameter default.
+    #[test]
+    fn parse_empty_array_constructor() {
+        for src in [
+            "ARRAY[]",
+            "ARRAY[]::int[]",
+            "array[]::oidvector",
+            "ARRAY[1]",
+            "ARRAY[[1, 2], [3, 4]]",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
+    /// `ROW()` — the empty row constructor (`row: ROW '(' ')'` in gram.y).
+    /// It must work bare, as an `IS NULL` operand and on both sides of `=`.
+    #[test]
+    fn parse_empty_row_constructor() {
+        for src in ["ROW()", "ROW(1)", "ROW(1, 2)"] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(matches!(expr, Expr::RowExpr(_)), "expected RowExpr for {src:?}");
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
     }
 }

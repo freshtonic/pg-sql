@@ -902,6 +902,25 @@ pub enum SubscriptClose {
     Value,
 }
 
+/// A subscript followed by the field selectors that continue PostgreSQL's
+/// `opt_indirection` chain: `arr[i]`, `arr[i].field`, `arr[i].f.g`.
+///
+/// Further subscripts are not repeated here — the postfix `Expr::Subscript`
+/// operator already re-applies to the result, so `a[1].b[2]` is a subscript
+/// carrying `.b` followed by a second subscript. Keeping brackets out of
+/// this tail leaves the two forms with disjoint continuations.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct SubscriptIndirection<'input> {
+    pub subscript: BracketSubscript<'input>,
+    /// Greedy: a leading DOT starts this element instead of ending
+    /// `SubscriptIndirection` (bison shift preference). PostgreSQL's
+    /// `indirection_el` is left-recursive on the subscripted value, so a `.`
+    /// after a subscript is always the next chain element — no other
+    /// production resumes on `.` at that point.
+    #[greedy(DOT)]
+    pub fields: Vec<IndirectionField<'input>>,
+}
+
 /// `.field` accessor in an indirection chain.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct IndirectionField<'input> {
@@ -998,12 +1017,17 @@ pub struct NestedArrayElements<'input> {
 }
 
 /// ARRAY bracket constructor: `ARRAY[expr, ...]`, including the
-/// multi-dimensional form `ARRAY[[1,2],[3,4]]`.
+/// multi-dimensional form `ARRAY[[1,2],[3,4]]` and the empty `ARRAY[]`.
+///
+/// PostgreSQL's `array_expr` keeps `'[' ']'` as its own alternative, so the
+/// element list is nullable. The `ARRAY` keyword still leads the node, which
+/// keeps the opening bracket visible to FIRST-k analysis, exactly as the
+/// nested `NestedArrayElements` list above already relies on.
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ARRAY, LBRACKET, this, RBRACKET)]
 pub struct ArrayBracket<'input> {
     #[sep(COMMA)]
-    pub elements: recursa::Vec1<ArrayElement<'input>>,
+    pub elements: Vec<ArrayElement<'input>>,
 }
 
 /// ARRAY subquery constructor: `ARRAY(subquery)`
@@ -1023,12 +1047,30 @@ pub enum ArrayExpr<'input> {
     Subquery(ArraySubquery<'input>),
 }
 
-/// ROW constructor: `ROW(expr, ...)`
+/// `GROUPING(expr, ...)` — the grouping-set membership function.
+///
+/// gram.y keeps this as `func_expr_common_subexpr: GROUPING '(' expr_list
+/// ')'`. `GROUPING` is a `COL_NAME` keyword, so it is a `ColId` but not a
+/// `type_function_name`: it can be a bare column reference, never an
+/// ordinary function name, and the call form needs its own production.
+#[derive(recursa::Node, Debug, Clone)]
+#[tok(GROUPING, LPAREN, this, RPAREN)]
+pub struct GroupingCall<'input> {
+    #[sep(COMMA)]
+    pub args: recursa::Vec1<Expr<'input>>,
+}
+
+/// ROW constructor: `ROW(expr, ...)` or the empty `ROW()`.
+///
+/// PostgreSQL's `row` production keeps `ROW '(' expr_list ')'` and
+/// `ROW '(' ')'` as separate alternatives, so the field list is nullable
+/// here. The `ROW` keyword still leads the node, so the empty form does not
+/// hide the opening parenthesis from FIRST-k analysis.
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ROW, LPAREN, this, RPAREN)]
 pub struct RowExpr<'input> {
     #[sep(COMMA)]
-    pub values: recursa::Vec1<Expr<'input>>,
+    pub values: Option<recursa::Vec1<Expr<'input>>>,
 }
 
 /// `WHEN cond THEN result` arm of a CASE expression.
@@ -1229,7 +1271,7 @@ pub struct NotInSuffix<'input> {
 
 /// Payload for function-style type cast: either a string literal (common
 /// case `bool 'value'`) or a psql client variable substitution
-/// (`bigint :'txid_current'`).
+/// (`numeric :'txid_current'`).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum TypeCastValue<'input> {
     String(literal::StringLit<'input>),
@@ -1272,13 +1314,36 @@ pub struct FixedTypeCastFunc<'input> {
 }
 
 /// Function-style typed literal for an identifier-spelled type without
-/// typmods: `bool 'value'`, `text 'hello'`, `bigint :'var'`, or
-/// `double precision 'value'`.
+/// typmods: `bool 'value'`, `text 'hello'`, or `double precision 'value'`.
+///
+/// The payload is PostgreSQL's `Sconst` and nothing else. pg-sql admits
+/// psql's `:'var'` interpolation as a stand-in for a string constant
+/// elsewhere, but not after a bare identifier: `ident : …` is also the
+/// SQL/JSON `key : value` entry of `JSON_OBJECT` and `JSON_OBJECTAGG`, and
+/// the atom dispatcher commits on the identifier and colon alone. Since
+/// PostgreSQL's own `AexprConst: func_name Sconst` has no colon at all, the
+/// pg-sql-only spelling is the one that yields. The keyword-named form
+/// (`numeric :'var'`) and the typmod form (`name(10) :'var'`) keep it —
+/// neither can be mistaken for an unquoted column name.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct NamedTypeCastFunc<'input> {
     pub type_name: crate::tokens::type_function_name<'input>,
     #[presence(PRECISION)]
     pub precision: bool,
+    pub value: literal::StringLit<'input>,
+}
+
+/// Function-style typed literal for `json`: `json '{"a": 1}'`.
+///
+/// `JSON` is a `COL_NAME` keyword with its own `JsonType` production in
+/// gram.y, so it reaches neither `NamedTypeCastFunc` (whose name is a
+/// `type_function_name`) nor the typmod form. `JsonType` takes no type
+/// modifiers, so none are modelled here — which also keeps this node
+/// disjoint from the `JSON ( ... )` SQL/JSON value constructor at the second
+/// token.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct JsonTypeCastFunc<'input> {
+    #[tok(JSON, this)]
     pub value: TypeCastValue<'input>,
 }
 
@@ -1286,9 +1351,14 @@ pub struct NamedTypeCastFunc<'input> {
 /// directly; identifier-spelled types with typmods use
 /// [`FunctionCallTail::TypedLiteral`], where the complete call/typmod prefix
 /// is shared.
+///
+/// Variant ordering is immaterial: `Fixed` leads with one of its own
+/// keywords, `Json` with `JSON`, and `Named` with a `type_function_name`,
+/// which admits neither.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum TypeCastFunc<'input> {
     Fixed(FixedTypeCastFunc<'input>),
+    Json(JsonTypeCastFunc<'input>),
     Named(NamedTypeCastFunc<'input>),
 }
 
@@ -1776,11 +1846,29 @@ pub struct SubstringSimilar<'input> {
 ///
 /// Variant ordering: `Similar` (`SIMILAR`) before `FromFor` (`FROM`) — distinct
 /// first tokens, so order is not strictly required, but listed by length.
+/// One `, arg` of the ordinary function-call spelling of `SUBSTRING`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct SubstringMoreArg<'input> {
+    #[tok(COMMA, this)]
+    pub value: Box<Expr<'input>>,
+}
+
+/// The tail of `SUBSTRING(...)` after its first argument.
+///
+/// Besides the SQL-standard FROM/FOR and SIMILAR forms, gram.y keeps
+/// `SUBSTRING '(' func_arg_list_opt ')'` so that a function named
+/// `substring` can be called without the special syntax — the
+/// `substring(x, 3, 1)` spelling. `SUBSTRING` is a `COL_NAME` keyword and
+/// can never be an ordinary `FuncCall` name, so that form belongs here.
+///
+/// Variant ordering is immaterial: the four alternatives lead with SIMILAR,
+/// FROM, FOR and COMMA respectively.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum SubstringTail<'input> {
     Similar(SubstringSimilar<'input>),
     FromFor(SubstringFromFor<'input>),
     For(ForCount<'input>),
+    Args(recursa::Vec1<SubstringMoreArg<'input>>),
 }
 
 /// Inner of `SUBSTRING(...)`: `source` followed by FROM/SIMILAR tail.
@@ -2071,17 +2159,48 @@ pub enum JsonKeyValueSep {
     Value,
 }
 
-/// One `[KEY] ‹key› {: | VALUE} ‹value› [FORMAT JSON ...]` entry of `JSON_OBJECT`.
+/// The `{: | VALUE} ‹value› [FORMAT JSON ...]` part of a `JSON_OBJECT` item.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct JsonObjectEntry<'input> {
-    pub key: Box<Expr<'input>>,
+pub struct JsonObjectEntryValue<'input> {
     pub sep: JsonKeyValueSep,
     pub value: Box<Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
 }
 
-/// Non-empty entry form of `JSON_OBJECT`, followed by the optional `ON NULL`,
-/// `UNIQUE` and `RETURNING` clauses.
+/// One item of a `JSON_OBJECT` list: either a SQL/JSON
+/// `[KEY] ‹key› {: | VALUE} ‹value› [FORMAT JSON ...]` entry, or one
+/// argument of PostgreSQL's legacy `json_object(text[])` /
+/// `json_object(text[], text[])` function form.
+///
+/// gram.y keeps those as separate productions — `JSON_OBJECT` is a
+/// `COL_NAME` keyword and can never be an ordinary `FuncCall` name, so the
+/// legacy call gets its own `JSON_OBJECT '(' func_arg_list ')'` rule. Both
+/// are comma-separated and expression-led, and no bounded lookahead splits
+/// them: one `U&'...' UESCAPE '...'` key already spans five tokens. They
+/// therefore share this node, and the presence of the key/value separator
+/// is what tells the two forms apart.
+///
+/// PostgreSQL's `func_arg_list` also admits the `name => value` spelling.
+/// That form is not modelled here: no `json_object` call uses it, and a
+/// named argument is not a legal SQL/JSON entry key.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct JsonObjectEntry<'input> {
+    pub key: Box<Expr<'input>>,
+    pub value: Option<JsonObjectEntryValue<'input>>,
+}
+
+/// One `‹key› {: | VALUE} ‹value› [FORMAT JSON ...]` entry of
+/// `JSON_OBJECTAGG`, whose gram.y production admits only the SQL/JSON
+/// spelling and therefore requires the value.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct JsonObjectAggEntry<'input> {
+    pub key: Box<Expr<'input>>,
+    pub value: JsonObjectEntryValue<'input>,
+}
+
+/// Non-empty item list of `JSON_OBJECT`, followed by the optional `ON NULL`,
+/// `UNIQUE` and `RETURNING` clauses. Those clauses belong to the SQL/JSON
+/// entry production only; the legacy function form never carries them.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct JsonObjectArgs<'input> {
     #[sep(COMMA)]
@@ -2091,7 +2210,7 @@ pub struct JsonObjectArgs<'input> {
     pub returning: Option<JsonReturning<'input>>,
 }
 
-/// `JSON_OBJECT` has distinct PostgreSQL productions for a non-empty entry
+/// `JSON_OBJECT` has distinct PostgreSQL productions for a non-empty item
 /// list and for the empty/returning-only form. Keeping those paths distinct
 /// prevents the expression-led entry parser from claiming the reserved
 /// `RETURNING` token as an entry key.
@@ -2344,7 +2463,7 @@ pub struct JsonQuery<'input> {
 /// Inner contents of `JSON_OBJECTAGG`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct JsonObjectAggInner<'input> {
-    pub entry: JsonObjectEntry<'input>,
+    pub entry: JsonObjectAggEntry<'input>,
     pub on_null: Option<JsonOnNull>,
     pub unique: Option<JsonUniqueKeys>,
     pub returning: Option<JsonReturning<'input>>,
@@ -2498,10 +2617,11 @@ pub enum Expr<'input> {
     /// Postgres-style cast: `expr::type`
     #[parse(postfix, bp = 20)]
     Cast(Box<Self>, #[tok(COLONCOLON, this)] Box<CastType<'input>>),
-    /// Array index or slice: `expr[idx]`, `expr[low:high]`, `expr[:high]`,
-    /// `expr[low:]`, or `expr[:]`.
+    /// Array index or slice, plus the field selectors that may follow it:
+    /// `expr[idx]`, `expr[low:high]`, `expr[:high]`, `expr[low:]`, `expr[:]`,
+    /// and `expr[idx].field`.
     #[parse(postfix, bp = 20)]
-    Subscript(Box<Self>, BracketSubscript<'input>),
+    Subscript(Box<Self>, SubscriptIndirection<'input>),
     /// `expr COLLATE "collation"` — collation specifier. Binds tighter than
     /// comparisons (bp 5) but looser than `::` cast (bp 20).
     #[parse(postfix, bp = 18)]
@@ -2910,6 +3030,10 @@ pub enum Expr<'input> {
     Array(ArrayExpr<'input>),
     /// ROW constructor: `ROW(...)`
     RowExpr(RowExpr<'input>),
+    /// `GROUPING(...)` grouping-set membership function. Declared before
+    /// `ColumnRef`, which would otherwise claim the bare `GROUPING` keyword
+    /// and leave the argument list unparsed.
+    Grouping(GroupingCall<'input>),
     /// CASE expression: `CASE [expr] WHEN ... THEN ... [ELSE ...] END`
     Case(CaseExpr<'input>),
     /// Unicode string literal: `U&'...'` with optional `UESCAPE 'c'`. Must

@@ -627,6 +627,8 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_direct_parenthesized_set_limit
 embedded-tests/src/ast/shared/expr.tests.rs	parse_distance	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_dollar_string_literal_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_double_precision_type_cast	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_empty_array_constructor	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_empty_row_constructor	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_eq_all_array	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_eq_any_subquery	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_eq_expr	false
@@ -637,6 +639,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_extract_century_from_ident	fal
 embedded-tests/src/ast/shared/expr.tests.rs	parse_extract_epoch_from_date	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_extract_string_field	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_extract_year_from_now	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_field_selection_after_subscript	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_four_part_string_concat	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_func_all_named_args	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_func_call_filter	false
@@ -651,6 +654,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_function_call_booleq	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_function_call_no_args	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_function_call_with_args	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_function_calls_with_required_delimiters	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_grouping_function	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_gt_caret_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_hash_hash_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_horizontal	false
@@ -681,11 +685,14 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_json_constructors	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_delete_path_operator_classified	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_field	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_field_text	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_json_object_entry_with_identifier_key	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_json_object_ordinary_function_form	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_path	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_path_exists	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_path_text	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_query_functions	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_timestamp_cast_before_unique_keys	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_json_typed_literal	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_jsonb_all_keys	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_jsonb_any_key	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_jsonb_contained_by	false
@@ -761,6 +768,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_string_literal	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_subquery_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_subscript_unchanged	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_subset_eq	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_substring_comma_argument_form	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_substring_for_only	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_substring_from	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_substring_from_for	false
