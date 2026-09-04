@@ -12,34 +12,38 @@ pub struct DeleteAsAlias<'input> {
 
 /// Table alias in DELETE FROM: either `AS alias` or bare `alias`.
 ///
+/// gram.y's `relation_expr_opt_alias` spells both forms with `ColId`, not
+/// with `BareColLabel`: a reserved keyword such as `USING` or `NULL` can
+/// never open the alias, which is what keeps `USING ...` a using-clause.
+///
 /// Variant ordering: WithAs (`AS ident`) has a longer first_pattern than
 /// Bare (`ident`), so longest-match-wins picks it when AS is present.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum DeleteTableAlias<'input> {
     WithAs(DeleteAsAlias<'input>),
-    Bare(crate::tokens::BareColLabel<'input>),
+    Bare(crate::tokens::ColId<'input>),
 }
 
 impl<'input> DeleteTableAlias<'input> {
     /// Returns the alias name regardless of variant.
     pub fn name(&self) -> &str {
-        match self {
-            DeleteTableAlias::WithAs(a) => match &a.name {
-                crate::tokens::ColId::Text(text) => text.text(),
-            },
-            DeleteTableAlias::Bare(ident) => match ident {
-                crate::tokens::BareColLabel::Text(text) => text.text(),
-            },
-        }
+        let (DeleteTableAlias::WithAs(DeleteAsAlias {
+            name: crate::tokens::ColId::Text(text),
+        })
+        | DeleteTableAlias::Bare(crate::tokens::ColId::Text(text))) = self;
+        text.text()
     }
 }
 
 /// `USING table, ...` clause in DELETE statements.
+///
+/// `USING` leads the whole from-list, so it is declared on the struct;
+/// gram.y's `using_clause: USING from_list` makes the list non-empty.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(USING, this)]
 pub struct DeleteUsingClause<'input> {
-    #[tok(USING, this)]
     #[sep(COMMA)]
-    pub tables: Vec<crate::ast::dml::select::TableRef<'input>>,
+    pub tables: recursa::Vec1<crate::ast::dml::select::TableRef<'input>>,
 }
 
 /// DELETE FROM statement: `DELETE FROM [ONLY] table [alias] [USING ...] [WHERE expr] [RETURNING ...]`.
@@ -55,8 +59,8 @@ pub struct DeleteStmt<'input> {
     #[presence(ONLY)]
     pub only: bool,
     pub table_name: QualifiedName<'input>,
-    /// Greedy: a leading ABSENT, NULL starts this element instead of ending `DeleteStmt` (bison shift preference).
-    #[greedy(ABSENT, NULL)]
+    /// Greedy: a leading ABSENT starts this element instead of ending `DeleteStmt` (bison shift preference).
+    #[greedy(ABSENT)]
     pub alias: Option<Box<DeleteTableAlias<'input>>>,
     #[pretty(break_before = soft)]
     pub using_clause: Option<Box<DeleteUsingClause<'input>>>,

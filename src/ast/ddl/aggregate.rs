@@ -42,9 +42,11 @@ pub struct CreateAggregateOrderBy<'input> {
     pub args: CreateAggregateOrderByInner<'input>,
 }
 
+/// `ORDER BY aggr_args_list` — the `ORDER BY` leads the whole list, so it is
+/// declared on the struct rather than on the repeated field.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(ORDER, BY, this)]
 pub struct CreateAggregateOrderByInner<'input> {
-    #[tok(ORDER, BY, this)]
     #[sep(COMMA)]
     pub args: recursa::Vec1<crate::ast::ddl::function::FuncParam<'input>>,
 }
@@ -95,9 +97,11 @@ pub struct CreateAggregateArgLists<'input> {
 }
 
 /// `ORDER BY aggr_args_list` tail of an ordered-set aggregate signature.
+///
+/// `ORDER BY` leads the whole list, so it is declared on the struct.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(ORDER, BY, this)]
 pub struct CreateAggregateOrderedTail<'input> {
-    #[tok(ORDER, BY, this)]
     #[sep(COMMA)]
     pub ordered: recursa::Vec1<crate::ast::ddl::function::FuncParam<'input>>,
 }

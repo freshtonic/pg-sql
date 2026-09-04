@@ -230,11 +230,17 @@ pub struct GeneratedIdentityConstraint<'input> {
     #[tok(GENERATED, this)]
     pub mode: GeneratedIdentityMode,
     pub identity: AsIdentity,
-    /// Greedy: a leading LPAREN starts this element instead of ending `GeneratedIdentityConstraint` (bison shift preference).
-    #[greedy(LPAREN)]
-    #[tok(LPAREN, this, RPAREN)]
-    pub seq_options: Option<recursa::Vec1<IdentitySeqOption<'input>>>,
+    pub seq_options: Option<IdentitySeqOptionList<'input>>,
 }
+
+/// Parenthesized sequence-option list on `GENERATED ... AS IDENTITY (...)`.
+///
+/// `SeqOptList` is space-separated, so the parentheses have to surround the
+/// whole list; a field-level attachment would demand a fresh pair per option
+/// (`(START WITH 44) (INCREMENT BY 2)`).
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct IdentitySeqOptionList<'input>(#[deref] pub recursa::Vec1<IdentitySeqOption<'input>>);
 
 /// Required `AS IDENTITY` marker after the generation mode.
 #[derive(recursa::Node, Debug, Clone)]

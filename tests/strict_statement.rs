@@ -289,3 +289,116 @@ fn declared_lists_and_optionals_span_their_delimiters() {
         assert!(input.is_eof(), "strict parse left input for {source:?}");
     }
 }
+
+/// `NONE` is PostgreSQL's missing-operand marker in an `oper_argtypes` pair
+/// (#52).
+///
+/// `NONE` is a `COL_NAME` keyword, and `Typename`'s `type_function_name` path
+/// admits neither `COL_NAME` nor therefore `NONE`. gram.y consequently spells
+/// `'(' NONE ',' Typename ')'` as its own `oper_argtypes` alternative, and so
+/// does `OperatorArgType`.
+#[test]
+fn operator_argtypes_accept_none_in_either_position() {
+    for source in [
+        "DROP OPERATOR # (NONE, int4)",
+        "DROP OPERATOR # (int4, NONE)",
+        "DROP OPERATOR IF EXISTS !!! (NONE, bigint)",
+        "ALTER OPERATOR @#@ (NONE, bigint) OWNER TO regress_user",
+        "COMMENT ON OPERATOR ! (bigint, NONE) IS 'test'",
+        "COMMENT ON OPERATOR @#@ (NONE, bigint) IS NULL",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        Statement::parse(&mut input)
+            .unwrap_or_else(|error| panic!("strict statement {source:?}: {error}"));
+        assert!(input.is_eof(), "strict parse left input for {source:?}");
+    }
+}
+
+/// `NONE` stays out of the general type-name language: it is a `COL_NAME`
+/// keyword, and PostgreSQL's `GenericType: type_function_name` excludes those
+/// (#52).
+#[test]
+fn none_is_not_a_general_type_name() {
+    for source in ["CREATE TABLE t (a NONE)", "CREATE DOMAIN d AS NONE"] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        let parsed = Statement::parse(&mut input);
+        assert!(
+            parsed.is_err() || !input.is_eof(),
+            "NONE must not be a general type name, but {source:?} parsed"
+        );
+    }
+}
+
+/// The remaining section-A clauses of #59, each of which carried its
+/// delimiter or lead-in keyword on every element rather than on the clause.
+#[test]
+fn repaired_clauses_accept_the_ordinary_multi_element_spelling() {
+    for source in [
+        // CastFunctionRef.args.
+        "CREATE CAST (int AS text) WITH FUNCTION f(int, text)",
+        // CreateAggregateOrderByInner.args.
+        "CREATE AGGREGATE ag (ORDER BY int, text) (SFUNC = f, STYPE = internal)",
+        // CreateAggregateOrderedTail.ordered.
+        "CREATE AGGREGATE ag (int ORDER BY int, text) (SFUNC = f, STYPE = internal)",
+        // TextSearchTokenList.tokens.
+        "ALTER TEXT SEARCH CONFIGURATION c ALTER MAPPING FOR a, b WITH d",
+        "ALTER TEXT SEARCH CONFIGURATION c DROP MAPPING FOR a, b",
+        // TSConfigAddMapping.tokens.
+        "ALTER TEXT SEARCH CONFIGURATION c ADD MAPPING FOR a, b WITH d",
+        // GeneratedIdentityConstraint.seq_options.
+        "CREATE TABLE t (a int GENERATED ALWAYS AS IDENTITY (START WITH 44 INCREMENT BY 2))",
+        // DeleteUsingClause.tables.
+        "DELETE FROM t USING a, b",
+        // AggregateArgs::Types.
+        "DROP AGGREGATE ag(int, text)",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        Statement::parse(&mut input)
+            .unwrap_or_else(|error| panic!("strict statement {source:?}: {error}"));
+        assert!(input.is_eof(), "strict parse left input for {source:?}");
+    }
+}
+
+/// The per-element spellings that the same clauses used to accept are not
+/// PostgreSQL and must now be rejected (#59).
+#[test]
+fn repaired_clauses_reject_the_per_element_spelling() {
+    for source in [
+        "CREATE CAST (int AS text) WITH FUNCTION f(int), (text)",
+        "CREATE AGGREGATE ag (ORDER BY int, ORDER BY text) (SFUNC = f, STYPE = internal)",
+        "CREATE AGGREGATE ag (int ORDER BY int, ORDER BY text) (SFUNC = f, STYPE = internal)",
+        "ALTER TEXT SEARCH CONFIGURATION c ALTER MAPPING FOR a, FOR b WITH d",
+        "ALTER TEXT SEARCH CONFIGURATION c DROP MAPPING FOR a, FOR b",
+        "ALTER TEXT SEARCH CONFIGURATION c ADD MAPPING FOR a, FOR b WITH d",
+        "CREATE TABLE t (a int GENERATED ALWAYS AS IDENTITY (START WITH 44) (INCREMENT BY 2))",
+        "DELETE FROM t USING a, USING b",
+        "DROP AGGREGATE ag(int), (text)",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        let parsed = Statement::parse(&mut input);
+        assert!(
+            parsed.is_err() || !input.is_eof(),
+            "the per-element spelling {source:?} must be rejected"
+        );
+    }
+}

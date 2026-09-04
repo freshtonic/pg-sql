@@ -85,12 +85,20 @@ pub enum AggregateArgs<'input> {
     /// `(*)` — the zero-argument aggregate (spelled like `COUNT(*)`).
     Star,
     /// `(type, ...)` — explicit argument type list.
-    Types(
-        #[tok(LPAREN, this, RPAREN)]
-        #[sep(COMMA)]
-        recursa::Vec1<TypeName<'input>>,
-    ),
+    Types(AggregateArgTypeList<'input>),
 }
+
+/// The parenthesized type list of `aggregate_with_argtypes`.
+///
+/// The parentheses surround the whole list; a field-level attachment would
+/// bind to each element and declare `(int), (text)`.
+#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, derive_more::Deref)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct AggregateArgTypeList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<TypeName<'input>>,
+);
 
 /// A dotted name: `name`, `schema.name`, or `catalog.schema.name`.
 ///
@@ -397,41 +405,67 @@ pub struct QualifiedOperatorPrefix<'input> {
     pub name: literal::Ident<'input>,
 }
 
+/// One side of an `oper_argtypes` pair: a type name, or `NONE` —
+/// PostgreSQL's missing-operand marker on a unary operator.
+///
+/// `NONE` is a `COL_NAME` keyword, and `Typename`'s `type_function_name`
+/// path admits only `UNRESERVED` and `TYPE_FUNC_NAME` keywords, so
+/// [`TypeName`] does not reach it. gram.y likewise spells
+/// `'(' NONE ',' Typename ')'` as its own `oper_argtypes` alternative rather
+/// than widening the type name.
+///
+/// Variant ordering: `None` first, because the literal `NONE` keyword is the
+/// specific match and `Type` would otherwise have to reject it.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum OperatorArgType<'input> {
+    #[tok(NONE)]
+    None,
+    Type(TypeName<'input>),
+}
+
+impl<'input> OperatorArgType<'input> {
+    /// Returns the named type, or `None` for the `NONE` marker.
+    pub fn type_name(&self) -> Option<&TypeName<'input>> {
+        match self {
+            OperatorArgType::None => Option::None,
+            OperatorArgType::Type(type_name) => Some(type_name),
+        }
+    }
+}
+
 /// `(left, right)` argument-type signature on `operator_with_argtypes` —
 /// Postgres' `oper_argtypes`.
 ///
-/// `NONE` is a `COL_NAME` keyword and is therefore also accepted by
-/// [`TypeName`]. Modelling unary and binary spellings as separate grammar
-/// alternatives would duplicate the same token language. This shared-prefix
-/// type parses the pair once; [`Self::left`] and [`Self::right`] interpret a
-/// single unqualified `NONE` as PostgreSQL's missing operand marker.
+/// gram.y gives the unary spellings their own alternatives (`'(' NONE ','
+/// Typename ')'` and `'(' Typename ',' NONE ')'`), which duplicates the same
+/// token language three times. This shared-prefix type parses the pair once
+/// and lets [`OperatorArgType`] carry the `NONE` marker; [`Self::left`] and
+/// [`Self::right`] read it back.
+///
+/// The shared prefix also admits `(NONE, NONE)`, which gram.y has no
+/// alternative for. PostgreSQL rejects that pair semantically ("an operator
+/// must have at least one operand"), so the over-acceptance costs nothing a
+/// parser can decide.
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct OperatorArgtypes<'input> {
-    pub left_type: TypeName<'input>,
+    pub left_type: OperatorArgType<'input>,
     #[tok(COMMA, this)]
-    pub right_type: TypeName<'input>,
+    pub right_type: OperatorArgType<'input>,
 }
 
 impl<'input> OperatorArgtypes<'input> {
     /// Returns the left operand type, or `None` for PostgreSQL's unary
     /// `(NONE, right)` spelling.
     pub fn left(&self) -> Option<&TypeName<'input>> {
-        (!is_operator_none(&self.left_type)).then_some(&self.left_type)
+        self.left_type.type_name()
     }
 
     /// Returns the right operand type, or `None` for PostgreSQL's unary
     /// `(left, NONE)` spelling.
     pub fn right(&self) -> Option<&TypeName<'input>> {
-        (!is_operator_none(&self.right_type)).then_some(&self.right_type)
+        self.right_type.type_name()
     }
-}
-
-fn is_operator_none(type_name: &TypeName<'_>) -> bool {
-    let TypeName::Ident(name) = type_name else {
-        return false;
-    };
-    name.parts.len() == 1 && name.object().eq_ignore_ascii_case("none")
 }
 
 /// `any_operator oper_argtypes` — Postgres' `operator_with_argtypes`. The
