@@ -104,13 +104,18 @@ pub struct AlterDomainCheckConstraint<'input> {
 
 /// `NOT NULL ConstraintAttributeSpec` — Postgres' NOT NULL arm of
 /// `DomainConstraintElem` (ALTER DOMAIN-specific form). The corpus
-/// exercises only the bare `NOT NULL` form, but the grammar allows the
-/// optional `ConstraintAttributeSpec` trailer.
+/// exercises the bare `NOT NULL` form as well as the optional
+/// `ConstraintAttributeSpec` trailer the grammar allows.
+///
+/// The `NOT NULL` keywords sit on the struct, not on the `attrs` field: a
+/// field-level `#[tok(...)]` on a repeated field binds to each element, so
+/// it would demand one `NOT NULL` per attribute and reject the bare form
+/// (which has no attributes at all).
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(NOT, NULL, this)]
 pub struct AlterDomainNotNullConstraint {
-    /// Greedy: a leading NOT starts this element instead of ending `AlterDomainNotNullConstraint` (bison shift preference).
-    #[greedy(NOT)]
-    #[tok(NOT, NULL, this)]
+    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `AlterDomainNotNullConstraint` (bison shift preference).
+    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub attrs: Vec<ConstraintAttributeElem>,
 }
 

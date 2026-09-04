@@ -157,4 +157,65 @@ mod tests {
             "ALTER AGGREGATE my_rank(VARIADIC \"any\" ORDER BY VARIADIC \"any\") RENAME TO test_rank",
         );
     }
+    /// `CREATE AGGREGATE name (BASETYPE = ..., STYPE = int[], ...)` — the
+    /// old-style single-group definition list (gram.y
+    /// `DefineStmt: CREATE AGGREGATE func_name old_aggr_definition`).
+    /// `def_arg` is `func_type`, which carries `opt_array_bounds`, so an
+    /// array type is a legal option value.
+    #[test]
+    fn parse_create_aggregate_old_style_array_stype() {
+        for src in [
+            "CREATE AGGREGATE myaggp05a(BASETYPE = int, SFUNC = tfnp, STYPE = int[], FINALFUNC = ffp, INITCOND = '{}')",
+            "CREATE AGGREGATE myaggp07a(BASETYPE = anyelement, SFUNC = tfnp, STYPE = int[], FINALFUNC = ffp, INITCOND = '{}')",
+            "CREATE AGGREGATE myaggp09b(BASETYPE = int, SFUNC = tf1p, STYPE = int[], INITCOND = '{}')",
+            "CREATE AGGREGATE myaggn05a(BASETYPE = int, SFUNC = tfnp, STYPE = anyarray, FINALFUNC = ffnp, INITCOND = '{}')",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+            let mut input = lexed.input();
+            let _stmt = crate::ast::Statement::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(
+                input.is_eof(),
+                "parser cursor for {src:?}: {}",
+                input.cursor()
+            );
+        }
+    }
+
+    /// The old-style group records its `= value` tail as a `def_arg`, not as
+    /// a parameter default: `aggr_arg` is gram.y's `func_arg`, which has no
+    /// default.
+    #[test]
+    fn parse_create_aggregate_old_style_shape() {
+        let lexed = crate::lex("CREATE AGGREGATE a(BASETYPE = int, STYPE = int[])");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let CreateAggregateArgs::Args(lists) = &stmt.signature.args else {
+            panic!("expected a plain argument group");
+        };
+        assert_eq!(lists.direct.len(), 2);
+        assert!(lists.direct[0].value.is_some());
+        assert!(lists.direct[1].value.is_some());
+        assert!(stmt.signature.definition.is_none());
+        assert!(input.is_eof());
+    }
+
+    /// The modern `(arg_types) (def_list)` form keeps parsing as arguments.
+    #[test]
+    fn parse_create_aggregate_modern_args_unchanged() {
+        let lexed = crate::lex("CREATE AGGREGATE sum2(int8, int8) (SFUNC = sum3, STYPE = int8)");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let CreateAggregateArgs::Args(lists) = &stmt.signature.args else {
+            panic!("expected a plain argument group");
+        };
+        assert_eq!(lists.direct.len(), 2);
+        assert!(lists.direct[0].value.is_none());
+        assert!(stmt.signature.definition.is_some());
+        assert!(input.is_eof());
+    }
 }

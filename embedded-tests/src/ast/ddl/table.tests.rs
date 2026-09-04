@@ -795,4 +795,88 @@ mod tests {
         let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
+    #[test]
+    fn parse_create_table_as_execute() {
+        // gram.y `ExecuteStmt: CREATE OptTemp TABLE create_as_target AS
+        // EXECUTE name execute_param_clause opt_with_data`.
+        let lexed = crate::lex("CREATE TABLE as_select1 AS EXECUTE select1");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let super::CreateTableBody::AsQuery(body) = &stmt.body else {
+            panic!("expected an AS-query body");
+        };
+        let super::CtasSource::Execute(execute) = &body.source else {
+            panic!("expected an EXECUTE source");
+        };
+        assert_eq!(execute.name.text(), "select1");
+        assert!(execute.params.is_none());
+        assert!(body.with_data.is_none());
+        assert!(input.is_eof());
+    }
+
+    #[test]
+    fn parse_create_table_as_execute_params_with_no_data() {
+        let lexed = crate::lex(
+            "CREATE TEMPORARY TABLE q5_prep_nodata AS EXECUTE q5(200, 'DTAAAA') WITH NO DATA",
+        );
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let super::CreateTableBody::AsQuery(body) = &stmt.body else {
+            panic!("expected an AS-query body");
+        };
+        let super::CtasSource::Execute(execute) = &body.source else {
+            panic!("expected an EXECUTE source");
+        };
+        assert_eq!(execute.params.as_ref().unwrap().params.len(), 2);
+        assert!(matches!(body.with_data, Some(super::WithDataClause::NoData)));
+        assert!(input.is_eof());
+    }
+
+    #[test]
+    fn parse_create_table_columns_as_execute() {
+        let lexed = crate::lex(
+            "CREATE TABLE selinto_schema.tbl_withdata3 (a) AS EXECUTE data_sel WITH DATA",
+        );
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let super::CreateTableBody::ColumnsAsQuery(body) = &stmt.body else {
+            panic!("expected a columns AS-query body");
+        };
+        assert_eq!(body.columns.columns.len(), 1);
+        assert!(matches!(body.source, super::CtasSource::Execute(_)));
+        assert!(matches!(body.with_data, Some(super::WithDataClause::Data)));
+        assert!(input.is_eof());
+    }
+
+    #[test]
+    fn parse_create_table_tablespace_as_execute() {
+        let lexed = crate::lex(
+            "CREATE TABLE testschema.asexecute TABLESPACE regress_tblspace AS EXECUTE selectsource(2)",
+        );
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let super::CreateTableBody::AsQuery(body) = &stmt.body else {
+            panic!("expected an AS-query body");
+        };
+        assert!(body.tablespace.is_some());
+        assert!(matches!(body.source, super::CtasSource::Execute(_)));
+        assert!(input.is_eof());
+    }
+
+    #[test]
+    fn parse_create_table_as_query_still_parses() {
+        let lexed = crate::lex("CREATE TABLE t AS SELECT 1 WITH NO DATA");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let super::CreateTableBody::AsQuery(body) = &stmt.body else {
+            panic!("expected an AS-query body");
+        };
+        assert!(matches!(body.source, super::CtasSource::Query(_)));
+        assert!(input.is_eof());
+    }
 }

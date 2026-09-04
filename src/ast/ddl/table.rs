@@ -957,7 +957,28 @@ pub struct OfTypeBody<'input> {
     pub column_options: Option<PartitionColumnOptionList<'input>>,
 }
 
-/// AS-query table body: `AS SELECT ... [WITH [NO] DATA]`.
+/// The source of a CTAS body after `AS` — a query, or a prepared statement
+/// invoked with `EXECUTE name [(args)]`.
+///
+/// gram.y routes the second spelling through its own production
+/// (`ExecuteStmt: CREATE OptTemp TABLE create_as_target AS EXECUTE name
+/// execute_param_clause opt_with_data`), but on the surface it is a plain
+/// alternative in the same position, sharing the `WITH [NO] DATA` tail. The
+/// argument list is the same `execute_param_clause` as the standalone
+/// `EXECUTE` statement, so [`ExecuteStmt`] is reused whole.
+///
+/// Variant ordering: `Execute` begins with the `EXECUTE` keyword while
+/// `Query` begins with `SELECT` / `TABLE` / `VALUES` / `WITH` / `(`, so the
+/// first-token sets are disjoint and order is for clarity.
+///
+/// [`ExecuteStmt`]: crate::ast::tcl::prepared::ExecuteStmt
+#[derive(recursa::Node, Debug, Clone)]
+pub enum CtasSource<'input> {
+    Execute(Box<crate::ast::tcl::prepared::ExecuteStmt<'input>>),
+    Query(Box<crate::ast::dml::values::Subquery<'input>>),
+}
+
+/// AS-query table body: `AS { SELECT ... | EXECUTE name [(args)] } [WITH [NO] DATA]`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AsQueryBody<'input> {
     /// Optional `WITH (param = value, ...)` storage parameters before `AS`.
@@ -965,7 +986,7 @@ pub struct AsQueryBody<'input> {
     /// Optional `TABLESPACE name` before `AS`.
     pub tablespace: Option<TablespaceClause<'input>>,
     #[tok(AS, this)]
-    pub query: Box<crate::ast::dml::values::Subquery<'input>>,
+    pub source: CtasSource<'input>,
     pub with_data: Option<WithDataClause>,
 }
 
@@ -980,13 +1001,15 @@ pub enum WithDataClause {
     Data,
 }
 
-/// `(col, col, ...) [ON COMMIT ...] AS query [WITH [NO] DATA]` — CTAS with column list.
+/// `(col, col, ...) [ON COMMIT ...] AS source [WITH [NO] DATA]` — CTAS with
+/// column list. The source is a query or an `EXECUTE` of a prepared
+/// statement, as in `CREATE TABLE t (a) AS EXECUTE data_sel WITH DATA`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ColumnsAsQueryBody<'input> {
     pub columns: CtasColumnList<'input>,
     pub on_commit: Option<OnCommitClause>,
     #[tok(AS, this)]
-    pub query: Box<crate::ast::dml::values::Subquery<'input>>,
+    pub source: CtasSource<'input>,
     pub with_data: Option<WithDataClause>,
 }
 
