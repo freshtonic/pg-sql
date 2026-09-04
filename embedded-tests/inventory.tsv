@@ -684,6 +684,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_json_constructors	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_delete_path_operator_classified	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_field	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_field_text	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_json_object_ordinary_function_form	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_path	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_path_exists	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_json_path_text	false

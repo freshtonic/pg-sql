@@ -2100,17 +2100,48 @@ pub enum JsonKeyValueSep {
     Value,
 }
 
-/// One `[KEY] ‹key› {: | VALUE} ‹value› [FORMAT JSON ...]` entry of `JSON_OBJECT`.
+/// The `{: | VALUE} ‹value› [FORMAT JSON ...]` part of a `JSON_OBJECT` item.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct JsonObjectEntry<'input> {
-    pub key: Box<Expr<'input>>,
+pub struct JsonObjectEntryValue<'input> {
     pub sep: JsonKeyValueSep,
     pub value: Box<Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
 }
 
-/// Non-empty entry form of `JSON_OBJECT`, followed by the optional `ON NULL`,
-/// `UNIQUE` and `RETURNING` clauses.
+/// One item of a `JSON_OBJECT` list: either a SQL/JSON
+/// `[KEY] ‹key› {: | VALUE} ‹value› [FORMAT JSON ...]` entry, or one
+/// argument of PostgreSQL's legacy `json_object(text[])` /
+/// `json_object(text[], text[])` function form.
+///
+/// gram.y keeps those as separate productions — `JSON_OBJECT` is a
+/// `COL_NAME` keyword and can never be an ordinary `FuncCall` name, so the
+/// legacy call gets its own `JSON_OBJECT '(' func_arg_list ')'` rule. Both
+/// are comma-separated and expression-led, and no bounded lookahead splits
+/// them: one `U&'...' UESCAPE '...'` key already spans five tokens. They
+/// therefore share this node, and the presence of the key/value separator
+/// is what tells the two forms apart.
+///
+/// PostgreSQL's `func_arg_list` also admits the `name => value` spelling.
+/// That form is not modelled here: no `json_object` call uses it, and a
+/// named argument is not a legal SQL/JSON entry key.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct JsonObjectEntry<'input> {
+    pub key: Box<Expr<'input>>,
+    pub value: Option<JsonObjectEntryValue<'input>>,
+}
+
+/// One `‹key› {: | VALUE} ‹value› [FORMAT JSON ...]` entry of
+/// `JSON_OBJECTAGG`, whose gram.y production admits only the SQL/JSON
+/// spelling and therefore requires the value.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct JsonObjectAggEntry<'input> {
+    pub key: Box<Expr<'input>>,
+    pub value: JsonObjectEntryValue<'input>,
+}
+
+/// Non-empty item list of `JSON_OBJECT`, followed by the optional `ON NULL`,
+/// `UNIQUE` and `RETURNING` clauses. Those clauses belong to the SQL/JSON
+/// entry production only; the legacy function form never carries them.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct JsonObjectArgs<'input> {
     #[sep(COMMA)]
@@ -2120,7 +2151,7 @@ pub struct JsonObjectArgs<'input> {
     pub returning: Option<JsonReturning<'input>>,
 }
 
-/// `JSON_OBJECT` has distinct PostgreSQL productions for a non-empty entry
+/// `JSON_OBJECT` has distinct PostgreSQL productions for a non-empty item
 /// list and for the empty/returning-only form. Keeping those paths distinct
 /// prevents the expression-led entry parser from claiming the reserved
 /// `RETURNING` token as an entry key.
@@ -2373,7 +2404,7 @@ pub struct JsonQuery<'input> {
 /// Inner contents of `JSON_OBJECTAGG`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct JsonObjectAggInner<'input> {
-    pub entry: JsonObjectEntry<'input>,
+    pub entry: JsonObjectAggEntry<'input>,
     pub on_null: Option<JsonOnNull>,
     pub unique: Option<JsonUniqueKeys>,
     pub returning: Option<JsonReturning<'input>>,

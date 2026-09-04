@@ -3220,6 +3220,38 @@ mod tests {
         }
     }
 
+    /// The legacy ordinary-function spelling of `json_object`
+    /// (`JSON_OBJECT '(' func_arg_list ')'` in gram.y) alongside the SQL/JSON
+    /// constructor forms, which must keep winning where they apply.
+    #[test]
+    fn parse_json_object_ordinary_function_form() {
+        for src in [
+            "json_object('{}')",
+            "json_object('{a,b}', '{1,2}')",
+            "json_object(array_agg(g))",
+            "json_object_keys(json_object(array_agg(g)))",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _expr = Expr::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+        for src in [
+            "JSON_OBJECT('a': 1, 'b': 2)",
+            "JSON_OBJECT(KEY 'a' VALUE 2 + 3)",
+            "JSON_OBJECT()",
+            "JSON_OBJECT(RETURNING jsonb)",
+        ] {
+            assert!(
+                matches!(parse_expr_classified(src), Expr::JsonObject(_)),
+                "expected the SQL/JSON constructor for {src:?}",
+            );
+        }
+    }
+
     /// `arr[i].field` — PostgreSQL's `opt_indirection` chains subscripts and
     /// attribute names freely, so a `.field` selector must be able to follow
     /// a subscript.
