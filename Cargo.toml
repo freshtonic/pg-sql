@@ -34,7 +34,6 @@ postgres-oracle = ["dep:pg-oracle"]
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 recursa = { path = "../recursa/recursa", features = ["diagrams", "explorer"] }
-logos = "0.16"
 regex = "1"
 derive_more = { version = "2.1.1", features = ["deref"] }
 arbitrary = { version = "1", features = ["derive"], optional = true }

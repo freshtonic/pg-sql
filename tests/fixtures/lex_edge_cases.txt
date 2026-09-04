@@ -1,0 +1,213 @@
+## edge "a+--b" (5 bytes, 2 records)
+0..1 T ColIdText "a"
+1..2 T PLUS "+"
+## edge "x*/*c*/y" (8 bytes, 3 records)
+0..1 T ColIdText "x"
+1..2 T STAR "*"
+7..8 T ColIdText "y"
+## edge "x||/*c*/y" (9 bytes, 3 records)
+0..1 T ColIdText "x"
+1..3 T CONCAT "||"
+8..9 T ColIdText "y"
+## edge "x||/*c" (6 bytes, 4 records)
+0..1 T ColIdText "x"
+1..4 T PIPEPIPESLASH "||/"
+4..5 T STAR "*"
+5..6 T ColIdText "c"
+## edge "SELECT $$unterminated" (21 bytes, 2 records)
+0..6 T SELECT "SELECT"
+7..21 E RCA4001 7..9 "$$unterminated"
+## edge "SELECT $tag$body$tag$" (21 bytes, 2 records)
+0..6 T SELECT "SELECT"
+7..21 T DollarStringLit "$tag$body$tag$"
+## edge "SELECT $tag$body$other$" (23 bytes, 2 records)
+0..6 T SELECT "SELECT"
+7..23 E RCA4001 7..12 "$tag$body$other$"
+## edge "SELECT /* unterminated" (22 bytes, 2 records)
+0..6 T SELECT "SELECT"
+7..22 E RCA4002 7..9 "/* unterminated"
+## edge "SELECT /* a /* b */ c */ 1" (26 bytes, 2 records)
+0..6 T SELECT "SELECT"
+25..26 T IntegerLit "1"
+## edge "SELECT ?" (8 bytes, 2 records)
+0..6 T SELECT "SELECT"
+7..8 T QUESTION "?"
+## edge "SELECT 1e+" (10 bytes, 4 records)
+0..6 T SELECT "SELECT"
+7..8 E RCA4004 7..8 "1"
+8..9 T ColIdText "e"
+9..10 T PLUS "+"
+## edge "SELECT 1e+1" (11 bytes, 2 records)
+0..6 T SELECT "SELECT"
+7..11 T NumericLit "1e+1"
+## edge "SELECT x.y" (10 bytes, 4 records)
+0..6 T SELECT "SELECT"
+7..8 T ColIdText "x"
+8..9 T DOT "."
+9..10 T ColIdText "y"
+## edge "SELECT 1..2" (11 bytes, 3 records)
+0..6 T SELECT "SELECT"
+7..9 T NumericLit "1."
+9..11 T NumericLit ".2"
+## edge "SELECT 1." (9 bytes, 2 records)
+0..6 T SELECT "SELECT"
+7..9 T NumericLit "1."
+## edge "SELECT .1" (9 bytes, 2 records)
+0..6 T SELECT "SELECT"
+7..9 T NumericLit ".1"
+## edge "SELECT 0x1f, 0o17, 0b101" (24 bytes, 6 records)
+0..6 T SELECT "SELECT"
+7..11 T IntegerLit "0x1f"
+11..12 T COMMA ","
+13..17 T IntegerLit "0o17"
+17..18 T COMMA ","
+19..24 T IntegerLit "0b101"
+## edge "SELECT 1_000" (12 bytes, 2 records)
+0..6 T SELECT "SELECT"
+7..12 T IntegerLit "1_000"
+## edge "SELECT 1abc" (11 bytes, 3 records)
+0..6 T SELECT "SELECT"
+7..8 E RCA4004 7..8 "1"
+8..11 T ColIdText "abc"
+## edge "SELECT 0x" (9 bytes, 3 records)
+0..6 T SELECT "SELECT"
+7..8 E RCA4004 7..8 "0"
+8..9 T ColIdText "x"
+## edge "a <<>> b" (8 bytes, 3 records)
+0..1 T ColIdText "a"
+2..6 T CustomOp "<<>>"
+7..8 T ColIdText "b"
+## edge "a <> b" (6 bytes, 3 records)
+0..1 T ColIdText "a"
+2..4 T NEQ "<>"
+5..6 T ColIdText "b"
+## edge "a ! b" (5 bytes, 3 records)
+0..1 T ColIdText "a"
+2..3 T CustomOp "!"
+4..5 T ColIdText "b"
+## edge "a !! b" (6 bytes, 3 records)
+0..1 T ColIdText "a"
+2..4 T CustomOp "!!"
+5..6 T ColIdText "b"
+## edge "a +- b" (6 bytes, 4 records)
+0..1 T ColIdText "a"
+2..3 T PLUS "+"
+3..4 T MINUS "-"
+5..6 T ColIdText "b"
+## edge "a +-~ b" (7 bytes, 3 records)
+0..1 T ColIdText "a"
+2..5 T CustomOp "+-~"
+6..7 T ColIdText "b"
+## edge "a ~+- b" (7 bytes, 3 records)
+0..1 T ColIdText "a"
+2..5 T CustomOp "~+-"
+6..7 T ColIdText "b"
+## edge "a @-@ b" (7 bytes, 3 records)
+0..1 T ColIdText "a"
+2..5 T ATMINUSAT "@-@"
+6..7 T ColIdText "b"
+## edge "a ||/ 9" (7 bytes, 3 records)
+0..1 T ColIdText "a"
+2..5 T PIPEPIPESLASH "||/"
+6..7 T IntegerLit "9"
+## edge "a |/ 9" (6 bytes, 3 records)
+0..1 T ColIdText "a"
+2..4 T PIPESLASH "|/"
+5..6 T IntegerLit "9"
+## edge "select 1 -- trailing\nselect 2" (29 bytes, 4 records)
+0..6 T SELECT "select"
+7..8 T IntegerLit "1"
+21..27 T SELECT "select"
+28..29 T IntegerLit "2"
+## edge "select 1 --trailing" (19 bytes, 2 records)
+0..6 T SELECT "select"
+7..8 T IntegerLit "1"
+## edge "select 1 -- trailing\r\nselect 2" (30 bytes, 4 records)
+0..6 T SELECT "select"
+7..8 T IntegerLit "1"
+22..28 T SELECT "select"
+29..30 T IntegerLit "2"
+## edge "u&'\\0441'" (9 bytes, 1 records)
+0..9 T UnicodeStringLit "u&'\\0441'"
+## edge "U&\"d\\0061t\\+000061\"" (19 bytes, 1 records)
+0..19 T ColIdText "U&\"d\\0061t\\+000061\""
+## edge "e'\\n'" (5 bytes, 1 records)
+0..5 T EscapeStringLit "e'\\n'"
+## edge "E'a''b'" (7 bytes, 1 records)
+0..7 T EscapeStringLit "E'a''b'"
+## edge "b'0101'" (7 bytes, 1 records)
+0..7 T BitStringLit "b'0101'"
+## edge "x'1f'" (5 bytes, 1 records)
+0..5 T HexStringLit "x'1f'"
+## edge "'it''s'" (7 bytes, 1 records)
+0..7 T StringLit "'it''s'"
+## edge "'unterminated" (13 bytes, 2 records)
+0..1 E RCA4000 0..1 "'"
+1..13 T ColIdText "unterminated"
+## edge "\"unterminated" (13 bytes, 2 records)
+0..1 E RCA4000 0..1 "\""
+1..13 T ColIdText "unterminated"
+## edge "$1 $2 $12a" (10 bytes, 4 records)
+0..2 T DollarNum "$1"
+3..5 T DollarNum "$2"
+6..9 E RCA4004 6..9 "$12"
+9..10 T ColIdText "a"
+## edge "\\gexec \\g \\gx \\gset \\crosstabview \\; \\" (38 bytes, 7 records)
+0..6 T PSQLGEXEC "\\gexec"
+7..9 T PSQLG "\\g"
+10..13 T PSQLGX "\\gx"
+14..19 T PSQLGSET "\\gset"
+20..33 T PSQLCROSSTABVIEW "\\crosstabview"
+34..36 T PSQLBATCHSEMI "\\;"
+37..38 T BACKSLASH "\\"
+## edge "SELECT 1 é 2" (13 bytes, 4 records)
+0..6 T SELECT "SELECT"
+7..8 T IntegerLit "1"
+9..11 E RCA4000 9..11 "é"
+12..13 T IntegerLit "2"
+## edge "SELECT 'é'" (11 bytes, 2 records)
+0..6 T SELECT "SELECT"
+7..11 T StringLit "'é'"
+## edge "" (0 bytes, 0 records)
+## edge " " (1 bytes, 0 records)
+## edge "\t\r\n\u{c}" (4 bytes, 0 records)
+## edge "---" (3 bytes, 0 records)
+## edge "/*/" (3 bytes, 1 records)
+0..3 E RCA4002 0..2 "/*/"
+## edge "/**/" (4 bytes, 0 records)
+## edge "/*" (2 bytes, 1 records)
+0..2 E RCA4002 0..2 "/*"
+## edge "*/" (2 bytes, 1 records)
+0..2 T CustomOp "*/"
+## edge "+" (1 bytes, 1 records)
+0..1 T PLUS "+"
+## edge "-" (1 bytes, 1 records)
+0..1 T MINUS "-"
+## edge "*" (1 bytes, 1 records)
+0..1 T STAR "*"
+## edge "/" (1 bytes, 1 records)
+0..1 T SLASH "/"
+## edge "a#-b" (4 bytes, 3 records)
+0..1 T ColIdText "a"
+1..3 T HASHMINUS "#-"
+3..4 T ColIdText "b"
+## edge "a^@b" (4 bytes, 3 records)
+0..1 T ColIdText "a"
+1..3 T CARETAT "^@"
+3..4 T ColIdText "b"
+## edge "a#>>b" (5 bytes, 3 records)
+0..1 T ColIdText "a"
+1..4 T HASHARROWARROW "#>>"
+4..5 T ColIdText "b"
+## edge "a?||b" (5 bytes, 3 records)
+0..1 T ColIdText "a"
+1..4 T QUESTIONPIPEPIPE "?||"
+4..5 T ColIdText "b"
+## edge "a!~~*b" (6 bytes, 3 records)
+0..1 T ColIdText "a"
+1..5 T BANGTILDETILDESTAR "!~~*"
+5..6 T ColIdText "b"
+## edge "a~<=~b" (6 bytes, 3 records)
+0..1 T ColIdText "a"
+1..5 T TILDELEQTILDE "~<=~"
+5..6 T ColIdText "b"

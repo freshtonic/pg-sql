@@ -473,3 +473,50 @@ generated static so the runtime borrows it (zero alloc, zero copy) instead
 of composing per parse-site. Alternatively make composed sets `Rc`-shared
 (pointer-sized clone). The inline-buffer approach is preserved on the
 branch but must not land as-is. Reverted to wave-1 pin 870ddfe.
+
+## Track R wave 3 landed: logos-backed lexer (2026-09-04)
+
+recursa `perf/logos-lexer` (pinned by pg-sql `perf/logos-lexer`). The runtime
+lexer no longer tries all 113 generated rules at every source offset. Codegen
+now emits a private `#[derive(Logos)]` enum per grammar — one variant per
+lexical rule — and the runtime drives that single DFA. `logos` stays an
+implementation detail: it is re-exported through `recursa::__private::logos`
+and generated code names it with `#[logos(crate = ...)]`, so pg-sql needs no
+`logos` dependency (the unused direct one was removed).
+
+Three mechanisms cannot be expressed by one longest-match DFA and stay in the
+driver: operator runs (their extent shrinks after the fact, at the first
+interior fence and under the trailing-character rule), operator-fence
+suppression (it needs a second lexical decision at the fence), and closed
+regions (they arbitrate on the extent their callback reaches, not on their
+opener, so they get a second small DFA consulted only at offsets whose first
+byte can open one).
+
+Measured with `flame -- <workload> --duration 5`, two runs each, against the
+same tree without the change (pg-sql 0ec8716 + recursa aac09ef):
+
+| Workload | before | after | Δ |
+| --- | --: | --: | --: |
+| bool_chain | 11.83 ms/statement (84.6/s) | 5.83 ms/statement (171.6/s) | **2.03× faster** |
+| corpus | 0.0509 ms/statement (19,655/s) | 0.0197 ms/statement (50,840/s) | **2.59× faster** |
+| select_list_10000 | 97.5 ms/statement (10.3/s) | 53.4 ms/statement (18.7/s) | **1.83× faster** |
+
+Lexing output is byte-identical. `tests/lex_identity.rs` dumps one line per
+lexical record — kind, span, text, and diagnostic code plus anchor — for the
+complete PostgreSQL regression corpus, every stress fixture, and 64
+adversarial inputs (`a+--b`, `x*/*c*/y`, `x||/*c*/y`, unterminated `$$` and
+`/*`, `1e+`, `1..2`, stray `?`, psql meta-commands, non-ASCII scalars). The
+dump is byte-identical before and after across 801,597 lines; the adversarial
+half is pinned as a checked-in expectation
+(`tests/fixtures/lex_edge_cases.txt`).
+
+Suites: recursa workspace green; pg-sql `--test embedded` 1092/0/2, `--test
+document` 27/0/0, `--test lex_identity` 2/0/0. `--features postgres-oracle
+--test differential` reports 160 passed / 74 failed both with and against the
+change, with the identical failure set — those 74 are a pre-existing local
+condition, not this change.
+
+The old matcher runtime is gone: `CompiledLexMatcher`, the thread-local
+compiled-table cache from wave 1, and recursa-core's `regex-automata`
+dependency were all removed (`regex-automata` stays a codegen-only
+dependency). The private generation protocol moved to 21.
