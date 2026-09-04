@@ -283,6 +283,11 @@ fn run_alloc_count(inputs: &[String]) {
         "alloc_total statements={} allocs={} bytes={}",
         lex.statements, total_allocs, total_bytes,
     );
+    println!(
+        "interned_follow_sets={} memoized_pairs={}",
+        recursa::__private::FollowSet::interned_composition_count(),
+        recursa::__private::FollowSet::memoized_pair_count()
+    );
 }
 
 /// One completed profiling loop: how much work ran inside the deadline.
