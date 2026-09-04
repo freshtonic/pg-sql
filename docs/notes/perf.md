@@ -25,6 +25,30 @@ The stress fixtures are checked in and regenerable with
 statement set that `benches/parse.rs` calls the "corpus head-to-head"; the
 head-to-head engine comparison itself stays in that bench.
 
+### Known blind spot: all three workloads are the statement seam
+
+Every workload above, every profile in this journal, and `benches/parse.rs`
+itself measure the same seam: `lex_statement_source` + `Statement::parse`,
+one statement at a time. **Document framing (`pg_sql::document::parse_sql`)
+has never been measured here.** That is a gap in the discipline, not merely
+a missing number: a cost that lives only in the file-level path is
+structurally invisible to every measurement we take, however many workloads
+we add at the statement level.
+
+It has already hidden one: a peer session profiling the file-level seam on
+2026-09-04 measured `document::parse_sql` as **quadratic in statement
+count** (growth exponent 2.00 at 1,600 statements; 67 KB of SQL taking
+1.03 s where PostgreSQL's raw parser takes ~0.8 ms), attributed to
+`recursa-core/src/framing.rs`'s island loop re-lexing the remaining document
+once per island and `Input::input_bounded` validating and cloning the whole
+record vector per island. None of the statement-seam work recorded below
+would have surfaced it, and none of it is affected by it.
+
+A document-level canonical workload belongs in this table. It is deliberately
+not added in the same change that discovered the defect, so that the fix can
+be measured against a workload defined independently of it; see the
+document-framing work for the proposal.
+
 ## Running the flame harness
 
 The harness is `benches/flame.rs` (Track T port of recursa-old's
