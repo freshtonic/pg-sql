@@ -53,9 +53,10 @@ acceptance on every build against the overlap it finds at that site:
 
 All three fail the build, so an acceptance never hides a new or changed
 ambiguity, and a fixed grammar shape surfaces as a stale acceptance to remove.
-Railroad diagrams label an accepted element `greedy(...)`. The enum-level
-acceptance on `ast::shared::expr::Expr` covers every left-denotation operand
-and the `ESCAPE` tails of the LIKE family in one declaration.
+Railroad diagrams show `greedy(...)` as hover text on an accepted element, so
+the note costs the drawing no space. The enum-level acceptance on
+`ast::shared::expr::Expr` covers every left-denotation operand and the
+`ESCAPE` tails of the LIKE family in one declaration.
 
 Counts: 143 attributes (16 `all`, 1 enum-level, the rest
 exact kind lists).
