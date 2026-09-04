@@ -229,10 +229,14 @@ pub enum NullsDistinctClause {
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DropIndexStmt<'input> {
+    /// Greedy: a leading CONCURRENTLY starts this element instead of ending `DropIndexStmt` (bison shift preference).
+    #[greedy(CONCURRENTLY)]
     #[tok(DROP, INDEX, this)]
     #[presence(CONCURRENTLY)]
     pub concurrently: bool,
     pub if_exists: Option<IfExists>,
+    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropIndexStmt` (bison shift preference).
+    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
     pub names: Vec<crate::ast::shared::names::QualifiedName<'input>>,
     pub behavior: Option<DropBehavior>,

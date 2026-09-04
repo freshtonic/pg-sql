@@ -109,6 +109,8 @@ pub enum DeallocateTarget<'input> {
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DeallocateStmt<'input> {
+    /// Greedy: a leading PREPARE starts this element instead of ending `DeallocateStmt` (bison shift preference).
+    #[greedy(PREPARE)]
     #[tok(DEALLOCATE, this)]
     #[presence(PREPARE)]
     pub prepare: bool,

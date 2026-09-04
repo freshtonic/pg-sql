@@ -67,6 +67,8 @@ pub struct CreateSchemaStmt<'input> {
     /// Schema name and/or `AUTHORIZATION` clause. Postgres requires at least
     /// one — the enum forces that structurally.
     pub head: SchemaNameClause<'input>,
+    /// Greedy: a leading CREATE, GRANT starts this element instead of ending `CreateSchemaStmt` (bison shift preference).
+    #[greedy(CREATE, GRANT)]
     /// Nested `schema_element` statements — `OptSchemaEltList`. Each element
     /// is a top-level statement type; the surrounding semicolons live on the
     /// enclosing statement, not on the nested ones.

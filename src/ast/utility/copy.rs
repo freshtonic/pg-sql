@@ -210,6 +210,10 @@ pub enum CopyGenericOptionArg<'input> {
 /// stops at the first non-option token (typically `WHERE` or end-of-statement).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CopyLegacyOptions<'input> {
+    /// Greedy: a leading token from any of 11 kinds starts this element instead of ending `CopyLegacyOptions` (bison shift preference).
+    #[greedy(
+        BINARY, CSV, DELIMITER, ENCODING, ESCAPE, FORCE, FREEZE, HEADER, NULL, OIDS, QUOTE
+    )]
     pub items: Vec<CopyLegacyOptionItem<'input>>,
 }
 

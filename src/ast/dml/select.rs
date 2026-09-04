@@ -18,7 +18,11 @@ pub enum SelectStar {
 /// An expression target with its optional output alias.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SelectExprItem<'input> {
+    /// Greedy: the expression keeps extending on every shared extender instead of yielding to what may follow `SelectExprItem`.
+    #[greedy(all)]
     pub expr: Expr<'input>,
+    /// Greedy: any kind that can start this element continues it instead of ending `SelectExprItem` (bison shift preference).
+    #[greedy(all)]
     pub alias: Option<Alias<'input>>,
 }
 
@@ -155,6 +159,8 @@ pub struct ParenTableRef<'input> {
     pub open: SelectLParen,
     pub body: ParenTableBody<'input>,
     pub close: SelectRParen,
+    /// Greedy: a leading ABSENT starts this element instead of ending `ParenTableRef` (bison shift preference).
+    #[greedy(ABSENT)]
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
@@ -173,6 +179,8 @@ pub type SelectRParen = ParenthesizedClose;
 pub struct LateralSubquery<'input> {
     #[tok(LPAREN, this, RPAREN)]
     pub query: Box<Subquery<'input>>,
+    /// Greedy: a leading ABSENT starts this element instead of ending `LateralSubquery` (bison shift preference).
+    #[greedy(ABSENT)]
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
@@ -322,6 +330,8 @@ pub struct FuncTableRef<'input> {
     pub func: FunctionApplicationExpr<'input>,
     #[presence(WITH, ORDINALITY)]
     pub ordinality: bool,
+    /// Greedy: a leading token from any of 9 kinds starts this element instead of ending `FuncTableRef` (bison shift preference).
+    #[greedy(ABSENT, CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT, TABLESAMPLE)]
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
@@ -362,6 +372,8 @@ pub struct SpecialFuncTableRef<'input> {
     pub func: SpecialFuncTableExpr<'input>,
     #[presence(WITH, ORDINALITY)]
     pub ordinality: bool,
+    /// Greedy: a leading token from any of 9 kinds starts this element instead of ending `SpecialFuncTableRef` (bison shift preference).
+    #[greedy(ABSENT, CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT, TABLESAMPLE)]
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
@@ -408,6 +420,8 @@ pub struct JsonTableTypedColumn<'input> {
     pub path: Option<JsonTableColumnPath<'input>>,
     pub wrapper: Option<JsonWrapper>,
     pub quotes: Option<JsonQuotes>,
+    /// Greedy: a leading token from any of 7 kinds starts this element instead of ending `JsonTableTypedColumn` (bison shift preference).
+    #[greedy(DEFAULT, EMPTY, ERROR, FALSE, NULL, TRUE, UNKNOWN)]
     pub on_empty_behaviour: Option<JsonOnBehavior<'input>>,
     pub on_error_behaviour: Option<JsonOnBehavior<'input>>,
 }
@@ -495,6 +509,8 @@ pub struct JsonTable<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTableRef<'input> {
     pub table: JsonTable<'input>,
+    /// Greedy: a leading ABSENT starts this element instead of ending `JsonTableRef` (bison shift preference).
+    #[greedy(ABSENT)]
     pub alias: Option<TableAlias<'input>>,
 }
 
@@ -537,6 +553,8 @@ pub struct XmlTableNamespaces<'input> {
 /// `PATH '‹xpath›'` clause on an XMLTABLE column.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableColumnPath<'input> {
+    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `XmlTableColumnPath`.
+    #[greedy(NOT)]
     #[tok(PATH, this)]
     pub xpath: Box<Expr<'input>>,
 }
@@ -544,6 +562,8 @@ pub struct XmlTableColumnPath<'input> {
 /// `DEFAULT ‹expr›` clause on an XMLTABLE column.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableColumnDefault<'input> {
+    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `XmlTableColumnDefault`.
+    #[greedy(NOT)]
     #[tok(DEFAULT, this)]
     pub value: Box<Expr<'input>>,
 }
@@ -619,6 +639,8 @@ pub struct XmlTable<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableRef<'input> {
     pub table: XmlTable<'input>,
+    /// Greedy: a leading ABSENT starts this element instead of ending `XmlTableRef` (bison shift preference).
+    #[greedy(ABSENT)]
     pub alias: Option<TableAlias<'input>>,
 }
 
@@ -647,6 +669,8 @@ pub struct RowsFromRef<'input> {
     pub items: RowsFromItemList<'input>,
     #[presence(WITH, ORDINALITY)]
     pub ordinality: bool,
+    /// Greedy: a leading token from any of 9 kinds starts this element instead of ending `RowsFromRef` (bison shift preference).
+    #[greedy(ABSENT, CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT, TABLESAMPLE)]
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
@@ -678,6 +702,8 @@ pub enum TableFunctionName<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct NamedTableRef<'input> {
     pub name: TableFunctionName<'input>,
+    /// Greedy: a leading ABSENT starts this element instead of ending `NamedTableRef` (bison shift preference).
+    #[greedy(ABSENT)]
     pub tail: Option<NamedTableRefTail<'input>>,
 }
 
@@ -694,12 +720,16 @@ pub struct NamedFunctionTableTail<'input> {
     pub application: FunctionCallApplication<'input>,
     #[presence(WITH, ORDINALITY)]
     pub ordinality: bool,
+    /// Greedy: a leading token from any of 9 kinds starts this element instead of ending `NamedFunctionTableTail` (bison shift preference).
+    #[greedy(ABSENT, CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT, TABLESAMPLE)]
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct NamedInheritedTail<'input> {
     pub star: SelectStar,
+    /// Greedy: a leading ABSENT starts this element instead of ending `NamedInheritedTail` (bison shift preference).
+    #[greedy(ABSENT)]
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
@@ -709,6 +739,8 @@ pub struct NamedInheritedTail<'input> {
 pub struct OnlyTableRef<'input> {
     pub only: SelectOnly,
     pub name: QualifiedName<'input>,
+    /// Greedy: a leading ABSENT starts this element instead of ending `OnlyTableRef` (bison shift preference).
+    #[greedy(ABSENT)]
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
@@ -821,6 +853,8 @@ pub enum ColNameTableName {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ColNameTableRef<'input> {
     pub name: ColNameTableName,
+    /// Greedy: a leading ABSENT starts this element instead of ending `ColNameTableRef` (bison shift preference).
+    #[greedy(ABSENT)]
     pub tail: Option<ColNameTableTail<'input>>,
 }
 
@@ -922,6 +956,8 @@ pub struct JoinUsingColumns<'input>(
 #[tok(USING, this)]
 pub struct JoinUsing<'input> {
     pub columns: JoinUsingColumns<'input>,
+    /// Greedy: a leading token from any of 8 kinds starts this element instead of ending `JoinUsing` (bison shift preference).
+    #[greedy(ABSENT, CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT)]
     pub alias: Option<JoinUsingAlias<'input>>,
 }
 
@@ -940,6 +976,8 @@ pub struct JoinSuffix<'input> {
     /// right operand, preserving each condition at the grammar level that
     /// owns it.
     pub table: Box<TableRef<'input>>,
+    /// Greedy: a leading ON, USING starts this element instead of ending `JoinSuffix` (bison shift preference).
+    #[greedy(ON, USING)]
     pub condition: Option<JoinCondition<'input>>,
 }
 
@@ -966,6 +1004,8 @@ pub struct TableSampleRepeatable<'input> {
 pub struct TableRef<'input> {
     pub base: SimpleTableRef<'input>,
     pub tablesample: Option<TableSampleClause<'input>>,
+    /// Greedy: a leading token from any of 7 kinds starts this element instead of ending `TableRef` (bison shift preference).
+    #[greedy(CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT)]
     pub joins: Vec<JoinSuffix<'input>>,
 }
 
@@ -1053,6 +1093,8 @@ pub struct OrderByItem<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ORDER, BY, this)]
 pub struct OrderByClause<'input> {
+    /// Greedy: any kind that can start this element continues it instead of ending `OrderByClause` (bison shift preference).
+    #[greedy(all)]
     #[sep(COMMA)]
     pub items: Vec<OrderByItem<'input>>,
 }
@@ -1149,6 +1191,8 @@ pub enum LimitingClause<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct LimitThenOffset<'input> {
     pub limit: LimitingClause<'input>,
+    /// Greedy: a leading OFFSET starts this element instead of ending `LimitThenOffset` (bison shift preference).
+    #[greedy(OFFSET)]
     #[pretty(break_before = soft)]
     pub offset: Option<Box<OffsetClause<'input>>>,
 }
@@ -1157,6 +1201,8 @@ pub struct LimitThenOffset<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct OffsetThenLimit<'input> {
     pub offset: OffsetClause<'input>,
+    /// Greedy: a leading FETCH, LIMIT starts this element instead of ending `OffsetThenLimit` (bison shift preference).
+    #[greedy(FETCH, LIMIT)]
     #[pretty(break_before = soft)]
     pub limit: Option<Box<LimitingClause<'input>>>,
 }
@@ -1227,6 +1273,8 @@ pub enum LockingMode {
 pub struct GroupByClause<'input> {
     /// Optional `DISTINCT` / `ALL` modifier (Postgres 16+).
     pub modifier: Option<GroupByModifier>,
+    /// Greedy: any kind that can start this element continues it instead of ending `GroupByClause` (bison shift preference).
+    #[greedy(all)]
     #[sep(COMMA)]
     pub items: Vec<GroupByItem<'input>>,
 }
@@ -1363,8 +1411,12 @@ pub struct SelectStmt<'input> {
     pub having: Option<Box<HavingClause<'input>>>,
     #[pretty(break_before = soft)]
     pub window: Option<Box<WindowClause<'input>>>,
+    /// Greedy: a leading ORDER starts this element instead of ending `SelectStmt` (bison shift preference).
+    #[greedy(ORDER)]
     #[pretty(break_before = soft)]
     pub order_by: Option<Box<OrderByClause<'input>>>,
+    /// Greedy: a leading FETCH, LIMIT, OFFSET starts this element instead of ending `SelectStmt` (bison shift preference).
+    #[greedy(FETCH, LIMIT, OFFSET)]
     /// LIMIT / OFFSET / FETCH FIRST tail. Postgres allows one limiting
     /// clause (`LIMIT` or `FETCH FIRST`) and one `OFFSET`, in either order.
     #[pretty(break_before = soft)]
@@ -1417,6 +1469,8 @@ pub struct SelectTargetList<'input> {
     #[sep(COMMA)]
     #[pretty(group = consistent, indent)]
     pub items: recursa::Vec1<SelectItem<'input>>,
+    /// Greedy: a leading ABSENT starts this element instead of ending `SelectTargetList` (bison shift preference).
+    #[greedy(ABSENT)]
     #[pretty(break_before = soft)]
     pub into: Option<Box<SelectIntoClause<'input>>>,
     #[pretty(break_before = soft)]

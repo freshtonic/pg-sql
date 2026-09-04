@@ -12,6 +12,8 @@ use crate::ast::shared::names::QualifiedName;
 /// `CREATE TABLE AS … WITH [NO] DATA`).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct RefreshStmt<'input> {
+    /// Greedy: a leading CONCURRENTLY starts this element instead of ending `RefreshStmt` (bison shift preference).
+    #[greedy(CONCURRENTLY)]
     #[tok(REFRESH, MATERIALIZED, VIEW, this)]
     #[presence(CONCURRENTLY)]
     pub concurrently: bool,

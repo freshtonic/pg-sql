@@ -31,6 +31,8 @@ pub struct FetchRelative<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(FORWARD, this)]
 pub struct FetchForward<'input> {
+    /// Greedy: a leading ALL starts this element instead of ending `FetchForward` (bison shift preference).
+    #[greedy(ALL)]
     pub count: Option<FetchCountOrAll<'input>>,
 }
 
@@ -38,6 +40,8 @@ pub struct FetchForward<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(BACKWARD, this)]
 pub struct FetchBackward<'input> {
+    /// Greedy: a leading ALL starts this element instead of ending `FetchBackward` (bison shift preference).
+    #[greedy(ALL)]
     pub count: Option<FetchCountOrAll<'input>>,
 }
 

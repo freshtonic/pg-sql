@@ -36,6 +36,8 @@ pub enum SearchDirection {
 #[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
 #[tok(FIRST, BY, this)]
 pub struct SearchColumnList<'input>(
+    /// Greedy: a leading SET starts this element instead of ending `SearchColumnList` (bison shift preference).
+    #[greedy(SET)]
     #[sep(COMMA)]
     #[deref]
     pub Vec<literal::AliasName<'input>>,
@@ -55,6 +57,8 @@ pub struct SearchClause<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(CYCLE, this)]
 pub struct CycleClause<'input> {
+    /// Greedy: a leading SET starts this element instead of ending `CycleClause` (bison shift preference).
+    #[greedy(SET)]
     #[sep(COMMA)]
     pub columns: Vec<literal::AliasName<'input>>,
     #[tok(SET, this)]

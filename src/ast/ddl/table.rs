@@ -39,6 +39,8 @@ pub struct UsingIndexTablespace<'input> {
 #[tok(PRIMARY, KEY, this)]
 pub struct PrimaryKeyConstraint<'input> {
     pub index_tablespace: Option<UsingIndexTablespace<'input>>,
+    /// Greedy: a leading NOT starts this element instead of ending `PrimaryKeyConstraint` (bison shift preference).
+    #[greedy(NOT)]
     /// Optional `[NOT] DEFERRABLE [INITIALLY {DEFERRED|IMMEDIATE}]` suffix.
     pub attrs: ConstraintAttrs,
 }
@@ -50,6 +52,8 @@ pub struct UniqueConstraint<'input> {
     /// Optional `NULLS [NOT] DISTINCT` qualifier (Postgres 15+).
     pub nulls: Option<NullsDistinctQualifier>,
     pub index_tablespace: Option<UsingIndexTablespace<'input>>,
+    /// Greedy: a leading NOT starts this element instead of ending `UniqueConstraint` (bison shift preference).
+    #[greedy(NOT)]
     /// Optional `[NOT] DEFERRABLE [INITIALLY ...]` attributes.
     pub attrs: ConstraintAttrs,
 }
@@ -173,7 +177,11 @@ pub struct ReferencesConstraint<'input> {
     #[sep(COMMA)]
     pub columns: Option<recursa::Vec1<literal::AliasName<'input>>>,
     pub match_clause: Option<MatchClause>,
+    /// Greedy: a leading ON starts this element instead of ending `ReferencesConstraint` (bison shift preference).
+    #[greedy(ON)]
     pub actions: Vec<OnAction<'input>>,
+    /// Greedy: a leading NOT starts this element instead of ending `ReferencesConstraint` (bison shift preference).
+    #[greedy(NOT)]
     pub deferrable: Option<DeferrableKind>,
     pub initially: Option<InitiallyClause>,
     #[presence(NOT, VALID)]
@@ -210,6 +218,8 @@ pub struct GeneratedIdentityConstraint<'input> {
     #[tok(GENERATED, this)]
     pub mode: GeneratedIdentityMode,
     pub identity: AsIdentity,
+    /// Greedy: a leading LPAREN starts this element instead of ending `GeneratedIdentityConstraint` (bison shift preference).
+    #[greedy(LPAREN)]
     #[tok(LPAREN, this, RPAREN)]
     pub seq_options: Option<recursa::Vec1<IdentitySeqOption<'input>>>,
 }
@@ -292,6 +302,8 @@ pub struct CompressionConstraint<'input> {
 /// DEFAULT expr column constraint.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DefaultConstraint<'input> {
+    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `DefaultConstraint`.
+    #[greedy(NOT)]
     #[tok(DEFAULT, this)]
     pub expr: crate::ast::shared::expr::Expr<'input>,
 }
@@ -399,6 +411,20 @@ pub struct ColumnDef<'input> {
     pub type_name: crate::ast::shared::expr::CastType<'input>,
     pub collate: Option<CollateClause<'input>>,
     pub column_options: Option<CreateGenericOptions<'input>>,
+    /// Greedy: a leading token from any of 11 kinds starts this element instead of ending `ColumnDef` (bison shift preference).
+    #[greedy(
+        CHECK,
+        COMPRESSION,
+        CONSTRAINT,
+        DEFAULT,
+        GENERATED,
+        NOT,
+        NULL,
+        PRIMARY,
+        REFERENCES,
+        STORAGE,
+        UNIQUE
+    )]
     pub constraints: Vec<ColumnConstraint<'input>>,
 }
 
@@ -475,6 +501,8 @@ pub struct IndexedConstraintColumns<'input> {
 pub struct TablePrimaryKey<'input> {
     #[tok(PRIMARY, KEY, this)]
     pub body: IndexedConstraintBody<'input>,
+    /// Greedy: a leading NOT starts this element instead of ending `TablePrimaryKey` (bison shift preference).
+    #[greedy(NOT)]
     pub attrs: ConstraintAttrs,
 }
 
@@ -502,6 +530,8 @@ pub struct TableUnique<'input> {
     /// semantic time; the diff oracle handles that case.
     pub nulls: Option<NullsDistinctQualifier>,
     pub body: IndexedConstraintBody<'input>,
+    /// Greedy: a leading NOT starts this element instead of ending `TableUnique` (bison shift preference).
+    #[greedy(NOT)]
     pub attrs: ConstraintAttrs,
 }
 
@@ -597,6 +627,8 @@ pub struct TableExclude<'input> {
     pub index_tablespace: Option<UsingIndexTablespace<'input>>,
     /// `WHERE (expr)` partial-constraint predicate (parens mandatory).
     pub where_clause: Option<ExclusionWhereClause<'input>>,
+    /// Greedy: a leading NOT starts this element instead of ending `TableExclude` (bison shift preference).
+    #[greedy(NOT)]
     pub attrs: ConstraintAttrs,
 }
 
@@ -674,6 +706,8 @@ pub enum LikeOption {
 pub struct LikeClause<'input> {
     #[tok(LIKE, this)]
     pub source: crate::ast::shared::names::QualifiedName<'input>,
+    /// Greedy: a leading EXCLUDING, INCLUDING starts this element instead of ending `LikeClause` (bison shift preference).
+    #[greedy(EXCLUDING, INCLUDING)]
     pub options: Vec<LikeOption>,
 }
 
@@ -853,6 +887,20 @@ pub struct PartitionColumnOptionDef<'input> {
     #[presence(WITH, OPTIONS)]
     pub with_options: bool,
     pub collate: Option<CollateClause<'input>>,
+    /// Greedy: a leading token from any of 11 kinds starts this element instead of ending `PartitionColumnOptionDef` (bison shift preference).
+    #[greedy(
+        CHECK,
+        COMPRESSION,
+        CONSTRAINT,
+        DEFAULT,
+        GENERATED,
+        NOT,
+        NULL,
+        PRIMARY,
+        REFERENCES,
+        STORAGE,
+        UNIQUE
+    )]
     pub constraints: Vec<ColumnConstraint<'input>>,
 }
 
@@ -1017,6 +1065,8 @@ impl<'input> CreateTableStmt<'input> {
 /// operator class for the partition strategy.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct PartitionKeyItem<'input> {
+    /// Greedy: the expression keeps extending on every shared extender instead of yielding to what may follow `PartitionKeyItem`.
+    #[greedy(all)]
     pub expr: Expr<'input>,
     #[tok(COLLATE, this)]
     pub collate: Option<literal::AliasName<'input>>,
@@ -1164,6 +1214,8 @@ pub struct DropTableStmt<'input> {
     #[tok(DROP, TABLE, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
+    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropTableStmt` (bison shift preference).
+    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
     pub names: Vec<QualifiedName<'input>>,
     pub behavior: Option<DropBehavior>,

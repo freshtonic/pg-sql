@@ -152,5 +152,7 @@ pub struct MergeStmt<'input> {
     pub condition: Box<Expr<'input>>,
     /// PostgreSQL's `merge_when_list` is one-or-more.
     pub when_clauses: recursa::Vec1<WhenClause<'input>>,
+    /// Greedy: a leading RETURNING starts this element instead of ending `MergeStmt` (bison shift preference).
+    #[greedy(RETURNING)]
     pub returning: Option<Box<ReturningClause<'input>>>,
 }

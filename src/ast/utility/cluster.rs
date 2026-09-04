@@ -59,6 +59,8 @@ pub enum ClusterTarget<'input> {
 #[tok(CLUSTER, this)]
 pub struct ClusterStmt<'input> {
     pub options: Option<VacuumOptions<'input>>,
+    /// Greedy: a leading VERBOSE starts this element instead of ending `ClusterStmt` (bison shift preference).
+    #[greedy(VERBOSE)]
     #[presence(VERBOSE)]
     pub verbose: bool,
     pub target: Option<ClusterTarget<'input>>,

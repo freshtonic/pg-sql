@@ -6,7 +6,11 @@ use crate::ast::dml::select::SelectBody;
 pub struct TableStmt<'input> {
     #[tok(TABLE, this)]
     pub table_name: crate::ast::shared::names::QualifiedName<'input>,
+    /// Greedy: a leading ORDER starts this element instead of ending `TableStmt` (bison shift preference).
+    #[greedy(ORDER)]
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
+    /// Greedy: a leading FETCH, LIMIT, OFFSET starts this element instead of ending `TableStmt` (bison shift preference).
+    #[greedy(FETCH, LIMIT, OFFSET)]
     pub limit_offset: Option<Box<crate::ast::dml::select::LimitOffsetClause<'input>>>,
 }
 
@@ -56,9 +60,15 @@ pub enum Subquery<'input> {
 pub struct CompoundParen<'input> {
     #[tok(LPAREN, this, RPAREN)]
     pub inner: Box<Subquery<'input>>,
+    /// Greedy: a leading EXCEPT, INTERSECT, UNION starts this element instead of ending `CompoundParen` (bison shift preference).
+    #[greedy(EXCEPT, INTERSECT, UNION)]
     pub set_op: Option<SetOpCombiner<'input>>,
+    /// Greedy: a leading ORDER starts this element instead of ending `CompoundParen` (bison shift preference).
+    #[greedy(ORDER)]
     /// Optional trailing `ORDER BY ...` applied to the parenthesized query.
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
+    /// Greedy: a leading FETCH, LIMIT, OFFSET starts this element instead of ending `CompoundParen` (bison shift preference).
+    #[greedy(FETCH, LIMIT, OFFSET)]
     pub limit_offset: Option<Box<crate::ast::dml::select::LimitOffsetClause<'input>>>,
 }
 
@@ -66,5 +76,7 @@ pub struct CompoundParen<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CompoundBody<'input> {
     pub body: SelectBody<'input>,
+    /// Greedy: a leading EXCEPT, INTERSECT, UNION starts this element instead of ending `CompoundBody` (bison shift preference).
+    #[greedy(EXCEPT, INTERSECT, UNION)]
     pub set_op: Option<SetOpCombiner<'input>>,
 }

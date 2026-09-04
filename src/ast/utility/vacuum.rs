@@ -66,10 +66,16 @@ pub struct VacuumRelation<'input> {
 #[tok(VACUUM, this)]
 pub struct VacuumStmt<'input> {
     pub options: Option<VacuumOptions<'input>>,
+    /// Greedy: a leading FULL starts this element instead of ending `VacuumStmt` (bison shift preference).
+    #[greedy(FULL)]
     #[presence(FULL)]
     pub full: bool,
+    /// Greedy: a leading FREEZE starts this element instead of ending `VacuumStmt` (bison shift preference).
+    #[greedy(FREEZE)]
     #[presence(FREEZE)]
     pub freeze: bool,
+    /// Greedy: a leading VERBOSE starts this element instead of ending `VacuumStmt` (bison shift preference).
+    #[greedy(VERBOSE)]
     #[presence(VERBOSE)]
     pub verbose: bool,
     #[presence(ANALYZE)]

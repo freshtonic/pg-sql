@@ -186,6 +186,8 @@ pub struct CommitStmt<'input> {
 /// `TO [SAVEPOINT] name` — the savepoint target of `ROLLBACK TO`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct RollbackToClause<'input> {
+    /// Greedy: a leading SAVEPOINT starts this element instead of ending `RollbackToClause` (bison shift preference).
+    #[greedy(SAVEPOINT)]
     #[tok(TO, this)]
     #[presence(SAVEPOINT)]
     pub savepoint: bool,

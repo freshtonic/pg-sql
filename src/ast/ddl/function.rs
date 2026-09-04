@@ -160,11 +160,17 @@ pub struct FunctionCastTypeTail<'input> {
     /// `PRECISION` in `DOUBLE PRECISION`.
     #[presence(PRECISION)]
     pub precision_keyword: bool,
+    /// Greedy: a leading VARYING starts this element instead of ending `FunctionCastTypeTail` (bison shift preference).
+    #[greedy(VARYING)]
     #[presence(VARYING)]
     pub varying: bool,
     pub precision: Option<TypePrecision<'input>>,
     pub tz: Option<TimeZoneQualifier>,
+    /// Greedy: a leading token from any of 6 kinds starts this element instead of ending `FunctionCastTypeTail` (bison shift preference).
+    #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, YEAR)]
     pub interval_qualifier: Option<IntervalQualifier<'input>>,
+    /// Greedy: a leading LBRACKET starts this element instead of ending `FunctionCastTypeTail` (bison shift preference).
+    #[greedy(LBRACKET)]
     pub array_suffixes: Vec<ArraySuffix<'input>>,
     pub array_kw_suffix: Option<ArrayKwSuffix<'input>>,
 }
@@ -173,6 +179,8 @@ pub struct FunctionCastTypeTail<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionBuiltinType<'input> {
     pub base: FunctionBuiltinTypeName,
+    /// Greedy: a leading token from any of 8 kinds starts this element instead of ending `FunctionBuiltinType` (bison shift preference).
+    #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, VARYING, WITHOUT, YEAR)]
     pub tail: FunctionCastTypeTail<'input>,
 }
 
@@ -187,6 +195,8 @@ pub struct FunctionTypeNamePart<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionTypeName<'input> {
     pub first: crate::tokens::type_function_name<'input>,
+    /// Greedy: a leading DOT starts this element instead of ending `FunctionTypeName` (bison shift preference).
+    #[greedy(DOT)]
     pub rest: Vec<FunctionTypeNamePart<'input>>,
 }
 
@@ -201,13 +211,18 @@ pub enum FunctionPctTypeSuffix {
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FunctionIdentifierTypeSuffix<'input> {
     Pct(FunctionPctTypeSuffix),
-    Cast(FunctionCastTypeTail<'input>),
+    Cast(
+        #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, VARYING, WITHOUT, YEAR)]
+        FunctionCastTypeTail<'input>,
+    ),
 }
 
 /// Identifier-spelled cast type or `qualified%TYPE` reference.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionIdentifierType<'input> {
     pub name: FunctionTypeName<'input>,
+    /// Greedy: a leading token from any of 8 kinds starts this element instead of ending `FunctionIdentifierType` (bison shift preference).
+    #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, VARYING, WITHOUT, YEAR)]
     pub suffix: FunctionIdentifierTypeSuffix<'input>,
 }
 
@@ -428,6 +443,8 @@ pub enum BeginAtomicEmpty {
 /// `RETURN expr` option on CREATE FUNCTION (SQL-standard body form).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ReturnOption<'input> {
+    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `ReturnOption`.
+    #[greedy(NOT)]
     #[tok(RETURN, this)]
     pub expr: Expr<'input>,
 }
@@ -462,12 +479,16 @@ pub enum LeakproofOption {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CostOption<'input> {
+    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `CostOption`.
+    #[greedy(NOT)]
     #[tok(COST, this)]
     pub value: Expr<'input>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct RowsOption<'input> {
+    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `RowsOption`.
+    #[greedy(NOT)]
     #[tok(ROWS, this)]
     pub value: Expr<'input>,
 }
@@ -524,6 +545,8 @@ pub struct CreateFunctionStmt<'input> {
     pub name: crate::ast::shared::names::FuncDefName<'input>,
     pub args: FunctionParameters<'input>,
     pub returns: Option<FuncReturnsClause<'input>>,
+    /// Greedy: any kind that can start this element continues it instead of ending `CreateFunctionStmt` (bison shift preference).
+    #[greedy(all)]
     pub options: Vec<FuncOption<'input>>,
 }
 
@@ -598,6 +621,8 @@ pub struct DropFunctionStmt<'input> {
     #[tok(DROP, FUNCTION, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
+    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropFunctionStmt` (bison shift preference).
+    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
     pub targets: Vec<DropFunctionTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
@@ -610,6 +635,8 @@ pub struct DropRoutineStmt<'input> {
     #[tok(DROP, ROUTINE, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
+    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropRoutineStmt` (bison shift preference).
+    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
     pub targets: Vec<DropFunctionTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,

@@ -118,6 +118,8 @@ pub struct TriggerTransition<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(REFERENCING, this)]
 pub struct TriggerReferencing<'input> {
+    /// Greedy: a leading NEW, OLD starts this element instead of ending `TriggerReferencing` (bison shift preference).
+    #[greedy(NEW, OLD)]
     pub transitions: Vec<TriggerTransition<'input>>,
 }
 
@@ -268,6 +270,8 @@ pub struct CreateConstraintTriggerStmt<'input> {
     #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub from_table: Option<ConstrFromTable<'input>>,
+    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `CreateConstraintTriggerStmt` (bison shift preference).
+    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub constraint_attrs: Vec<ConstraintAttributeElem>,
     pub for_each_row: ForEachRow,
     pub when_clause: Option<TriggerWhenClause<'input>>,

@@ -238,6 +238,8 @@ pub struct AlterServerStmt<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFdwOptsAction<'input> {
     pub head: FdwOption<'input>,
+    /// Greedy: a leading HANDLER, NO, VALIDATOR starts this element instead of ending `AlterFdwOptsAction` (bison shift preference).
+    #[greedy(HANDLER, NO, VALIDATOR)]
     pub rest: Vec<FdwOption<'input>>,
     pub generic: Option<AlterGenericOptions<'input>>,
 }
@@ -398,6 +400,8 @@ pub struct FdwValidatorOption<'input> {
 pub struct CreateFdwBody<'input> {
     #[tok(DATA, WRAPPER, this)]
     pub name: crate::tokens::ColId<'input>,
+    /// Greedy: a leading HANDLER, NO, VALIDATOR starts this element instead of ending `CreateFdwBody` (bison shift preference).
+    #[greedy(HANDLER, NO, VALIDATOR)]
     pub fdw_options: Vec<FdwOption<'input>>,
     pub options: Option<CreateGenericOptions<'input>>,
 }

@@ -353,6 +353,8 @@ pub struct InlineWindowSpec<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(PARTITION, BY, this)]
 pub struct WindowPartitionBy<'input> {
+    /// Greedy: a leading GROUPS, ORDER, RANGE, ROWS starts this element instead of ending `WindowPartitionBy` (bison shift preference).
+    #[greedy(GROUPS, ORDER, RANGE, ROWS)]
     #[sep(COMMA)]
     pub exprs: Vec<Expr<'input>>,
 }
@@ -669,7 +671,11 @@ pub struct FunctionPlainTail<'input> {
     pub open: FunctionCallOpen,
     pub body: Option<FunctionCallBody<'input>>,
     pub close: FunctionCallClose,
+    /// Greedy: a leading FILTER starts this element instead of ending `FunctionPlainTail` (bison shift preference).
+    #[greedy(FILTER)]
     pub filter: Option<FilterClause<'input>>,
+    /// Greedy: a leading OVER starts this element instead of ending `FunctionPlainTail` (bison shift preference).
+    #[greedy(OVER)]
     pub window: Option<WindowSpec<'input>>,
 }
 
@@ -711,7 +717,11 @@ pub struct FunctionWithinGroupTail<'input> {
     pub body: Option<FunctionWithinGroupBody<'input>>,
     pub close: FunctionCallClose,
     pub within_group: WithinGroupClause<'input>,
+    /// Greedy: a leading FILTER starts this element instead of ending `FunctionWithinGroupTail` (bison shift preference).
+    #[greedy(FILTER)]
     pub filter: Option<FilterClause<'input>>,
+    /// Greedy: a leading OVER starts this element instead of ending `FunctionWithinGroupTail` (bison shift preference).
+    #[greedy(OVER)]
     pub window: Option<WindowSpec<'input>>,
 }
 
@@ -803,6 +813,8 @@ pub struct ParenthesizedExpr<'input> {
     pub open: ParenthesizedOpen,
     pub content: ParenContent<'input>,
     pub close: ParenthesizedClose,
+    /// Greedy: a leading DOT, LBRACKET starts this element instead of ending `ParenthesizedExpr` (bison shift preference).
+    #[greedy(DOT, LBRACKET)]
     pub indirection: Vec<ParenthesizedIndirection<'input>>,
 }
 
@@ -811,6 +823,8 @@ pub struct ParenthesizedExpr<'input> {
 /// Both bounds are optional; the colon is required.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SubscriptSlice<'input> {
+    /// Greedy: a leading COLON starts this element instead of ending `SubscriptSlice` (bison shift preference).
+    #[greedy(COLON)]
     pub lower: Option<Box<Expr<'input>>>,
     #[tok(COLON, this)]
     pub upper: Option<Box<Expr<'input>>>,
@@ -837,6 +851,8 @@ pub enum SubscriptColon {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct PsqlVariableExpr<'input> {
     pub colon: PsqlColon,
+    /// Greedy: any kind that can start this element continues it instead of ending `PsqlVariableExpr` (bison shift preference).
+    #[greedy(all)]
     pub value: Option<PsqlVariableExprValue<'input>>,
 }
 
@@ -1035,6 +1051,8 @@ pub struct CaseElse<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CaseSearched<'input> {
     pub first_arm: CaseWhenArm<'input>,
+    /// Greedy: a leading WHEN starts this element instead of ending `CaseSearched` (bison shift preference).
+    #[greedy(WHEN)]
     pub rest_arms: Vec<CaseWhenArm<'input>>,
     pub else_clause: Option<CaseElse<'input>>,
 }
@@ -1044,6 +1062,8 @@ pub struct CaseSearched<'input> {
 pub struct CaseSimple<'input> {
     pub operand: Box<Expr<'input>>,
     pub first_arm: CaseWhenArm<'input>,
+    /// Greedy: a leading WHEN starts this element instead of ending `CaseSimple` (bison shift preference).
+    #[greedy(WHEN)]
     pub rest_arms: Vec<CaseWhenArm<'input>>,
     pub else_clause: Option<CaseElse<'input>>,
 }
@@ -1094,7 +1114,11 @@ pub enum ArraySuffixEmpty {
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
 pub struct CastType<'input> {
     pub head: CastTypeHead<'input>,
+    /// Greedy: a leading LBRACKET starts this element instead of ending `CastType` (bison shift preference).
+    #[greedy(LBRACKET)]
     pub array_suffixes: Vec<ArraySuffix<'input>>,
+    /// Greedy: a leading ARRAY starts this element instead of ending `CastType` (bison shift preference).
+    #[greedy(ARRAY)]
     /// PG gram.y also accepts `SimpleTypename ARRAY` and
     /// `SimpleTypename ARRAY '[' Iconst ']'` — the keyword form for
     /// declaring an array type (e.g. `integer ARRAY[4]`, `text ARRAY`).
@@ -1137,6 +1161,8 @@ pub enum DateTimeCastTypeName {
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
 #[tok(INTERVAL, this)]
 pub struct IntervalCastType<'input> {
+    /// Greedy: a leading token from any of 6 kinds starts this element instead of ending `IntervalCastType` (bison shift preference).
+    #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, YEAR)]
     pub modifier: Option<IntervalCastTypeModifier<'input>>,
 }
 
@@ -1150,6 +1176,8 @@ pub enum IntervalCastTypeModifier<'input> {
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
 pub struct GeneralCastType<'input> {
     pub base: GeneralCastTypeName<'input>,
+    /// Greedy: a leading VARYING starts this element instead of ending `GeneralCastType` (bison shift preference).
+    #[greedy(VARYING)]
     #[presence(VARYING)]
     /// `VARYING` modifier (e.g., `BIT VARYING`, `CHARACTER VARYING`).
     /// Always precedes the precision parens.
@@ -1359,6 +1387,8 @@ pub struct IntervalLit<'input> {
     /// Optional precision, e.g. `interval(2)` or `interval(0)`.
     pub precision: Option<TypePrecision<'input>>,
     pub value: literal::StringLit<'input>,
+    /// Greedy: a leading token from any of 6 kinds starts this element instead of ending `IntervalLit` (bison shift preference).
+    #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, YEAR)]
     pub qualifier: Option<IntervalQualifier<'input>>,
 }
 
@@ -1708,6 +1738,8 @@ pub struct TrimWithChars<'input> {
 pub struct TrimValues<'input> {
     pub first: Box<Expr<'input>>,
     pub from: Option<TrimFromArgs<'input>>,
+    /// Greedy: a leading COMMA starts this element instead of ending `TrimValues` (bison shift preference).
+    #[greedy(COMMA)]
     pub more: Vec<TrimMoreArg<'input>>,
 }
 
@@ -1762,6 +1794,8 @@ pub enum SubstringTail<'input> {
 /// Inner of `SUBSTRING(...)`: `source` followed by FROM/SIMILAR tail.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SubstringInner<'input> {
+    /// Greedy: the expression keeps extending on SIMILAR instead of yielding to what may follow `SubstringInner`.
+    #[greedy(SIMILAR)]
     pub source: Box<Expr<'input>>,
     pub tail: SubstringTail<'input>,
 }
@@ -1840,6 +1874,8 @@ pub struct PositionInner<'input> {
         Or,
         And
     )))]
+    /// Greedy: the expression keeps extending on IN instead of yielding to what may follow `PositionInner`.
+    #[greedy(IN)]
     pub needle: Box<Expr<'input>>,
     #[tok(IN, this)]
     pub haystack: Box<Expr<'input>>,
@@ -1914,6 +1950,8 @@ pub struct UnicodeStringLitWithEscape<'input> {
 /// `ESCAPE expr` clause on LIKE / SIMILAR TO / ILIKE operators.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct EscapeClause<'input> {
+    /// Greedy: the expression keeps extending on every shared extender instead of yielding to what may follow `EscapeClause`.
+    #[greedy(all)]
     #[tok(ESCAPE, this)]
     pub char: Box<Expr<'input>>,
 }
@@ -1970,6 +2008,8 @@ pub enum WithOrWithout {
 pub struct JsonUniqueKeys {
     #[tok(this, UNIQUE)]
     pub with_or_without: WithOrWithout,
+    /// Greedy: a leading KEYS starts this element instead of ending `JsonUniqueKeys` (bison shift preference).
+    #[greedy(KEYS)]
     /// Whether the optional `KEYS` noise word occurred, preserved for
     /// round-trip rendering.
     #[presence(KEYS)]
@@ -2265,6 +2305,8 @@ pub struct JsonValueInner<'input> {
     pub returning: Option<JsonReturning<'input>>,
     // Two generic behavior slots: each `JsonOnBehavior` self-identifies its
     // `ON EMPTY` / `ON ERROR` trigger, so the pair is order-independent.
+    /// Greedy: a leading token from any of 7 kinds starts this element instead of ending `JsonValueInner` (bison shift preference).
+    #[greedy(DEFAULT, EMPTY, ERROR, FALSE, NULL, TRUE, UNKNOWN)]
     pub on_behavior_1: Option<JsonOnBehavior<'input>>,
     pub on_behavior_2: Option<JsonOnBehavior<'input>>,
 }
@@ -2287,6 +2329,8 @@ pub struct JsonQueryInner<'input> {
     pub returning: Option<JsonReturning<'input>>,
     pub wrapper: Option<JsonWrapper>,
     pub quotes: Option<JsonQuotes>,
+    /// Greedy: a leading token from any of 7 kinds starts this element instead of ending `JsonQueryInner` (bison shift preference).
+    #[greedy(DEFAULT, EMPTY, ERROR, FALSE, NULL, TRUE, UNKNOWN)]
     pub on_behavior_1: Option<JsonOnBehavior<'input>>,
     pub on_behavior_2: Option<JsonOnBehavior<'input>>,
 }
@@ -2319,7 +2363,11 @@ pub struct JsonObjectAggInner<'input> {
 pub struct JsonObjectAgg<'input> {
     #[tok(JSON_OBJECTAGG, LPAREN, this, RPAREN)]
     pub inner: JsonObjectAggInner<'input>,
+    /// Greedy: a leading FILTER starts this element instead of ending `JsonObjectAgg` (bison shift preference).
+    #[greedy(FILTER)]
     pub filter: Option<FilterClause<'input>>,
+    /// Greedy: a leading OVER starts this element instead of ending `JsonObjectAgg` (bison shift preference).
+    #[greedy(OVER)]
     pub window: Option<WindowSpec<'input>>,
 }
 
@@ -2338,7 +2386,11 @@ pub struct JsonArrayAggInner<'input> {
 pub struct JsonArrayAgg<'input> {
     #[tok(JSON_ARRAYAGG, LPAREN, this, RPAREN)]
     pub inner: JsonArrayAggInner<'input>,
+    /// Greedy: a leading FILTER starts this element instead of ending `JsonArrayAgg` (bison shift preference).
+    #[greedy(FILTER)]
     pub filter: Option<FilterClause<'input>>,
+    /// Greedy: a leading OVER starts this element instead of ending `JsonArrayAgg` (bison shift preference).
+    #[greedy(OVER)]
     pub window: Option<WindowSpec<'input>>,
 }
 
@@ -2364,6 +2416,8 @@ pub struct IsJsonTail {
     #[tok(this, JSON)]
     #[presence(NOT)]
     pub not: bool,
+    /// Greedy: a leading ARRAY, OBJECT, SCALAR, VALUE starts this element instead of ending `IsJsonTail` (bison shift preference).
+    #[greedy(ARRAY, OBJECT, SCALAR, VALUE)]
     pub type_kind: Option<JsonTypeKind>,
     pub unique: Option<JsonUniqueKeys>,
 }
@@ -2390,6 +2444,17 @@ pub enum JsonFuncExpr<'input> {
 
 /// SQL expression with Pratt-derived parsing.
 #[derive(recursa::Node, Debug, Clone)]
+/// Greedy: this enum-level acceptance covers every left-denotation operand
+/// inside `Expr` (the right operands of infix and postfix variants and the
+/// operands of prefix forms) plus the optional `ESCAPE` tails of the LIKE
+/// family. An operand keeps extending on a shared extender instead of
+/// yielding to whatever may follow the enclosing expression, which is
+/// PostgreSQL's precedence resolution; `ESCAPE` starts the tail instead of
+/// ending the pattern operand.
+#[greedy(
+    AND, AT, BETWEEN, COLLATE, ESCAPE, ILIKE, IN, IS, ISNULL, LIKE, NOT, NOTNULL, OPERATOR, OR,
+    OVERLAPS, SIMILAR
+)]
 #[pratt]
 pub enum Expr<'input> {
     // --- Prefix ---

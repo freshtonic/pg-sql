@@ -81,6 +81,8 @@ pub enum ConflictAction<'input> {
 /// followed by a `COLLATE "name"` clause and an optional opclass ident.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ConflictTargetItem<'input> {
+    /// Greedy: the expression keeps extending on AT, BETWEEN, COLLATE, OPERATOR instead of yielding to what may follow `ConflictTargetItem`.
+    #[greedy(AT, BETWEEN, COLLATE, OPERATOR)]
     pub expr: Expr<'input>,
     pub collate: Option<crate::ast::ddl::table::CollateClause<'input>>,
     pub opclass: Option<crate::tokens::ColId<'input>>,
@@ -116,7 +118,11 @@ pub enum ConflictTarget<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ON, CONFLICT, this)]
 pub struct OnConflictClause<'input> {
+    /// Greedy: a leading ON starts this element instead of ending `OnConflictClause` (bison shift preference).
+    #[greedy(ON)]
     pub target: Option<ConflictTarget<'input>>,
+    /// Greedy: a leading WHERE starts this element instead of ending `OnConflictClause` (bison shift preference).
+    #[greedy(WHERE)]
     /// `WHERE predicate` after the arbiter target list, restricting the
     /// partial-index arbiter to matching rows. Only valid for the
     /// index-params form (gram.y attaches `where_clause` to that branch
@@ -141,8 +147,12 @@ pub struct InsertStmt<'input> {
     pub overriding: Option<OverridingClause>,
     #[pretty(break_before = soft)]
     pub source: Box<InsertSource<'input>>,
+    /// Greedy: a leading ON starts this element instead of ending `InsertStmt` (bison shift preference).
+    #[greedy(ON)]
     #[pretty(break_before = soft)]
     pub on_conflict: Option<Box<OnConflictClause<'input>>>,
+    /// Greedy: a leading RETURNING starts this element instead of ending `InsertStmt` (bison shift preference).
+    #[greedy(RETURNING)]
     #[pretty(break_before = soft)]
     pub returning: Option<Box<ReturningClause<'input>>>,
 }
@@ -153,6 +163,8 @@ pub struct InsertStmt<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct InsertColumnItem<'input> {
     pub name: crate::tokens::ColId<'input>,
+    /// Greedy: a leading DOT, LBRACKET starts this element instead of ending `InsertColumnItem` (bison shift preference).
+    #[greedy(DOT, LBRACKET)]
     pub indirection: Vec<crate::ast::shared::expr::IndirectionEl<'input>>,
 }
 

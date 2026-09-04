@@ -46,6 +46,8 @@ pub enum ExtensionOption<'input> {
 pub struct CreateExtensionStmt<'input> {
     pub if_not_exists: Option<crate::ast::shared::flags::IfNotExists>,
     pub name: crate::tokens::ColId<'input>,
+    /// Greedy: a leading CASCADE, SCHEMA, VERSION, WITH starts this element instead of ending `CreateExtensionStmt` (bison shift preference).
+    #[greedy(CASCADE, SCHEMA, VERSION, WITH)]
     #[tok(optional(WITH), this)]
     pub options: Vec<ExtensionOption<'input>>,
 }

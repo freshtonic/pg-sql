@@ -89,6 +89,8 @@ pub struct DropViewStmt<'input> {
     #[tok(DROP, VIEW, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
+    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropViewStmt` (bison shift preference).
+    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
     pub names: Vec<QualifiedName<'input>>,
     pub behavior: Option<DropBehavior>,

@@ -12,6 +12,8 @@ pub struct SavepointStmt<'input> {
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ReleaseStmt<'input> {
+    /// Greedy: a leading SAVEPOINT starts this element instead of ending `ReleaseStmt` (bison shift preference).
+    #[greedy(SAVEPOINT)]
     #[tok(RELEASE, this)]
     #[presence(SAVEPOINT)]
     pub savepoint: bool,

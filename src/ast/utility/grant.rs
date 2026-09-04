@@ -628,6 +628,8 @@ pub enum DefAclOption<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ALTER, DEFAULT, PRIVILEGES, this)]
 pub struct AlterDefaultPrivilegesStmt<'input> {
+    /// Greedy: a leading FOR, IN starts this element instead of ending `AlterDefaultPrivilegesStmt` (bison shift preference).
+    #[greedy(FOR, IN)]
     pub options: Vec<DefAclOption<'input>>,
     pub action: DefAclAction<'input>,
 }

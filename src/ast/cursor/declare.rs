@@ -43,6 +43,8 @@ pub enum CursorHold {
 pub struct DeclareStmt<'input> {
     #[tok(DECLARE, this)]
     pub name: literal::AliasName<'input>,
+    /// Greedy: a leading token from any of 5 kinds starts this element instead of ending `DeclareStmt` (bison shift preference).
+    #[greedy(ASENSITIVE, BINARY, INSENSITIVE, NO, SCROLL)]
     pub options: Vec<CursorOption>,
     pub cursor: CursorKeyword,
     pub hold: Option<CursorHold>,

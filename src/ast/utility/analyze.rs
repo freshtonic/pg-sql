@@ -9,6 +9,8 @@ use crate::tokens::literal;
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ANALYZE, this)]
 pub struct AnalyzeStmt<'input> {
+    /// Greedy: a leading VERBOSE starts this element instead of ending `AnalyzeStmt` (bison shift preference).
+    #[greedy(VERBOSE)]
     #[presence(VERBOSE)]
     /// Optional `VERBOSE` keyword (legacy bareword form).
     pub verbose: bool,

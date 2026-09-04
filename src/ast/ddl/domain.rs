@@ -39,6 +39,8 @@ pub struct DomainCheckBody<'input> {
 /// `DEFAULT expr` clause — domain default value.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DomainDefault<'input> {
+    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `DomainDefault`.
+    #[greedy(NOT)]
     #[tok(DEFAULT, this)]
     pub expr: Box<Expr<'input>>,
 }
@@ -73,6 +75,8 @@ pub struct CreateDomainStmt<'input> {
     #[tok(optional(AS), this)]
     pub type_name: CastType<'input>,
     pub collate: Option<DomainCollate<'input>>,
+    /// Greedy: a leading token from any of 5 kinds starts this element instead of ending `CreateDomainStmt` (bison shift preference).
+    #[greedy(CHECK, CONSTRAINT, DEFAULT, NOT, NULL)]
     pub constraints: Vec<DomainConstraint<'input>>,
 }
 
@@ -93,6 +97,8 @@ pub struct DropDomainStmt<'input> {
 pub struct AlterDomainCheckConstraint<'input> {
     #[tok(CHECK, LPAREN, this, RPAREN)]
     pub expr: Box<Expr<'input>>,
+    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `AlterDomainCheckConstraint` (bison shift preference).
+    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub attrs: Vec<ConstraintAttributeElem>,
 }
 
@@ -102,6 +108,8 @@ pub struct AlterDomainCheckConstraint<'input> {
 /// optional `ConstraintAttributeSpec` trailer.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterDomainNotNullConstraint {
+    /// Greedy: a leading NOT starts this element instead of ending `AlterDomainNotNullConstraint` (bison shift preference).
+    #[greedy(NOT)]
     #[tok(NOT, NULL, this)]
     pub attrs: Vec<ConstraintAttributeElem>,
 }

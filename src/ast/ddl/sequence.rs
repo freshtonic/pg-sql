@@ -125,6 +125,11 @@ pub struct CreateSequenceStmt<'input> {
     pub sequence: SequenceKeyword,
     pub if_not_exists: Option<IfNotExists>,
     pub name: QualifiedName<'input>,
+    /// Greedy: a leading token from any of 12 kinds starts this element instead of ending `CreateSequenceStmt` (bison shift preference).
+    #[greedy(
+        AS, CACHE, CYCLE, INCREMENT, MAXVALUE, MINVALUE, NO, OWNED, RESTART, SEQUENCE, START,
+        UNLOGGED
+    )]
     pub options: Vec<SeqOption<'input>>,
 }
 
@@ -213,6 +218,11 @@ pub enum AlterSequenceAction<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptList<'input> {
     pub head: SeqOption<'input>,
+    /// Greedy: a leading token from any of 12 kinds starts this element instead of ending `SeqOptList` (bison shift preference).
+    #[greedy(
+        AS, CACHE, CYCLE, INCREMENT, MAXVALUE, MINVALUE, NO, OWNED, RESTART, SEQUENCE, START,
+        UNLOGGED
+    )]
     pub rest: Vec<SeqOption<'input>>,
 }
 

@@ -121,6 +121,8 @@ pub struct DefArgNamedType<'input> {
     pub parameters: Option<DefArgNamedParameters<'input>>,
     pub tz: Option<TimeZoneQualifier>,
     pub interval_qualifier: Option<IntervalQualifier<'input>>,
+    /// Greedy: a leading LBRACKET starts this element instead of ending `DefArgNamedType` (bison shift preference).
+    #[greedy(LBRACKET)]
     pub array_suffixes: Vec<ArraySuffix<'input>>,
     pub array_kw_suffix: Option<ArrayKwSuffix<'input>>,
 }
@@ -312,6 +314,8 @@ pub enum CreateRoleOption<'input> {
 pub struct CreateGroupStmt<'input> {
     #[tok(CREATE, GROUP, this)]
     pub name: crate::tokens::NonReservedWord<'input>,
+    /// Greedy: any kind that can start this element continues it instead of ending `CreateGroupStmt` (bison shift preference).
+    #[greedy(all)]
     #[tok(optional(WITH), this)]
     pub options: Vec<CreateRoleOption<'input>>,
 }
@@ -328,6 +332,8 @@ pub struct DropGroupStmt<'input> {
 pub struct CreateRoleStmt<'input> {
     #[tok(CREATE, ROLE, this)]
     pub name: crate::tokens::NonReservedWord<'input>,
+    /// Greedy: any kind that can start this element continues it instead of ending `CreateRoleStmt` (bison shift preference).
+    #[greedy(all)]
     #[tok(optional(WITH), this)]
     pub options: Vec<CreateRoleOption<'input>>,
 }
@@ -344,6 +350,8 @@ pub struct DropRoleStmt<'input> {
 pub struct CreateUserStmt<'input> {
     #[tok(CREATE, USER, this)]
     pub name: crate::tokens::NonReservedWord<'input>,
+    /// Greedy: any kind that can start this element continues it instead of ending `CreateUserStmt` (bison shift preference).
+    #[greedy(all)]
     #[tok(optional(WITH), this)]
     pub options: Vec<CreateRoleOption<'input>>,
 }
@@ -453,6 +461,8 @@ pub struct AlterRoleSetReset<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(WITH, this)]
 pub struct AlterRoleWithOptions<'input> {
+    /// Greedy: any kind that can start this element continues it instead of ending `AlterRoleWithOptions` (bison shift preference).
+    #[greedy(all)]
     pub options: Vec<AlterRoleOption<'input>>,
 }
 

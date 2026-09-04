@@ -55,11 +55,15 @@ pub struct DeleteStmt<'input> {
     #[presence(ONLY)]
     pub only: bool,
     pub table_name: QualifiedName<'input>,
+    /// Greedy: a leading ABSENT, NULL starts this element instead of ending `DeleteStmt` (bison shift preference).
+    #[greedy(ABSENT, NULL)]
     pub alias: Option<Box<DeleteTableAlias<'input>>>,
     #[pretty(break_before = soft)]
     pub using_clause: Option<Box<DeleteUsingClause<'input>>>,
     #[pretty(break_before = soft)]
     pub where_clause: Option<Box<WhereClause<'input>>>,
+    /// Greedy: a leading RETURNING starts this element instead of ending `DeleteStmt` (bison shift preference).
+    #[greedy(RETURNING)]
     #[pretty(break_before = soft)]
     pub returning: Option<Box<ReturningClause<'input>>>,
 }

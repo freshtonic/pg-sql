@@ -104,6 +104,8 @@ pub struct DropAggregateTarget<'input> {
 #[tok(DROP, AGGREGATE, this)]
 pub struct DropAggregateStmt<'input> {
     pub if_exists: Option<IfExists>,
+    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropAggregateStmt` (bison shift preference).
+    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
     pub targets: Vec<DropAggregateTarget<'input>>,
     pub behavior: Option<DropBehavior>,

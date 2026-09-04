@@ -68,6 +68,8 @@ pub struct CreateDbOption<'input> {
 pub struct CreateDatabaseStmt<'input> {
     #[tok(CREATE, DATABASE, this)]
     pub name: crate::tokens::ColId<'input>,
+    /// Greedy: any kind that can start this element continues it instead of ending `CreateDatabaseStmt` (bison shift preference).
+    #[greedy(all)]
     #[tok(optional(WITH), this)]
     pub options: Vec<CreateDbOption<'input>>,
 }

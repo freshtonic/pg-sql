@@ -29,6 +29,8 @@ pub struct CreateProcedureStmt<'input> {
     pub or_replace: bool,
     pub name: crate::ast::shared::names::QualifiedName<'input>,
     pub args: FunctionParameters<'input>,
+    /// Greedy: any kind that can start this element continues it instead of ending `CreateProcedureStmt` (bison shift preference).
+    #[greedy(all)]
     pub options: Vec<FuncOption<'input>>,
 }
 
@@ -48,6 +50,8 @@ pub struct DropProcedureStmt<'input> {
     #[tok(DROP, PROCEDURE, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
+    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropProcedureStmt` (bison shift preference).
+    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
     pub targets: Vec<DropProcedureTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,

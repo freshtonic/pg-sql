@@ -16,6 +16,8 @@ use crate::tokens::literal;
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SingleAssignment<'input> {
     pub column: literal::Ident<'input>,
+    /// Greedy: a leading DOT, LBRACKET starts this element instead of ending `SingleAssignment` (bison shift preference).
+    #[greedy(DOT, LBRACKET)]
     pub indirection: Vec<crate::ast::shared::expr::IndirectionEl<'input>>,
     #[tok(EQ, this)]
     pub value: Expr<'input>,
@@ -28,6 +30,8 @@ pub struct SingleAssignment<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SetTarget<'input> {
     pub column: literal::Ident<'input>,
+    /// Greedy: a leading DOT, LBRACKET starts this element instead of ending `SetTarget` (bison shift preference).
+    #[greedy(DOT, LBRACKET)]
     pub indirection: Vec<crate::ast::shared::expr::IndirectionEl<'input>>,
 }
 
@@ -68,6 +72,8 @@ pub enum SetAssignment<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(RETURNING, this)]
 pub struct ReturningClause<'input> {
+    /// Greedy: any kind that can start this element continues it instead of ending `ReturningClause` (bison shift preference).
+    #[greedy(all)]
     #[sep(COMMA)]
     pub items: Vec<crate::ast::dml::select::SelectItem<'input>>,
 }
@@ -85,6 +91,8 @@ pub struct UpdateTableAliasWithAs<'input> {
 #[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
 #[tok(SET, this)]
 pub struct SetClause<'input>(
+    /// Greedy: a leading ABSENT starts this element instead of ending `SetClause` (bison shift preference).
+    #[greedy(ABSENT)]
     #[sep(COMMA)]
     #[pretty(indent)]
     #[deref]
@@ -132,6 +140,8 @@ pub struct UpdateStmt<'input> {
     pub from_clause: Option<Box<FromClause<'input>>>,
     #[pretty(break_before = soft)]
     pub where_clause: Option<Box<WhereClause<'input>>>,
+    /// Greedy: a leading RETURNING starts this element instead of ending `UpdateStmt` (bison shift preference).
+    #[greedy(RETURNING)]
     #[pretty(break_before = soft)]
     pub returning: Option<Box<ReturningClause<'input>>>,
 }

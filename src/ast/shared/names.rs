@@ -384,6 +384,8 @@ pub enum QualifiedOperatorName<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct QualifiedOperatorPath<'input> {
     pub first: QualifiedOperatorPrefix<'input>,
+    /// Greedy: any kind that can start this element continues it instead of ending `QualifiedOperatorPath` (bison shift preference).
+    #[greedy(all)]
     pub rest: Vec<QualifiedOperatorPrefix<'input>>,
     pub name: OperatorName<'input>,
 }
