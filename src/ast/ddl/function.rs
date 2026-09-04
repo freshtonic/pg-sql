@@ -130,10 +130,19 @@ pub enum ArgMode {
 
 /// Fixed PostgreSQL built-in type names. Identifier-spelled type names are
 /// factored separately so their shared qualified prefix can be parsed once.
+///
+/// `JSON` belongs here rather than with the identifier-spelled names because
+/// it is a `COL_NAME` keyword and so is excluded from `type_function_name`.
+/// PostgreSQL reaches it through the dedicated `JsonType` production
+/// (gram.y `SimpleTypename: … | JsonType`), which is what makes
+/// `RETURNS json` and `f(node json)` legal while keeping `json` out of
+/// `func_name`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FunctionBuiltinTypeName {
     #[tok(BOOLEAN)]
     Boolean,
+    #[tok(JSON)]
+    Json,
     #[tok(INTEGER)]
     Integer,
     #[tok(INT)]

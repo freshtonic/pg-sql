@@ -196,6 +196,29 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    /// `json` is a `COL_NAME` keyword, so it is excluded from
+    /// `type_function_name`. PostgreSQL still reaches it as a type through the
+    /// dedicated `JsonType` production (gram.y `SimpleTypename: … | JsonType`),
+    /// which is what makes `RETURNS json` and `f(node json)` legal.
+    #[test]
+    fn parse_create_function_json_param_and_return_type() {
+        for src in [
+            "CREATE FUNCTION f(node json) RETURNS json LANGUAGE sql AS 'select $1'",
+            "CREATE FUNCTION f(json) RETURNS json[] LANGUAGE sql AS 'select $1'",
+            "CREATE FUNCTION f() RETURNS SETOF json LANGUAGE sql AS 'select 1'",
+            "CREATE FUNCTION f() RETURNS TABLE(a json) LANGUAGE sql AS 'select 1'",
+            "CREATE FUNCTION mood_to_json(mood) RETURNS json AS 'select 1' LANGUAGE sql IMMUTABLE",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let _stmt = CreateFunctionStmt::parse(&mut input)
+                .unwrap_or_else(|error| panic!("parse {src:?}: {error:?}"))
+                .into_ast();
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+    }
+
     #[test]
     fn parse_create_function_array_arg_multi() {
         let lexed = crate::lex(
