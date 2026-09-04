@@ -289,3 +289,52 @@ fn declared_lists_and_optionals_span_their_delimiters() {
         assert!(input.is_eof(), "strict parse left input for {source:?}");
     }
 }
+
+/// `NONE` is PostgreSQL's missing-operand marker in an `oper_argtypes` pair
+/// (#52).
+///
+/// `NONE` is a `COL_NAME` keyword, and `Typename`'s `type_function_name` path
+/// admits neither `COL_NAME` nor therefore `NONE`. gram.y consequently spells
+/// `'(' NONE ',' Typename ')'` as its own `oper_argtypes` alternative, and so
+/// does `OperatorArgType`.
+#[test]
+fn operator_argtypes_accept_none_in_either_position() {
+    for source in [
+        "DROP OPERATOR # (NONE, int4)",
+        "DROP OPERATOR # (int4, NONE)",
+        "DROP OPERATOR IF EXISTS !!! (NONE, bigint)",
+        "ALTER OPERATOR @#@ (NONE, bigint) OWNER TO regress_user",
+        "COMMENT ON OPERATOR ! (bigint, NONE) IS 'test'",
+        "COMMENT ON OPERATOR @#@ (NONE, bigint) IS NULL",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        Statement::parse(&mut input)
+            .unwrap_or_else(|error| panic!("strict statement {source:?}: {error}"));
+        assert!(input.is_eof(), "strict parse left input for {source:?}");
+    }
+}
+
+/// `NONE` stays out of the general type-name language: it is a `COL_NAME`
+/// keyword, and PostgreSQL's `GenericType: type_function_name` excludes those
+/// (#52).
+#[test]
+fn none_is_not_a_general_type_name() {
+    for source in ["CREATE TABLE t (a NONE)", "CREATE DOMAIN d AS NONE"] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        let parsed = Statement::parse(&mut input);
+        assert!(
+            parsed.is_err() || !input.is_eof(),
+            "NONE must not be a general type name, but {source:?} parsed"
+        );
+    }
+}
