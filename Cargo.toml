@@ -77,11 +77,5 @@ name = "accepted_legacy_gaps"
 path = "tests/accepted_legacy_gaps.rs"
 required-features = ["postgres-oracle"]
 
-[package.metadata.recursa.ast]
-derives = ["Debug", "Clone", "FormatTokens", "Visit", "Transform"]
-arbitrary_feature = "arbitrary"
-railroad = true
-parser_rules = "SqlRules"
-
 [build-dependencies]
 recursa-codegen = { path = "../recursa/recursa-codegen", features = ["diagrams", "explorer"] }

@@ -2,13 +2,13 @@
 
 ## Principles
 
-1. **NEVER manually implement Parse/Scan/Visit/FormatTokens/Debug** They MUST be derived. When encountering a piece of SQL syntax that seems to make derivation with `recursa` impossible STOP what you are doing, explain the problem and ask for feedback.
+1. **NEVER manually implement Parse/Pretty/Visit/VisitMut/Debug** They MUST be derived. When encountering a piece of SQL syntax that seems to make derivation with `recursa` impossible STOP what you are doing, explain the problem and ask for feedback.
 
-2. **All AST nodes MUST derive these traits: Debug, Clone, FormatTokens, Parse, Visit, PartialEq, PartialOrd, Hash**
+2. **All AST nodes MUST derive `recursa::Node, Debug, Clone`.** `Parse`, `Pretty`, `Visit` and `VisitMut` come from the `Node` derive and the root `grammar!` `derives(...)` list, never from a per-node derive. Add `PartialEq`, `Eq`, `Hash` only where a consumer needs them.
 
-3. **All AST nodes MUST derive a Arbitrary but behind a feature gate `#[cfg_attr(feature = "arbitrary", Arbitrary)]`**
+3. **`Arbitrary` is a recursa configured trait.** Enable it through the root `grammar!` `derives(...)` list under the `arbitrary` cargo feature; never add per-node `cfg_attr` derives for it.
 
-4. **Use method syntax, not UFCS.** Write `T::parse(input, rules)` not `<T as Parse>::parse(input, rules)`.
+4. **Use method syntax, not UFCS.** Write `T::parse(input)` not `<T as Parse>::parse(input)`.
 
 5. **Test against real Postgres.** Use testcontainers for regression tests. Each test gets a private Postgres 17 instance.
 
