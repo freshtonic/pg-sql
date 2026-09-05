@@ -10,10 +10,17 @@ that is where the parsing machinery lives; it is filed here because pg-sql is wh
 measurements were taken and where the performance ledger
 (`docs/notes/perf.md`) records them.
 
-**Status.** The defect found in section 7.7 is fixed: recursa `f134fad` and `f52e722`,
-pinned here since pg-sql `b36a44b`. The ledger carries the numbers. Every other item in
-section 7 is open. Each item states its own status, so read those rather than assuming
+**Status, last revised 2026-09-05.** The defect found in section 7.7 is fixed: recursa
+`f134fad` and `f52e722`, pinned here since pg-sql `b36a44b`. Section 7.7 also now carries
+the settled gate question and the current head-to-head figures. Section 8 is new: it
+measures the nesting cost that sections 4 and 7 predicted structurally. Every other item
+in section 7 is open. Each item states its own status, so read those rather than assuming
 the list is current as a whole.
+
+Sections 1 to 6 describe PostgreSQL 17.9 and do not go stale. Sections 7 and 8 cite
+measurements taken on one machine on one day, and the benchmark's statement membership
+changes as the grammar improves, so treat their absolute figures as dated and their
+ratios as the durable part.
 
 ## Short answer
 
@@ -350,6 +357,61 @@ Table sizes:
 
 The cost model is the point. Grammar size is paid in table space, not in time. Adding a
 rule costs bytes; it does not slow the parse.
+
+### How the tables are compressed
+
+A dense action table would be one cell per state per terminal. Most of it would say
+"error", so bison does not store it densely.
+
+| | |
+| --- | --: |
+| Dense action table | 6,458 x 539 = **3,480,862** entries |
+| Actually stored (`YYLAST`) | **123,277** entries |
+| Compression | **28x** |
+| Dense at `int16` | 6.6 MB |
+| Stored, `yytable` + `yycheck` | **482 KB** |
+
+The rows are overlapped into one shared array — a comb vector. `yypact[state]` gives each
+state a displacement into that array, and two rows may interleave wherever their
+non-error entries do not collide. `yycheck` is what makes the overlap safe: it records
+which terminal owns each cell, so a state that lands in a cell belonging to another state
+sees the mismatch and falls through to its default action.
+
+That is the whole of the lookup:
+
+```c
+yyn = yypact[yystate];      /* this state's displacement    */
+yyn += yytoken;             /* index into the shared array  */
+if (yycheck[yyn] != yytoken) goto yydefault;   /* is this cell mine? */
+yyn = yytable[yyn];         /* it is: here is the action    */
+```
+
+A positive `yytable` entry is a shift and names the state to push. A negative entry is a
+reduction and names the rule. Reduction then needs three more tables: `yyr2[rule]` gives
+how many states to pop, `yyr1[rule]` gives the nonterminal produced, and
+`yypgoto`/`yydefgoto` give the state to push in its place. The rule's action code — in
+Postgres, a `makeNode` call — runs at that point and builds the tree node.
+
+### A real lookup
+
+Decoded from the generated `gram.c` rather than described:
+
+```
+state 0:   yypact = 11386    58 legal lookahead tokens
+             "end of file"  ->  reduce by rule 136
+             ABORT_P        ->  shift to state 1
+             ALTER          ->  shift to state 2
+state 1:   yypact = 47        2 legal lookahead tokens
+             TRANSACTION    ->  shift to state 194
+             WORK           ->  shift to state 195
+state 2:   yypact = 14000    35 legal lookahead tokens
+             AGGREGATE      ->  shift to state 197
+             COLLATION      ->  shift to state 198
+```
+
+State 1 is "`ABORT` has been seen". Only `TRANSACTION` and `WORK` can follow it, and that
+fact lives in a table row rather than in a branch. Nothing in the generated C mentions
+`ABORT`; the parser loop is the same loop it would be for any other grammar.
 
 ### The lookahead is read lazily
 
@@ -717,6 +779,101 @@ The stale `#10` claim in `benches/parse.rs` was corrected separately in `92bdade
 kept the statement-level seam but said why it is the one timed. A document-level
 canonical workload is tracked as issue #61, deliberately assigned to a session with no
 stake in this defect, so the workload is not shaped by the bug it would have caught.
+
+**The gate question, settled by measurement, 2026-09-05.** One doubt about this section
+remained: `probe_statements` times only statements all three engines accept, so the
+headline pg-sql/PostgreSQL ratio inherits a gate belonging to sqlparser, an engine that
+comparison does not involve. sqlparser causes 90.5% of all rejection events, and dropping
+its gate admits 27.5% more statements. If those statements parsed at a different relative
+speed, the headline number would be biased.
+
+The experiment was pre-registered before it ran — threshold, decision metric and a
+binding rule in both directions — and the result is null:
+
+| Membership | Statements | geomean pg-sql/postgres |
+| --- | --: | --: |
+| All three engines accept | 33,703 | 3.3826 |
+| pg-sql and PostgreSQL accept | 42,984 | 3.3567 |
+
+**Relative change: −0.77%**, against a pre-registered threshold of 5% and a measured
+run-to-run spread of 0.88%. Adding 9,281 statements moves the ratio by less than one
+run's worth of jitter — the statistic cannot see the difference. The three-way gate does
+not bias the PostgreSQL comparison, so the headline ratio may be read as a statement
+about pg-sql and PostgreSQL. Full protocol, amendment and result are in
+[`docs/notes/perf.md`](../notes/perf.md).
+
+**Current numbers.** Run `2026-09-04T14-42-32Z-c972f92`, recursa pin `f52e722`:
+
+| Engine | Total median | Throughput | Geomean vs pg-sql |
+| --- | --: | --: | --: |
+| pg-sql | 144.5 ms | 22.4 MiB/s | — |
+| sqlparser 0.52 | 208.8 ms | 15.5 MiB/s | 0.685x |
+| PostgreSQL 17.9 | 39.1 ms | 82.7 MiB/s | 3.419x |
+
+33,718 of 43,489 frozen statements timed; rejections pg-sql 289, sqlparser 9,613,
+PostgreSQL 484. Against the 12:30 run of 2026-09-04 the timed set grew by 125 statements;
+against the 09:12 run it grew by 336. Totals are only comparable between runs of equal
+membership, so name the baseline whenever quoting one.
+
+**A note on measuring under load, because it generalises.** This run was taken with a
+macOS background process holding 72 to 74% of a core throughout, which could not be
+stopped. The run is still citable, and the argument is not that the load looked
+acceptable. PostgreSQL's own total came in at 39.1 ms against 39.3 ms in the previous
+run, a 0.5% move, inside the 0.88% run-to-run spread measured from the only same-commit
+replicate pair in `docs/benchmarks/`. The control engine did not move. That works because
+the control is an engine the change under test cannot touch, and it converts an assurance
+into evidence. Prefer it to waiting for a quiet machine, which may not come.
+
+## 8. The price of recursive descent, measured
+
+Sections 4 and 7 argue from generated code that a table-driven parser handles nesting
+more cheaply than a recursive-descent one: bison pushes an `int16` onto a state stack,
+where recursive descent makes a real function call per nonterminal, with a stack frame, a
+`Result` to match, and drop glue to run. That was a structural claim, made by reading
+`gram.c`. The benchmark of 2026-09-05 measures it.
+
+The `stress/nested_subquery` fixtures vary one thing — nesting depth — at 5, 10 and 15.
+From run `2026-09-04T14-42-32Z-c972f92`, with PostgreSQL's figures back-computed from the
+report's ratio column:
+
+| Depth | pg-sql | sqlparser | PostgreSQL |
+| --: | --: | --: | --: |
+| 5 | 0.011 ms | 0.011 ms | ~0.0017 ms |
+| 10 | 0.020 ms | 0.021 ms | ~0.0028 ms |
+| 15 | 0.029 ms | 0.029 ms | ~0.0041 ms |
+
+Marginal cost of one nesting level:
+
+| Parser | Per level | Against PostgreSQL |
+| --- | --: | --: |
+| pg-sql (recursive descent) | 1.80 us | 7.2x |
+| sqlparser (recursive descent) | 1.90 us | 7.6x |
+| PostgreSQL (LALR tables) | 0.249 us | — |
+
+**Both recursive-descent parsers have the same slope**, within 5% of each other, and both
+pay roughly 7.5x PostgreSQL per level. All three scale linearly; none blows up.
+
+That symmetry is what makes the result architectural rather than an implementation
+defect. A pathology in one parser would show as a steeper slope in that parser. Two
+independent implementations, written by different people in different codebases, paying
+the same marginal cost against the same table-driven baseline is the signature of the
+technique rather than the code.
+
+It is also the one shape where pg-sql loses its usual advantage over sqlparser: 0.95x
+here, against 0.41x to 0.58x on every other stress shape. pg-sql is not unusually bad at
+nesting. sqlparser is unusually good at it, because nesting is where the constant-factor
+work that pg-sql normally wins on stops dominating.
+
+Three lines therefore agree: the mechanism read out of `gram.c`, the prediction made
+before any measurement, and two parsers measured independently. That is worth more than
+any one of them.
+
+**Caveat, and it is a real one.** Three data points, absolute times of 11 to 29
+microseconds, and the PostgreSQL column derived from a ratio printed to three significant
+figures. This is strong enough to reframe the question and not strong enough to answer
+it. The open question is whether roughly 7.5x per nesting level is simply what recursive
+descent costs, in which case it is a property to document rather than a defect to fix. It
+deserves a profile before anyone believes it.
 
 ## Sources
 
