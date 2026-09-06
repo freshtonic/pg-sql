@@ -901,3 +901,60 @@ the absolute milliseconds should be treated as an upper bound.
 Report: `docs/benchmarks/2026-09-04T09-12-51Z-eb16f47/` (`report.md`,
 `data.json`, `time.svg`, `throughput.svg`). Run directories stay untracked
 (`.gitignore` line 5), so only this journal entry is committed.
+
+## Track T: the grammar restructuring for the table-driven parser style
+
+**Change.** pg-sql `effe2aa`, recursa pin `6d91867`. Issue #68's two passes:
+lookahead filters mirroring `parser.c`, a `precedence` block mirroring
+`gram.y`'s, node restructurings that mirror their `gram.y` nonterminals, the
+`ESCAPE` clause as an attached Pratt operand, a real custom-prefix Pratt
+variant, `DEFAULT` excluded from `b_expr` operands, and every `#[greedy(...)]`
+acceptance made exact against recursa's now-honoured exclusions. Every Pratt
+binding power was rescaled by ten to make room for `gram.y`'s keyword levels.
+
+**Question.** The work exists to make the grammar LALR-clean. Did it cost the
+recursive-descent parser anything? A restructuring that mirrors `gram.y` is
+not obviously free: it adds nonterminals, and the binding-power rescale
+touches every Pratt decision.
+
+**Run.** `2026-09-06T07-01-19Z-effe2aa`, machine otherwise idle. Compared with
+the two previous runs over the 236 benchmarks common to all three, so the
+membership is identical.
+
+| Run | pg-sql | sqlparser | PostgreSQL | geomean vs PostgreSQL | geomean vs sqlparser |
+| --- | --: | --: | --: | --: | --: |
+| `c972f92` | 144.5 ms | 208.8 ms | 39.1 ms | 3.419x | 0.685x |
+| `7522830` | 144.7 ms | 211.2 ms | 39.3 ms | 3.421x | 0.681x |
+| `effe2aa` | **140.8 ms** | 208.7 ms | 39.7 ms | **3.302x** | **0.671x** |
+
+**Result: the restructuring made recursive descent faster.** The geomean
+against PostgreSQL improves 3.5%, and the parity gate against sqlparser holds
+at 0.671x. Read the ratio, not the totals: the PostgreSQL control moved 1.0%
+between runs, just above the 0.88% same-commit spread this journal measured,
+so the machine was marginally slower, and the ratio is the figure that
+normalises it. pg-sql got faster while the control got slower, so the
+direction is not in doubt.
+
+Nesting, the shape section 8 of the parser research predicted would be
+architectural:
+
+| Run | pg-sql per level | PostgreSQL per level | Ratio |
+| --- | --: | --: | --: |
+| `7522830` | 1.754 us | 0.246 us | 7.13x |
+| `effe2aa` | 1.683 us | 0.242 us | 6.96x |
+
+4% cheaper per nesting level, still about 7x PostgreSQL. That number is a
+property of recursive descent and only the table-driven style will move it.
+
+**Why it got faster, most likely.** The restructurings replace enum
+alternatives that shared long prefixes with nonterminals that part earlier, so
+predictive dispatch decides on fewer tokens. Two changes remove work outright:
+the `ESCAPE` clause is now an attached Pratt operand rather than a separate
+node with a 74-name exclusion list, and `CustomPrefixOperand` is gone, folded
+into a real Pratt prefix variant. This is a plausible mechanism, not a
+measurement; a profile would settle it and none was taken.
+
+**Status of the table-driven style.** Not measured here, because it cannot be
+generated yet: 33 LR conflicts remain, 23 of them recursa #129 and 1 recursa
+#128, and recursa refuses to emit a parser with any conflict. Issue #70 times
+it once those land.
