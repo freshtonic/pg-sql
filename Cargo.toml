@@ -31,9 +31,11 @@ arbitrary = ["dep:arbitrary", "recursa/arbitrary"]
 postgres-oracle = ["dep:pg-oracle"]
 # The two-parser build (#68): gates `tests/two_parsers.rs`, which needs the
 # grammar to declare `parsers(rd = recursive_descent, lr = table_driven)`.
-# The declaration waits on recursa changes that retire the remaining LR
-# conflicts. Until it lands, `pg_sql::parsers::lr` does not exist and the
-# test does not compile: do not enable the feature yet.
+# The declaration waits on the last 33 LR conflicts, which need recursa #128
+# and #129; recursa refuses to generate the table-driven parser while any
+# conflict remains. Until it lands, `pg_sql::parsers::lr` does not exist and
+# the test does not compile: do not enable the feature yet. See the header of
+# `tests/two_parsers.rs` for what each conflict group needs.
 table-driven = []
 
 [dependencies]
