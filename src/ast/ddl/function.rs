@@ -43,17 +43,19 @@ pub struct LanguageOption<'input> {
     pub name: LanguageName<'input>,
 }
 
-/// Function body: either single-quoted string, dollar-quoted string, or a
-/// psql client variable substitution (e.g., `AS :'regresslib'` for C-language
-/// shared libraries passed in via psql `\set`).
+/// Function body: either a single-quoted or a dollar-quoted string, which is
+/// gram.y's `func_as: Sconst | Sconst ',' Sconst` payload.
 ///
-/// Variant ordering: dollar-quoted before single-quoted before psql var
-/// (different first chars).
+/// psql's `AS :'regresslib'` is not a form of this: psql substitutes the
+/// variable before the server lexes, so what reaches gram.y is an ordinary
+/// `Sconst`. Render such a script through the `pg-psql` crate first.
+///
+/// Variant ordering: dollar-quoted before single-quoted (different first
+/// chars).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FuncBodyPart<'input> {
     Dollar(literal::DollarStringLit<'input>),
     String(literal::StringLit<'input>),
-    PsqlVar(literal::PsqlVariable<'input>),
 }
 
 /// Full function body — `AS body [, symbol]`. The second comma-separated
@@ -597,10 +599,6 @@ fn strip_body_delimiters<'a>(part: &'a FuncBodyPart<'a>) -> &'a str {
     match part {
         FuncBodyPart::Dollar(d) => strip_dollar_quotes(d.text()),
         FuncBodyPart::String(s) => strip_quotes(s.text()),
-        FuncBodyPart::PsqlVar(v) => match &v.name {
-            literal::PsqlVariableValue::Name(name) => name.text(),
-            literal::PsqlVariableValue::String(string) => strip_quotes(string.text()),
-        },
     }
 }
 

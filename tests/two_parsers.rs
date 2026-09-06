@@ -6,8 +6,9 @@
 //! table_driven)` in `src/lib.rs` for `pg_sql::parsers::lr` to exist. That
 //! declaration is still not in place. recursa refuses to generate the
 //! table-driven parser while any conflict remains (`RCA9105`), and the
-//! construction reports 31: 9,643 before the first pass, 522 after it, 33
-//! after the second, 31 now.
+//! construction reports 23: 9,643 before the first pass, 522 after it, 33
+//! after the second, 31 after the third, 23 now that psql has left the
+//! grammar.
 //!
 //! recursa #129 was implemented and then rejected: two grammar types sharing
 //! one LR nonterminal cannot retire a reduce/reduce between themselves, since
@@ -33,17 +34,16 @@
 //!   `RCA3101` but makes `Expr` derive `( Subquery )` and three enums then
 //!   report `RCA0200`. There is no pg-sql-side route around it.
 //!
-//! - 8, pg-sql's psql-variable extension. `TypeCastValue::PsqlVar` admits
-//!   `:'x'` after a fixed type-name keyword, so `SELECT int :'x'` is a typed
-//!   literal while `int :` also begins a `JSON_OBJECT` key/value entry. psql
-//!   substitutes `:'x'` textually before the server lexes, so gram.y never
-//!   meets the choice, and no amount of lookahead settles it: both readings
-//!   stay live past the colon. pg-sql already made the opposite call for
-//!   identifier-spelled type names (see `TypeCastFunc`), and making the same
-//!   call here would retire all 8; the cost is `numeric :'txid_current'` in
-//!   psql scripts. The differential never sees it -- "statements containing
-//!   psql variable interpolation are not standalone SQL" is a frozen corpus
-//!   rule -- so this is a product decision, not a parity one.
+//! - 0, and retired: pg-sql's psql-variable extension used to cost 8.
+//!   `TypeCastValue::PsqlVar` admitted `:'x'` after a fixed type-name
+//!   keyword, so `SELECT int :'x'` was a typed literal while `int :` also
+//!   begins a `JSON_OBJECT` key/value entry, and no lookahead settled it:
+//!   both readings stayed live past the colon. gram.y never meets the
+//!   choice, because psql substitutes `:'x'` textually before the server
+//!   lexes. The product decision was to say the same thing in the same
+//!   place: psql is its own grammar in the `pg-psql` crate, which parses a
+//!   psql document, substitutes, and renders the SQL text this grammar then
+//!   reads. 31 -> 23, and the conflict states fell from 14 to 6.
 //!
 //! - 3, the two `func_arg_list` spellings. Mirroring gram.y exactly (one
 //!   `func_arg_list`, gram.y:16539, with `VARIADIC` as the `',' VARIADIC

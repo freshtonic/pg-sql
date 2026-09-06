@@ -932,24 +932,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_psql_var() {
-        let lexed = crate::lex(":foo_oid");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
-    fn parse_psql_var_in_func_call() {
-        let lexed = crate::lex("pg_stat_get_function_calls(:func_oid)");
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(input.is_eof());
-    }
-
-    #[test]
     fn parse_trim_both_from() {
         let lexed = crate::lex("TRIM(BOTH FROM '  hi  ')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
@@ -3068,13 +3050,31 @@ mod tests {
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
+    /// `j['a':'b']` — a slice whose bounds are string literals.
+    ///
+    /// This did not parse while psql's `:'name'` was one token of the SQL
+    /// lexer: `:'b'` was taken for an interpolation, so the slice colon was
+    /// never seen, and the form was recorded as a limitation. psql now has
+    /// its own grammar, and both bounds are ordinary `opt_slice_bound`
+    /// expressions (gram.y:15442).
+    #[test]
+    fn parse_array_slice_with_string_bounds() {
+        let lexed = crate::lex("j['a':'b']");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
+        assert!(input.is_eof(), "parser cursor: {}", input.cursor());
+    }
+
     /// Slice on a parenthesised cast: `(arr::int[])[1:2]` — PG accepts the
     /// postfix subscript on any a_expr including a parenthesised cast.
-    /// Slices with a reserved keyword (NULL/TRUE/FALSE) as a bound rely on
-    /// the `pg_lex` post-processor splitting `:NULL` PsqlVars; the
-    /// jsonb-string-range form `[ 'a':'b' ]` is a separate limitation —
-    /// PsqlVar's `:'…'` quoted form is preserved to keep psql-style
-    /// `COPY ... :'filename'` round-tripping.
+    ///
+    /// Both bounds are plainly optional expressions now, as gram.y's
+    /// `opt_slice_bound` has them. While the colon could also start a psql
+    /// variable, a bound spelled with a reserved keyword (`[1:NULL]`) or a
+    /// string (`['a':'b']`) had to be recovered from that reading; with psql
+    /// in its own grammar there is nothing to recover from.
     #[test]
     fn parse_array_slice_on_paren_cast() {
         for src in [
@@ -3303,10 +3303,11 @@ mod tests {
 
     /// `JSON_OBJECTAGG(k: v)` and `JSON_OBJECT(k: v)` with an identifier key.
     ///
-    /// pg-sql models psql's `:name` interpolation in the expression grammar,
-    /// where PostgreSQL has no such production. An identifier followed by a
-    /// colon therefore also reads as the typed literal `type_function_name
-    /// :'var'`, and that reading swallowed the SQL/JSON key/value separator.
+    /// pg-sql used to model psql's `:name` interpolation in the expression
+    /// grammar, where PostgreSQL has none. An identifier followed by a colon
+    /// then also read as the typed literal `type_function_name :'var'`, and
+    /// that reading swallowed the SQL/JSON key/value separator. psql now has
+    /// its own grammar, so a colon here is only ever the separator.
     #[test]
     fn parse_json_object_entry_with_identifier_key() {
         for src in [
@@ -3330,12 +3331,8 @@ mod tests {
             panic!("expected the entry form");
         };
         assert!(args.entries.first().value.is_some(), "expected a key/value entry");
-        // psql's typed-literal interpolation keeps its keyword-named and
-        // typmod spellings, which no column name can be mistaken for.
-        assert!(matches!(
-            parse_expr_classified("numeric :'txid'"),
-            Expr::CastFunc(_)
-        ));
+        // The typed literal keeps its keyword-named spelling, which is
+        // gram.y's `ConstTypename Sconst` and takes a string, never a colon.
         assert!(matches!(
             parse_expr_classified("bigint 'txid'"),
             Expr::CastFunc(_)

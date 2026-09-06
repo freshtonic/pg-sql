@@ -39,6 +39,7 @@ enum Rationale {
     ClosedWindowRefAdmission,
     CorrectedAdr0004,
     FrozenStatementSpanAdapter,
+    Issue68PsqlCrate,
     Issue8OmittedTooling,
     Issue9GeneratedExpression,
     Issue9GeneratedStatement,
@@ -185,6 +186,7 @@ fn disposition_ledger(source: &str) -> Result<Vec<DispositionRow>, String> {
                 "closed-window-ref-admission" => Rationale::ClosedWindowRefAdmission,
                 "corrected-adr-0004" => Rationale::CorrectedAdr0004,
                 "frozen-statement-span-adapter" => Rationale::FrozenStatementSpanAdapter,
+                "issue-68-psql-crate" => Rationale::Issue68PsqlCrate,
                 "issue-8-omitted-tooling" => Rationale::Issue8OmittedTooling,
                 "issue-9-generated-expression" => Rationale::Issue9GeneratedExpression,
                 "issue-9-generated-statement" => Rationale::Issue9GeneratedStatement,
@@ -607,6 +609,16 @@ fn validate_disposition_rationale(row: &DispositionRow) -> Result<(), String> {
             | Some("tests::support::tests::skips_psql_interpolation") => {
                 Rationale::FrozenStatementSpanAdapter
             }
+            // psql left the SQL grammar in #68. These three covered psql
+            // variable interpolation as an expression, as a function-call
+            // argument, and as a COPY target; the `pg-psql` crate's suite
+            // covers all three, and pg-sql cannot, because its grammar
+            // mirrors gram.y and gram.y has no such production.
+            Some("ast::shared::expr::tests::parse_psql_var")
+            | Some("ast::shared::expr::tests::parse_psql_var_in_func_call")
+            | Some("ast::utility::copy::tests::copy_table_psql_var_target") => {
+                Rationale::Issue68PsqlCrate
+            }
             _ => {
                 return Err(format!(
                     "superseded row has no reviewed rationale mapping: {:?}",
@@ -636,7 +648,7 @@ fn all_imported_embedded_tests_and_ignored_statuses_are_accounted_for() {
     let included_paths = included_test_modules(root, &discovered_paths);
     let actual = actual_inventory(root, &discovered_paths);
 
-    assert_eq!(expected.len(), 1_123);
+    assert_eq!(expected.len(), 1_121);
     assert_eq!(discovered_paths, expected_paths);
     assert_eq!(
         included_paths,
@@ -674,7 +686,7 @@ fn every_frozen_legacy_test_and_new_relocated_test_has_a_disposition() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
 
     assert_eq!(legacy.len(), 1_318);
-    assert_eq!(current.len(), 1_123);
+    assert_eq!(current.len(), 1_121);
     validate_reconciliation(
         &legacy,
         &current,

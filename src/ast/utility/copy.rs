@@ -111,13 +111,16 @@ pub enum CopyDirection {
     To,
 }
 
-/// The source/destination of a COPY: a quoted filename, a psql `:'var'`
-/// variable substitution (common in the regression corpus), `STDIN`, or
-/// `STDOUT`.
+/// The source/destination of a COPY: a quoted filename, `STDIN`, or
+/// `STDOUT` — gram.y's `copy_file_name: Sconst | STDIN | STDOUT`.
+///
+/// The regression corpus spells the filename `:'filename'`, but that is psql
+/// substituting before the server lexes, not a `copy_file_name` production;
+/// render such a script through the `pg-psql` crate first.
 ///
 /// Variant ordering: keyword forms first so they win over the otherwise-
-/// matching string/PsqlVar rules (`STDIN` / `STDOUT` are soft keywords that
-/// the scanner could equally well classify as identifiers).
+/// matching string rule (`STDIN` / `STDOUT` are soft keywords that the
+/// scanner could equally well classify as identifiers).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CopyTarget<'input> {
     #[tok(STDIN)]
@@ -125,7 +128,6 @@ pub enum CopyTarget<'input> {
     #[tok(STDOUT)]
     Stdout,
     File(literal::StringLit<'input>),
-    PsqlVar(literal::PsqlVariable<'input>),
 }
 
 /// Legacy `[USING] DELIMITERS 'c'` clause — Postgres' `copy_delimiter`

@@ -3,7 +3,13 @@
 //! `document::parse_sql` accepts zero or more semicolon-separated PostgreSQL
 //! statements with an optional final semicolon and no psql-only syntax. The
 //! tests cover the reviewed happy-path matrix, the exact source-ownership
-//! partition, the strict rejection of invalid input, and psql rejection.
+//! partition, and the strict rejection of invalid input.
+//!
+//! psql input is rejected here like any other invalid input, and nothing
+//! more is claimed about it: this grammar mirrors `gram.y`, which has no
+//! psql construct, so it has nothing left that could recognise one. What
+//! psql input *means* is the `pg-psql` crate's subject, and the tests that
+//! asserted a substituted reading moved there with the behaviour.
 
 use pg_sql::ast::{Statement, dml::select::SelectBody, dml::values::SelectClause};
 use pg_sql::document::{self, SqlParseError};
@@ -400,32 +406,30 @@ fn psql_interpolation_is_rejected() {
         "SELECT :\"var\";",
         "SELECT * FROM t WHERE a = :filter;",
         "COPY t FROM :'filename';",
-        // The typed-literal payload keeps psql interpolation in its
-        // keyword-named spelling. The identifier-named form (`bigint :'x'`)
-        // is not a pg-sql production: `ident : …` is the SQL/JSON
-        // `key : value` entry, and PostgreSQL's own `AexprConst` has no
-        // colon there.
+        // `numeric :'txid'` used to parse here as a typed literal, which is
+        // what made `SELECT int :'x'` ambiguous against the SQL/JSON
+        // `int : value` entry. gram.y's `ConstTypename Sconst` takes a
+        // string and never a colon, and so does this grammar now.
         "SELECT numeric :'txid';",
     ] {
-        match document::parse_sql(source) {
-            Ok(_) => panic!("{source:?} is psql interpolation and must be rejected"),
-            Err(SqlParseError::Psql(_)) => {}
-            Err(other) => panic!("{source:?} must reject as psql syntax, got {other}"),
-        }
+        assert_strict_rejection(source);
     }
 }
 
 #[test]
 fn psql_rejection_names_the_offending_statement() {
+    // The rejection is an ordinary strict rejection, and it still names the
+    // statement it belongs to; that is what the occurrence model guarantees
+    // for every rejection, psql or not.
     let source = "SELECT 1;\nSELECT :x;";
-    let Err(SqlParseError::Psql(psql)) = document::parse_sql(source) else {
+    let Err(SqlParseError::Rejected(rejection)) = document::parse_sql(source) else {
         panic!("interpolation in the second statement must be rejected");
     };
-    assert_eq!(&source[psql.span().range()], "SELECT :x;");
+    assert_eq!(&source[rejection.island().range()], "SELECT :x;");
 }
 
 #[test]
-fn array_slices_are_not_psql_interpolation() {
+fn array_slices_are_not_a_colon_prefixed_value() {
     for source in [
         "SELECT arr[:2] FROM t;",
         "SELECT arr[:] FROM t;",

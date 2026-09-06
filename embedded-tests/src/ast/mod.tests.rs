@@ -47,8 +47,8 @@ mod tests {
     }
 
     /// `UPDATE arrtest SET c[1:NULL] = '{…}'` — slice with a SQL keyword
-    /// (NULL) as the upper bound. Relies on the `pg_lex` post-processor
-    /// splitting the `:NULL` PsqlVar into a `Colon` + `NULL` pair.
+    /// (NULL) as the upper bound, which is just gram.y's `opt_slice_bound`
+    /// holding an `a_expr`.
     #[test]
     fn parse_subscript_assign_slice_null_bound() {
         let src = "UPDATE arrtest SET c[1:NULL] = '{16,25}' WHERE array_dims(c) is null";

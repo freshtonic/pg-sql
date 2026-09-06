@@ -8,6 +8,14 @@
 //! line that follow it in a psql script are not, and they are rejected like
 //! every other non-SQL region.
 //!
+//! psql input is rejected here the way any other invalid input is. This
+//! grammar mirrors `gram.y`, which contains no psql construct, so there is
+//! nothing left in it that could recognise one: a psql script is text the
+//! SQL grammar does not accept, and it selects [`SqlParseError::Rejected`]
+//! with the failing statement named. To parse one, render it through the
+//! `pg-psql` crate first — that is what psql itself does before the server
+//! ever sees the text.
+//!
 //! Success is a [`SqlDocument`]: a fully strict, provenance-bearing
 //! partition of the complete source. Ordinary invalid input is rejected with
 //! a [`SqlRejection`]: the first failing statement island, its strict parse
@@ -16,13 +24,11 @@
 //! failure is limited to violated framing invariants ([`FrameError`]).
 
 use std::fmt;
-use std::ops::ControlFlow;
 
-use recursa::{NodeView, Parsed, Span, Visit, VisitBreak, Visitor};
+use recursa::{NodeView, Parsed, Span};
 
 use crate::ast::Statement;
 use crate::ast::file::SqlDocumentItem;
-use crate::tokens::literal::PsqlVariableValue;
 use crate::{
     CompleteFrame, CompletePart, FrameDiagnostic, FrameError, FrameFailure, FrameRejection,
 };
@@ -32,31 +38,28 @@ use crate::{
 /// The generated document-framing adapter partitions the source into
 /// semicolon-bounded statement islands and right-owned trivia gaps, parses
 /// every island strictly, and fails closed on any ordinary failure. A final
-/// statement does not need a trailing semicolon. Psql-only syntax is
-/// rejected: directives, send commands, query-buffer escapes, and COPY
-/// payload text are not SQL and select [`SqlParseError::Rejected`], while
-/// psql interpolation (`:name`, `:'name'`, `:"name"`) parses lexically but
-/// is rejected as [`SqlParseError::Psql`].
+/// statement does not need a trailing semicolon. Psql-only syntax — a
+/// directive, a send command, a query-buffer escape, COPY payload text, or
+/// an interpolation such as `:name` — is not SQL and selects
+/// [`SqlParseError::Rejected`]; use the `pg-psql` crate to render it to SQL
+/// first.
 pub fn parse_sql(source: &str) -> Result<SqlDocument<'_>, SqlParseError<'_>> {
     match SqlDocumentItem::frame(source) {
         Err(FrameFailure::Fatal(fatal)) => Err(SqlParseError::Fatal(fatal)),
         Err(FrameFailure::Rejected(rejection)) => {
             Err(SqlParseError::Rejected(SqlRejection(rejection)))
         }
-        Ok(frame) => match first_psql_use(&frame) {
-            Some(rejection) => Err(SqlParseError::Psql(rejection)),
-            None => {
-                // The generated view accessors do not declare precise
-                // `use<..>` capture, so under edition 2024 a borrowed
-                // statement view cannot be returned across a closure
-                // boundary; the semantic list is cloned once instead.
-                let statements = frame
-                    .typed_islands()
-                    .filter_map(|item| item.root().value().statement.clone())
-                    .collect();
-                Ok(SqlDocument { frame, statements })
-            }
-        },
+        Ok(frame) => {
+            // The generated view accessors do not declare precise `use<..>`
+            // capture, so under edition 2024 a borrowed statement view
+            // cannot be returned across a closure boundary; the semantic
+            // list is cloned once instead.
+            let statements = frame
+                .typed_islands()
+                .filter_map(|item| item.root().value().statement.clone())
+                .collect();
+            Ok(SqlDocument { frame, statements })
+        }
     }
 }
 
@@ -124,8 +127,6 @@ pub enum SqlParseError<'input> {
     /// Ordinary invalid input: the first failing statement island with its
     /// strict diagnostics and optional framing cause.
     Rejected(SqlRejection<'input>),
-    /// Psql interpolation inside an otherwise-parseable document.
-    Psql(PsqlSyntaxError),
     /// Violated grammar, framing, partition, plan, or progress invariants.
     Fatal(FrameError<'input>),
 }
@@ -142,7 +143,6 @@ impl fmt::Display for SqlParseError<'_> {
                     rejection.0,
                 )
             }
-            Self::Psql(psql) => psql.fmt(formatter),
             Self::Fatal(fatal) => fatal.fmt(formatter),
         }
     }
@@ -157,7 +157,6 @@ impl fmt::Debug for SqlParseError<'_> {
                 .field("diagnostics", &rejection.diagnostics().len())
                 .field("framing", &rejection.framing().map(FrameDiagnostic::code))
                 .finish_non_exhaustive(),
-            Self::Psql(psql) => psql.fmt(formatter),
             Self::Fatal(fatal) => fatal.fmt(formatter),
         }
     }
@@ -175,77 +174,3 @@ impl std::error::Error for SqlParseError<'_> {}
 /// statement, or authored document.
 #[derive(derive_more::Deref)]
 pub struct SqlRejection<'input>(FrameRejection<'input>);
-
-/// Psql interpolation found inside an otherwise-parseable document.
-///
-/// The strict interface accepts PostgreSQL `RAW_PARSE_DEFAULT` input only.
-/// `:name`, `:'name'`, and `:"name"` are psql client-side substitutions, not
-/// server SQL, so a document containing one is rejected even though the
-/// permissive statement grammar (which also serves the psql-flavored
-/// regression corpus) can parse it.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PsqlSyntaxError {
-    /// Extent of the statement island containing the interpolation.
-    span: Span,
-}
-
-impl PsqlSyntaxError {
-    /// Returns the extent of the statement island containing the
-    /// interpolation, in absolute document offsets.
-    pub const fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl fmt::Display for PsqlSyntaxError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "psql variable interpolation is not PostgreSQL server SQL (statement at {}..{})",
-            self.span.start(),
-            self.span.end()
-        )
-    }
-}
-
-impl std::error::Error for PsqlSyntaxError {}
-
-/// Breaks traversal at the first psql client-side substitution.
-///
-/// `PsqlVariableValue` is the one shared leaf of every interpolation
-/// spelling: the expression atom (`SELECT :name`), the typed-literal cast
-/// (`bigint :'name'`), function bodies (`AS :'lib'`), and COPY targets. The
-/// lower-unbounded array-slice forms (`[:2]`, `[:]`, `[:(expr)]`) that reuse
-/// the same colon atom carry non-psql values and stay accepted.
-#[derive(recursa::TotalVisitor)]
-#[total_visitor(
-    dispatch = [crate::tokens::literal::PsqlVariableValue<'static>],
-    error = (),
-    event = crate::__RecursaVisitEvent,
-)]
-struct PsqlUseScan;
-
-impl<'input> Visitor<PsqlVariableValue<'input>> for PsqlUseScan {
-    type Error = ();
-
-    fn enter(&mut self, _node: &PsqlVariableValue<'input>) -> ControlFlow<VisitBreak<()>> {
-        ControlFlow::Break(VisitBreak::Error(()))
-    }
-}
-
-/// Finds the first island containing psql interpolation, if any.
-fn first_psql_use(frame: &CompleteFrame<'_, SqlDocumentItem<'_>>) -> Option<PsqlSyntaxError> {
-    frame.parts().find_map(|part| match part {
-        CompletePart::Island(island) => match island.parsed().visit(&mut PsqlUseScan) {
-            ControlFlow::Break(VisitBreak::Error(())) => Some(PsqlSyntaxError {
-                span: island.span(),
-            }),
-            ControlFlow::Break(VisitBreak::SkipChildren | VisitBreak::Finished)
-            | ControlFlow::Continue(()) => None,
-        },
-        CompletePart::Gap(_)
-        | CompletePart::Line(_)
-        | CompletePart::Delimited(_)
-        | CompletePart::Payload(_) => None,
-    })
-}

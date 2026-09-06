@@ -391,6 +391,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pg-psql"
+version = "0.1.0"
+dependencies = [
+ "pg-sql",
+ "recursa",
+ "recursa-codegen",
+]
+
+[[package]]
 name = "pg-sql"
 version = "0.1.0"
 dependencies = [

@@ -716,7 +716,7 @@ pub struct FunctionTypedLiteralTail<'input> {
     /// gram.y `opt_sort_clause`.
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
     pub close: FunctionCallClose,
-    pub value: TypeCastValue<'input>,
+    pub value: literal::StringLit<'input>,
 }
 
 /// What follows a function name in call position.
@@ -817,44 +817,25 @@ pub enum SubscriptColon {
     Value,
 }
 
-/// Colon-prefixed client value. In an ordinary expression this retains psql's
-/// `:name` / `:'name'` spelling. Inside a bracket it also gives the
-/// lower-unbounded slice form with an upper bound (`[:2]`) one expression
-/// representation, avoiding an exact grammar overlap between a slice colon
-/// and a psql-variable colon; the bare `[:]` is
-/// [`BracketSubscriptValue::Unbounded`]. The value is required: a colon on
-/// its own is not an expression, so nothing decides between "the value
-/// follows" and "the expression has ended".
-#[derive(recursa::Node, Debug, Clone)]
-pub struct PsqlVariableExpr<'input> {
-    #[tok(COLON, this)]
-    pub value: PsqlVariableExprValue<'input>,
-}
-
-#[derive(recursa::Node, Debug, Clone)]
-pub enum PsqlVariableExprValue<'input> {
-    Psql(literal::PsqlVariableValue<'input>),
-    Numeric(literal::NumericLit<'input>),
-    Integer(literal::IntegerLit<'input>),
-    Paren(ParenthesizedExpr<'input>),
-    #[tok(NULL)]
-    Null,
-    #[tok(TRUE)]
-    True,
-    #[tok(FALSE)]
-    False,
-}
-
 /// Content between subscript brackets — gram.y `indirection_el`'s
-/// `'[' a_expr ']'` and `'[' opt_slice_bound ':' opt_slice_bound ']'`.
+/// `'[' a_expr ']'` and `'[' opt_slice_bound ':' opt_slice_bound ']'`
+/// (gram.y:15442), where `opt_slice_bound` is `a_expr` or empty.
 ///
-/// Variant ordering: `Unbounded` (`[:]`) first; a colon followed by a value
-/// is a `PsqlVariableExpr` lower bound and takes the `Bounded` path.
+/// The empty lower bound is its own variant, as gram.y has it. It used to
+/// reach the `Bounded` path instead, by reading the colon and its upper
+/// bound as one `PsqlVariableExpr`: that gave `[:2]` and `:'name'` a single
+/// representation and so avoided an overlap between a slice colon and a
+/// psql-variable colon. With psql gone from this grammar there is no
+/// overlap to avoid, and the two bounds are simply optional the way
+/// PostgreSQL writes them.
+///
+/// Variant ordering: only the lower-unbounded forms can begin with a colon,
+/// and no expression can, so the two are disjoint.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum BracketSubscriptValue<'input> {
-    /// `[:]` — both slice bounds absent.
-    #[tok(COLON)]
-    Unbounded,
+    /// `[:]` and `[: upper]` — the lower `opt_slice_bound` is empty.
+    LowerUnbounded(SubscriptSliceSuffix<'input>),
+    /// `[lower]`, `[lower :]` and `[lower : upper]`.
     Bounded(BracketSubscriptBounds<'input>),
 }
 
@@ -1500,15 +1481,6 @@ pub struct NotInSuffix<'input> {
     pub list: InList<'input>,
 }
 
-/// Payload for function-style type cast: either a string literal (common
-/// case `bool 'value'`) or a psql client variable substitution
-/// (`numeric :'txid_current'`).
-#[derive(recursa::Node, Debug, Clone)]
-pub enum TypeCastValue<'input> {
-    String(literal::StringLit<'input>),
-    PsqlVar(literal::PsqlVariable<'input>),
-}
-
 /// Fixed-keyword name accepted by PostgreSQL's function-style typed literal
 /// syntax.
 ///
@@ -1546,21 +1518,19 @@ pub struct FixedTypeCastFunc<'input> {
     #[presence(VARYING)]
     pub varying: bool,
     pub typmods: Option<TypePrecision<'input>>,
-    pub value: TypeCastValue<'input>,
+    pub value: literal::StringLit<'input>,
 }
 
 /// Function-style typed literal for an identifier-spelled type without
 /// typmods: `bool 'value'`, `text 'hello'`, or `double precision 'value'`.
 ///
-/// The payload is PostgreSQL's `Sconst` and nothing else. pg-sql admits
-/// psql's `:'var'` interpolation as a stand-in for a string constant
-/// elsewhere, but not after a bare identifier: `ident : …` is also the
-/// SQL/JSON `key : value` entry of `JSON_OBJECT` and `JSON_OBJECTAGG`, and
-/// the atom dispatcher commits on the identifier and colon alone. Since
-/// PostgreSQL's own `AexprConst: func_name Sconst` has no colon at all, the
-/// pg-sql-only spelling is the one that yields. The keyword-named form
-/// (`numeric :'var'`) and the typmod form (`name(10) :'var'`) keep it —
-/// neither can be mistaken for an unquoted column name.
+/// The payload is PostgreSQL's `Sconst` and nothing else, as
+/// `AexprConst: func_name Sconst` has it: nothing stands between the name
+/// and the string, and in particular no colon. pg-sql used to admit psql's
+/// `:'var'` here and in the keyword-named form, which collided with the
+/// SQL/JSON `key : value` entry of `JSON_OBJECT` and `JSON_OBJECTAGG`; psql
+/// now has its own grammar, so a colon after a type name is only ever that
+/// entry separator.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct NamedTypeCastFunc<'input> {
     /// gram.y `AexprConst: func_name Sconst` — nothing stands between the
@@ -1584,7 +1554,7 @@ pub struct NamedTypeCastFunc<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTypeCastFunc<'input> {
     #[tok(JSON, this)]
-    pub value: TypeCastValue<'input>,
+    pub value: literal::StringLit<'input>,
 }
 
 /// Function-style typed literal. Fixed-keyword type names can carry typmods
@@ -3534,6 +3504,4 @@ pub enum Expr<'input> {
     PositionalParam(PositionalParam<'input>),
     /// Unqualified column reference: `f1` or `"Foo"`, with its subscripts
     ColumnRef(ColumnRef<'input>),
-    /// psql client variable substitution: `:foo`, `:'foo'`, `:"foo"`.
-    PsqlVar(PsqlVariableExpr<'input>),
 }

@@ -9,6 +9,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/ddl/foreign.tests.rs	alter_server_option_list_roundtrips	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/foreign.tests.rs	import_foreign_schema_qualification_lists_roundtrip	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/function.tests.rs	parse_create_function_json_param_and_return_type	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_bare_func_with_operator_argument	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_opclass_options	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_as_execute	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_as_execute_params_with_no_data	issue-9-generated-statement
@@ -36,9 +37,13 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/dml/values.tests.rs	parse_table_stmt_order_by_multiple_items	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/values.tests.rs	reject_compound_paren_duplicate_limit_offset_clauses	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/values.tests.rs	reject_table_stmt_duplicate_limit_offset_clauses	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_local_scope_session_authorization	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_session_scope_session_authorization	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	accept_function_applications_gram_y_admits	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	concat_binds_less_tightly_than_addition	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	custom_infix_chain_is_left_associative	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	custom_infix_does_not_consume_lower_precedence_comparison	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_array_slice_with_string_bounds	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_cast_parenthesized_field_access	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_direct_parenthesized_set_limit_offset_orders_roundtrip	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_empty_array_constructor	issue-9-generated-expression
@@ -62,7 +67,6 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	position_needle_uses_postgres_restricted_expression_extensions	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	qualified_ref_qualifier_is_a_col_id	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	reject_direct_parenthesized_set_duplicate_limit_offset_clauses	issue-9-generated-expression
--	introduced	embedded-tests/src/ast/shared/expr.tests.rs	accept_function_applications_gram_y_admits	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	reject_invalid_function_application_states	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	reject_wildcard_as_an_ordinary_function_argument	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	type_name_preserves_legacy_fixed_variants_and_json_ident	issue-9-generated-expression
@@ -307,9 +311,12 @@ ast::file::tests::parse_write_parallel_sql_fixture	file-recovery-scope	-	-	adr-0
 ast::file::tests::parse_xid_sql_fixture	file-recovery-scope	-	-	adr-0005-file-recovery
 ast::file::tests::parse_xml_sql_fixture	file-recovery-scope	-	-	adr-0005-file-recovery
 ast::file::tests::parse_xmlmap_sql_fixture	file-recovery-scope	-	-	adr-0005-file-recovery
+ast::shared::expr::tests::parse_psql_var	superseded	-	-	issue-68-psql-crate
+ast::shared::expr::tests::parse_psql_var_in_func_call	superseded	-	-	issue-68-psql-crate
 ast::shared::expr::tests::reject_string_continuation_across_comment	superseded	embedded-tests/src/ast/shared/expr.tests.rs	parse_string_continuation_after_comment_and_later_newline	corrected-adr-0004
 ast::tests::parse_psql_command_directive	superseded	embedded-tests/src/ast/mod.tests.rs	psql_directive_is_not_a_strict_statement	strict-entry-point
 ast::tests::parse_psql_command_statement	superseded	embedded-tests/src/ast/mod.tests.rs	parse_strict_statement_to_end_of_input	strict-entry-point
+ast::utility::copy::tests::copy_table_psql_var_target	superseded	-	-	issue-68-psql-crate
 corpus_tests::$template	retained-integration	-	-	retained-outside-embedded
 flame::tests::run_loop_accepts_empty_input	migration-tooling-scope	-	-	issue-8-omitted-tooling
 flame::tests::run_loop_fails_on_missing_file	migration-tooling-scope	-	-	issue-8-omitted-tooling
@@ -341,6 +348,3 @@ tests::support::tests::extracts_sql_skips_directives	superseded	-	-	frozen-state
 tests::support::tests::skips_psql_interpolation	superseded	-	-	frozen-statement-span-adapter
 tokens::tests::token_kind_is_soft_classifies_correctly	superseded	-	-	classified-token-public-coverage
 tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src/tokens.tests.rs	window_ref_name_rejects_clause_heads	closed-window-ref-admission
--	introduced	embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_bare_func_with_operator_argument	issue-9-generated-statement
--	introduced	embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_session_scope_session_authorization	issue-9-generated-statement
--	introduced	embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_local_scope_session_authorization	issue-9-generated-statement
