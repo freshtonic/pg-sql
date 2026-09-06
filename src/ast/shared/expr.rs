@@ -756,6 +756,10 @@ pub struct QuotedFuncCall<'input> {
 /// comma-separated expression list.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ParenContent<'input> {
+    /// gram.y `c_expr: select_with_parens %prec UMINUS`: with a query on the
+    /// stack the parser reduces rather than shifting the query's own
+    /// `ORDER BY` / `LIMIT` / `FETCH` / `FOR` tail.
+    #[parse(prec = UMINUS)]
     Subquery(Box<DirectSubquery<'input>>),
     Exprs(#[sep(COMMA)] recursa::Vec1<Expr<'input>>),
 }
@@ -921,8 +925,8 @@ pub enum IndirectionEl<'input> {
 /// `(@# a) @# b`). A recursa Pratt prefix carries a precedence only with a
 /// fixed-token operator; a content-token operator makes this an atom, so
 /// the operand spells that precedence with an exclusion list naming every
-/// extender at or below `Op` (binding power 8 and under), the same
-/// `Expr[min 9]` a Pratt prefix at `Op`'s level would take (recursa #124).
+/// extender at or below `Op` (binding power 80 and under), the same
+/// `Expr[min 90]` a Pratt prefix at `Op`'s level would take (recursa #124).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CustomPrefixOperand<'input> {
     #[parse(pratt(exclude(
@@ -1129,7 +1133,7 @@ pub enum QuantifiedCmpOperator {
 }
 
 /// `subquery_Op`'s `LIKE | NOT_LA LIKE | ILIKE | NOT_LA ILIKE`, at the level
-/// of `Expr::Like` (binding power 6).
+/// of `Expr::Like` (binding power 60).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum QuantifiedLikeOperator {
     #[tok(NOT, LIKE)]
@@ -1142,7 +1146,7 @@ pub enum QuantifiedLikeOperator {
     Ilike,
 }
 
-/// `subquery_Op` at gram.y's generic `Op` level (binding power 8): `||`,
+/// `subquery_Op` at gram.y's generic `Op` level (binding power 80): `||`,
 /// `^@`, every spelling that is only a prefix operator elsewhere in `Expr`,
 /// the multi-character custom operators, and `OPERATOR(any_operator)`
 /// (`%left Op OPERATOR`).
@@ -1170,7 +1174,7 @@ pub enum QuantifiedOpOperator<'input> {
     Decorated(QuantifiedDecoratedOperator<'input>),
 }
 
-/// `subquery_Op` at the level of `+` and `-` (binding power 10), which in
+/// `subquery_Op` at the level of `+` and `-` (binding power 100), which in
 /// pg-sql also holds the bitwise and JSON operators.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum QuantifiedAddOperator {
@@ -1210,7 +1214,7 @@ pub enum QuantifiedAddOperator {
     Question,
 }
 
-/// `subquery_Op` at the level of `*`, `/` and `%` (binding power 11).
+/// `subquery_Op` at the level of `*`, `/` and `%` (binding power 110).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum QuantifiedMulOperator {
     #[tok(STAR)]
@@ -1221,7 +1225,7 @@ pub enum QuantifiedMulOperator {
     Percent,
 }
 
-/// `subquery_Op` at the level of `^` (binding power 13).
+/// `subquery_Op` at the level of `^` (binding power 130).
 #[derive(recursa::Node, Debug, Clone)]
 pub enum QuantifiedPowOperator {
     #[tok(CARET)]
@@ -2381,8 +2385,8 @@ pub struct UnicodeStringLitWithEscape<'input> {
 /// ESCAPE` one level above `LIKE`: the escape operand takes every operator
 /// above `ESCAPE` (`'$'::bytea`, `'$' || 'x'`) and stops before `LIKE`'s
 /// level and below. The exclusion list names the extenders at or below
-/// `LIKE` (binding power 7 and under), so the operand is the same
-/// `Expr[min 8]` a Pratt right operand at that level would be. The attached
+/// `LIKE` (binding power 70 and under), so the operand is the same
+/// `Expr[min 80]` a Pratt right operand at that level would be. The attached
 /// form (`#[tok(ESCAPE, this)] Option<Box<Self>>` on the variant) would
 /// carry the precedence itself but fails recursa's emission with `RCA9105`
 /// (recursa #123); the table-driven lowering gives this struct rule no
@@ -3031,44 +3035,44 @@ pub enum JsonFuncExpr<'input> {
 #[pratt]
 pub enum Expr<'input> {
     // --- Prefix ---
-    #[parse(prefix, bp = 15)]
+    #[parse(prefix, bp = 150)]
     Not(#[tok(NOT, this)] Box<Self>),
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     Neg(#[tok(MINUS, this)] Box<Self>),
     /// Unary plus: `+expr` — identity operator on numeric types.
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     Pos(#[tok(PLUS, this)] Box<Self>),
     /// Unary geometric "center point": `@@ expr`. Postgres uses `@@` as
     /// a prefix operator on box / polygon / etc. (in addition to the
     /// text-search infix form).
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     GeomCenter(#[tok(ATAT, this)] Box<Self>),
     /// Bitwise NOT: `~ expr` (e.g. inet / bit / int bitwise complement).
     /// Must come before any infix `~` variant so the prefix form wins when
     /// `~` appears at the start of an operand.
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     BitNot(#[tok(TILDE, this)] Box<Self>),
     /// Geometric path/lseg length: `@-@ expr`. Must come before `Abs` (`@`)
     /// since `@-@` is longer.
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     PathLength(#[tok(ATMINUSAT, this)] Box<Self>),
     /// User-defined prefix: `@#@ expr` (e.g. factorial).
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     AtHashAtPrefix(#[tok(ATHASHAT, this)] Box<Self>),
     /// Geometric point-count: `# path` — number of points in a path.
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     PointCount(#[tok(POUND, this)] Box<Self>),
     /// Absolute value: `@ expr` (Postgres unary `@` operator).
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     Abs(#[tok(ATSIGN, this)] Box<Self>),
     /// User-defined prefix: `!=- expr`.
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     BangEqMinusPrefix(#[tok(BANGEQMINUS, this)] Box<Self>),
     /// Square root: `|/ expr` (Postgres unary `|/` operator).
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     Sqrt(#[tok(PIPESLASH, this)] Box<Self>),
     /// Cube root: `||/ expr` (Postgres unary `||/` operator).
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     Cbrt(#[tok(PIPEPIPESLASH, this)] Box<Self>),
 
     /// Catch-all prefix: any user-defined prefix operator not matched by a
@@ -3083,11 +3087,11 @@ pub enum Expr<'input> {
 
     // --- Postfix ---
     /// Postgres-style cast: `expr::type`
-    #[parse(postfix, bp = 20)]
+    #[parse(postfix, bp = 200)]
     Cast(Box<Self>, #[tok(COLONCOLON, this)] Box<CastType<'input>>),
     /// `expr COLLATE "collation"` — collation specifier. Binds tighter than
     /// comparisons (bp 5) but looser than `::` cast (bp 20).
-    #[parse(postfix, bp = 18)]
+    #[parse(postfix, bp = 180)]
     Collate(
         Box<Self>,
         #[tok(COLLATE, this)] crate::tokens::ColId<'input>,
@@ -3104,22 +3108,22 @@ pub enum Expr<'input> {
     /// standalone expression. Keeping the operator and quantifier in one
     /// Pratt continuation also makes `f(ALL(x))` unambiguously the function
     /// application's ALL-qualified argument production.
-    #[parse(postfix, bp = 5)]
+    #[parse(postfix, bp = 50)]
     QuantifiedComparisonCmp(Box<Self>, QuantifiedComparisonCmpSuffix<'input>),
     /// `subquery_Op`'s `LIKE` family, at the level of `Like`.
-    #[parse(postfix, bp = 6)]
+    #[parse(postfix, bp = 60)]
     QuantifiedComparisonLike(Box<Self>, QuantifiedComparisonLikeSuffix<'input>),
     /// `subquery_Op` at gram.y's generic `Op` level.
-    #[parse(postfix, bp = 8)]
+    #[parse(postfix, bp = 80)]
     QuantifiedComparisonOp(Box<Self>, QuantifiedComparisonOpSuffix<'input>),
     /// `subquery_Op` at the level of `Add` / `Sub`.
-    #[parse(postfix, bp = 10)]
+    #[parse(postfix, bp = 100)]
     QuantifiedComparisonAdd(Box<Self>, QuantifiedComparisonAddSuffix<'input>),
     /// `subquery_Op` at the level of `Mul` / `Div` / `Mod`.
-    #[parse(postfix, bp = 11)]
+    #[parse(postfix, bp = 110)]
     QuantifiedComparisonMul(Box<Self>, QuantifiedComparisonMulSuffix<'input>),
     /// `subquery_Op` at the level of `Pow`.
-    #[parse(postfix, bp = 13)]
+    #[parse(postfix, bp = 130)]
     QuantifiedComparisonPow(Box<Self>, QuantifiedComparisonPowSuffix<'input>),
     // The `IS` family sits at one level below the comparison operators, gram.y
     // `%nonassoc IS ISNULL NOTNULL` (`a = b IS NULL` is `(a = b) IS NULL`);
@@ -3127,44 +3131,44 @@ pub enum Expr<'input> {
     // settle `IS` by precedence. Binding power 4.
     /// `expr IS NOT DISTINCT FROM expr`. Declared before `IsDistinctFrom` so
     /// the longer `NOT` prefix wins disambiguation.
-    #[parse(infix, lbp = 4, rbp = 5)]
+    #[parse(infix, lbp = 40, rbp = 41)]
     IsNotDistinctFrom(Box<Self>, #[tok(IS, NOT, DISTINCT, FROM, this)] Box<Self>),
     /// `expr IS DISTINCT FROM expr`.
-    #[parse(infix, lbp = 4, rbp = 5)]
+    #[parse(infix, lbp = 40, rbp = 41)]
     IsDistinctFrom(Box<Self>, #[tok(IS, DISTINCT, FROM, this)] Box<Self>),
     /// `expr IS [NOT] JSON [{VALUE|SCALAR|ARRAY|OBJECT}] [{WITH|WITHOUT}
     /// UNIQUE [KEYS]]` — the SQL/JSON type predicate. Declared before
     /// `BoolTest` (both lead with `IS`); `BoolTest` rejects `JSON` as a
     /// `BoolTestKind`, so order is not load-bearing, only tidy.
-    #[parse(postfix, bp = 4)]
+    #[parse(postfix, bp = 40)]
     IsJson(Box<Self>, #[tok(IS, this)] IsJsonTail),
     /// `expr IS [NOT] [NFC|NFD|NFKC|NFKD] NORMALIZED` — the Unicode
     /// normalisation predicate (gram.y rules 15198/15205/15212/15220).
     /// Declared before `BoolTest` (both lead with `IS`); `BoolTest` rejects
     /// `NORMALIZED`/`NFx` as a `BoolTestKind`, so order is not load-bearing.
-    #[parse(postfix, bp = 4)]
+    #[parse(postfix, bp = 40)]
     IsNormalized(Box<Self>, #[tok(IS, this)] IsNormalizedTail),
     /// `expr IS [NOT] DOCUMENT` — the XML document predicate.
-    #[parse(postfix, bp = 4)]
+    #[parse(postfix, bp = 40)]
     IsDocument(Box<Self>, #[tok(IS, this)] IsDocumentTail),
     /// Boolean test: `expr IS [NOT] TRUE/FALSE/UNKNOWN/NULL`
-    #[parse(postfix, bp = 4)]
+    #[parse(postfix, bp = 40)]
     BoolTest(Box<Self>, #[tok(IS, this)] BoolTestKind),
     /// Postgres `expr NOTNULL` postfix null test (synonym for `IS NOT NULL`).
-    #[parse(postfix, bp = 4)]
+    #[parse(postfix, bp = 40)]
     Notnull(#[tok(this, NOTNULL)] Box<Self>),
     /// Postgres `expr ISNULL` postfix null test (synonym for `IS NULL`).
-    #[parse(postfix, bp = 4)]
+    #[parse(postfix, bp = 40)]
     Isnull(#[tok(this, ISNULL)] Box<Self>),
     /// `expr AT LOCAL` — convert to session timezone. Listed before
     /// `AtTimeZone` so `AT LOCAL` wins (distinct second token `LOCAL` vs `TIME`).
-    #[parse(postfix, bp = 9)]
+    #[parse(postfix, bp = 90)]
     AtLocal(#[tok(this, AT, LOCAL)] Box<Self>),
     /// `expr AT TIME ZONE zone_expr` — convert to specified timezone.
-    #[parse(infix, lbp = 9, rbp = 10)]
+    #[parse(infix, lbp = 90, rbp = 91)]
     AtTimeZone(Box<Self>, #[tok(AT, TIME, ZONE, this)] Box<Self>),
     /// NOT IN list: `expr NOT IN (val, ...)`
-    #[parse(postfix, bp = 6)]
+    #[parse(postfix, bp = 60)]
     NotInExpr(Box<Self>, NotInSuffix<'input>),
     // The LIKE family shares one level with `BETWEEN` and `IN`, gram.y
     // `%nonassoc BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA`, one step above the
@@ -3176,7 +3180,7 @@ pub enum Expr<'input> {
     /// `expr NOT ILIKE pattern [ESCAPE char]`. Declared before `NotLike` so the longer
     /// `NOT ILIKE` is tried first (matters only if any rule shares a prefix;
     /// here `NOT ILIKE` vs `NOT LIKE` differ on the second token).
-    #[parse(infix, lbp = 6, rbp = 7)]
+    #[parse(infix, lbp = 60, rbp = 61)]
     NotIlike(
         Box<Self>,
         #[tok(NOT, ILIKE, this)] Box<Self>,
@@ -3184,7 +3188,7 @@ pub enum Expr<'input> {
     ),
     /// `expr NOT SIMILAR TO pattern [ESCAPE char]`. Declared before `NotLike` so the longer
     /// `NOT SIMILAR TO` form wins longest-match-wins disambiguation.
-    #[parse(infix, lbp = 6, rbp = 7)]
+    #[parse(infix, lbp = 60, rbp = 61)]
     NotSimilarTo(
         Box<Self>,
         #[tok(NOT, SIMILAR, TO, this)] Box<Self>,
@@ -3192,28 +3196,28 @@ pub enum Expr<'input> {
     ),
     /// `expr NOT LIKE pattern [ESCAPE char]`. Must come before the `Not` prefix atom so
     /// longest-match-wins prefers the postfix form.
-    #[parse(infix, lbp = 6, rbp = 7)]
+    #[parse(infix, lbp = 60, rbp = 61)]
     NotLike(
         Box<Self>,
         #[tok(NOT, LIKE, this)] Box<Self>,
         #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
     ),
     /// `expr SIMILAR TO pattern [ESCAPE char]` — SQL standard similar-to pattern match.
-    #[parse(infix, lbp = 6, rbp = 7)]
+    #[parse(infix, lbp = 60, rbp = 61)]
     SimilarTo(
         Box<Self>,
         #[tok(SIMILAR, TO, this)] Box<Self>,
         #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
     ),
     /// `expr ILIKE pattern [ESCAPE char]`
-    #[parse(infix, lbp = 6, rbp = 7)]
+    #[parse(infix, lbp = 60, rbp = 61)]
     Ilike(
         Box<Self>,
         #[tok(ILIKE, this)] Box<Self>,
         #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
     ),
     /// `expr LIKE pattern [ESCAPE char]`
-    #[parse(infix, lbp = 6, rbp = 7)]
+    #[parse(infix, lbp = 60, rbp = 61)]
     Like(
         Box<Self>,
         #[tok(LIKE, this)] Box<Self>,
@@ -3221,73 +3225,73 @@ pub enum Expr<'input> {
     ),
     // --- Locale-aware text comparison operators (4-char before 3-char) ---
     /// `expr ~<=~ expr` — locale-aware less-or-equal.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     TildeLeqTilde(Box<Self>, #[tok(TILDELEQTILDE, this)] Box<Self>),
     /// `expr ~>=~ expr` — locale-aware greater-or-equal.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     TildeGeqTilde(Box<Self>, #[tok(TILDEGEQTILDE, this)] Box<Self>),
     /// `expr ~<~ expr` — locale-aware less-than.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     TildeLtTilde(Box<Self>, #[tok(TILDELTTILDE, this)] Box<Self>),
     /// `expr ~>~ expr` — locale-aware greater-than.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     TildeGtTilde(Box<Self>, #[tok(TILDEGTTILDE, this)] Box<Self>),
     /// `expr !~* pattern` — POSIX case-insensitive negated regex match.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     RegexNotIMatch(Box<Self>, #[tok(BANGTILDESTAR, this)] Box<Self>),
     /// `expr ~* pattern` — POSIX case-insensitive regex match.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     RegexIMatch(Box<Self>, #[tok(TILDESTAR, this)] Box<Self>),
     /// `expr !~ pattern` — POSIX negated regex match.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     RegexNotMatch(Box<Self>, #[tok(BANGTILDE, this)] Box<Self>),
     /// `expr ~= expr` — geometric "same as" operator. Declared before `RegexMatch`
     /// so the longer `~=` wins longest-match.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     GeomSame(Box<Self>, #[tok(TILDEEQ, this)] Box<Self>),
     /// `expr ~ pattern` — POSIX regex match.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     RegexMatch(Box<Self>, #[tok(TILDE, this)] Box<Self>),
     /// `expr !~~* pattern` — operator-form `NOT ILIKE` (gram.y 14897).
     /// Declared before `LikeOpINeg` (`!~~`) so the longer `!~~*` wins.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     LikeOpINeg(Box<Self>, #[tok(BANGTILDETILDESTAR, this)] Box<Self>),
     /// `expr ~~* pattern` — operator-form `ILIKE` (gram.y 14888).
     /// Declared before `LikeOpI` would be (no `~~*` longer prefix).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     LikeOpI(Box<Self>, #[tok(TILDETILDESTAR, this)] Box<Self>),
     /// `expr !~~ pattern` — operator-form `NOT LIKE` (gram.y 14874).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     LikeOpNeg(Box<Self>, #[tok(BANGTILDETILDE, this)] Box<Self>),
     /// `expr ~~ pattern` — operator-form `LIKE` (gram.y 14860).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     LikeOp(Box<Self>, #[tok(TILDETILDE, this)] Box<Self>),
     /// `(start, end) OVERLAPS (start, end)` — SQL time-period overlap test.
     /// Each operand is an ordinary parenthesized expression to the parser.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Overlaps(Box<Self>, #[tok(OVERLAPS, this)] Box<Self>),
     /// Record comparison operators: `expr *= expr`, `*<>`, `*<`, `*<=`,
     /// `*>`, `*>=` — compare ROW/composite values field by field.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     RecordLte(Box<Self>, #[tok(STARLTE, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     RecordGte(Box<Self>, #[tok(STARGTE, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     RecordNeq(Box<Self>, #[tok(STARNEQ, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     RecordLt(Box<Self>, #[tok(STARLT, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     RecordGt(Box<Self>, #[tok(STARGT, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     RecordEq(Box<Self>, #[tok(STAREQ, this)] Box<Self>),
     /// IN list: `expr IN (val, ...)`
-    #[parse(postfix, bp = 6)]
+    #[parse(postfix, bp = 60)]
     InExpr(Box<Self>, #[tok(IN, this)] InList<'input>),
     /// `expr NOT BETWEEN low AND high`. Declared before `BetweenExpr` so
     /// the longer `NOT BETWEEN` prefix wins disambiguation. Recursive fields
-    /// in this postfix tail inherit `bp = 6`, so the low/high operands stop
-    /// before the literal `AND` infix at `bp = 2`.
-    #[parse(postfix, bp = 6)]
+    /// in this postfix tail inherit `bp = 60`, so the low/high operands stop
+    /// before the literal `AND` infix at `bp = 20`.
+    #[parse(postfix, bp = 60)]
     NotBetweenExpr(
         Box<Self>,
         #[tok(NOT, BETWEEN, this)] Box<Self>,
@@ -3295,7 +3299,7 @@ pub enum Expr<'input> {
     ),
     /// `expr BETWEEN low AND high`. See `NotBetweenExpr` for the recursive
     /// postfix-tail binding-power rationale.
-    #[parse(postfix, bp = 6)]
+    #[parse(postfix, bp = 60)]
     BetweenExpr(
         Box<Self>,
         #[tok(BETWEEN, this)] Box<Self>,
@@ -3308,60 +3312,60 @@ pub enum Expr<'input> {
     // JSON / JSONB operators are listed FIRST among infix so that their
     // longer tokens are peeked before conflicting shorter ones
     // (e.g. `<@` before `<`, `->` before `-`). These dedicated operators use
-    // bp = 10; generic `Op` spellings such as `||` use the lower bp = 8 tier.
+    // bp = 100; generic `Op` spellings such as `||` use the lower bp = 80 tier.
     /// JSON path as text: `expr #>> path`
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     JsonPathText(Box<Self>, #[tok(HASHARROWARROW, this)] Box<Self>),
     /// JSON path: `expr #> path`
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     JsonPath(Box<Self>, #[tok(HASHARROW, this)] Box<Self>),
     /// JSON field as text: `expr ->> field`
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     JsonFieldText(Box<Self>, #[tok(ARROWARROW, this)] Box<Self>),
     /// JSON field: `expr -> field`
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     JsonField(Box<Self>, #[tok(ARROW, this)] Box<Self>),
     /// Geometric parallel: `a ?|| b`. Must precede `JsonAnyKey` (`?|`)
     /// so the 3-char token wins over the 2-char token.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Parallel(Box<Self>, #[tok(QUESTIONPIPEPIPE, this)] Box<Self>),
     /// JSON any-key-exists: `expr ?| keys`
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     JsonAnyKey(Box<Self>, #[tok(QUESTIONPIPE, this)] Box<Self>),
     /// JSON all-keys-exist: `expr ?& keys`
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     JsonAllKeys(Box<Self>, #[tok(QUESTIONAMP, this)] Box<Self>),
     /// Geometric intersect: `a ?# b`. Must precede `JsonKey` (`?`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Intersect(Box<Self>, #[tok(QUESTIONHASH, this)] Box<Self>),
     /// Geometric perpendicular: `a ?-| b`. Must precede `Horizontal` (`?-`)
     /// so the 3-char token wins over the 2-char token.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Perpendicular(Box<Self>, #[tok(QUESTIONDASHPIPE, this)] Box<Self>),
     /// Geometric horizontal: `a ?- b`. Must precede `JsonKey` (`?`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Horizontal(Box<Self>, #[tok(QUESTIONDASH, this)] Box<Self>),
     /// Geometric "is horizontal" prefix: `?- s` — tests whether the
     /// LSEG/LINE `s` is horizontal. PG's geometry.sql uses this in WHERE.
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     IsHorizontal(#[tok(QUESTIONDASH, this)] Box<Self>),
     /// Geometric "is vertical" prefix: `?| s`.
-    #[parse(prefix, bp = 12)]
+    #[parse(prefix, bp = 120)]
     IsVertical(#[tok(QUESTIONPIPE, this)] Box<Self>),
     /// Geometric "below": `a <^ b`.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Below(Box<Self>, #[tok(LTCARET, this)] Box<Self>),
     /// Geometric "above": `a >^ b`.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Above(Box<Self>, #[tok(GTCARET, this)] Box<Self>),
     /// JSON key-exists: `expr ? key`
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     JsonKey(Box<Self>, #[tok(QUESTION, this)] Box<Self>),
     /// JSONB contains: `expr @> expr`
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     JsonContains(Box<Self>, #[tok(ATGT, this)] Box<Self>),
     /// JSONB contained-by: `expr <@ expr`
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     JsonContainedBy(Box<Self>, #[tok(LTAT, this)] Box<Self>),
 
     // --- Postgres text-search / jsonpath / range / geometric 3-char operators ---
@@ -3373,100 +3377,100 @@ pub enum Expr<'input> {
     // variant declared first would swallow the `&<` / `<<` / `?` and leave
     // the trailing `|` / `#` dangling.
     /// Text-search / jsonb path match: `expr @@@ expr`.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     TsMatch3(Box<Self>, #[tok(ATATAT, this)] Box<Self>),
     /// User-defined triple-less-than: `a <<< b`. Before `StrictlyLeft` (`<<`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     TripleLt(Box<Self>, #[tok(LTLTLT, this)] Box<Self>),
     /// Geometric strictly-below: `a <<| b`. Before `StrictlyLeft` (`<<`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     StrictlyBelow(Box<Self>, #[tok(LTLTPIPE, this)] Box<Self>),
     /// Inet is-subset-or-equal: `a <<= b`. Before `StrictlyLeft` (`<<`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     SubsetEq(Box<Self>, #[tok(LTLTEQ, this)] Box<Self>),
     /// Distance: `a <-> b`. Before any `<` variant.
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     Distance(Box<Self>, #[tok(LTMINUSGT, this)] Box<Self>),
     /// User-defined triple-greater-than: `a >>> b`. Before `StrictlyRight` (`>>`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     TripleGt(Box<Self>, #[tok(GTGTGT, this)] Box<Self>),
     /// Inet is-superset-or-equal: `a >>= b`. Before `StrictlyRight` (`>>`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     SupersetEq(Box<Self>, #[tok(GTGTEQ, this)] Box<Self>),
     /// Range adjacent: `a -|- b`. Before `Sub` (`-`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Adjacent(Box<Self>, #[tok(MINUSPIPEMINUS, this)] Box<Self>),
     /// Geometric strictly-above: `a |>> b`. Before `Concat` (`||`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     StrictlyAbove(Box<Self>, #[tok(PIPEGTGT, this)] Box<Self>),
     /// Geometric no-extend-below: `a |&> b`. Before `Concat` (`||`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     NoExtendBelow(Box<Self>, #[tok(PIPEAMPGT, this)] Box<Self>),
     /// Geometric no-extend-above: `a &<| b`. Before `NoExtendRight` (`&<`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     NoExtendAbove(Box<Self>, #[tok(AMPLTPIPE, this)] Box<Self>),
 
     // --- 2-char operators ---
     /// Text-search / jsonb path match: `expr @@ expr`.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     TsMatch(Box<Self>, #[tok(ATAT, this)] Box<Self>),
     /// Jsonpath exists: `expr @? path`.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     JsonPathExists(Box<Self>, #[tok(ATQUESTION, this)] Box<Self>),
     /// Range / array overlap: `a && b`.
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     Overlap(Box<Self>, #[tok(AMPAMP, this)] Box<Self>),
     /// Range does-not-extend-right: `a &< b`.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     NoExtendRight(Box<Self>, #[tok(AMPLT, this)] Box<Self>),
     /// Range does-not-extend-left: `a &> b`.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     NoExtendLeft(Box<Self>, #[tok(AMPGT, this)] Box<Self>),
     /// Range strictly-left-of: `a << b`.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     StrictlyLeft(Box<Self>, #[tok(LTLT, this)] Box<Self>),
     /// Range strictly-right-of: `a >> b`.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     StrictlyRight(Box<Self>, #[tok(GTGT, this)] Box<Self>),
 
     // --- User-defined / custom infix operators ---
     /// `expr === expr` — user-defined triple-equal. Must come before `Eq` (`=`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     TripleEq(Box<Self>, #[tok(TRIPLEEQ, this)] Box<Self>),
     /// `expr !== expr` — user-defined not-equal. Must come before `BangEq` (`!=`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     BangEqEq(Box<Self>, #[tok(BANGEQEQ, this)] Box<Self>),
     /// `expr ## expr` — geometric closest-point / path intersection.
     /// Must come before `BitXor` (`#`).
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     GeomClosest(Box<Self>, #[tok(HASHHASH, this)] Box<Self>),
 
-    #[parse(infix, lbp = 1, rbp = 2)]
+    #[parse(infix, lbp = 10, rbp = 11)]
     Or(Box<Self>, #[tok(OR, this)] Box<Self>),
-    #[parse(infix, lbp = 2, rbp = 3)]
+    #[parse(infix, lbp = 20, rbp = 21)]
     And(Box<Self>, #[tok(AND, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     BangEq(Box<Self>, #[tok(BANGEQ, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Neq(Box<Self>, #[tok(NEQ, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Lte(Box<Self>, #[tok(LTE, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Gte(Box<Self>, #[tok(GTE, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Eq(Box<Self>, #[tok(EQ, this)] Box<Self>),
 
     /// Text starts-with: `expr ^@ expr` (PostgreSQL `starts_with` operator).
     /// `^@` is a single token (see `punct::CaretAt`); declared before
     /// `CustomInfix` so it wins the declaration-order tiebreak. bp=8 matches
     /// Postgres's generic `Op` precedence.
-    #[parse(infix, lbp = 8, rbp = 9)]
+    #[parse(infix, lbp = 80, rbp = 81)]
     StartsWith(Box<Self>, #[tok(CARETAT, this)] Box<Self>),
     /// JSONB delete-path: `expr #- path` (PostgreSQL jsonb delete-at-path
     /// operator). `#-` is a single token (see `punct::HashMinus`); declared
     /// before `CustomInfix` so it wins the declaration-order tiebreak. bp=10
     /// matches the neighbouring `#>`/`#>>` JSON path operators.
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     JsonDeletePath(Box<Self>, #[tok(HASHMINUS, this)] Box<Self>),
 
     /// Catch-all infix: any user-defined operator not matched by a specific
@@ -3476,46 +3480,46 @@ pub enum Expr<'input> {
     /// single-char operators still fall through to the variants below.
     /// bp=8 matches Postgres's generic `Op` precedence (between comparison
     /// bp=5 and additive bp=10).
-    #[parse(infix, lbp = 8, rbp = 9)]
+    #[parse(infix, lbp = 80, rbp = 81)]
     CustomInfix(
         Box<Self>,
         #[pretty(break_before = soft, break_after = soft)] literal::CustomOp<'input>,
         Box<Self>,
     ),
 
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Lt(Box<Self>, #[tok(LT, this)] Box<Self>),
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 50, rbp = 51)]
     Gt(Box<Self>, #[tok(GT, this)] Box<Self>),
     /// String concatenation: `expr || expr`. PostgreSQL scans `||` as a
     /// generic `Op`, below additive operators in the precedence hierarchy.
-    #[parse(infix, lbp = 8, rbp = 9)]
+    #[parse(infix, lbp = 80, rbp = 81)]
     Concat(Box<Self>, #[tok(CONCAT, this)] Box<Self>),
     /// Bitwise OR: `expr | expr`. Must come after `Concat` (`||`) so the
     /// longer token matches first at the punctuation level.
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     BitOr(Box<Self>, #[tok(PIPE, this)] Box<Self>),
     /// Bitwise AND: `expr & expr`.
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     BitAnd(Box<Self>, #[tok(AMP, this)] Box<Self>),
     /// Bitwise XOR: `expr # expr` (Postgres bit-string / integer operator).
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     BitXor(Box<Self>, #[tok(POUND, this)] Box<Self>),
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     Add(Box<Self>, #[tok(PLUS, this)] Box<Self>),
-    #[parse(infix, lbp = 10, rbp = 11)]
+    #[parse(infix, lbp = 100, rbp = 101)]
     Sub(Box<Self>, #[tok(MINUS, this)] Box<Self>),
     /// Multiplication: `expr * expr`
-    #[parse(infix, lbp = 11, rbp = 12)]
+    #[parse(infix, lbp = 110, rbp = 111)]
     Mul(Box<Self>, #[tok(STAR, this)] Box<Self>),
     /// Division: `expr / expr`
-    #[parse(infix, lbp = 11, rbp = 12)]
+    #[parse(infix, lbp = 110, rbp = 111)]
     Div(Box<Self>, #[tok(SLASH, this)] Box<Self>),
     /// Modulo: `expr % expr`
-    #[parse(infix, lbp = 11, rbp = 12)]
+    #[parse(infix, lbp = 110, rbp = 111)]
     Mod(Box<Self>, #[tok(PERCENT, this)] Box<Self>),
     /// Exponentiation: `expr ^ expr` (Postgres numeric power operator).
-    #[parse(infix, lbp = 13, rbp = 14)]
+    #[parse(infix, lbp = 130, rbp = 131)]
     Pow(Box<Self>, #[tok(CARET, this)] Box<Self>),
 
     // --- Atoms ---
