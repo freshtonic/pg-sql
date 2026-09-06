@@ -917,105 +917,6 @@ pub enum IndirectionEl<'input> {
     Field(IndirectionField<'input>),
 }
 
-/// The operand of a custom prefix operator, gram.y `qual_Op a_expr %prec Op`.
-///
-/// gram.y gives that rule the precedence of `Op`, so the operand extends
-/// over the operators above `Op` (`@# a + b` is `@# (a + b)`) and stops
-/// at `Op` and below (`@# a = b` is `(@# a) = b`, `@# a @# b` is
-/// `(@# a) @# b`). A recursa Pratt prefix carries a precedence only with a
-/// fixed-token operator; a content-token operator makes this an atom, so
-/// the operand spells that precedence with an exclusion list naming every
-/// extender at or below `Op` (binding power 80 and under), the same
-/// `Expr[min 90]` a Pratt prefix at `Op`'s level would take (recursa #124).
-#[derive(recursa::Node, Debug, Clone)]
-pub struct CustomPrefixOperand<'input> {
-    #[parse(pratt(exclude(
-        Above,
-        Adjacent,
-        And,
-        BangEq,
-        BangEqEq,
-        Below,
-        BetweenExpr,
-        BoolTest,
-        Concat,
-        CustomInfix,
-        Eq,
-        GeomClosest,
-        GeomSame,
-        Gt,
-        Gte,
-        Horizontal,
-        Ilike,
-        InExpr,
-        Intersect,
-        IsDistinctFrom,
-        IsDocument,
-        IsJson,
-        IsNormalized,
-        IsNotDistinctFrom,
-        Isnull,
-        JsonPathExists,
-        Like,
-        LikeOp,
-        LikeOpI,
-        LikeOpINeg,
-        LikeOpNeg,
-        Lt,
-        Lte,
-        Neq,
-        NoExtendAbove,
-        NoExtendBelow,
-        NoExtendLeft,
-        NoExtendRight,
-        NotBetweenExpr,
-        NotIlike,
-        NotInExpr,
-        NotLike,
-        NotSimilarTo,
-        Notnull,
-        Or,
-        Overlaps,
-        Parallel,
-        Perpendicular,
-        QuantifiedComparisonCmp,
-        QuantifiedComparisonLike,
-        QuantifiedComparisonOp,
-        RecordEq,
-        RecordGt,
-        RecordGte,
-        RecordLt,
-        RecordLte,
-        RecordNeq,
-        RegexIMatch,
-        RegexMatch,
-        RegexNotIMatch,
-        RegexNotMatch,
-        SimilarTo,
-        StartsWith,
-        StrictlyAbove,
-        StrictlyBelow,
-        StrictlyLeft,
-        StrictlyRight,
-        SubsetEq,
-        SupersetEq,
-        TildeGeqTilde,
-        TildeGtTilde,
-        TildeLeqTilde,
-        TildeLtTilde,
-        TripleEq,
-        TripleGt,
-        TripleLt,
-        TsMatch,
-        TsMatch3
-    )))]
-    // No acceptance: the exclusion list leaves this operand no extender that
-    // the enclosing expression's continuation also admits, so analysis finds
-    // no overlap here (recursa #126 made the overlap check honour
-    // `pratt(exclude(...))`).
-    pub expr: Box<Expr<'input>>,
-}
-
 // Operators of PostgreSQL's `subquery_Op` production, one enum per
 // precedence level of pg-sql's `Expr`: gram.y decides the shift before a
 // quantified comparison by the operator token's own precedence, so each
@@ -2278,6 +2179,10 @@ pub struct SubstringCall<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct PositionInner<'input> {
     #[parse(pratt(exclude(
+        // gram.y's `b_expr` reaches no `DEFAULT`: the keyword is not a
+        // `c_expr`, only pg-sql's `INSERT`/`UPDATE` value placeholder.
+        // recursa #122 lets an exclusion name an atom variant.
+        Default,
         Collate,
         QuantifiedComparisonCmp,
         QuantifiedComparisonLike,
@@ -2377,106 +2282,6 @@ pub struct UnicodeStringLitWithEscape<'input> {
     #[lex(pattern = r"(?i:U)&'(?:[^']|'')*'")]
     pub lit: literal::UnicodeStringLit<'input>,
     pub uescape: Option<UescapeSuffix<'input>>,
-}
-
-/// `ESCAPE expr` clause on LIKE / SIMILAR TO / ILIKE operators.
-///
-/// gram.y `a_expr LIKE a_expr ESCAPE a_expr %prec LIKE` with `%nonassoc
-/// ESCAPE` one level above `LIKE`: the escape operand takes every operator
-/// above `ESCAPE` (`'$'::bytea`, `'$' || 'x'`) and stops before `LIKE`'s
-/// level and below. The exclusion list names the extenders at or below
-/// `LIKE` (binding power 70 and under), so the operand is the same
-/// `Expr[min 80]` a Pratt right operand at that level would be. The attached
-/// form (`#[tok(ESCAPE, this)] Option<Box<Self>>` on the variant) would
-/// carry the precedence itself but fails recursa's emission with `RCA9105`
-/// (recursa #123); the table-driven lowering gives this struct rule no
-/// precedence (recursa #120).
-#[derive(recursa::Node, Debug, Clone)]
-pub struct EscapeClause<'input> {
-    #[parse(pratt(exclude(
-        Above,
-        Adjacent,
-        And,
-        BangEq,
-        BangEqEq,
-        Below,
-        BetweenExpr,
-        BoolTest,
-        Eq,
-        GeomClosest,
-        GeomSame,
-        Gt,
-        Gte,
-        Horizontal,
-        Ilike,
-        InExpr,
-        Intersect,
-        IsDistinctFrom,
-        IsDocument,
-        IsJson,
-        IsNormalized,
-        IsNotDistinctFrom,
-        Isnull,
-        JsonPathExists,
-        Like,
-        LikeOp,
-        LikeOpI,
-        LikeOpINeg,
-        LikeOpNeg,
-        Lt,
-        Lte,
-        Neq,
-        NoExtendAbove,
-        NoExtendBelow,
-        NoExtendLeft,
-        NoExtendRight,
-        NotBetweenExpr,
-        NotIlike,
-        NotInExpr,
-        NotLike,
-        NotSimilarTo,
-        Notnull,
-        Or,
-        Overlaps,
-        Parallel,
-        Perpendicular,
-        QuantifiedComparisonCmp,
-        QuantifiedComparisonLike,
-        RecordEq,
-        RecordGt,
-        RecordGte,
-        RecordLt,
-        RecordLte,
-        RecordNeq,
-        RegexIMatch,
-        RegexMatch,
-        RegexNotIMatch,
-        RegexNotMatch,
-        SimilarTo,
-        StrictlyAbove,
-        StrictlyBelow,
-        StrictlyLeft,
-        StrictlyRight,
-        SubsetEq,
-        SupersetEq,
-        TildeGeqTilde,
-        TildeGtTilde,
-        TildeLeqTilde,
-        TildeLtTilde,
-        TripleEq,
-        TripleGt,
-        TripleLt,
-        TsMatch,
-        TsMatch3
-    )))]
-    /// Greedy: none of these is an extender of this restricted operand, but
-    /// the analysis does not consult the exclusion set for the overlap check
-    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
-    /// Greedy: the operand keeps extending on every extender it admits, which
-    /// the enclosing expression's continuation also admits.
-    #[greedy(all)]
-    #[tok(ESCAPE, this)]
-    pub char: Box<Expr<'input>>,
 }
 
 // --- SQL/JSON constructor atoms ---
@@ -3077,12 +2882,18 @@ pub enum Expr<'input> {
 
     /// Catch-all prefix: any user-defined prefix operator not matched by a
     /// specific token. Declared LAST among prefixes.
-    // A dynamic content-token operator cannot occupy Recursa's fixed-only
-    // Pratt prefix slot. As an atom it still has an unambiguous lexical
-    // starter and retains the operator text plus its expression operand.
+    ///
+    /// gram.y `qual_Op a_expr %prec Op` (gram.y:889 `%left Op OPERATOR`):
+    /// the operand extends over the operators above `Op` (`@# a + b` is
+    /// `@# (a + b)`) and stops at `Op` and below (`@# a = b` is
+    /// `(@# a) = b`, `@# a @# b` is `(@# a) @# b`), which is the binding
+    /// power one step above `Op`'s level. recursa #124 admits a content
+    /// token as a Pratt prefix operator, so this is a real prefix variant
+    /// rather than an atom with a hand-written exclusion list.
+    #[parse(prefix, bp = 81)]
     CustomPrefix(
         literal::CustomOp<'input>,
-        #[pretty(break_before = soft)] CustomPrefixOperand<'input>,
+        #[pretty(break_before = soft)] Box<Self>,
     ),
 
     // --- Postfix ---
@@ -3175,8 +2986,17 @@ pub enum Expr<'input> {
     // comparison operators: `a = b LIKE c` is `a = (b LIKE c)`. Binding
     // power 6; the pattern operand is the infix right operand at 7, so a
     // LIKE never nests in a LIKE's pattern (gram.y makes the level
-    // non-associative) and an `ESCAPE` belongs to the LIKE it follows. The
-    // `ESCAPE` operand is `EscapeClause`, see there.
+    // non-associative) and an `ESCAPE` belongs to the LIKE it follows.
+    //
+    // gram.y `a_expr LIKE a_expr ESCAPE a_expr %prec LIKE` with
+    // `%nonassoc ESCAPE` one level above `LIKE`. The `ESCAPE` operand is
+    // an attached optional operand on the variant itself (recursa #123),
+    // so it is a Pratt right operand at `ESCAPE`'s level and carries that
+    // precedence into both parsers: it takes every operator above
+    // `ESCAPE` (`'$'::bytea`, `'$' || 'x'`) and stops at `LIKE`'s level
+    // and below. The first pass had to spell this as a separate
+    // `EscapeClause` struct with an exclusion list, which no rule
+    // precedence reproduced.
     /// `expr NOT ILIKE pattern [ESCAPE char]`. Declared before `NotLike` so the longer
     /// `NOT ILIKE` is tried first (matters only if any rule shares a prefix;
     /// here `NOT ILIKE` vs `NOT LIKE` differ on the second token).
@@ -3184,7 +3004,14 @@ pub enum Expr<'input> {
     NotIlike(
         Box<Self>,
         #[tok(NOT, ILIKE, this)] Box<Self>,
-        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
+        // Greedy: the `ESCAPE` operand is a Pratt right operand at
+        // `ESCAPE`'s level, so it keeps extending on every operator above
+        // that level -- each of which may also follow the whole LIKE
+        // expression. The overlap is that entire set, so the acceptance is
+        // `all` rather than a hand-copied list of every operator kind.
+        #[greedy(all)]
+        #[tok(ESCAPE, this)]
+        Option<Box<Self>>,
     ),
     /// `expr NOT SIMILAR TO pattern [ESCAPE char]`. Declared before `NotLike` so the longer
     /// `NOT SIMILAR TO` form wins longest-match-wins disambiguation.
@@ -3192,7 +3019,14 @@ pub enum Expr<'input> {
     NotSimilarTo(
         Box<Self>,
         #[tok(NOT, SIMILAR, TO, this)] Box<Self>,
-        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
+        // Greedy: the `ESCAPE` operand is a Pratt right operand at
+        // `ESCAPE`'s level, so it keeps extending on every operator above
+        // that level -- each of which may also follow the whole LIKE
+        // expression. The overlap is that entire set, so the acceptance is
+        // `all` rather than a hand-copied list of every operator kind.
+        #[greedy(all)]
+        #[tok(ESCAPE, this)]
+        Option<Box<Self>>,
     ),
     /// `expr NOT LIKE pattern [ESCAPE char]`. Must come before the `Not` prefix atom so
     /// longest-match-wins prefers the postfix form.
@@ -3200,28 +3034,56 @@ pub enum Expr<'input> {
     NotLike(
         Box<Self>,
         #[tok(NOT, LIKE, this)] Box<Self>,
-        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
+        // Greedy: the `ESCAPE` operand is a Pratt right operand at
+        // `ESCAPE`'s level, so it keeps extending on every operator above
+        // that level -- each of which may also follow the whole LIKE
+        // expression. The overlap is that entire set, so the acceptance is
+        // `all` rather than a hand-copied list of every operator kind.
+        #[greedy(all)]
+        #[tok(ESCAPE, this)]
+        Option<Box<Self>>,
     ),
     /// `expr SIMILAR TO pattern [ESCAPE char]` — SQL standard similar-to pattern match.
     #[parse(infix, lbp = 60, rbp = 61)]
     SimilarTo(
         Box<Self>,
         #[tok(SIMILAR, TO, this)] Box<Self>,
-        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
+        // Greedy: the `ESCAPE` operand is a Pratt right operand at
+        // `ESCAPE`'s level, so it keeps extending on every operator above
+        // that level -- each of which may also follow the whole LIKE
+        // expression. The overlap is that entire set, so the acceptance is
+        // `all` rather than a hand-copied list of every operator kind.
+        #[greedy(all)]
+        #[tok(ESCAPE, this)]
+        Option<Box<Self>>,
     ),
     /// `expr ILIKE pattern [ESCAPE char]`
     #[parse(infix, lbp = 60, rbp = 61)]
     Ilike(
         Box<Self>,
         #[tok(ILIKE, this)] Box<Self>,
-        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
+        // Greedy: the `ESCAPE` operand is a Pratt right operand at
+        // `ESCAPE`'s level, so it keeps extending on every operator above
+        // that level -- each of which may also follow the whole LIKE
+        // expression. The overlap is that entire set, so the acceptance is
+        // `all` rather than a hand-copied list of every operator kind.
+        #[greedy(all)]
+        #[tok(ESCAPE, this)]
+        Option<Box<Self>>,
     ),
     /// `expr LIKE pattern [ESCAPE char]`
     #[parse(infix, lbp = 60, rbp = 61)]
     Like(
         Box<Self>,
         #[tok(LIKE, this)] Box<Self>,
-        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
+        // Greedy: the `ESCAPE` operand is a Pratt right operand at
+        // `ESCAPE`'s level, so it keeps extending on every operator above
+        // that level -- each of which may also follow the whole LIKE
+        // expression. The overlap is that entire set, so the acceptance is
+        // `all` rather than a hand-copied list of every operator kind.
+        #[greedy(all)]
+        #[tok(ESCAPE, this)]
+        Option<Box<Self>>,
     ),
     // --- Locale-aware text comparison operators (4-char before 3-char) ---
     /// `expr ~<=~ expr` — locale-aware less-or-equal.
