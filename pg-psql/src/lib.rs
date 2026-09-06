@@ -40,6 +40,13 @@
 //! verbatim. A document using one therefore renders to SQL the server
 //! cannot parse, which is a diagnosable condition rather than a silent
 //! rewrite.
+//!
+//! One lexical divergence is deliberate: psql tolerates end of input inside
+//! an open string, dollar-quoted body or comment (`psqlscan.l:983`'s single
+//! `<<EOF>>` rule), and this crate refuses the document instead
+//! (freshtonic/recursa#131). It fails closed, so an unterminated region is
+//! never reinterpreted as ordinary text and a colon inside one is never
+//! substituted.
 
 recursa::grammar! {
     module = crate,

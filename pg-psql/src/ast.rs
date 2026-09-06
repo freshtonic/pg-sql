@@ -11,17 +11,18 @@
 ///
 /// The item list covers the whole source: the repetition ends only at end of
 /// input, so an empty document is an empty list.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
 pub struct PsqlDocument<'input> {
     /// Greedy over every kind: this is the root, so nothing follows it and
     /// there is no caller continuation an item could be mistaken for. The
     /// repetition ends at end of input, which `crate::parse` then checks.
     #[greedy(all)]
+    #[deref]
     pub items: Vec<PsqlItem<'input>>,
 }
 
 /// One item of a psql document.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum PsqlItem<'input> {
     /// A variable interpolation, which substitution rewrites.
     Interpolation(Interpolation<'input>),
@@ -48,7 +49,7 @@ pub enum PsqlItem<'input> {
 /// which is what `psqlscan.l:775-796` does with `yyless(1)`: `:'a b'` is a
 /// colon and a string literal, not an interpolation, because a space is not
 /// a `variable_char`.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum Interpolation<'input> {
     /// `:'name'` — psqlscan.l:756. Substituted as a SQL string literal.
     Literal(#[lex(pattern = r":'[A-Za-z0-9_\u{0080}-\u{10FFFF}]+'")] LiteralInterpolation<'input>),
@@ -96,7 +97,7 @@ impl<'input> Interpolation<'input> {
 }
 
 /// A terminator: psql submits the current query buffer and starts a new one.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum Terminator<'input> {
     /// `;` — psqlscan.l:681, the only terminator `psqlscan.l` itself
     /// returns. The server sees it unchanged, so rendering copies it.
@@ -126,7 +127,7 @@ pub enum Terminator<'input> {
 /// what makes `\gsetfoo` one unknown command rather than `\gset` followed
 /// by `foo` — `psqlscanslash.l` reads a whole command name before looking it
 /// up.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SendCommand<'input> {
     /// `\crosstabview`
     Crosstabview(#[lex(pattern = r"\\crosstabview", priority = 2)] SendCrosstabview<'input>),
@@ -154,8 +155,9 @@ impl<'input> SendCommand<'input> {
 }
 
 /// A maximal run of source that psql forwards to the server unchanged.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
 pub struct SqlText<'input> {
+    #[deref]
     pub atoms: recursa::Vec1<SqlAtom<'input>>,
 }
 
@@ -167,14 +169,18 @@ pub struct SqlText<'input> {
 /// comment is ordinary content, and it stays ordinary content because the
 /// whole construct is one token. Comments reach the same end by being
 /// ignored trivia, which rendering preserves because it copies source.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(recursa::Node, Debug, Clone)]
 pub enum SqlAtom<'input> {
     /// `'...'` — psqlscan.l:485-491 `xq`, with `''` doubling. psql's
     /// default `standard_conforming_strings` is on, so a backslash here is
     /// an ordinary character.
     String(#[lex(pattern = r"'[^']*(?:''[^']*)*'")] StringText<'input>),
     /// `E'...'` — psqlscan.l:492-495 `xe`, where a backslash escapes.
-    EscapeString(#[lex(pattern = r"(?i:E)'(?:[^'\\]|\\.|'')*'")] EscapeStringText<'input>),
+    ///
+    /// The escape is `[\s\S]` rather than `.`: psqlscan.l:213 spells it
+    /// `xeescape [\\][^0-7]`, a negated class that matches a newline, while
+    /// `.` here does not.
+    EscapeString(#[lex(pattern = r"(?i:E)'(?:[^'\\]|\\[\s\S]|'')*'")] EscapeStringText<'input>),
     /// `U&'...'` — psqlscan.l `xus`.
     UnicodeString(#[lex(pattern = r"(?i:U)&'[^']*(?:''[^']*)*'")] UnicodeStringText<'input>),
     /// `B'...'` — psqlscan.l `xb`.

@@ -394,6 +394,7 @@ dependencies = [
 name = "pg-psql"
 version = "0.1.0"
 dependencies = [
+ "derive_more",
  "pg-sql",
  "recursa",
  "recursa-codegen",

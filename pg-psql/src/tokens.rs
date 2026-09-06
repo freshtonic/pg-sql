@@ -41,8 +41,15 @@ recursa::tokens! {
     }
     matchers {
         // psqlscan.l:564-601 `xdolq`: a dollar-quoted body is opaque, and
-        // only the delimiter that opened it can close it.
-        DollarString => same_delimiter(opener = r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$"),
+        // only the delimiter that opened it can close it. The tag classes
+        // are psqlscan.l:235-236's `dolq_start [A-Za-z\200-\377_]` and
+        // `dolq_cont [A-Za-z\200-\377_0-9]`; the high-byte range is every
+        // non-ASCII scalar in UTF-8 source, and leaving it out would end the
+        // opaque body early at a tag like `$tagé$` and expose a colon inside
+        // it to the interpolation rules.
+        DollarString => same_delimiter(
+            opener = r"\$(?:[A-Za-z_\u{0080}-\u{10FFFF}][A-Za-z0-9_\u{0080}-\u{10FFFF}]*)?\$"
+        ),
         // No `next_exclusion` appears in this lexer, and that is deliberate.
         // It reports a lexical error when the excluded character follows,
         // which is what a *SQL* lexer wants for `$1a` or `123abc`. psql

@@ -11,6 +11,7 @@ build = "build.rs"
 [dependencies]
 recursa = { path = "../../recursa/recursa", features = ["diagrams", "explorer"] }
 pg-sql = { path = ".." }
+derive_more = { version = "2.1.1", features = ["deref"] }
 
 [build-dependencies]
 recursa-codegen = { path = "../../recursa/recursa-codegen", features = ["diagrams", "explorer"] }

@@ -128,6 +128,71 @@ fn interpolation_is_not_recognised_inside_a_dollar_quoted_body() {
 }
 
 #[test]
+fn a_dollar_quote_tag_may_hold_any_non_ascii_character() {
+    // psqlscan.l:235-236 spells the tag classes `dolq_start
+    // [A-Za-z\200-\377_]` and `dolq_cont [A-Za-z\200-\377_0-9]`. The
+    // high-byte range is every non-ASCII scalar in UTF-8 source. An
+    // ASCII-only tag class ends the opaque body early and exposes the colon
+    // inside it, which substituted a variable psql never would.
+    for source in [
+        "SELECT $tagé$ :v $tagé$",
+        "SELECT $é$ :v $é$",
+        "SELECT $_é9$ :v $_é9$",
+    ] {
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} holds no interpolation"
+        );
+        assert_eq!(
+            interpolation_count(source),
+            0,
+            "{source:?} holds no interpolation"
+        );
+    }
+}
+
+#[test]
+fn an_escape_string_may_escape_a_newline() {
+    // psqlscan.l:213's `xeescape [\\][^0-7]` is a negated class, so it
+    // matches a backslash before a literal newline. A regex `.` does not,
+    // and the string would then end early -- at a later `\'` it would end
+    // early enough to expose a colon that psql keeps inside the literal.
+    let source = "SELECT E'a\\\nb\\' :v c'";
+    assert_eq!(
+        render_unbound(source),
+        source,
+        "{source:?} holds no interpolation"
+    );
+    assert_eq!(
+        interpolation_count(source),
+        0,
+        "{source:?} holds no interpolation"
+    );
+}
+
+#[test]
+fn an_unterminated_lexical_region_is_refused_rather_than_reinterpreted() {
+    // A deliberate divergence, pinned so it stays deliberate.
+    //
+    // psqlscan.l:983 has one `<<EOF>>` rule for every scanner state, so psql
+    // tolerates reaching end of input inside an open string, dollar-quoted
+    // body or comment. recursa's closed matchers need their closer to exist,
+    // so this refuses the document instead (freshtonic/recursa#131).
+    //
+    // The divergence is fail-closed, which is the half that matters: the
+    // region is never silently reinterpreted as ordinary text, so a colon
+    // inside an unterminated string can never be substituted. A caller is
+    // told the document is not psql rather than handed a wrong rendering.
+    for source in ["SELECT $$ :v", "SELECT ':v", "SELECT \":v", "SELECT /* :v"] {
+        assert!(
+            pg_psql::parse(source).is_err(),
+            "{source:?} must be refused, not reinterpreted",
+        );
+    }
+}
+
+#[test]
 fn interpolation_is_not_recognised_inside_a_quoted_identifier() {
     // psqlscan.l:622-624 `xd`/`xui`.
     for source in ["SELECT \":v\"", "SELECT \"a :v b\"", "SELECT U&\":v\""] {
