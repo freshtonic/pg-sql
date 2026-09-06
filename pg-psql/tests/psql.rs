@@ -184,7 +184,18 @@ fn an_unterminated_lexical_region_is_refused_rather_than_reinterpreted() {
     // region is never silently reinterpreted as ordinary text, so a colon
     // inside an unterminated string can never be substituted. A caller is
     // told the document is not psql rather than handed a wrong rendering.
-    for source in ["SELECT $$ :v", "SELECT ':v", "SELECT \":v", "SELECT /* :v"] {
+    for source in [
+        "SELECT ':v",
+        "SELECT E':v",
+        "SELECT U&':v",
+        "SELECT B'01",
+        "SELECT X'1f",
+        "SELECT \":v",
+        "SELECT U&\":v",
+        "SELECT $$ :v",
+        "SELECT $tag$ :v",
+        "SELECT /* :v",
+    ] {
         assert!(
             pg_psql::parse(source).is_err(),
             "{source:?} must be refused, not reinterpreted",
