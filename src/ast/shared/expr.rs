@@ -2186,7 +2186,8 @@ pub struct PositionInner<'input> {
     #[parse(pratt(exclude(
         // gram.y's `b_expr` reaches no `DEFAULT`: the keyword is not a
         // `c_expr`, only pg-sql's `INSERT`/`UPDATE` value placeholder.
-        // recursa #122 lets an exclusion name an atom variant.
+        // recursa #122 lets an exclusion name an atom variant. Every other
+        // `b_expr` operand excludes it too, citing this site.
         Default,
         Collate,
         QuantifiedComparisonCmp,
@@ -2839,6 +2840,13 @@ pub enum JsonFuncExpr<'input> {
 }
 
 // --- Pratt expression enum ---
+//
+// Binding powers on this enum are gram.y's precedence order times ten. The
+// scale is shared with the `precedence { ... }` block in `crate::tokens`,
+// which needs room for the two keyword levels gram.y puts between `ESCAPE`
+// and `Op`; that block names the gram.y line each level comes from. A left
+// associative infix variant is `lbp = N, rbp = N + 1`, which is the only
+// shape a rule precedence reproduces (`RCA0402`).
 
 /// SQL expression with Pratt-derived parsing.
 #[derive(recursa::Node, Debug, Clone)]
@@ -2847,7 +2855,7 @@ pub enum JsonFuncExpr<'input> {
 /// operands of prefix forms). An operand keeps extending on a shared
 /// extender instead of yielding to whatever may follow the enclosing
 /// expression, which is PostgreSQL's precedence resolution. The optional
-/// `ESCAPE` tails of the LIKE family carry their own `#[greedy(ESCAPE)]`.
+/// `ESCAPE` tails of the LIKE family carry their own `#[greedy(all)]`.
 ///
 /// The overlap here is every extender of `Expr` — each infix and postfix
 /// operator in this enum both continues an operand and may follow the
@@ -3015,6 +3023,12 @@ pub enum Expr<'input> {
     // and below. The first pass had to spell this as a separate
     // `EscapeClause` struct with an exclusion list, which no rule
     // precedence reproduced.
+    //
+    // Each `ESCAPE` operand accepts `all`. It keeps extending on every
+    // operator above `ESCAPE`'s level, and every one of those may also
+    // follow the whole LIKE expression, so the overlap is that entire set.
+    // Naming it as a list would say no more and would need an edit for each
+    // operator added.
     /// `expr NOT ILIKE pattern [ESCAPE char]`. Declared before `NotLike` so the longer
     /// `NOT ILIKE` is tried first (matters only if any rule shares a prefix;
     /// here `NOT ILIKE` vs `NOT LIKE` differ on the second token).
@@ -3022,11 +3036,7 @@ pub enum Expr<'input> {
     NotIlike(
         Box<Self>,
         #[tok(NOT, ILIKE, this)] Box<Self>,
-        // Greedy: the `ESCAPE` operand is a Pratt right operand at
-        // `ESCAPE`'s level, so it keeps extending on every operator above
-        // that level -- each of which may also follow the whole LIKE
-        // expression. The overlap is that entire set, so the acceptance is
-        // `all` rather than a hand-copied list of every operator kind.
+        // Greedy: see the note above this group.
         #[greedy(all)]
         #[tok(ESCAPE, this)]
         Option<Box<Self>>,
@@ -3037,11 +3047,7 @@ pub enum Expr<'input> {
     NotSimilarTo(
         Box<Self>,
         #[tok(NOT, SIMILAR, TO, this)] Box<Self>,
-        // Greedy: the `ESCAPE` operand is a Pratt right operand at
-        // `ESCAPE`'s level, so it keeps extending on every operator above
-        // that level -- each of which may also follow the whole LIKE
-        // expression. The overlap is that entire set, so the acceptance is
-        // `all` rather than a hand-copied list of every operator kind.
+        // Greedy: see the note above this group.
         #[greedy(all)]
         #[tok(ESCAPE, this)]
         Option<Box<Self>>,
@@ -3052,11 +3058,7 @@ pub enum Expr<'input> {
     NotLike(
         Box<Self>,
         #[tok(NOT, LIKE, this)] Box<Self>,
-        // Greedy: the `ESCAPE` operand is a Pratt right operand at
-        // `ESCAPE`'s level, so it keeps extending on every operator above
-        // that level -- each of which may also follow the whole LIKE
-        // expression. The overlap is that entire set, so the acceptance is
-        // `all` rather than a hand-copied list of every operator kind.
+        // Greedy: see the note above this group.
         #[greedy(all)]
         #[tok(ESCAPE, this)]
         Option<Box<Self>>,
@@ -3066,11 +3068,7 @@ pub enum Expr<'input> {
     SimilarTo(
         Box<Self>,
         #[tok(SIMILAR, TO, this)] Box<Self>,
-        // Greedy: the `ESCAPE` operand is a Pratt right operand at
-        // `ESCAPE`'s level, so it keeps extending on every operator above
-        // that level -- each of which may also follow the whole LIKE
-        // expression. The overlap is that entire set, so the acceptance is
-        // `all` rather than a hand-copied list of every operator kind.
+        // Greedy: see the note above this group.
         #[greedy(all)]
         #[tok(ESCAPE, this)]
         Option<Box<Self>>,
@@ -3080,11 +3078,7 @@ pub enum Expr<'input> {
     Ilike(
         Box<Self>,
         #[tok(ILIKE, this)] Box<Self>,
-        // Greedy: the `ESCAPE` operand is a Pratt right operand at
-        // `ESCAPE`'s level, so it keeps extending on every operator above
-        // that level -- each of which may also follow the whole LIKE
-        // expression. The overlap is that entire set, so the acceptance is
-        // `all` rather than a hand-copied list of every operator kind.
+        // Greedy: see the note above this group.
         #[greedy(all)]
         #[tok(ESCAPE, this)]
         Option<Box<Self>>,
@@ -3094,11 +3088,7 @@ pub enum Expr<'input> {
     Like(
         Box<Self>,
         #[tok(LIKE, this)] Box<Self>,
-        // Greedy: the `ESCAPE` operand is a Pratt right operand at
-        // `ESCAPE`'s level, so it keeps extending on every operator above
-        // that level -- each of which may also follow the whole LIKE
-        // expression. The overlap is that entire set, so the acceptance is
-        // `all` rather than a hand-copied list of every operator kind.
+        // Greedy: see the note above this group.
         #[greedy(all)]
         #[tok(ESCAPE, this)]
         Option<Box<Self>>,

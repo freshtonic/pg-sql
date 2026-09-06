@@ -34,7 +34,7 @@ analysis warning and the gate is the attribute's own exactness check.
   differential trie, or the site is a repetition rather than an optional. The
   generated parser keeps the greedy commitment, matching PostgreSQL bison's
   shift preference.
-- **`RCA0301` accepted (12 sites)** — a Pratt extender shares a kind with
+- **`RCA0301` accepted (11 sites)** — a Pratt extender shares a kind with
   caller FOLLOW. Strict Pratt deliberately preserves this ambiguity rather
   than resolving it by convention (the recursa#97 principle); the operand keeps
   extending, which is PostgreSQL's precedence resolution.
@@ -55,11 +55,16 @@ All three fail the build, so an acceptance never hides a new or changed
 ambiguity, and a fixed grammar shape surfaces as a stale acceptance to remove.
 Railroad diagrams show `greedy(...)` as hover text on an accepted element, so
 the note costs the drawing no space. The enum-level acceptance on
-`ast::shared::expr::Expr` covers every left-denotation operand and the
-`ESCAPE` tails of the LIKE family in one declaration.
+`ast::shared::expr::Expr` covers every left-denotation operand; since
+recursa #123 the `ESCAPE` tails of the LIKE family are attached operands
+with an acceptance each.
 
-Counts: 139 attributes (15 `all`, 1 enum-level, the rest
-exact kind lists).
+Counts: 139 accepted sites, carried by 69 `#[greedy(...)]` attributes
+(15 `all`, 1 enum-level, the rest exact kind lists). Issue #68 moved this
+from 140 sites: `EscapeClause` and `CustomPrefixOperand` are gone, replaced
+by an attached `ESCAPE` operand and a real Pratt prefix (recursa #123 and
+#124), and `PositionInner`'s acceptance went with them because recursa #126
+made the overlap check honour `pratt(exclude(...))`.
 
 ## Accepted sites
 
@@ -166,8 +171,8 @@ exact kind lists).
 | RCA0300 | `ast::shared::expr::CaseSearched` `rest_arms` | WHEN | A leading WHEN starts this element instead of ending `CaseSearched` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::CaseSimple` `rest_arms` | WHEN | A leading WHEN starts this element instead of ending `CaseSimple` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::CastType` `array_suffixes` | LBRACKET | A leading LBRACKET starts this element instead of ending `CastType` (bison shift preference). |
-| RCA0301 | `ast::shared::expr::EscapeClause` `char` | `all` | The expression keeps extending on every shared extender instead of yielding to what may follow `EscapeClause`. |
-| RCA0300/RCA0301 | `ast::shared::expr::Expr` (enum) | 14 kinds (AND, AT, BETWEEN, …) | This enum-level acceptance covers every left-denotation operand inside `Expr` (the right operands of infix and postfix variants and the operands of prefix forms) plus the optional `ESCAPE` tails of the LIKE family. An operand keeps extending on a shared extender instead of yielding to whatever may follow the enclosing expression, which is PostgreSQL's precedence resolution; `ESCAPE` starts the tail instead of ending the pattern operand. |
+| RCA0300/RCA0301 | `ast::shared::expr::Expr` (enum) | `all` | This enum-level acceptance covers every left-denotation operand inside `Expr` (the right operands of infix and postfix variants and the operands of prefix forms). An operand keeps extending on a shared extender instead of yielding to whatever may follow the enclosing expression, which is PostgreSQL's precedence resolution. The overlap is every extender of `Expr`, because each infix and postfix operator both continues an operand and may follow the enclosing expression, so the acceptance is `all`: a list of every operator kind would say no more and would need an edit for each operator added. |
+| RCA0301 | `ast::shared::expr::Expr` `Like`, `Ilike`, `SimilarTo`, `NotLike`, `NotIlike`, `NotSimilarTo` (attached `ESCAPE` operand) | `all` | The `ESCAPE` operand is a Pratt right operand at `ESCAPE`'s level (gram.y:838 `%nonassoc ESCAPE`), so it keeps extending on every operator above that level, each of which may also follow the whole LIKE expression. Six variants, one acceptance each; before recursa #123 this was one `EscapeClause` struct with a 74-name exclusion list. |
 | RCA0300 | `ast::shared::expr::FunctionPlainTail` `filter` | FILTER | A leading FILTER starts this element instead of ending `FunctionPlainTail` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::FunctionPlainTail` `window` | OVER | A leading OVER starts this element instead of ending `FunctionPlainTail` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::FunctionWithinGroupTail` `filter` | FILTER | A leading FILTER starts this element instead of ending `FunctionWithinGroupTail` (bison shift preference). |
@@ -184,7 +189,6 @@ exact kind lists).
 | RCA0300 | `ast::shared::expr::JsonUniqueKeys` `keys` | KEYS | A leading KEYS starts this element instead of ending `JsonUniqueKeys` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::JsonValueInner` `on_behavior_1` | DEFAULT, EMPTY, ERROR, FALSE, NULL, TRUE, UNKNOWN | A leading token from any of 7 kinds starts this element instead of ending `JsonValueInner` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::ParenthesizedExpr` `indirection` | DOT, LBRACKET | A leading DOT, LBRACKET starts this element instead of ending `ParenthesizedExpr` (bison shift preference). |
-| RCA0301 | `ast::shared::expr::PositionInner` `needle` | IN | The expression keeps extending on IN instead of yielding to what may follow `PositionInner`. |
 | RCA0300 | `ast::shared::expr::PsqlVariableExpr` `value` | `all` | Any kind that can start this element continues it instead of ending `PsqlVariableExpr` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::SubscriptSlice` `lower` | COLON | A leading COLON starts this element instead of ending `SubscriptSlice` (bison shift preference). |
 | RCA0301 | `ast::shared::expr::SubstringInner` `source` | SIMILAR | The expression keeps extending on SIMILAR instead of yielding to what may follow `SubstringInner`. |

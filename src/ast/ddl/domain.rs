@@ -43,9 +43,6 @@ pub struct DomainDefault<'input> {
     /// grammar; exclusions as in `PositionInner`), so `DEFAULT 1 NOT NULL`
     /// ends the default at `NOT`.
     #[parse(pratt(exclude(
-        // gram.y's `b_expr` reaches no `DEFAULT`: the keyword is not a
-        // `c_expr`, only pg-sql's `INSERT`/`UPDATE` value placeholder.
-        // recursa #122 lets an exclusion name an atom variant.
         Default,
         Collate,
         QuantifiedComparisonCmp,

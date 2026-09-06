@@ -977,6 +977,13 @@ recursa::tokens! {
         },
         // gram.y:894 `%left AT` ("sets precedence for AT TIME ZONE, AT
         // LOCAL") -- `Expr::AtTimeZone` (lbp 90).
+        //
+        // The level is pg-sql's, not gram.y's: gram.y puts `AT` above `^`,
+        // while pg-sql's Pratt puts `AtTimeZone` between `Op` and `+`/`-`.
+        // That divergence predates this block. The block shares one scale
+        // with Pratt, so a level here must be the one Pratt already uses,
+        // and every state this level decides needs only `AT` above
+        // `BETWEEN`, which both placements give.
         left(bp = 90) { AT },
         // gram.y:890 `%left '+' '-'` -- `Expr::Add` and `Expr::Sub`
         // (lbp 100), and the `Pos` / `Neg` prefixes.
