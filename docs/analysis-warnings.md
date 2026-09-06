@@ -189,7 +189,6 @@ made the overlap check honour `pratt(exclude(...))`.
 | RCA0300 | `ast::shared::expr::JsonUniqueKeys` `keys` | KEYS | A leading KEYS starts this element instead of ending `JsonUniqueKeys` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::JsonValueInner` `on_behavior_1` | DEFAULT, EMPTY, ERROR, FALSE, NULL, TRUE, UNKNOWN | A leading token from any of 7 kinds starts this element instead of ending `JsonValueInner` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::ParenthesizedExpr` `indirection` | DOT, LBRACKET | A leading DOT, LBRACKET starts this element instead of ending `ParenthesizedExpr` (bison shift preference). |
-| RCA0300 | `ast::shared::expr::PsqlVariableExpr` `value` | `all` | Any kind that can start this element continues it instead of ending `PsqlVariableExpr` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::SubscriptSlice` `lower` | COLON | A leading COLON starts this element instead of ending `SubscriptSlice` (bison shift preference). |
 | RCA0301 | `ast::shared::expr::SubstringInner` `source` | SIMILAR | The expression keeps extending on SIMILAR instead of yielding to what may follow `SubstringInner`. |
 | RCA0300 | `ast::shared::expr::TrimValues` `more` | COMMA | A leading COMMA starts this element instead of ending `TrimValues` (bison shift preference). |

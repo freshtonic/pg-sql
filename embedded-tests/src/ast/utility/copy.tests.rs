@@ -182,8 +182,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn copy_table_psql_var_target() {
-        reparse_stable::<CopyStmt>("COPY t TO :'filename' CSV");
-    }
 }

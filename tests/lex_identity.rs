@@ -110,8 +110,13 @@ fn dump_lex_records(label: &str, source: &str, out: &mut String) {
         ));
     }
     rows.sort_by_key(|(start, end, _)| (*start, *end));
-    writeln!(out, "## {label} ({} bytes, {} records)", source.len(), rows.len())
-        .expect("string write");
+    writeln!(
+        out,
+        "## {label} ({} bytes, {} records)",
+        source.len(),
+        rows.len()
+    )
+    .expect("string write");
     for (start, end, body) in rows {
         writeln!(out, "{start}..{end} {body}").expect("string write");
     }
@@ -141,7 +146,8 @@ fn adversarial_inputs_keep_their_pinned_arbitration() {
         dump_lex_records(&format!("edge {source:?}"), source, &mut out);
     }
 
-    let expectation = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lex_edge_cases.txt");
+    let expectation =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lex_edge_cases.txt");
     if std::env::var_os("PG_SQL_LEX_BLESS").is_some() {
         fs::create_dir_all(expectation.parent().expect("fixture directory"))
             .expect("create fixture directory");

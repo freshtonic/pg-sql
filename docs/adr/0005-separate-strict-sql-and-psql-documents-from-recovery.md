@@ -1,6 +1,15 @@
 # Separate strict SQL and psql documents from recovery
 
-Status: accepted
+Status: accepted, superseded in part by ADR 0007
+
+ADR 0007 moves the psql document out of `pg-sql` and into the `pg-psql`
+crate, so `parse_psql` is not a `pg-sql` entry point. Everything this ADR
+says about the *strict SQL* document -- recovery, framing, source ownership,
+COPY regions -- still stands, and so does its account of psql source
+behaviour, which now describes `pg-psql`. The one reversal is expansion:
+this ADR preserves interpolation unexpanded, while ADR 0007 makes
+substitution the step that produces the server payload, carrying the source
+map this ADR already anticipated.
 
 `pg-sql` will expose separate high-level entry points for PostgreSQL SQL and
 psql source documents. Both entry points are strict: success means the complete

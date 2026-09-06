@@ -7,7 +7,7 @@ pub mod shared;
 pub mod tcl;
 pub mod utility;
 
-pub use self::file::{PsqlTerminator, StatementTerminator, TerminatedStatement};
+pub use self::file::{StatementTerminator, TerminatedStatement};
 
 // The `Statement` enum references ~170 *Stmt types defined across every
 // sub-module of `ast::{ddl,dml,tcl,cursor,session,utility,shared}`.

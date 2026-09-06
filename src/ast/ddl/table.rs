@@ -1608,7 +1608,6 @@ pub struct AddTableConstraintCmd<'input> {
     pub constraint: crate::ast::ddl::table::TableConstraint<'input>,
 }
 
-
 /// `ADD columnDef` (no `COLUMN` keyword, no `IF NOT EXISTS`).
 ///
 /// Listed last in the ADD family because every column definition begins with

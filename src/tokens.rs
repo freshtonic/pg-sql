@@ -678,17 +678,11 @@ recursa::tokens! {
         GT        => ">", spacing = around,
         COLONCOLON => "::",
         COLON      => ":",
-        // Psql meta-commands that can terminate a SQL statement in place of `;`.
-        // Must be listed before plain BackSlash so longest-match-wins picks the
-        // specific directive over the bare backslash.
-        PSQLCROSSTABVIEW => "\\crosstabview",
-        PSQLGEXEC  => "\\gexec",
-        PSQLGSET   => "\\gset",
-        PSQLGX     => "\\gx",
-        PSQLG      => "\\g",
-        // `\;` — psql batch separator: ends a statement without ending the
-        // line. Listed before bare `BackSlash`.
-        PSQLBATCHSEMI => "\\;",
+        // A backslash is not PostgreSQL SQL outside a string literal. The
+        // token exists only so that one lexes instead of failing, which lets
+        // the parser reject a psql script with a strict diagnostic naming the
+        // statement. psql's own spellings -- the send commands and `\;` --
+        // belong to the `pg-psql` crate's grammar, not to this one.
         BACKSLASH  => "\\",
         PLUS       => "+",
         // 3-char `-|-` before 2-char `->>`/`->` before single-char `-`.
@@ -826,7 +820,6 @@ recursa::tokens! {
         // precedence to settle those states (recursa #120).
         SelectBareAliasName = bare_label
             - { AND, OR, NOT, IS, IN, LIKE, ILIKE, COLLATE, SIMILAR, BETWEEN, OPERATOR, AT },
-        PsqlVariableName = AllWordKinds - { NULL, TRUE, FALSE },
         UnquotedIdent = NonReservedWord,
         BareAliasName = AllWordKinds,
         // gram.y `createdb_opt_name`: `IDENT` plus these keywords; the
@@ -1166,24 +1159,6 @@ pub mod literal {
         pub numeric: NumericLit<'input>,
         #[lex(matcher)]
         pub custom_operator: CustomOp<'input>,
-    }
-
-    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub struct PsqlVariable<'input> {
-        #[tok(COLON)]
-        pub name: PsqlVariableValue<'input>,
-    }
-
-    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub enum PsqlVariableValue<'input> {
-        Name(
-            #[lex(
-                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-                admits(PsqlVariableName)
-            )]
-            PsqlVariableNameText<'input>,
-        ),
-        String(StringLit<'input>),
     }
 
     // Catch-all for Postgres user-defined operator names.

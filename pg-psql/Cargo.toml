@@ -1,0 +1,17 @@
+[package]
+name = "pg-psql"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "psql client-side grammar: variable interpolation, substitution and rendering to server SQL"
+license = "MIT"
+publish = false
+build = "build.rs"
+
+[dependencies]
+recursa = { path = "../../recursa/recursa", features = ["diagrams", "explorer"] }
+pg-sql = { path = ".." }
+derive_more = { version = "2.1.1", features = ["deref"] }
+
+[build-dependencies]
+recursa-codegen = { path = "../../recursa/recursa-codegen", features = ["diagrams", "explorer"] }

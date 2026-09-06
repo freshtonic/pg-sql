@@ -71,7 +71,6 @@ pub struct CreateAggregateOrderByInner<'input> {
     pub args: recursa::Vec1<crate::ast::ddl::function::FunctionArg<'input>>,
 }
 
-
 /// One entry of `CREATE AGGREGATE`'s first parenthesized group — an
 /// `aggr_arg`, or an `old_aggr_elem` when it carries a `= value` tail.
 ///

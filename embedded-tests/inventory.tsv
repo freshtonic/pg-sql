@@ -617,6 +617,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_array_slice_lower_only	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_array_slice_on_paren_cast	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_array_slice_unbounded	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_array_slice_upper_only	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_array_slice_with_string_bounds	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_at_hash_at_prefix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_at_local	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_at_minus_at_prefix	false
@@ -762,8 +763,6 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_positional_param	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_positional_param_in_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_pound_prefix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_power_operator	false
-embedded-tests/src/ast/shared/expr.tests.rs	parse_psql_var	false
-embedded-tests/src/ast/shared/expr.tests.rs	parse_psql_var_in_func_call	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_column_ref	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_wildcard	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_question_dash_pipe_infix	false
@@ -837,6 +836,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	pratt_peek_classified_covers_identif
 embedded-tests/src/ast/shared/expr.tests.rs	qualified_ref_qualifier_is_a_col_id	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_direct_parenthesized_set_duplicate_limit_offset_clauses	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_invalid_function_application_states	false
+embedded-tests/src/ast/shared/expr.tests.rs	reject_typed_literal_with_a_psql_variable_payload	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_wildcard_as_an_ordinary_function_argument	false
 embedded-tests/src/ast/shared/expr.tests.rs	type_name_preserves_legacy_fixed_variants_and_json_ident	false
 embedded-tests/src/ast/shared/with_clause.tests.rs	immediate_recursive_is_the_clause_modifier	false
@@ -927,7 +927,6 @@ embedded-tests/src/ast/utility/copy.tests.rs	copy_table_legacy_chained_delimiter
 embedded-tests/src/ast/utility/copy.tests.rs	copy_table_legacy_force_not_null_list	false
 embedded-tests/src/ast/utility/copy.tests.rs	copy_table_legacy_force_quote_star	false
 embedded-tests/src/ast/utility/copy.tests.rs	copy_table_legacy_with_null_as	false
-embedded-tests/src/ast/utility/copy.tests.rs	copy_table_psql_var_target	false
 embedded-tests/src/ast/utility/copy.tests.rs	copy_table_to_file	false
 embedded-tests/src/ast/utility/copy.tests.rs	copy_table_to_file_csv_quote_escape_legacy	false
 embedded-tests/src/ast/utility/copy.tests.rs	copy_table_to_stdout	false
