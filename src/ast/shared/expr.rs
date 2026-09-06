@@ -819,7 +819,8 @@ pub enum SubscriptColon {
 
 /// Content between subscript brackets — gram.y `indirection_el`'s
 /// `'[' a_expr ']'` and `'[' opt_slice_bound ':' opt_slice_bound ']'`
-/// (gram.y:15442), where `opt_slice_bound` is `a_expr` or empty.
+/// (gram.y:16801), where `opt_slice_bound` is `a_expr` or empty
+/// (gram.y:16812).
 ///
 /// The empty lower bound is its own variant, as gram.y has it. It used to
 /// reach the `Bounded` path instead, by reading the colon and its upper

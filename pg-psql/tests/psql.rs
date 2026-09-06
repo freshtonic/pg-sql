@@ -301,6 +301,40 @@ fn the_batch_separator_renders_as_one_semicolon() {
 }
 
 #[test]
+fn an_escaped_colon_is_not_an_interpolation() {
+    // psqlscan.l:697-702's rule is `"\\"[;:]`, and its body emits
+    // `yytext + 1`. `\:` is therefore how a psql user writes a colon that
+    // must not be interpolated -- the escape has to beat the interpolation
+    // rule, and it does because it is one token.
+    let bindings = variables(&[("x", "SUBSTITUTED")]);
+    for (source, expected) in [
+        (r"SELECT \:x", "SELECT :x"),
+        (r"SELECT \:'x'", "SELECT :'x'"),
+    ] {
+        let rendered = pg_psql::render(source, &bindings)
+            .unwrap_or_else(|error| panic!("{source:?} must parse as psql: {error}"));
+        assert_eq!(rendered.sql(), expected, "rendering {source:?}");
+        assert!(
+            !rendered.sql().contains("SUBSTITUTED"),
+            "{source:?} must not interpolate an escaped colon",
+        );
+    }
+    // The unescaped spelling still interpolates, so the escape is doing the
+    // work rather than the variable being unreachable.
+    assert_eq!(
+        pg_psql::render("SELECT :x", &bindings).unwrap().sql(),
+        "SELECT SUBSTITUTED",
+    );
+    // The escape covers exactly one colon, because `"\\"[;:]` matches two
+    // characters and flex takes the longest match from there: `\::x` is the
+    // escape followed by an ordinary interpolation.
+    assert_eq!(
+        pg_psql::render(r"SELECT \::x", &bindings).unwrap().sql(),
+        "SELECT :SUBSTITUTED",
+    );
+}
+
+#[test]
 fn an_unmodelled_meta_command_stays_text() {
     // `\set` and its kin belong to psqlscanslash.l and to pg-sql#11, #12,
     // #13. They are forwarded verbatim rather than silently dropped, so the
@@ -385,6 +419,28 @@ fn the_source_map_translates_inside_and_outside_a_substituted_region() {
         rendered.map().origin(rendered.sql().len()),
         Origin::Verbatim(source.len())
     );
+}
+
+#[test]
+fn a_variable_bound_to_the_empty_string_keeps_the_map_exact() {
+    // `:name` substitutes raw text, so an empty value produces a rewrite
+    // that renders nothing. The region is real but zero-length, and every
+    // verbatim byte after it must still name the byte that produced it.
+    let bindings = variables(&[("e", "")]);
+    let source = "SELECT :e, 1";
+    let rendered = pg_psql::render(source, &bindings).unwrap();
+    assert_eq!(rendered.sql(), "SELECT , 1");
+    assert_eq!(rendered.map().regions().count(), 1);
+
+    for (offset, byte) in rendered.sql().bytes().enumerate() {
+        if let Origin::Verbatim(origin) = rendered.map().origin(offset) {
+            assert_eq!(
+                source.as_bytes()[origin],
+                byte,
+                "rendered byte {offset} came from source byte {origin}",
+            );
+        }
+    }
 }
 
 #[test]

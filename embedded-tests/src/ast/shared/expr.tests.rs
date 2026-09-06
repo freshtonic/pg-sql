@@ -3080,7 +3080,7 @@ mod tests {
     /// lexer: `:'b'` was taken for an interpolation, so the slice colon was
     /// never seen, and the form was recorded as a limitation. psql now has
     /// its own grammar, and both bounds are ordinary `opt_slice_bound`
-    /// expressions (gram.y:15442).
+    /// expressions (gram.y:16812).
     #[test]
     fn parse_array_slice_with_string_bounds() {
         let lexed = crate::lex("j['a':'b']");

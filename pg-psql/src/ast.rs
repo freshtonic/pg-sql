@@ -193,9 +193,17 @@ pub enum SqlAtom<'input> {
     /// no exclusion: `$1a` is a param and an identifier, and psql forwards
     /// both for the server to object to.
     DollarNumber(#[lex(pattern = r"\$[0-9]+")] DollarNumber<'input>),
-    /// `\;` — psqlscan.l:697-702. Not a submission boundary: it contributes
-    /// a semicolon to the query buffer, so rendering emits `;` for it.
-    BatchSemi(#[lex(pattern = r"\\;")] BatchSemiText<'input>),
+    /// `\;` and `\:` — psqlscan.l:697-702, whose rule is `"\\"[;:]` and
+    /// whose body emits `yytext + 1`. Neither is a submission boundary: each
+    /// forces its second character into the query buffer, so the server
+    /// receives one byte where the user wrote two.
+    ///
+    /// `\:` is how a psql user writes a colon that must *not* be
+    /// interpolated, so this token is what stops `\:name` becoming a
+    /// variable reference. It has to be one token to do that: a bare
+    /// backslash followed by a separate colon would leave `:name` to the
+    /// interpolation rule.
+    Escaped(#[lex(pattern = r"\\[;:]")] EscapedText<'input>),
     /// An identifier-shaped run, `psqlscan.l:340` `identifier`. `$` is a
     /// continuation character there, so `a$$b$$` is one identifier and not
     /// an identifier followed by a dollar-quoted string.

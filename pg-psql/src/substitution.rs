@@ -205,13 +205,14 @@ pub(crate) fn render_document(
             PsqlItem::Terminator(Terminator::Semi) => {}
             PsqlItem::Sql(text) => {
                 for atom in text.atoms.iter() {
-                    // `\;` contributes a semicolon to the query buffer
-                    // (psqlscan.l:697-702); the server receives that one
-                    // byte, not the two the user wrote.
-                    if let SqlAtom::BatchSemi(token) = atom {
+                    // `\;` and `\:` each force their second character into
+                    // the query buffer (psqlscan.l:697-702); the server
+                    // receives that one byte, not the two the user wrote.
+                    if let SqlAtom::Escaped(token) = atom {
+                        let escaped = token.text();
                         rewrites.push(Rewrite {
-                            source: span_of(source, token.text()),
-                            text: ";".to_owned(),
+                            source: span_of(source, escaped),
+                            text: escaped[1..].to_owned(),
                         });
                     }
                 }
