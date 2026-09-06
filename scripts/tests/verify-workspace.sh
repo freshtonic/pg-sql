@@ -33,12 +33,19 @@ jq -e --arg root "$repo_root" --arg recursa "$recursa_root" '
     $package.publish == [] and
     any($package.dependencies[]; .name == "recursa" and .kind == null and .path == ($recursa + "/recursa")) and
     any($package.dependencies[]; .name == "recursa-codegen" and .kind == "build" and .path == ($recursa + "/recursa-codegen"))) and
+  ([.packages[] | select(.manifest_path == ($root + "/pg-psql/Cargo.toml"))] | length == 1) and
+  ([.packages[] | select(.manifest_path == ($root + "/pg-psql/Cargo.toml"))][0] as $psql |
+    $psql.edition == "2024" and
+    $psql.publish == [] and
+    any($psql.dependencies[]; .name == "pg-sql" and .kind == null and .path == $root) and
+    any($psql.dependencies[]; .name == "recursa" and .kind == null and .path == ($recursa + "/recursa")) and
+    any($psql.dependencies[]; .name == "recursa-codegen" and .kind == "build" and .path == ($recursa + "/recursa-codegen"))) and
   ([.packages[] | select(.manifest_path == ($root + "/pg-oracle/Cargo.toml") or .manifest_path == ($root + "/migration-tool/Cargo.toml"))] |
     length == 2 and all(.[]; .publish == []))
 ' >/dev/null <<<"$metadata" || fail "Cargo workspace metadata does not match the repository contract"
 
 rg -q '^resolver = "3"$' Cargo.toml || fail "workspace resolver must be 3"
-rg -q '^members = \["pg-oracle", "migration-tool"\]$' Cargo.toml || fail "workspace members are incorrect"
+rg -q '^members = \["pg-oracle", "migration-tool", "pg-psql"\]$' Cargo.toml || fail "workspace members are incorrect"
 
 test -x scripts/verify-recursa-revision || fail "scripts/verify-recursa-revision is missing or not executable"
 test -x pg-oracle/scripts/build-pg.sh || fail "pg-oracle/scripts/build-pg.sh is not executable"

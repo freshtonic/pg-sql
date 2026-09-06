@@ -97,6 +97,8 @@ jobs:
         run: cargo test --locked --package pg-sql --test embedded_inventory
       - name: Run imported embedded tests
         run: cargo test --locked --package pg-sql --test embedded
+      - name: Check the psql client grammar and substitution
+        run: cargo test --locked --package pg-psql
       - name: Run the PostgreSQL 17.9 differential baseline
         run: >-
           cargo test --locked --package pg-sql

@@ -49,14 +49,20 @@ fn interpolation_is_recognised_in_every_position() {
         // A function argument.
         ("SELECT f(:v)", "SELECT f(1)"),
         // A predicate operand.
-        ("SELECT * FROM t WHERE a = :'v'", "SELECT * FROM t WHERE a = '1'"),
+        (
+            "SELECT * FROM t WHERE a = :'v'",
+            "SELECT * FROM t WHERE a = '1'",
+        ),
         // The typed-literal payload that cost pg-sql 8 LALR conflicts.
         ("SELECT numeric :'v'", "SELECT numeric '1'"),
         ("SELECT int :'v'", "SELECT int '1'"),
         // A COPY target.
         ("COPY t FROM :'f'", "COPY t FROM '/tmp/x.csv'"),
         // A function body.
-        ("CREATE FUNCTION g() RETURNS int AS :'lib'", "CREATE FUNCTION g() RETURNS int AS 'regresslib'"),
+        (
+            "CREATE FUNCTION g() RETURNS int AS :'lib'",
+            "CREATE FUNCTION g() RETURNS int AS 'regresslib'",
+        ),
         // A statement of its own, and inside a parenthesised subquery.
         ("SELECT (SELECT :v)", "SELECT (SELECT 1)"),
         // Immediately after punctuation and at the very start of input.
@@ -83,8 +89,16 @@ fn interpolation_is_not_recognised_inside_a_string() {
         "SELECT X'0:1'",
         "SELECT 'a :v b'",
     ] {
-        assert_eq!(render_unbound(source), source, "{source:?} holds no interpolation");
-        assert_eq!(interpolation_count(source), 0, "{source:?} holds no interpolation");
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} holds no interpolation"
+        );
+        assert_eq!(
+            interpolation_count(source),
+            0,
+            "{source:?} holds no interpolation"
+        );
     }
 }
 
@@ -100,8 +114,16 @@ fn interpolation_is_not_recognised_inside_a_dollar_quoted_body() {
         "SELECT $a$ :v $b$ :v $a$",
         "DO $$ BEGIN PERFORM :v; END $$",
     ] {
-        assert_eq!(render_unbound(source), source, "{source:?} holds no interpolation");
-        assert_eq!(interpolation_count(source), 0, "{source:?} holds no interpolation");
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} holds no interpolation"
+        );
+        assert_eq!(
+            interpolation_count(source),
+            0,
+            "{source:?} holds no interpolation"
+        );
     }
 }
 
@@ -109,8 +131,16 @@ fn interpolation_is_not_recognised_inside_a_dollar_quoted_body() {
 fn interpolation_is_not_recognised_inside_a_quoted_identifier() {
     // psqlscan.l:622-624 `xd`/`xui`.
     for source in ["SELECT \":v\"", "SELECT \"a :v b\"", "SELECT U&\":v\""] {
-        assert_eq!(render_unbound(source), source, "{source:?} holds no interpolation");
-        assert_eq!(interpolation_count(source), 0, "{source:?} holds no interpolation");
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} holds no interpolation"
+        );
+        assert_eq!(
+            interpolation_count(source),
+            0,
+            "{source:?} holds no interpolation"
+        );
     }
 }
 
@@ -124,16 +154,33 @@ fn interpolation_is_not_recognised_inside_a_comment() {
         "SELECT /* :v */ 1",
         "SELECT /* a /* :v */ b */ 1",
     ] {
-        assert_eq!(render_unbound(source), source, "{source:?} holds no interpolation");
-        assert_eq!(interpolation_count(source), 0, "{source:?} holds no interpolation");
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} holds no interpolation"
+        );
+        assert_eq!(
+            interpolation_count(source),
+            0,
+            "{source:?} holds no interpolation"
+        );
     }
 }
 
 #[test]
 fn the_cast_and_assignment_operators_are_not_interpolation() {
     // psqlscan.l:288 `typecast` and :290 `colon_equals` are matched first.
-    for source in ["SELECT a::int", "SELECT a::b::c", "SELECT x := 1", "SELECT a:::v"] {
-        assert_eq!(render_unbound(source), source, "{source:?} renders unchanged");
+    for source in [
+        "SELECT a::int",
+        "SELECT a::b::c",
+        "SELECT x := 1",
+        "SELECT a:::v",
+    ] {
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} renders unchanged"
+        );
     }
     // `a:::v` is `::` then `:v` — one interpolation, exactly as flex's
     // longest-match gives psql.
@@ -146,9 +193,22 @@ fn the_cast_and_assignment_operators_are_not_interpolation() {
 fn an_incomplete_form_falls_back_to_a_bare_colon() {
     // psqlscan.l:775-796 throws back everything but the colon with
     // `yyless(1)`, because a space is not a `variable_char`.
-    for source in ["SELECT :'a b'", "SELECT :\"a b\"", "SELECT : 'v'", "SELECT :"] {
-        assert_eq!(render_unbound(source), source, "{source:?} renders unchanged");
-        assert_eq!(interpolation_count(source), 0, "{source:?} holds no interpolation");
+    for source in [
+        "SELECT :'a b'",
+        "SELECT :\"a b\"",
+        "SELECT : 'v'",
+        "SELECT :",
+    ] {
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} renders unchanged"
+        );
+        assert_eq!(
+            interpolation_count(source),
+            0,
+            "{source:?} holds no interpolation"
+        );
     }
 }
 
@@ -195,7 +255,10 @@ fn an_unbound_variable_is_left_verbatim() {
     assert_eq!(names, ["loose", "loose", "loose"]);
     // The first unbound token is `:loose` at source offset 15.
     assert_eq!(rendered.unbound()[0].source, 15..21);
-    assert_eq!(&"SELECT :bound, :loose, :'loose', :\"loose\""[15..21], ":loose");
+    assert_eq!(
+        &"SELECT :bound, :loose, :'loose', :\"loose\""[15..21],
+        ":loose"
+    );
 
     // pg-sql then rejects the rendering, which is the point.
     assert!(rendered.parse_sql().is_err());
@@ -243,7 +306,11 @@ fn an_unmodelled_meta_command_stays_text() {
     // #13. They are forwarded verbatim rather than silently dropped, so the
     // SQL parse fails and the gap is visible.
     for source in [r"\set foo 1", r"\d users", r"\timing on"] {
-        assert_eq!(render_unbound(source), source, "{source:?} renders unchanged");
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} renders unchanged"
+        );
     }
     let rendered = pg_psql::render(r"\set foo 1", &Variables::new()).unwrap();
     assert!(rendered.parse_sql().is_err());
@@ -262,7 +329,11 @@ fn a_send_command_name_is_read_whole() {
         r"\getenv abs_srcdir",
         r"\gdesc",
     ] {
-        assert_eq!(render_unbound(source), source, "{source:?} renders unchanged");
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} renders unchanged"
+        );
         assert_eq!(
             pg_psql::parse(source)
                 .unwrap()
@@ -310,7 +381,10 @@ fn the_source_map_translates_inside_and_outside_a_substituted_region() {
     assert_eq!(source.as_bytes()[12], b',');
     assert_eq!(rendered.map().origin(16), Origin::Verbatim(12));
     // One past the end continues the final verbatim run.
-    assert_eq!(rendered.map().origin(rendered.sql().len()), Origin::Verbatim(source.len()));
+    assert_eq!(
+        rendered.map().origin(rendered.sql().len()),
+        Origin::Verbatim(source.len())
+    );
 }
 
 #[test]
@@ -326,7 +400,8 @@ fn the_source_map_is_exact_across_several_regions() {
     for (offset, byte) in rendered.sql().bytes().enumerate() {
         if let Origin::Verbatim(origin) = rendered.map().origin(offset) {
             assert_eq!(
-                source.as_bytes()[origin], byte,
+                source.as_bytes()[origin],
+                byte,
                 "rendered byte {offset} came from source byte {origin}",
             );
         }
@@ -413,7 +488,11 @@ fn the_documents_pg_sql_used_to_reject_now_render_and_parse() {
 #[test]
 fn an_empty_document_is_valid_and_source_preserving() {
     for source in ["", "   ", "-- just a comment\n", "/* only this */"] {
-        assert_eq!(render_unbound(source), source, "{source:?} renders unchanged");
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} renders unchanged"
+        );
     }
     assert!(pg_psql::parse("").unwrap().items.is_empty());
 }

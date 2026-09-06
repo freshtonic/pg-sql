@@ -139,4 +139,3 @@ pub enum WithBody<'input> {
     Delete(Box<crate::ast::dml::delete::DeleteStmt<'input>>),
     Merge(Box<crate::ast::dml::merge::MergeStmt<'input>>),
 }
-

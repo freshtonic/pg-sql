@@ -1,10 +1,9 @@
 /// SELECT statement AST.
 use crate::ast::dml::values::Subquery;
 use crate::ast::shared::expr::{
-    CastType, DirectSubquery, Expr, FunctionApplicationExpr, FunctionCallApplication, JsonBehaviorClause,
-    JsonEncoding,
-    JsonOnBehavior, JsonPassing, JsonQuotes, JsonWrapper, ParenthesizedClose, ParenthesizedOpen,
-    XmlPassingBy,
+    CastType, DirectSubquery, Expr, FunctionApplicationExpr, FunctionCallApplication,
+    JsonBehaviorClause, JsonEncoding, JsonOnBehavior, JsonPassing, JsonQuotes, JsonWrapper,
+    ParenthesizedClose, ParenthesizedOpen, XmlPassingBy,
 };
 use crate::ast::shared::names::QualifiedName;
 use crate::tokens::literal;

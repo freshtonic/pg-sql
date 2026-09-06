@@ -147,8 +147,20 @@ fn both_parsers_fail_at_the_same_token() {
         let lr_error =
             Statement::parse(&mut table).expect_err(&format!("table-driven accepts {source:?}"));
 
-        assert_eq!(rd_error.kind(), lr_error.kind(), "error kind for {source:?}");
-        assert_eq!(rd_error.span(), lr_error.span(), "failing span for {source:?}");
-        assert_eq!(rd_error.found(), lr_error.found(), "failing token for {source:?}");
+        assert_eq!(
+            rd_error.kind(),
+            lr_error.kind(),
+            "error kind for {source:?}"
+        );
+        assert_eq!(
+            rd_error.span(),
+            lr_error.span(),
+            "failing span for {source:?}"
+        );
+        assert_eq!(
+            rd_error.found(),
+            lr_error.found(),
+            "failing token for {source:?}"
+        );
     }
 }

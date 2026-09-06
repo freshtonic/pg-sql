@@ -296,7 +296,6 @@ pub struct ParamDefault<'input> {
     pub value: Expr<'input>,
 }
 
-
 /// gram.y `func_arg: arg_class param_name func_type | param_name arg_class
 /// func_type | param_name func_type | arg_class func_type | func_type`; a
 /// `param_name` is one `type_function_name`, never a type.

@@ -2506,7 +2506,6 @@ pub struct JsonArrayEmptyArgs<'input> {
     pub returning: Option<JsonReturning<'input>>,
 }
 
-
 /// `JSON_ARRAY ( ... )` — element-list or query form.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct JsonArray<'input> {

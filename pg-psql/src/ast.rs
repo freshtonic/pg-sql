@@ -51,19 +51,14 @@ pub enum PsqlItem<'input> {
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Interpolation<'input> {
     /// `:'name'` — psqlscan.l:756. Substituted as a SQL string literal.
-    Literal(
-        #[lex(pattern = r":'[A-Za-z0-9_\u{0080}-\u{10FFFF}]+'")] LiteralInterpolation<'input>,
-    ),
+    Literal(#[lex(pattern = r":'[A-Za-z0-9_\u{0080}-\u{10FFFF}]+'")] LiteralInterpolation<'input>),
     /// `:"name"` — psqlscan.l:761. Substituted as a quoted identifier.
     Identifier(
-        #[lex(pattern = r#":"[A-Za-z0-9_\u{0080}-\u{10FFFF}]+""#)]
-        IdentifierInterpolation<'input>,
+        #[lex(pattern = r#":"[A-Za-z0-9_\u{0080}-\u{10FFFF}]+""#)] IdentifierInterpolation<'input>,
     ),
     /// `:{?name}` — psqlscan.l:766. Substituted as `TRUE` or `FALSE`
     /// according to whether the variable is set.
-    Test(
-        #[lex(pattern = r":\{\?[A-Za-z0-9_\u{0080}-\u{10FFFF}]+\}")] TestInterpolation<'input>,
-    ),
+    Test(#[lex(pattern = r":\{\?[A-Za-z0-9_\u{0080}-\u{10FFFF}]+\}")] TestInterpolation<'input>),
     /// `:name` — psqlscan.l:710. Substituted as raw text.
     ///
     /// Listed last so the three punctuated forms are tried first; they are
@@ -134,9 +129,7 @@ pub enum Terminator<'input> {
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SendCommand<'input> {
     /// `\crosstabview`
-    Crosstabview(
-        #[lex(pattern = r"\\crosstabview", priority = 2)] SendCrosstabview<'input>,
-    ),
+    Crosstabview(#[lex(pattern = r"\\crosstabview", priority = 2)] SendCrosstabview<'input>),
     /// `\gexec`
     Gexec(#[lex(pattern = r"\\gexec", priority = 2)] SendGexec<'input>),
     /// `\gset`

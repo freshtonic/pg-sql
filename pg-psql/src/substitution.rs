@@ -174,7 +174,11 @@ struct Rewrite {
     text: String,
 }
 
-pub(crate) fn render_document(document: &PsqlDocument<'_>, source: &str, variables: &Variables) -> Rendered {
+pub(crate) fn render_document(
+    document: &PsqlDocument<'_>,
+    source: &str,
+    variables: &Variables,
+) -> Rendered {
     let mut rewrites = Vec::new();
     let mut unbound = Vec::new();
 
@@ -183,10 +187,7 @@ pub(crate) fn render_document(document: &PsqlDocument<'_>, source: &str, variabl
             PsqlItem::Interpolation(interpolation) => {
                 let span = span_of(source, interpolation.text());
                 match substitute(interpolation, variables) {
-                    Some(text) => rewrites.push(Rewrite {
-                        source: span,
-                        text,
-                    }),
+                    Some(text) => rewrites.push(Rewrite { source: span, text }),
                     // Left verbatim: no rewrite, so the token stays part of
                     // the surrounding copied run.
                     None => unbound.push(Unbound {

@@ -53,9 +53,7 @@ pub mod ast;
 pub mod substitution;
 pub mod tokens;
 
-pub use ast::{
-    Interpolation, PsqlDocument, PsqlItem, SendCommand, SqlAtom, SqlText, Terminator,
-};
+pub use ast::{Interpolation, PsqlDocument, PsqlItem, SendCommand, SqlAtom, SqlText, Terminator};
 pub use substitution::{Origin, Rendered, SourceMap, Unbound, Variables};
 
 use std::fmt;
