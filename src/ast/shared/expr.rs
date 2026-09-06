@@ -696,13 +696,20 @@ pub struct FunctionCallSuffix<'input> {
 }
 
 /// gram.y `AexprConst: func_name '(' func_arg_list opt_sort_clause ')'
-/// Sconst`: a typed literal spelled like a call, `char(20) 'x'`. It shares
-/// the argument list with [`FunctionCallSuffix`] and parts from it on the
-/// string after `)`.
+/// Sconst`: a typed literal spelled like a call, `char(20) 'x'`. The
+/// argument list is `func_arg_list opt_sort_clause` and nothing more: `*`,
+/// `DISTINCT`, `ALL` and `VARIADIC` belong to `func_application` and are
+/// syntax errors here. A named argument or the sort clause is grammatical
+/// and gram.y rejects it in the rule's action ("type modifier cannot have
+/// parameter name" / "... ORDER BY"). It parts from [`FunctionCallSuffix`]
+/// on the string after `)`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionTypedLiteralTail<'input> {
     pub open: FunctionCallOpen,
-    pub body: FunctionCallBody<'input>,
+    /// gram.y `func_arg_list`.
+    pub args: FunctionArgumentSequence<'input>,
+    /// gram.y `opt_sort_clause`.
+    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
     pub close: FunctionCallClose,
     pub value: TypeCastValue<'input>,
 }

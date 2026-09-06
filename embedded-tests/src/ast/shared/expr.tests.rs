@@ -797,13 +797,12 @@ mod tests {
     }
 
     /// Applications gram.y's `func_expr` admits: `func_application` is one
-    /// production for every argument shape, so an ordered or `DISTINCT`
-    /// argument list before `WITHIN GROUP` is grammatical and only parse
-    /// analysis rejects it (`cannot use multiple ORDER BY clauses with WITHIN
-    /// GROUP`). The typed literal `func_name '(' func_arg_list opt_sort_clause
-    /// ')' Sconst` shares its argument list with the call up to the closing
-    /// parenthesis, and a one-token parser cannot narrow it there, so the
-    /// `*`, `DISTINCT` and `VARIADIC` argument shapes reach the string too.
+    /// production for every argument shape, so an ordered, `DISTINCT` or
+    /// `VARIADIC` argument list before `WITHIN GROUP` is grammatical and only
+    /// parse analysis rejects it (`cannot use multiple ORDER BY clauses with
+    /// WITHIN GROUP`). The typed literal `func_name '(' func_arg_list
+    /// opt_sort_clause ')' Sconst` admits a named argument and a sort clause,
+    /// which gram.y rejects in the rule's action, not in its grammar.
     #[test]
     fn accept_function_applications_gram_y_admits() {
         for src in [
@@ -812,9 +811,6 @@ mod tests {
             "f(VARIADIC xs) WITHIN GROUP (ORDER BY 1)",
             "char(n => 1) 'x'",
             "char(1 ORDER BY 1) 'x'",
-            "char(*) 'x'",
-            "char(DISTINCT 1) 'x'",
-            "char(VARIADIC xs) 'x'",
         ] {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
@@ -858,6 +854,9 @@ mod tests {
             "f(ALL VARIADIC xs)",
             "f(DISTINCT VARIADIC xs)",
             "char() 'x'",
+            "char(*) 'x'",
+            "char(DISTINCT 1) 'x'",
+            "char(VARIADIC xs) 'x'",
             "char(1) 'x' FILTER (WHERE true)",
         ] {
             let lexed = crate::lex(src);

@@ -901,6 +901,27 @@ impl ColId<'_> {
     }
 }
 
+// gram.y `ColLabel`: every keyword class, the `attr_name` after a dot in
+// `qualified_name` and `func_name` indirection.
+#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ColLabel<'input> {
+    Text(
+        #[lex(
+            pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+            admits(ColLabel)
+        )]
+        ColLabelText<'input>,
+    ),
+}
+
+impl ColLabel<'_> {
+    pub fn text(&self) -> &str {
+        match self {
+            Self::Text(text) => text.text(),
+        }
+    }
+}
+
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NonReservedWord<'input> {
     Text(
