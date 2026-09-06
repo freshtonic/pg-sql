@@ -903,7 +903,16 @@ recursa::tokens! {
         // gram.y:836 `%nonassoc '<' '>' '=' LESS_EQUALS GREATER_EQUALS
         // NOT_EQUALS` -- `Expr::Lt` and friends (lbp 50). PostgreSQL's
         // scanner spells `<>` and `!=` as one `NOT_EQUALS`.
-        nonassoc(bp = 50) { LT, GT, EQ, LTE, GTE, NEQ, BANGEQ },
+        //
+        // `OVERLAPS` joins them, which gram.y does not do. gram.y needs no
+        // level for it because `a_expr: row OVERLAPS row` demands a row on
+        // the left, so `OVERLAPS` can never follow a bare column reference
+        // and the reduce is the only action there. pg-sql's `Expr::Overlaps`
+        // takes any operand, so `RANGE BETWEEN OVERLAPS ...` needs a level
+        // to settle `ColId: BETWEEN` against it; the level is the binding
+        // power `Expr::Overlaps` already carries, and it reduces, which is
+        // the answer gram.y arrives at without one.
+        nonassoc(bp = 50) { LT, GT, EQ, LTE, GTE, NEQ, BANGEQ, OVERLAPS },
         // gram.y:837 `%nonassoc BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA` --
         // `Expr::BetweenExpr`, `Expr::InExpr` and the LIKE family (bp 60).
         // gram.y's `NOT_LA` is absent: in pg-sql it is a lookahead filter,
