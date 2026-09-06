@@ -165,6 +165,28 @@ mod tests {
     }
 
     #[test]
+    fn parse_set_session_scope_session_authorization() {
+        // gram.y `VariableSetStmt: SET SESSION set_rest` (gram.y:1617) over
+        // one `set_rest`, whose `set_rest_more` holds `SESSION AUTHORIZATION
+        // NonReservedWord_or_Sconst` (gram.y:1761): the scope keyword and the
+        // `SESSION` of `SESSION AUTHORIZATION` are separate, so both appear.
+        let lexed = crate::lex("SET SESSION SESSION AUTHORIZATION alice");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SetSessionAuthStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
+    }
+
+    #[test]
+    fn parse_set_local_scope_session_authorization() {
+        let lexed = crate::lex("SET LOCAL SESSION AUTHORIZATION DEFAULT");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = SetSessionAuthStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
+    }
+
+    #[test]
     fn parse_set_time_zone_string() {
         let lexed = crate::lex("SET TIME ZONE 'UTC'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");

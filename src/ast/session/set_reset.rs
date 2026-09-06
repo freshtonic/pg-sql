@@ -109,13 +109,22 @@ pub enum SetSessionAuthTarget<'input> {
 }
 
 /// `SET [SESSION|LOCAL] SESSION AUTHORIZATION { rolename | DEFAULT }`
+///
+/// gram.y reaches this through the scope prefix like every other `set_rest`:
+/// `VariableSetStmt: SET set_rest | SET LOCAL set_rest | SET SESSION
+/// set_rest` (gram.y:1617) over one `set_rest`, whose `set_rest_more` holds
+/// `SESSION AUTHORIZATION NonReservedWord_or_Sconst` and `SESSION
+/// AUTHORIZATION DEFAULT` (gram.y:1761, 1770). The earlier spelling took
+/// `LOCAL` as a presence flag and wrote `SESSION AUTHORIZATION` as a
+/// literal, which put the shift of that `SESSION` against the reduce of the
+/// shared [`SetScope`] and left `SET LOCAL . SESSION` undecidable. Taking
+/// the shared scope restores gram.y's `SET SESSION SESSION AUTHORIZATION`
+/// spelling with it.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(SET, this)]
 pub struct SetSessionAuthStmt<'input> {
-    // Only `LOCAL` is allowed here — the `SESSION` scope keyword would
-    // conflict with the `SESSION AUTHORIZATION` literal that follows.
-    #[tok(SET, this, SESSION, AUTHORIZATION)]
-    #[presence(LOCAL)]
-    pub local: bool,
+    pub scope: Option<SetScope>,
+    #[tok(SESSION, AUTHORIZATION, this)]
     pub target: SetSessionAuthTarget<'input>,
 }
 
