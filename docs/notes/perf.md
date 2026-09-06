@@ -955,6 +955,8 @@ into a real Pratt prefix variant. This is a plausible mechanism, not a
 measurement; a profile would settle it and none was taken.
 
 **Status of the table-driven style.** Not measured here, because it cannot be
-generated yet: 33 LR conflicts remain, 23 of them recursa #129 and 1 recursa
-#128, and recursa refuses to emit a parser with any conflict. Issue #70 times
-it once those land.
+generated yet: 31 LR conflicts remain and recursa refuses to emit a parser
+with any conflict. Issue #70 times it once they are retired. (Corrected
+after the fact: recursa #128 landed and took 1; recursa #129 was rejected,
+so the 23 it was to take are ordinary pg-sql grammar work. `tests/two_parsers.rs`
+carries the current breakdown.)

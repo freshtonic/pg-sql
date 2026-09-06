@@ -342,3 +342,5 @@ tests::support::tests::skips_psql_interpolation	superseded	-	-	frozen-statement-
 tokens::tests::token_kind_is_soft_classifies_correctly	superseded	-	-	classified-token-public-coverage
 tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src/tokens.tests.rs	window_ref_name_rejects_clause_heads	closed-window-ref-admission
 -	introduced	embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_bare_func_with_operator_argument	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_session_scope_session_authorization	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_local_scope_session_authorization	issue-9-generated-statement

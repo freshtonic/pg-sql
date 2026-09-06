@@ -574,6 +574,7 @@ embedded-tests/src/ast/session/set_reset.tests.rs	parse_reset_time_zone	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_eq	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_integer_value	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_local_role	false
+embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_local_scope_session_authorization	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_multi_value	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_numeric_value	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_role_default	false
@@ -582,6 +583,7 @@ embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_role_none	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_session_authorization_default	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_session_authorization_string	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_session_scope	false
+embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_session_scope_session_authorization	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_time_zone_default	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_time_zone_local	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_time_zone_negative	false
