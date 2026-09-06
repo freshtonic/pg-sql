@@ -915,11 +915,12 @@ recursa::tokens! {
         nonassoc(bp = 50) { LT, GT, EQ, LTE, GTE, NEQ, BANGEQ, OVERLAPS },
         // gram.y:837 `%nonassoc BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA` --
         // `Expr::BetweenExpr`, `Expr::InExpr` and the LIKE family (bp 60).
-        // gram.y's `NOT_LA` is absent: in pg-sql it is a lookahead filter,
-        // not a token of its own, and the level it carries there is the
-        // binding power of `Expr::NotLike` and its siblings, which are
-        // already at 60.
-        nonassoc(bp = 60) { BETWEEN, IN, LIKE, ILIKE, SIMILAR },
+        // `NOT_LA` is the lookahead filter declared above, and a level may
+        // name a merged kind, so the level is spelled as gram.y spells it.
+        // A twin does not inherit the level of the token it filters, which
+        // is what gram.y does too: bare `NOT` keeps its own precedence and
+        // gram.y writes `%prec NOT` where it wants that.
+        nonassoc(bp = 60) { BETWEEN, IN, LIKE, ILIKE, SIMILAR, NOT_LA },
         // gram.y:838 `%nonassoc ESCAPE` ("ESCAPE must be just above
         // LIKE/ILIKE/SIMILAR").
         nonassoc(bp = 70) { ESCAPE },
