@@ -43,20 +43,13 @@ recursa::tokens! {
         // psqlscan.l:564-601 `xdolq`: a dollar-quoted body is opaque, and
         // only the delimiter that opened it can close it.
         DollarString => same_delimiter(opener = r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$"),
-        // psqlscan.l:352 `param` — `$1` is a server placeholder, not a
-        // dollar quote.
-        DollarNumber => next_exclusion(pattern = r"\$[0-9]+", excluded = r"[A-Za-z0-9_]"),
-        // The send commands, which submit the query buffer exactly as `;`
-        // does. `psqlscanslash.l` reads a whole command name before looking
-        // it up, so `\gsetfoo` is not `\gset` followed by `foo`; the
-        // exclusion reproduces that, and the run becomes a psql lexical
-        // error rather than a silent statement boundary, which is what psql
-        // answers with "invalid command" too.
-        SendCrosstabview => next_exclusion(pattern = r"\\crosstabview", excluded = r"[A-Za-z0-9_]"),
-        SendGexec => next_exclusion(pattern = r"\\gexec", excluded = r"[A-Za-z0-9_]"),
-        SendGset => next_exclusion(pattern = r"\\gset", excluded = r"[A-Za-z0-9_]"),
-        SendGx => next_exclusion(pattern = r"\\gx", excluded = r"[A-Za-z0-9_]"),
-        SendG => next_exclusion(pattern = r"\\g", excluded = r"[A-Za-z0-9_]"),
+        // No `next_exclusion` appears in this lexer, and that is deliberate.
+        // It reports a lexical error when the excluded character follows,
+        // which is what a *SQL* lexer wants for `$1a` or `123abc`. psql
+        // validates nothing: it forwards the bytes and lets the server
+        // object. Erroring here would refuse whole psql documents over text
+        // psql is happy to send, so every token below simply matches what it
+        // matches and longest-match settles the rest.
     }
     ignore {
         // psqlscan.l:163 `comment` — `--` to the end of the physical line.

@@ -124,18 +124,27 @@ pub enum Terminator<'input> {
 /// `LEXRES_BACKSLASH` and hands off. They are modelled here, and the rest of
 /// that scanner is not, because a send command terminates a statement and so
 /// changes where SQL text begins and ends; `\set` and its kin do not.
+///
+/// Each carries an explicit priority so it wins the tie against the
+/// [`SqlAtom::MetaCommand`] catch-all, which matches the same text. Where
+/// the catch-all matches *more* text it wins on length instead, which is
+/// what makes `\gsetfoo` one unknown command rather than `\gset` followed
+/// by `foo` — `psqlscanslash.l` reads a whole command name before looking it
+/// up.
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SendCommand<'input> {
     /// `\crosstabview`
-    Crosstabview(#[lex(matcher)] SendCrosstabview<'input>),
+    Crosstabview(
+        #[lex(pattern = r"\\crosstabview", priority = 2)] SendCrosstabview<'input>,
+    ),
     /// `\gexec`
-    Gexec(#[lex(matcher)] SendGexec<'input>),
+    Gexec(#[lex(pattern = r"\\gexec", priority = 2)] SendGexec<'input>),
     /// `\gset`
-    Gset(#[lex(matcher)] SendGset<'input>),
+    Gset(#[lex(pattern = r"\\gset", priority = 2)] SendGset<'input>),
     /// `\gx`
-    Gx(#[lex(matcher)] SendGx<'input>),
+    Gx(#[lex(pattern = r"\\gx", priority = 2)] SendGx<'input>),
     /// `\g`
-    G(#[lex(matcher)] SendG<'input>),
+    G(#[lex(pattern = r"\\g", priority = 2)] SendG<'input>),
 }
 
 impl<'input> SendCommand<'input> {
@@ -187,8 +196,10 @@ pub enum SqlAtom<'input> {
     QuotedIdentifier(#[lex(pattern = r#""[^"]*(?:""[^"]*)*""#)] QuotedIdentifierText<'input>),
     /// `$tag$...$tag$` — psqlscan.l:564-601 `xdolq`.
     DollarString(#[lex(matcher)] DollarString<'input>),
-    /// `$1` — psqlscan.l:352 `param`.
-    DollarNumber(#[lex(matcher)] DollarNumber<'input>),
+    /// `$1` — psqlscan.l:352 `param`, which is `\${decdigit}+` and carries
+    /// no exclusion: `$1a` is a param and an identifier, and psql forwards
+    /// both for the server to object to.
+    DollarNumber(#[lex(pattern = r"\$[0-9]+")] DollarNumber<'input>),
     /// `\;` — psqlscan.l:697-702. Not a submission boundary: it contributes
     /// a semicolon to the query buffer, so rendering emits `;` for it.
     BatchSemi(#[lex(pattern = r"\\;")] BatchSemiText<'input>),
@@ -218,8 +229,13 @@ pub enum SqlAtom<'input> {
     Slash,
     #[tok(DOLLAR)]
     Dollar,
-    /// A backslash that starts no send command: an unmodelled psql
-    /// meta-command, forwarded verbatim. See freshtonic/pg-sql#11, #12, #13.
+    /// A backslash command that is not a send command: an unmodelled psql
+    /// meta-command such as `\set` or `\getenv`, forwarded verbatim. The
+    /// whole name is one token, as `psqlscanslash.l` reads it, so a longer
+    /// name always beats a send-command prefix. See freshtonic/pg-sql#11,
+    /// #12, #13.
+    MetaCommand(#[lex(pattern = r"\\[A-Za-z][A-Za-z0-9_]*")] MetaCommandText<'input>),
+    /// A backslash starting no command name at all.
     #[tok(BACKSLASH)]
     Backslash,
 }

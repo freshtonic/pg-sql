@@ -252,14 +252,26 @@ fn an_unmodelled_meta_command_stays_text() {
 #[test]
 fn a_send_command_name_is_read_whole() {
     // psqlscanslash.l reads a whole command name before looking it up, so
-    // `\gsetfoo` is not `\gset` followed by `foo`; psql answers it with
-    // "invalid command". The send-command matchers carry the same exclusion,
-    // which makes the run a psql lexical error rather than a silent
-    // statement boundary.
-    for source in [r"SELECT 1 \gsetfoo", r"SELECT 1 \gexecx"] {
-        assert!(
-            pg_psql::parse(source).is_err(),
-            "{source:?} is not a valid psql command",
+    // `\gsetfoo` is not `\gset` followed by `foo`, and `\getenv` is not
+    // `\g` followed by `etenv`. The catch-all meta-command token matches
+    // the longer name and wins on length, so neither becomes a statement
+    // boundary; both are forwarded verbatim.
+    for source in [
+        r"SELECT 1 \gsetfoo",
+        r"SELECT 1 \gexecx",
+        r"\getenv abs_srcdir",
+        r"\gdesc",
+    ] {
+        assert_eq!(render_unbound(source), source, "{source:?} renders unchanged");
+        assert_eq!(
+            pg_psql::parse(source)
+                .unwrap()
+                .items
+                .iter()
+                .filter(|item| matches!(item, PsqlItem::Terminator(_)))
+                .count(),
+            0,
+            "{source:?} holds no terminator",
         );
     }
 }
@@ -412,4 +424,61 @@ fn rendering_preserves_every_byte_outside_a_rewrite() {
     // and no send command, the output is the input.
     let source = "-- header\nSELECT $$a$$, 'b', \"c\", 1.5, a::int, x[1:2] /* t */;\n";
     assert_eq!(render_unbound(source), source);
+}
+
+// --- The real corpus ---------------------------------------------------------
+
+/// Every PostgreSQL regression script is a psql document.
+///
+/// These files really are psql scripts — that is why psql runs first — so
+/// this is the honest measure of whether the grammar reads what psql reads.
+/// It also pins the rendering contract at corpus scale: with nothing bound,
+/// the only bytes that may change are the two client spellings the server
+/// never sees, and every one of them must be a recorded region.
+#[test]
+fn every_regression_script_is_a_psql_document() {
+    let directory = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../vendor/postgres/src/test/regress/sql"
+    );
+    let mut scripts: Vec<_> = std::fs::read_dir(directory)
+        .expect("the vendored PostgreSQL submodule must be checked out")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "sql"))
+        .collect();
+    scripts.sort();
+
+    let mut read = 0;
+    for path in &scripts {
+        let name = path.file_name().expect("a file name").to_string_lossy();
+        // One script is deliberately not UTF-8 (the encoding tests). psql
+        // scans bytes; this grammar takes `&str`, so such a script is out of
+        // scope by construction rather than by omission.
+        let Ok(source) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        read += 1;
+        let rendered = pg_psql::render(&source, &Variables::new())
+            .unwrap_or_else(|error| panic!("{name} must parse as a psql document: {error}"));
+
+        // With nothing bound the only rewrites allowed are client syntax
+        // the server never sees -- a send command or `\;` -- and `:{?name}`,
+        // the one interpolation psql answers rather than passes through
+        // (psqlscan.l:1568-1591, `FALSE` when unset). A `:name`, `:'name'`
+        // or `:"name"` must survive untouched.
+        for (_, origin) in rendered.map().regions() {
+            let text = &source[origin.clone()];
+            assert!(
+                text.starts_with('\\') || text.starts_with(":{?"),
+                "{name}: rewrote {text:?} at {origin:?} with nothing bound",
+            );
+        }
+        // And the rendering differs from the source only where it did so.
+        if rendered.map().regions().count() == 0 {
+            assert_eq!(rendered.sql(), source, "{name} must render unchanged");
+        }
+    }
+
+    assert_eq!(read, 225, "the vendored regression corpus changed size");
 }
