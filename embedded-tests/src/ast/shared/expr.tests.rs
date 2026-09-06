@@ -3050,6 +3050,30 @@ mod tests {
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
+    /// A typed literal no longer takes a psql variable as its payload.
+    ///
+    /// gram.y's `AexprConst: ConstTypename Sconst` puts a string after the
+    /// type name and nothing else. pg-sql used to admit psql's `:'var'`
+    /// there, which is what made `SELECT int :'x'` a typed literal while
+    /// `int :` also begins a SQL/JSON `JSON_OBJECT` entry -- 8 of the
+    /// grammar's LALR conflicts. psql substitutes before the server lexes,
+    /// so what reaches this grammar is an ordinary string constant; the
+    /// `pg-psql` crate is what renders it.
+    #[test]
+    fn reject_typed_literal_with_a_psql_variable_payload() {
+        for src in ["numeric :'txid'", "int :'x'", "bigint :'n'"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let consumed = Expr::parse(&mut input).is_ok() && input.is_eof();
+            assert!(!consumed, "{src:?} must not parse as an expression");
+        }
+        // The spelling gram.y does have is untouched.
+        assert!(matches!(
+            parse_expr_classified("numeric '1'"),
+            Expr::CastFunc(_)
+        ));
+    }
+
     /// `j['a':'b']` — a slice whose bounds are string literals.
     ///
     /// This did not parse while psql's `:'name'` was one token of the SQL

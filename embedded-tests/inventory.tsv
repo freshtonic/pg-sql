@@ -836,6 +836,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	pratt_peek_classified_covers_identif
 embedded-tests/src/ast/shared/expr.tests.rs	qualified_ref_qualifier_is_a_col_id	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_direct_parenthesized_set_duplicate_limit_offset_clauses	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_invalid_function_application_states	false
+embedded-tests/src/ast/shared/expr.tests.rs	reject_typed_literal_with_a_psql_variable_payload	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_wildcard_as_an_ordinary_function_argument	false
 embedded-tests/src/ast/shared/expr.tests.rs	type_name_preserves_legacy_fixed_variants_and_json_ident	false
 embedded-tests/src/ast/shared/with_clause.tests.rs	immediate_recursive_is_the_clause_modifier	false
