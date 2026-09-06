@@ -6,9 +6,9 @@
 //! table_driven)` in `src/lib.rs` for `pg_sql::parsers::lr` to exist. That
 //! declaration is still not in place. recursa refuses to generate the
 //! table-driven parser while any conflict remains (`RCA9105`), and the
-//! construction reports 23: 9,643 before the first pass, 522 after it, 33
-//! after the second, 31 after the third, 23 now that psql has left the
-//! grammar.
+//! construction reports 17: 9,643 before the first pass, 522 after it, 33
+//! after the second, 31 after the third, 23 once psql left the grammar, 17
+//! now that `select_with_parens` is one nonterminal.
 //!
 //! recursa #129 was implemented and then rejected: two grammar types sharing
 //! one LR nonterminal cannot retire a reduce/reduce between themselves, since
@@ -17,22 +17,50 @@
 //! against the nonterminal each node mirrors (CLAUDE.md principle 9). What is
 //! left, and what each needs:
 //!
-//! - 18, `SelectClause` against `DirectSelectClause`. Unifying them into the
-//!   one `select_clause` gram.y has (gram.y:12757) is correct and was
-//!   measured: conflicts fall 32 -> 16, and the analysis reports no
-//!   `RCA0200`, so recursive descent handles the unified form. It is blocked
-//!   by recursa #130. `Expr`'s only precedence-grouping witness is the
-//!   `Expr::Parenthesized` atom, and recursa discards a candidate atom whose
-//!   subtree is cyclic. `DirectParenthesizedSet` carried a *required*
-//!   `SetOpCombiner`, and a required non-fixed sibling stops the traversal,
-//!   so the cycle stayed hidden. One `select_clause` self-cycles as
-//!   `Subquery => '(' Subquery ')'` -- gram.y's own `select_with_parens: '('
-//!   select_with_parens ')'` (gram.y:12684) -- and `RCA3101` then claims the
-//!   grammar "has no atom that encloses Self between fixed tokens", which is
-//!   false. Splitting the query out of `ParenContent` into its own atom, as
-//!   gram.y's separate `c_expr` productions do (gram.y:15391), clears
-//!   `RCA3101` but makes `Expr` derive `( Subquery )` and three enums then
-//!   report `RCA0200`. There is no pg-sql-side route around it.
+//! - 12, `Subquery` against `DirectSubquery`, on lookaheads `ORDER`,
+//!   `OFFSET`, `LIMIT`, `FOR`, `FETCH` and `RPAREN` in two states. Blocked by
+//!   recursa #132, and not pg-sql grammar work.
+//!
+//!   The 18 that used to head this list are gone. They were `SelectClause`
+//!   against `DirectSelectClause`, and the diagnosis in this note was wrong:
+//!   `DirectSelectClause` was never a second copy of `select_clause`, it is
+//!   `simple_select` (gram.y:12790). What the two really shared, each
+//!   carrying its own copy, was `select_with_parens` (gram.y:12682). Giving
+//!   that its own node, as gram.y does and for the reason gram.y states
+//!   (gram.y:12658), retired all 18. Note that substituting `Subquery` for
+//!   `DirectSubquery` wholesale -- the "unification" this note used to
+//!   recommend -- reports `RCA0200` on five enums and is not the answer;
+//!   recursa #130 did not change that.
+//!
+//!   What remains is the same duplication one level up. gram.y writes every
+//!   position that admits both a parenthesized query and a parenthesized
+//!   expression as two alternatives that each own their `(`: `in_expr:
+//!   select_with_parens | '(' expr_list ')'` (gram.y:16715), and likewise
+//!   `c_expr` (gram.y:15391), `table_ref` (gram.y:13492) and the
+//!   `subquery_Op sub_type` operand (gram.y:15152). recursa cannot express
+//!   that shape. Written directly it
+//!   is `RCA0200`, witness `( -> ( -> SELECT -> U&'...' -> SELECT`,
+//!   `lookahead=Some(5)->None`: balanced dispatch does not engage, because
+//!   both alternatives close on the same `)` and their residuals after it are
+//!   identical. bison has no trouble, keeping `%expect 0` by giving `')'`
+//!   higher precedence than the `%prec UMINUS` on `c_expr:
+//!   select_with_parens` (gram.y:896-898, rationale at gram.y:12658-12666).
+//!
+//!   So pg-sql takes the remedy `RCA0200` names and factors the `(` out to
+//!   the position, which makes `DirectSubquery` a second spelling of
+//!   `select_no_parens`. The construction then sees both after the same `(`
+//!   and cannot tell which nonterminal owns it:
+//!
+//!   ```text
+//!   path: QuantifiedComparisonOperand -> ParenthesizedOpen SimpleSelect . ORDER
+//!     SelectClause   -> SimpleSelect .                  the `(` is SelectWithParens's
+//!     DirectSubquery -> SimpleSelect . OrderByClause    the `(` is the position's
+//!   ```
+//!
+//!   The grammar is unambiguous -- the `SelectWithParens` reading needs a set
+//!   operation that never arrives -- but LALR(1) cannot see that far, and the
+//!   shape that would avoid the conflict is the one `RCA0200` refuses. Do not
+//!   try to widen an admission set out of this; it is a recursa gap.
 //!
 //! - 0, and retired: pg-sql's psql-variable extension used to cost 8.
 //!   `TypeCastValue::PsqlVar` admitted `:'x'` after a fixed type-name
@@ -45,7 +73,9 @@
 //!   psql document, substitutes, and renders the SQL text this grammar then
 //!   reads. 31 -> 23, and the conflict states fell from 14 to 6.
 //!
-//! - 3, the two `func_arg_list` spellings. Mirroring gram.y exactly (one
+//! - 3, the two `func_arg_list` spellings, on `ORDER`, `COMMA` and `RPAREN`
+//!   in one state: `list1(FuncArg, sep=COMMA)` against
+//!   `FunctionOrdinaryArgumentSequence`. Mirroring gram.y exactly (one
 //!   `func_arg_list`, gram.y:16539, with `VARIADIC` as the `',' VARIADIC
 //!   func_arg_expr` tail of `func_application`, gram.y:15517) was tried and
 //!   reverted: it removes the two competing list nonterminals but nets zero,
@@ -55,8 +85,13 @@
 //!   breaks `f(1, VARIADIC xs ORDER BY 1)` under recursive descent, whose
 //!   `list1` eats the comma and then demands a `FuncArg`. The real blocker is
 //!   that `FunctionCallTail`'s two variants must share every nonterminal up
-//!   to `')'`, as `func_application` and `AexprConst` do, and pg-sql's do
-//!   not.
+//!   to `')'`, as `func_application` and `AexprConst` (gram.y:17231) do, and
+//!   pg-sql's do not. Merging them into one `open body close continuation`,
+//!   parting on the `Sconst` after `')'`, would do it -- but `body` is
+//!   `FunctionCallBody`, so the typed-literal form would then admit `*`,
+//!   `DISTINCT`, `ALL` and `VARIADIC`, which gram.y rejects grammatically and
+//!   not in a rule action. That is over-acceptance bought for 3 conflicts
+//!   that cannot reach zero anyway, so it is not taken.
 //!
 //! - 1, `SET SESSION . CHARACTERISTICS`. gram.y shifts the scope keyword as a
 //!   literal in `VariableSetStmt: SET set_rest | SET LOCAL set_rest | SET
@@ -72,7 +107,9 @@
 //!   lists (gram.y:17826, 18474), and `scan.l` produces one token for the
 //!   whole `U&'...' [UESCAPE 'c']` form. pg-sql lexes the two separately, so
 //!   the grammar must choose between attaching the escape and reading
-//!   `UESCAPE` as a column label. The fix is lexical, not grammatical.
+//!   `UESCAPE` as a column label. The fix is lexical, not grammatical: it is
+//!   not expressible in an LALR grammar that sees the two tokens, because
+//!   `UESCAPE` is a bare label and so may legitimately follow the literal.
 //!
 //! The `table-driven` cargo feature therefore stays. It is not dead weight to
 //! be removed "now that both parsers exist": they do not both exist, and an

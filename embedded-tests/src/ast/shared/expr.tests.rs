@@ -1,11 +1,12 @@
 #[cfg(test)]
 mod tests {
     use crate::ast::shared::expr::{
-        CastType, CastTypeHead, ColumnRef, DirectSelectClause, DirectSubquery, Expr,
+        CastType, CastTypeHead, ColumnRef, DirectSubquery, Expr,
         FunctionCallBody,
         FunctionCallTail, ParenContent, ParenthesizedDotStar, ParenthesizedExpr,
         JsonObject, ParenthesizedIndirection, TypeName,
     };
+    use crate::ast::dml::values::SimpleSelect;
 
     /// Parse `src` as an `Expr` through the logos lex pass.
     ///
@@ -1893,7 +1894,7 @@ mod tests {
                 content: ParenContent::Subquery(ref subquery),
                 ref indirection,
                 ..
-            }) if matches!(subquery.clause, DirectSelectClause::ParenthesizedSet(_))
+            }) if matches!(subquery.clause, SimpleSelect::ParenthesizedSet(_))
                 && indirection.is_empty()
         ));
         assert!(input.is_eof());

@@ -3,7 +3,7 @@
 /// Handles atoms, prefix (NOT, unary minus), infix (AND, OR, comparisons,
 /// arithmetic), and postfix operators (::type cast, IS [NOT] TRUE/FALSE/UNKNOWN/NULL,
 /// IN (list)).
-use crate::ast::dml::values::{SetOpCombiner, Subquery, TableStmt};
+use crate::ast::dml::values::Subquery;
 use crate::tokens::literal;
 
 /// Required opening delimiter for structurally parenthesized SQL forms.
@@ -20,45 +20,23 @@ pub enum ParenthesizedClose {
     Value,
 }
 
-/// A PostgreSQL query admitted directly inside an enclosing construct.
-/// Parentheses are accepted here only when followed by a required set
-/// operation, avoiding the exact `(SELECT ...)` language also represented by
-/// a scalar subquery expression.
-/// The query inside a parenthesized subquery position: gram.y
-/// `select_with_parens: '(' select_no_parens ')'` without the parentheses
-/// the position supplies, so the `with_clause`, the set-operation chain and
-/// the ORDER BY / LIMIT / FOR UPDATE tail of `select_no_parens` all live
-/// here. It differs from [`Subquery`] in one way: a parenthesized left
-/// operand must be followed by a set operation
-/// ([`DirectSelectClause::ParenthesizedSet`]); requiring the continuation
-/// keeps a plain `(SELECT ...)` expression on the ordinary
-/// parenthesized-expression path.
+/// A PostgreSQL query admitted directly inside a position that supplies its
+/// own parentheses: gram.y `select_no_parens` (gram.y:12698) restricted to
+/// the forms whose `select_clause` is a `simple_select`.
+///
+/// gram.y makes the same restriction, and for the same reason. A bare
+/// `select_clause` with no sort, limit or locking tail is only
+/// `select_no_parens` when it is a `simple_select`; a parenthesized one
+/// reaches these positions as `select_with_parens` instead, through the
+/// position's own alternative. Admitting `( SELECT 1 )` here as well would
+/// give `IN ((SELECT 1))` two derivations.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DirectSubquery<'input> {
     pub with: Option<crate::ast::shared::with_clause::WithClause<'input>>,
-    pub clause: DirectSelectClause<'input>,
+    pub clause: crate::ast::dml::values::SimpleSelect<'input>,
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
     pub limit_offset: Option<Box<crate::ast::dml::select::LimitOffsetClause<'input>>>,
     pub for_update: Option<Box<crate::ast::dml::select::ForUpdateClause<'input>>>,
-}
-
-/// `select_clause` inside a parenthesized subquery position, see
-/// [`DirectSubquery`].
-#[derive(recursa::Node, Debug, Clone)]
-pub enum DirectSelectClause<'input> {
-    ParenthesizedSet(DirectParenthesizedSet<'input>),
-    Table(TableStmt<'input>),
-    Body(crate::ast::dml::values::CompoundBody<'input>),
-}
-
-/// A query whose left operand is parenthesized and whose set-operation
-/// continuation is required, such as `(SELECT 1) UNION SELECT 2`.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct DirectParenthesizedSet<'input> {
-    pub open: ParenthesizedOpen,
-    pub left: Box<Subquery<'input>>,
-    pub close: ParenthesizedClose,
-    pub set_op: SetOpCombiner<'input>,
 }
 
 /// One or more adjacent string literals, concatenated by Postgres into a
