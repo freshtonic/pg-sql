@@ -24,21 +24,26 @@ pub enum ExplainOptValue<'input> {
     Ident(crate::tokens::ColId<'input>),
 }
 
-/// A single explain option: `name value` (e.g., `costs off`).
+/// A single explain option: `name value` (e.g., `costs off`); gram.y
+/// `utility_option_elem`, whose name is `utility_option_name`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ExplainOption<'input> {
-    pub name: literal::AliasName<'input>,
+    pub name: literal::UtilityOptionName<'input>,
     pub value: Option<ExplainOptValue<'input>>,
 }
 
 /// Explain options: `(opt, ...)`.
 #[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct ExplainOptions<'input>(
+pub struct ExplainOptions<'input> {
+    /// The shared parenthesis markers: after `EXPLAIN` a `(` opens either
+    /// this list or a parenthesized query, and both reduce the same marker
+    /// before the next token decides.
+    pub open: crate::ast::shared::expr::ParenthesizedOpen,
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<ExplainOption<'input>>,
-);
+    pub options: recursa::Vec1<ExplainOption<'input>>,
+    pub close: crate::ast::shared::expr::ParenthesizedClose,
+}
 
 /// A statement that `EXPLAIN` accepts: gram.y `ExplainableStmt`.
 ///
@@ -60,7 +65,9 @@ pub enum ExplainableStmt<'input> {
     Execute(crate::ast::tcl::prepared::ExecuteStmt<'input>),
     Refresh(crate::ast::utility::refresh::RefreshStmt<'input>),
     Declare(crate::ast::cursor::declare::DeclareStmt<'input>),
-    Query(Box<crate::ast::dml::values::Subquery<'input>>),
+    Query(Box<crate::ast::dml::values::QueryBody<'input>>),
+    /// `WITH ...` before a query or a DML statement, factored as in `Statement`.
+    With(Box<crate::ast::shared::with_clause::WithStatement<'input>>),
 }
 
 /// An EXPLAIN option list followed by the statement being explained.

@@ -51,7 +51,7 @@ use self::{
     dml::insert::InsertStmt,
     dml::merge::MergeStmt,
     dml::update::UpdateStmt,
-    dml::values::Subquery,
+    dml::values::QueryBody,
     session::discard::*,
     session::notify::*,
     session::set_reset::{
@@ -288,7 +288,10 @@ pub enum Statement<'input> {
     Show(ShowStmt<'input>),
     Load(LoadStmt<'input>),
     Analyze(AnalyzeStmt<'input>),
-    // Query. `Subquery` owns the common prefix so the top-level dispatcher
-    // does not compare duplicate languages for WITH/SELECT/VALUES/TABLE.
-    Query(Box<Subquery<'input>>),
+    /// A query without a `WITH` prefix: gram.y `SelectStmt` less its
+    /// `with_clause` forms, which `With` owns.
+    Query(Box<QueryBody<'input>>),
+    /// `WITH ... { query | INSERT | UPDATE | DELETE | MERGE }`: the CTE list
+    /// is the shared prefix of five statements, so it is factored once.
+    With(Box<crate::ast::shared::with_clause::WithStatement<'input>>),
 }

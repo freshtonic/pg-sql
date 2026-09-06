@@ -46,6 +46,62 @@ pub struct InsertValueRows<'input> {
 /// PostgreSQL's query form includes `VALUES`, so the `Subquery` AST retains
 /// the distinction between SELECT, VALUES, TABLE, and parenthesized sources
 /// without declaring the VALUES language twice at this enum boundary.
+/// gram.y `insert_rest`: `SelectStmt`, `OVERRIDING ... SelectStmt`,
+/// `'(' insert_column_list ')' [OVERRIDING ...] SelectStmt` or
+/// `DEFAULT VALUES`, as two alternatives that both begin by shifting the
+/// parenthesis marker when a `(` follows the table name.
+///
+/// Variant ordering: `Columns` starts with `(`; `Plain` with `OVERRIDING`,
+/// `DEFAULT` or a query (which may also start with `(`, decided by the
+/// token after it).
+#[derive(recursa::Node, Debug, Clone)]
+pub enum InsertRest<'input> {
+    Columns(InsertColumnsRest<'input>),
+    Plain(InsertPlainRest<'input>),
+}
+
+/// `'(' insert_column_list ')' [OVERRIDING ...] source`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct InsertColumnsRest<'input> {
+    pub columns: Box<ColumnList<'input>>,
+    pub overriding: Option<OverridingClause>,
+    #[pretty(break_before = soft)]
+    pub source: Box<InsertSource<'input>>,
+}
+
+/// `[OVERRIDING ...] source`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct InsertPlainRest<'input> {
+    pub overriding: Option<OverridingClause>,
+    pub source: Box<InsertSource<'input>>,
+}
+
+impl<'input> InsertRest<'input> {
+    /// The explicit column list, when written.
+    pub fn columns(&self) -> Option<&ColumnList<'input>> {
+        match self {
+            InsertRest::Columns(rest) => Some(&rest.columns),
+            InsertRest::Plain(_) => None,
+        }
+    }
+
+    /// The `OVERRIDING` clause, when written.
+    pub fn overriding(&self) -> Option<&OverridingClause> {
+        match self {
+            InsertRest::Columns(rest) => rest.overriding.as_ref(),
+            InsertRest::Plain(rest) => rest.overriding.as_ref(),
+        }
+    }
+
+    /// The row source.
+    pub fn source(&self) -> &InsertSource<'input> {
+        match self {
+            InsertRest::Columns(rest) => &rest.source,
+            InsertRest::Plain(rest) => &rest.source,
+        }
+    }
+}
+
 #[derive(recursa::Node, Debug, Clone)]
 pub enum InsertSource<'input> {
     #[tok(DEFAULT, VALUES)]
@@ -139,19 +195,11 @@ pub struct InsertStmt<'input> {
     /// Optional `[AS] alias` after the target table, used to rebind the
     /// target in ON CONFLICT DO UPDATE expressions.
     pub alias: Option<InsertTableAlias<'input>>,
-    pub columns: Option<Box<ColumnList<'input>>>,
-    /// `OVERRIDING {SYSTEM|USER} VALUE` between the column list and the
-    /// source. Controls whether explicit values override GENERATED ALWAYS
-    /// identity columns.
-    pub overriding: Option<OverridingClause>,
+    /// gram.y `insert_rest`.
     #[pretty(break_before = soft)]
-    pub source: Box<InsertSource<'input>>,
-    /// Greedy: a leading ON starts this element instead of ending `InsertStmt` (bison shift preference).
-    #[greedy(ON)]
+    pub rest: InsertRest<'input>,
     #[pretty(break_before = soft)]
     pub on_conflict: Option<Box<OnConflictClause<'input>>>,
-    /// Greedy: a leading RETURNING starts this element instead of ending `InsertStmt` (bison shift preference).
-    #[greedy(RETURNING)]
     #[pretty(break_before = soft)]
     pub returning: Option<Box<ReturningClause<'input>>>,
 }
@@ -169,12 +217,17 @@ pub struct InsertColumnItem<'input> {
 
 /// Column list: `(col1, col2[1], col3.field, ...)`.
 #[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct ColumnList<'input>(
+pub struct ColumnList<'input> {
+    /// The shared parenthesis markers: after `INSERT INTO t` a `(` opens
+    /// either this list or a parenthesized query, and both reduce the same
+    /// marker before the next token decides (gram.y `insert_rest`).
+    pub open: crate::ast::shared::expr::ParenthesizedOpen,
+    /// gram.y `insert_column_list`: one or more items.
     #[sep(COMMA)]
     #[deref]
-    pub Vec<InsertColumnItem<'input>>,
-);
+    pub items: recursa::Vec1<InsertColumnItem<'input>>,
+    pub close: crate::ast::shared::expr::ParenthesizedClose,
+}
 
 /// Value list: `(col1, col2, ...)`.
 #[derive(recursa::Node, Debug, Clone, derive_more::Deref)]

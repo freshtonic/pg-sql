@@ -16,7 +16,9 @@ use crate::tokens::literal;
 /// not affect disambiguation.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum PreparableStmt<'input> {
-    Query(Box<crate::ast::dml::values::Subquery<'input>>),
+    Query(Box<crate::ast::dml::values::QueryBody<'input>>),
+    /// `WITH ...` before a query or a DML statement, factored as in `Statement`.
+    With(Box<crate::ast::shared::with_clause::WithStatement<'input>>),
     Insert(Box<crate::ast::dml::insert::InsertStmt<'input>>),
     Update(Box<crate::ast::dml::update::UpdateStmt<'input>>),
     Delete(Box<crate::ast::dml::delete::DeleteStmt<'input>>),
@@ -108,10 +110,8 @@ pub enum DeallocateTarget<'input> {
 /// DEALLOCATE [PREPARE] { name | ALL }
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DEALLOCATE, this)]
 pub struct DeallocateStmt<'input> {
-    /// Greedy: a leading PREPARE starts this element instead of ending `DeallocateStmt` (bison shift preference).
-    #[greedy(PREPARE)]
-    #[tok(DEALLOCATE, this)]
     #[presence(PREPARE)]
     pub prepare: bool,
     pub target: DeallocateTarget<'input>,

@@ -108,8 +108,12 @@ pub struct AggregateArgTypeList<'input>(
 /// DROP targets, ALTER targets, etc.).
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct QualifiedName<'input> {
+    /// gram.y `qualified_name: ColId | ColId indirection`: the first part is
+    /// a `ColId`, so `verbose`, `full` and the other `type_func_name`
+    /// keywords are not object names. (gram.y admits any `ColLabel` after
+    /// the dot; the later parts here keep the `ColId` set.)
     #[sep(DOT)]
-    pub parts: recursa::Vec1<literal::Ident<'input>>,
+    pub parts: recursa::Vec1<crate::tokens::ColId<'input>>,
 }
 
 impl<'input> QualifiedName<'input> {

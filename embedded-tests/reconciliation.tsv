@@ -62,6 +62,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	position_needle_uses_postgres_restricted_expression_extensions	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	qualified_ref_qualifier_is_a_col_id	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	reject_direct_parenthesized_set_duplicate_limit_offset_clauses	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	accept_function_applications_gram_y_admits	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	reject_invalid_function_application_states	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	reject_wildcard_as_an_ordinary_function_argument	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	type_name_preserves_legacy_fixed_variants_and_json_ident	issue-9-generated-expression

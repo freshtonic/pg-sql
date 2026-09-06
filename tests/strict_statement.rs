@@ -5,7 +5,10 @@
 
 use pg_sql::{
     LexErrorCode,
-    ast::{Statement, dml::select::SelectBody, dml::values::Subquery},
+    ast::{
+        Statement, dml::select::SelectBody, dml::values::SelectClause,
+        shared::with_clause::WithBody,
+    },
     lex,
 };
 use recursa::{ParseErrorKind, Span};
@@ -23,8 +26,8 @@ fn parses_one_complete_semantically_typed_statement() {
         parsed.into_ast(),
         Statement::Query(query)
             if matches!(
-                query.as_ref(),
-                Subquery::Body(body) if matches!(&body.body, SelectBody::Select(_))
+                &query.clause,
+                SelectClause::Body(body) if matches!(&body.body, SelectBody::Select(_))
             )
     ));
 }
@@ -50,8 +53,15 @@ fn query_statement_owns_every_postgresql_query_prefix() {
             .unwrap_or_else(|error| panic!("strict query {source:?}: {error}"));
 
         assert!(input.is_eof(), "strict query left input for {source:?}");
+        // gram.y `SelectStmt` covers both shapes; pg-sql factors the
+        // `with_clause` prefix once for every statement that admits it.
+        let is_query = match parsed.into_ast() {
+            Statement::Query(_) => true,
+            Statement::With(with) => matches!(with.body, WithBody::Query(_)),
+            _ => false,
+        };
         assert!(
-            matches!(parsed.into_ast(), Statement::Query(_)),
+            is_query,
             "query prefix selected a non-query statement for {source:?}"
         );
     }
@@ -86,8 +96,8 @@ fn parses_explain_without_optional_settings_as_a_guarded_statement() {
         explain.statement(),
         pg_sql::ast::utility::explain::ExplainableStmt::Query(query)
             if matches!(
-                query.as_ref(),
-                Subquery::Body(body) if matches!(&body.body, SelectBody::Select(_))
+                &query.clause,
+                SelectClause::Body(body) if matches!(&body.body, SelectBody::Select(_))
             )
     ));
 }

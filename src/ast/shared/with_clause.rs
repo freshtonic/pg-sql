@@ -36,11 +36,10 @@ pub enum SearchDirection {
 #[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
 #[tok(FIRST, BY, this)]
 pub struct SearchColumnList<'input>(
-    /// Greedy: a leading SET starts this element instead of ending `SearchColumnList` (bison shift preference).
-    #[greedy(SET)]
+    /// gram.y `columnList`: one or more `ColId`.
     #[sep(COMMA)]
     #[deref]
-    pub Vec<literal::AliasName<'input>>,
+    pub recursa::Vec1<crate::tokens::ColId<'input>>,
 );
 
 /// SEARCH clause: `SEARCH DEPTH|BREADTH FIRST BY col, ... SET col`
@@ -50,7 +49,7 @@ pub struct SearchClause<'input> {
     pub direction: SearchDirection,
     pub columns: SearchColumnList<'input>,
     #[tok(SET, this)]
-    pub set_column: literal::AliasName<'input>,
+    pub set_column: crate::tokens::ColId<'input>,
 }
 
 /// CYCLE clause: `CYCLE col, ... SET col [TO val DEFAULT val] USING col`
@@ -106,10 +105,12 @@ pub struct CteDefinition<'input> {
     pub cycle: Option<CycleClause<'input>>,
 }
 
-/// WITH clause: `WITH [RECURSIVE] cte_def, ...`
+/// WITH clause: `WITH [RECURSIVE] cte_def, ...` — gram.y `with_clause:
+/// WITH cte_list | WITH_LA cte_list | WITH RECURSIVE cte_list`, whose
+/// `WITH_LA` twin lets the first CTE be named `time` or `ordinality`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct WithClause<'input> {
-    #[tok(WITH)]
+    pub with: crate::ast::shared::flags::AnyWith,
     #[presence(RECURSIVE)]
     pub recursive: bool,
     #[sep(COMMA)]
@@ -131,23 +132,11 @@ pub struct WithStatement<'input> {
 /// the four DML variants have disjoint leading keywords.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum WithBody<'input> {
-    Query(Box<WithQuery<'input>>),
+    /// gram.y `select_no_parens: with_clause select_clause ...`.
+    Query(Box<crate::ast::dml::values::QueryBody<'input>>),
     Insert(Box<crate::ast::dml::insert::InsertStmt<'input>>),
     Update(Box<crate::ast::dml::update::UpdateStmt<'input>>),
     Delete(Box<crate::ast::dml::delete::DeleteStmt<'input>>),
     Merge(Box<crate::ast::dml::merge::MergeStmt<'input>>),
 }
 
-/// `Subquery` without the `WITH` form, for the body of a `WithStatement`.
-/// A set operation after the body belongs to the enclosing compound body
-/// (`CompoundBody` or `DirectCompoundBody`), which always wraps a
-/// `WithStatement`, so `WITH x AS (...) SELECT ... UNION SELECT ...` keeps
-/// one owner for the `UNION`. `Select` comes before `Values` so the `SELECT`
-/// keyword wins, as in `SelectBody`.
-#[derive(recursa::Node, Debug, Clone)]
-pub enum WithQuery<'input> {
-    Paren(crate::ast::dml::values::CompoundParen<'input>),
-    Table(crate::ast::dml::values::TableStmt<'input>),
-    Select(Box<crate::ast::dml::select::SelectStmt<'input>>),
-    Values(crate::ast::dml::select::ValuesBody<'input>),
-}

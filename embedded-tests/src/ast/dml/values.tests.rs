@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::ast::dml::values::{CompoundBody, CompoundParen, TableStmt};
+    use crate::ast::dml::values::{CompoundBody, QueryBody, TableStmt};
 
     #[test]
     fn parse_table_stmt() {
@@ -49,7 +49,7 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = TableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
         assert!(stmt.order_by.is_some());
         assert!(input.is_eof());
     }
@@ -59,13 +59,14 @@ mod tests {
         let lexed = crate::lex("TABLE t ORDER BY a, b DESC");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = TableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.order_by.unwrap().items.len(), 2);
         assert!(input.is_eof());
     }
 
-    /// A `TABLE` statement accepts at most one limiting clause (`LIMIT` or
-    /// `FETCH FIRST`) and at most one `OFFSET` clause, like `SELECT`.
+    /// A `TABLE` query accepts at most one limiting clause (`LIMIT` or
+    /// `FETCH FIRST`) and at most one `OFFSET` clause, like `SELECT`; the
+    /// tail belongs to the enclosing `QueryBody`.
     #[test]
     fn reject_table_stmt_duplicate_limit_offset_clauses() {
         for src in [
@@ -77,7 +78,7 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let parsed = TableStmt::parse(&mut input);
+            let parsed = QueryBody::parse(&mut input);
             assert!(
                 parsed.is_err() || !input.is_eof(),
                 "invalid duplicate clause parsed to EOF: {src:?}"
@@ -98,7 +99,7 @@ mod tests {
             "TABLE t OFFSET 3",
             "TABLE t FETCH FIRST 2 ROWS ONLY",
         ] {
-            assert_eq!(roundtrip::<TableStmt>(src), src);
+            assert_eq!(roundtrip::<QueryBody>(src), src);
         }
     }
 
@@ -115,7 +116,7 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let parsed = CompoundParen::parse(&mut input);
+            let parsed = QueryBody::parse(&mut input);
             assert!(
                 parsed.is_err() || !input.is_eof(),
                 "invalid duplicate clause parsed to EOF: {src:?}"
@@ -136,7 +137,7 @@ mod tests {
             "(SELECT 1) OFFSET 3",
             "(SELECT 1) FETCH FIRST 2 ROWS ONLY",
         ] {
-            assert_eq!(roundtrip::<CompoundParen>(src), src);
+            assert_eq!(roundtrip::<QueryBody>(src), src);
         }
     }
 }

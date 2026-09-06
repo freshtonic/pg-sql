@@ -1,7 +1,8 @@
 /// SELECT statement AST.
 use crate::ast::dml::values::Subquery;
 use crate::ast::shared::expr::{
-    CastType, DirectSubquery, Expr, FunctionApplicationExpr, FunctionCallApplication, JsonEncoding,
+    CastType, DirectSubquery, Expr, FunctionApplicationExpr, FunctionCallApplication, JsonBehaviorClause,
+    JsonEncoding,
     JsonOnBehavior, JsonPassing, JsonQuotes, JsonWrapper, ParenthesizedClose, ParenthesizedOpen,
     XmlPassingBy,
 };
@@ -19,8 +20,6 @@ pub enum SelectStar {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SelectExprItem<'input> {
     pub expr: Expr<'input>,
-    /// Greedy: any kind that can start this element continues it instead of ending `SelectExprItem` (bison shift preference).
-    #[greedy(all)]
     pub alias: Option<Alias<'input>>,
 }
 
@@ -98,8 +97,9 @@ pub struct InheritedTable<'input> {
 /// `AS name [(col1, col2)]` table alias form.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct TableAliasWithAs<'input> {
+    /// gram.y `alias_clause: AS ColId ...`.
     #[tok(AS, this)]
-    pub name: literal::AliasName<'input>,
+    pub name: crate::tokens::ColId<'input>,
     pub columns: Option<TableAliasColumnList<'input>>,
 }
 
@@ -120,9 +120,10 @@ pub struct TableAliasBare<'input> {
 #[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct TableAliasColumnList<'input>(
+    /// gram.y `name_list`.
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<literal::AliasName<'input>>,
+    pub recursa::Vec1<crate::tokens::ColId<'input>>,
 );
 
 /// Table alias: `AS name [(col1, col2)]` or bare `name [(col1, col2)]`.
@@ -163,8 +164,6 @@ pub struct ParenTableRef<'input> {
     pub open: SelectLParen,
     pub body: ParenTableBody<'input>,
     pub close: SelectRParen,
-    /// Greedy: a leading ABSENT starts this element instead of ending `ParenTableRef` (bison shift preference).
-    #[greedy(ABSENT)]
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
@@ -183,8 +182,6 @@ pub type SelectRParen = ParenthesizedClose;
 pub struct LateralSubquery<'input> {
     #[tok(LPAREN, this, RPAREN)]
     pub query: Box<Subquery<'input>>,
-    /// Greedy: a leading ABSENT starts this element instead of ending `LateralSubquery` (bison shift preference).
-    #[greedy(ABSENT)]
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
@@ -240,8 +237,9 @@ pub enum PlainTableAlias<'input> {
 /// `AS name [(col, ...)]` form.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct PlainTableAliasWithAs<'input> {
+    /// gram.y `alias_clause: AS ColId ...`.
     #[tok(AS, this)]
-    pub name: literal::AliasName<'input>,
+    pub name: crate::tokens::ColId<'input>,
     pub columns: Option<TableAliasColumnList<'input>>,
 }
 
@@ -256,7 +254,8 @@ pub struct PlainTableAliasBare<'input> {
 /// `name type` (e.g., `a int`).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FuncTableColumnDef<'input> {
-    pub name: literal::AliasName<'input>,
+    /// gram.y `TableFuncElement: ColId Typename ...`.
+    pub name: crate::tokens::ColId<'input>,
     pub type_name: crate::ast::shared::expr::CastType<'input>,
 }
 
@@ -264,8 +263,9 @@ pub struct FuncTableColumnDef<'input> {
 /// column definition list form for table-returning functions.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ColumnDefList<'input> {
+    /// gram.y `func_alias_clause: [AS] ColId '(' TableFuncElementList ')'`.
     #[tok(optional(AS), this)]
-    pub name: Option<literal::AliasName<'input>>,
+    pub name: Option<crate::tokens::ColId<'input>>,
     #[tok(LPAREN, this, RPAREN)]
     #[sep(COMMA)]
     pub columns: Vec<FuncTableColumnDef<'input>>,
@@ -304,13 +304,17 @@ pub enum FuncTableAliasAfterAs<'input> {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FuncTableAliasAsNamed<'input> {
-    pub name: literal::AliasName<'input>,
+    /// gram.y `alias_clause: AS ColId ...`.
+    pub name: crate::tokens::ColId<'input>,
     pub columns: Option<FuncTableAliasColumns<'input>>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FuncTableAliasNamed<'input> {
-    pub name: literal::Ident<'input>,
+    /// gram.y `alias_clause: ColId ...`; `Ident` (every non-reserved word)
+    /// also admitted `left`, `join` and the other `type_func_name`
+    /// keywords that continue a join chain.
+    pub name: crate::tokens::ColId<'input>,
     pub columns: Option<FuncTableAliasColumns<'input>>,
 }
 
@@ -324,7 +328,8 @@ pub struct FuncTableAliasColumns<'input> {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FuncTableAliasColumn<'input> {
-    pub name: literal::AliasName<'input>,
+    /// gram.y `name_list` / `TableFuncElement`, both `ColId`.
+    pub name: crate::tokens::ColId<'input>,
     pub type_name: Option<CastType<'input>>,
 }
 
@@ -334,8 +339,6 @@ pub struct FuncTableRef<'input> {
     pub func: FunctionApplicationExpr<'input>,
     #[presence(WITH, ORDINALITY)]
     pub ordinality: bool,
-    /// Greedy: a leading token from any of 9 kinds starts this element instead of ending `FuncTableRef` (bison shift preference).
-    #[greedy(ABSENT, CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT, TABLESAMPLE)]
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
@@ -376,8 +379,6 @@ pub struct SpecialFuncTableRef<'input> {
     pub func: SpecialFuncTableExpr<'input>,
     #[presence(WITH, ORDINALITY)]
     pub ordinality: bool,
-    /// Greedy: a leading token from any of 9 kinds starts this element instead of ending `SpecialFuncTableRef` (bison shift preference).
-    #[greedy(ABSENT, CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT, TABLESAMPLE)]
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
@@ -424,10 +425,8 @@ pub struct JsonTableTypedColumn<'input> {
     pub path: Option<JsonTableColumnPath<'input>>,
     pub wrapper: Option<JsonWrapper>,
     pub quotes: Option<JsonQuotes>,
-    /// Greedy: a leading token from any of 7 kinds starts this element instead of ending `JsonTableTypedColumn` (bison shift preference).
-    #[greedy(DEFAULT, EMPTY, ERROR, FALSE, NULL, TRUE, UNKNOWN)]
-    pub on_empty_behaviour: Option<JsonOnBehavior<'input>>,
-    pub on_error_behaviour: Option<JsonOnBehavior<'input>>,
+    /// gram.y `json_behavior_clause_opt`.
+    pub on_behavior: Option<JsonBehaviorClause<'input>>,
 }
 
 /// `FORMAT JSON [ENCODING name]` within JSON_TABLE.
@@ -513,8 +512,6 @@ pub struct JsonTable<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct JsonTableRef<'input> {
     pub table: JsonTable<'input>,
-    /// Greedy: a leading ABSENT starts this element instead of ending `JsonTableRef` (bison shift preference).
-    #[greedy(ABSENT)]
     pub alias: Option<TableAlias<'input>>,
 }
 
@@ -526,6 +523,37 @@ pub struct JsonTableRef<'input> {
 /// One entry of an `XMLNAMESPACES(...)` list: `‹uri› AS ‹prefix›`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct XmlNamespaceNamed<'input> {
+    /// gram.y `xml_namespace_el: b_expr AS ColLabel` (exclusions as in
+    /// `PositionInner`).
+    #[parse(pratt(exclude(
+        Collate,
+        QuantifiedComparisonCmp,
+        QuantifiedComparisonLike,
+        QuantifiedComparisonOp,
+        QuantifiedComparisonAdd,
+        QuantifiedComparisonMul,
+        QuantifiedComparisonPow,
+        IsJson,
+        IsNormalized,
+        BoolTest,
+        Notnull,
+        Isnull,
+        AtLocal,
+        AtTimeZone,
+        NotInExpr,
+        NotIlike,
+        NotSimilarTo,
+        NotLike,
+        SimilarTo,
+        Ilike,
+        Like,
+        Overlaps,
+        InExpr,
+        NotBetweenExpr,
+        BetweenExpr,
+        Or,
+        And
+    )))]
     pub uri: Box<Expr<'input>>,
     #[tok(AS, this)]
     pub prefix: literal::AliasName<'input>,
@@ -534,6 +562,36 @@ pub struct XmlNamespaceNamed<'input> {
 /// The `DEFAULT ‹uri›` entry of an `XMLNAMESPACES(...)` list.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct XmlNamespaceDefault<'input> {
+    /// gram.y `xml_namespace_el: DEFAULT b_expr`.
+    #[parse(pratt(exclude(
+        Collate,
+        QuantifiedComparisonCmp,
+        QuantifiedComparisonLike,
+        QuantifiedComparisonOp,
+        QuantifiedComparisonAdd,
+        QuantifiedComparisonMul,
+        QuantifiedComparisonPow,
+        IsJson,
+        IsNormalized,
+        BoolTest,
+        Notnull,
+        Isnull,
+        AtLocal,
+        AtTimeZone,
+        NotInExpr,
+        NotIlike,
+        NotSimilarTo,
+        NotLike,
+        SimilarTo,
+        Ilike,
+        Like,
+        Overlaps,
+        InExpr,
+        NotBetweenExpr,
+        BetweenExpr,
+        Or,
+        And
+    )))]
     #[tok(DEFAULT, this)]
     pub uri: Box<Expr<'input>>,
 }
@@ -557,7 +615,40 @@ pub struct XmlTableNamespaces<'input> {
 /// `PATH '‹xpath›'` clause on an XMLTABLE column.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableColumnPath<'input> {
-    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `XmlTableColumnPath`.
+    /// gram.y `xmltable_column_option_el: PATH b_expr` (exclusions as in
+    /// `PositionInner`), so the path ends before a following `NOT NULL`.
+    #[parse(pratt(exclude(
+        Collate,
+        QuantifiedComparisonCmp,
+        QuantifiedComparisonLike,
+        QuantifiedComparisonOp,
+        QuantifiedComparisonAdd,
+        QuantifiedComparisonMul,
+        QuantifiedComparisonPow,
+        IsJson,
+        IsNormalized,
+        BoolTest,
+        Notnull,
+        Isnull,
+        AtLocal,
+        AtTimeZone,
+        NotInExpr,
+        NotIlike,
+        NotSimilarTo,
+        NotLike,
+        SimilarTo,
+        Ilike,
+        Like,
+        Overlaps,
+        InExpr,
+        NotBetweenExpr,
+        BetweenExpr,
+        Or,
+        And
+    )))]
+    /// Greedy: `NOT` is not an extender of this restricted expression, but
+    /// the analysis does not consult the exclusion set for the overlap check
+    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
     #[greedy(NOT)]
     #[tok(PATH, this)]
     pub xpath: Box<Expr<'input>>,
@@ -566,7 +657,40 @@ pub struct XmlTableColumnPath<'input> {
 /// `DEFAULT ‹expr›` clause on an XMLTABLE column.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableColumnDefault<'input> {
-    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `XmlTableColumnDefault`.
+    /// gram.y `xmltable_column_option_el: DEFAULT b_expr` (exclusions as in
+    /// `PositionInner`), so the default ends before a following `NOT NULL`.
+    #[parse(pratt(exclude(
+        Collate,
+        QuantifiedComparisonCmp,
+        QuantifiedComparisonLike,
+        QuantifiedComparisonOp,
+        QuantifiedComparisonAdd,
+        QuantifiedComparisonMul,
+        QuantifiedComparisonPow,
+        IsJson,
+        IsNormalized,
+        BoolTest,
+        Notnull,
+        Isnull,
+        AtLocal,
+        AtTimeZone,
+        NotInExpr,
+        NotIlike,
+        NotSimilarTo,
+        NotLike,
+        SimilarTo,
+        Ilike,
+        Like,
+        Overlaps,
+        InExpr,
+        NotBetweenExpr,
+        BetweenExpr,
+        Or,
+        And
+    )))]
+    /// Greedy: `NOT` is not an extender of this restricted expression, but
+    /// the analysis does not consult the exclusion set for the overlap check
+    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
     #[greedy(NOT)]
     #[tok(DEFAULT, this)]
     pub value: Box<Expr<'input>>,
@@ -643,8 +767,6 @@ pub struct XmlTable<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct XmlTableRef<'input> {
     pub table: XmlTable<'input>,
-    /// Greedy: a leading ABSENT starts this element instead of ending `XmlTableRef` (bison shift preference).
-    #[greedy(ABSENT)]
     pub alias: Option<TableAlias<'input>>,
 }
 
@@ -673,8 +795,6 @@ pub struct RowsFromRef<'input> {
     pub items: RowsFromItemList<'input>,
     #[presence(WITH, ORDINALITY)]
     pub ordinality: bool,
-    /// Greedy: a leading token from any of 9 kinds starts this element instead of ending `RowsFromRef` (bison shift preference).
-    #[greedy(ABSENT, CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT, TABLESAMPLE)]
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
@@ -706,8 +826,6 @@ pub enum TableFunctionName<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct NamedTableRef<'input> {
     pub name: TableFunctionName<'input>,
-    /// Greedy: a leading ABSENT starts this element instead of ending `NamedTableRef` (bison shift preference).
-    #[greedy(ABSENT)]
     pub tail: Option<NamedTableRefTail<'input>>,
 }
 
@@ -724,16 +842,12 @@ pub struct NamedFunctionTableTail<'input> {
     pub application: FunctionCallApplication<'input>,
     #[presence(WITH, ORDINALITY)]
     pub ordinality: bool,
-    /// Greedy: a leading token from any of 9 kinds starts this element instead of ending `NamedFunctionTableTail` (bison shift preference).
-    #[greedy(ABSENT, CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT, TABLESAMPLE)]
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct NamedInheritedTail<'input> {
     pub star: SelectStar,
-    /// Greedy: a leading ABSENT starts this element instead of ending `NamedInheritedTail` (bison shift preference).
-    #[greedy(ABSENT)]
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
@@ -743,8 +857,6 @@ pub struct NamedInheritedTail<'input> {
 pub struct OnlyTableRef<'input> {
     pub only: SelectOnly,
     pub name: QualifiedName<'input>,
-    /// Greedy: a leading ABSENT starts this element instead of ending `OnlyTableRef` (bison shift preference).
-    #[greedy(ABSENT)]
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
@@ -857,8 +969,6 @@ pub enum ColNameTableName {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ColNameTableRef<'input> {
     pub name: ColNameTableName,
-    /// Greedy: a leading ABSENT starts this element instead of ending `ColNameTableRef` (bison shift preference).
-    #[greedy(ABSENT)]
     pub tail: Option<ColNameTableTail<'input>>,
 }
 
@@ -909,8 +1019,6 @@ pub enum JoinType {
     Full,
     #[tok(INNER, JOIN)]
     Inner,
-    #[tok(CROSS, JOIN)]
-    Cross,
     #[tok(JOIN)]
     Plain,
 }
@@ -940,16 +1048,18 @@ pub struct JoinOn<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(AS, this)]
 pub struct JoinUsingAlias<'input> {
-    pub name: literal::AliasName<'input>,
+    /// gram.y `USING '(' name_list ')' opt_alias_clause`: `AS ColId`.
+    pub name: crate::tokens::ColId<'input>,
 }
 
 /// Parenthesized comma-separated column list in a JOIN USING clause.
 #[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct JoinUsingColumns<'input>(
+    /// gram.y `name_list`: one or more `ColId`.
     #[deref]
     #[sep(COMMA)]
-    pub Vec<literal::AliasName<'input>>,
+    pub recursa::Vec1<crate::tokens::ColId<'input>>,
 );
 
 /// USING clause for JOIN: `USING (col, ...) [AS alias]`
@@ -967,17 +1077,53 @@ pub struct JoinUsing<'input> {
 /// keep those longer spellings deterministic without admitting it after INNER
 /// or CROSS.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct JoinSuffix<'input> {
-    #[presence(NATURAL)]
-    pub natural: bool,
+pub enum JoinSuffix<'input> {
+    /// `CROSS JOIN table_ref` and `NATURAL [join_type] JOIN table_ref`.
+    Unqualified(UnqualifiedJoin<'input>),
+    /// `[join_type] JOIN table_ref join_qual`.
+    Qualified(QualifiedJoin<'input>),
+}
+
+/// gram.y `joined_table`'s forms without a `join_qual`. Its precedence
+/// declaration `%left JOIN CROSS LEFT FULL RIGHT INNER_P NATURAL` makes a
+/// chain of them left-associative (`a CROSS JOIN b CROSS JOIN c` is
+/// `(a CROSS JOIN b) CROSS JOIN c`), so the right operand is one table
+/// reference and never a join; a parenthesized join is a
+/// `SimpleTableRef::Paren`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct UnqualifiedJoin<'input> {
+    pub kind: UnqualifiedJoinKind,
+    pub table: SimpleTableRef<'input>,
+    pub tablesample: Option<TableSampleClause<'input>>,
+}
+
+/// `CROSS JOIN` or `NATURAL [join_type] JOIN`.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum UnqualifiedJoinKind {
+    #[tok(CROSS, JOIN)]
+    Cross,
+    Natural(NaturalJoin),
+}
+
+/// `NATURAL [join_type] JOIN` — gram.y `NATURAL join_type JOIN | NATURAL JOIN`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct NaturalJoin {
+    #[tok(NATURAL, this)]
     pub join_type: JoinType,
-    /// PostgreSQL assigns an unparenthesized joined table recursively to the
-    /// right operand, preserving each condition at the grammar level that
-    /// owns it.
+}
+
+/// gram.y `table_ref join_type JOIN table_ref join_qual` and `table_ref JOIN
+/// table_ref join_qual`: the qualification is required, so `a JOIN b JOIN c
+/// ON x ON y` nests to the right (the inner join must own an `ON` before the
+/// outer one can) and `a JOIN b` alone is rejected, as PostgreSQL rejects it.
+/// PostgreSQL assigns an unparenthesized joined table recursively to the
+/// right operand, preserving each condition at the grammar level that owns
+/// it.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct QualifiedJoin<'input> {
+    pub join_type: JoinType,
     pub table: Box<TableRef<'input>>,
-    /// Greedy: a leading ON, USING starts this element instead of ending `JoinSuffix` (bison shift preference).
-    #[greedy(ON, USING)]
-    pub condition: Option<JoinCondition<'input>>,
+    pub condition: JoinCondition<'input>,
 }
 
 /// TABLESAMPLE clause: `TABLESAMPLE method (args) [REPEATABLE (seed)]`.
@@ -986,11 +1132,19 @@ pub struct JoinSuffix<'input> {
 pub struct TableSampleClause<'input> {
     #[tok(TABLESAMPLE, this)]
     pub method: literal::AliasName<'input>,
+    /// gram.y `tablesample_clause: TABLESAMPLE func_name '(' expr_list ')'`.
     #[tok(LPAREN, this, RPAREN)]
-    #[sep(COMMA)]
-    pub args: Vec<Expr<'input>>,
+    pub args: TableSampleArgs<'input>,
     pub repeatable: Option<TableSampleRepeatable<'input>>,
 }
+
+/// gram.y `expr_list`: one or more expressions.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+pub struct TableSampleArgs<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<Expr<'input>>,
+);
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct TableSampleRepeatable<'input> {
@@ -1092,10 +1246,9 @@ pub struct OrderByItem<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ORDER, BY, this)]
 pub struct OrderByClause<'input> {
-    /// Greedy: any kind that can start this element continues it instead of ending `OrderByClause` (bison shift preference).
-    #[greedy(all)]
+    /// gram.y `sortby_list`: one or more items.
     #[sep(COMMA)]
-    pub items: Vec<OrderByItem<'input>>,
+    pub items: recursa::Vec1<OrderByItem<'input>>,
 }
 
 /// OFFSET clause: `OFFSET expr`
@@ -1190,8 +1343,6 @@ pub enum LimitingClause<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct LimitThenOffset<'input> {
     pub limit: LimitingClause<'input>,
-    /// Greedy: a leading OFFSET starts this element instead of ending `LimitThenOffset` (bison shift preference).
-    #[greedy(OFFSET)]
     #[pretty(break_before = soft)]
     pub offset: Option<Box<OffsetClause<'input>>>,
 }
@@ -1200,8 +1351,6 @@ pub struct LimitThenOffset<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct OffsetThenLimit<'input> {
     pub offset: OffsetClause<'input>,
-    /// Greedy: a leading FETCH, LIMIT starts this element instead of ending `OffsetThenLimit` (bison shift preference).
-    #[greedy(FETCH, LIMIT)]
     #[pretty(break_before = soft)]
     pub limit: Option<Box<LimitingClause<'input>>>,
 }
@@ -1233,9 +1382,10 @@ pub struct ForUpdateClause<'input> {
 /// `OF name[, ...]` in a `FOR UPDATE` locking clause.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ForUpdateOf<'input> {
+    /// gram.y `OF qualified_name_list`: one or more names.
     #[tok(OF, this)]
     #[sep(COMMA)]
-    pub names: Vec<crate::tokens::ColId<'input>>,
+    pub names: recursa::Vec1<crate::tokens::ColId<'input>>,
 }
 
 /// `NOWAIT | SKIP LOCKED` suffix on a `FOR UPDATE` clause.
@@ -1272,10 +1422,9 @@ pub enum LockingMode {
 pub struct GroupByClause<'input> {
     /// Optional `DISTINCT` / `ALL` modifier (Postgres 16+).
     pub modifier: Option<GroupByModifier>,
-    /// Greedy: any kind that can start this element continues it instead of ending `GroupByClause` (bison shift preference).
-    #[greedy(all)]
+    /// gram.y `group_by_list`: one or more items.
     #[sep(COMMA)]
-    pub items: Vec<GroupByItem<'input>>,
+    pub items: recursa::Vec1<GroupByItem<'input>>,
 }
 
 /// `GROUP BY [DISTINCT|ALL]` modifier.
@@ -1417,7 +1566,6 @@ pub struct SelectStmt<'input> {
     /// `INTERSECT` is not in FIRST(`SelectHead`) at all, so a targetless
     /// `SELECT` is reached for it and composes as a set-operation operand
     /// (issue #55).
-    #[greedy(NULL, ABSENT)]
     #[pretty(break_before = soft)]
     pub head: Option<SelectHead<'input>>,
     #[pretty(break_before = soft)]
@@ -1428,18 +1576,6 @@ pub struct SelectStmt<'input> {
     pub having: Option<Box<HavingClause<'input>>>,
     #[pretty(break_before = soft)]
     pub window: Option<Box<WindowClause<'input>>>,
-    /// Greedy: a leading ORDER starts this element instead of ending `SelectStmt` (bison shift preference).
-    #[greedy(ORDER)]
-    #[pretty(break_before = soft)]
-    pub order_by: Option<Box<OrderByClause<'input>>>,
-    /// Greedy: a leading FETCH, LIMIT, OFFSET starts this element instead of ending `SelectStmt` (bison shift preference).
-    #[greedy(FETCH, LIMIT, OFFSET)]
-    /// LIMIT / OFFSET / FETCH FIRST tail. Postgres allows one limiting
-    /// clause (`LIMIT` or `FETCH FIRST`) and one `OFFSET`, in either order.
-    #[pretty(break_before = soft)]
-    pub limit_offset: Option<Box<LimitOffsetClause<'input>>>,
-    #[pretty(break_before = soft)]
-    pub for_update: Option<Box<ForUpdateClause<'input>>>,
 }
 
 /// The DISTINCT ON, bare DISTINCT, or unqualified head of a SELECT statement.
@@ -1572,12 +1708,11 @@ impl<'input> SelectStmt<'input> {
     }
 }
 
-/// A SELECT body that can appear in subqueries -- WITH, SELECT, or VALUES.
-/// WithBody must come before Select so `WITH ... SELECT` matches before bare `SELECT`.
-/// SelectStmt must come before ValuesStmt so `SELECT` keyword wins over ambiguity.
+/// gram.y `simple_select`'s `SELECT` and `values_clause` forms. A `WITH`
+/// query is a `Subquery` with its own clause: gram.y attaches the
+/// `with_clause` to `select_no_parens`, never to a set-operation member.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum SelectBody<'input> {
-    WithBody(Box<crate::ast::shared::with_clause::WithStatement<'input>>),
     Select(Box<SelectStmt<'input>>),
     Values(ValuesBody<'input>),
 }
@@ -1589,11 +1724,13 @@ pub struct ValuesRow<'input> {
     pub values: Vec<Expr<'input>>,
 }
 
-/// VALUES body: `VALUES (expr, ...), (expr, ...)`
-/// Can appear standalone or inside subqueries.
+/// VALUES body: `VALUES (expr, ...), (expr, ...)` — gram.y `values_clause`,
+/// which has at least one row. Can appear standalone or inside subqueries;
+/// the expression-level subquery forms share it, so `(VALUES (1))` has one
+/// row grammar wherever it occurs.
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(VALUES, this)]
 pub struct ValuesBody<'input> {
     #[sep(COMMA)]
-    pub rows: Vec<ValuesRow<'input>>,
+    pub rows: recursa::Vec1<ValuesRow<'input>>,
 }
