@@ -132,6 +132,7 @@ embedded-tests/src/ast/ddl/function.tests.rs	parse_drop_function_cascade	false
 embedded-tests/src/ast/ddl/function.tests.rs	parse_drop_function_multi	false
 embedded-tests/src/ast/ddl/function.tests.rs	parse_drop_function_named_param	false
 embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index	false
+embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_bare_func_with_operator_argument	false
 embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_bare_json_expr	false
 embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_collate	false
 embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_collate_and_opclass	false

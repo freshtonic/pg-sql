@@ -851,17 +851,6 @@ recursa::tokens! {
     // LALR(1). Recursive descent ignores the block. Nodes keep writing
     // `#[tok(NOT, BETWEEN)]`; lowering substitutes the merged kind where a
     // trigger can follow.
-    //
-    // `parser.c`'s sixth case, `NOT` before BETWEEN, IN, LIKE, ILIKE or
-    // SIMILAR (`NOT_LA`), is not declared. gram.y needs it twice: to give
-    // `a NOT LIKE b` the precedence of LIKE rather than of NOT, which the
-    // Pratt binding power of each `Expr` variant already does, and to let
-    // `DEFAULT b_expr` end before `NOT NULL`, which the `b_expr` positions
-    // (no LIKE, BETWEEN or IN extender) already do. gram.y also writes the
-    // prefix twin `NOT a_expr | NOT_LA a_expr` so that `NOT between` stays
-    // a negated column; recursa lowers such a twin only where the token ends
-    // its rule and rejects it inside a Pratt prefix (`RCA0404`), so the
-    // filter cannot be declared without losing that input (recursa #121).
     lookahead {
         // `parser.c`: `case NULLS_P:` -> `NULLS_LA` before FIRST, LAST
         // (gram.y `opt_nulls_order`).
@@ -875,6 +864,135 @@ recursa::tokens! {
         // `parser.c`: `case FORMAT:` -> `FORMAT_LA` before JSON (gram.y
         // `json_format_clause`, `utility_option_name`).
         FORMAT_LA = FORMAT before { JSON },
+        // `parser.c`: `case NOT:` -> `NOT_LA` before BETWEEN, IN_P, LIKE,
+        // ILIKE, SIMILAR (gram.y `a_expr NOT_LA BETWEEN ...`, and the
+        // prefix twin `NOT_LA a_expr` that keeps `NOT between` a negated
+        // column). recursa #121 twins a filtered token at any rule
+        // position, a Pratt prefix included, so the filter now lowers.
+        NOT_LA = NOT before { BETWEEN, IN, LIKE, ILIKE, SIMILAR },
+    }
+
+    // PostgreSQL's precedence declarations (`gram.y:829-900`, "Precedence:
+    // lowest to highest") on pg-sql's Pratt binding-power scale. recursa
+    // consults a level only where Pratt says nothing, so an operator that
+    // is already an `Expr` variant carries its level in its own binding
+    // power and appears here only where gram.y names the token itself.
+    //
+    // pg-sql's scale is gram.y's order times ten. gram.y puts two keyword
+    // levels (`UNBOUNDED NESTED`, then the `IDENT` group) between `ESCAPE`
+    // and `Op`, which the un-scaled numbering had no room for.
+    //
+    // Levels gram.y declares that pg-sql does not repeat here, and why:
+    // `UNION EXCEPT` / `INTERSECT` (gram.y:830-831) order the set
+    // operators, which pg-sql parses as `CompoundBody` rather than as
+    // `Expr` extenders; `NOT` (gram.y:834) is `Expr::Not`, a Pratt prefix;
+    // `+ - * / % ^` (gram.y:890-892), `AT` (gram.y:894), `COLLATE`
+    // (gram.y:895), `TYPECAST` (gram.y:899) and `.` (gram.y:900) are all
+    // `Expr` variants whose binding power is the level; `[` `]` `(` `)`
+    // (gram.y:897-898) bracket closed forms that need no precedence; and
+    // the `JOIN` group (gram.y:908) orders `joined_table`, which pg-sql
+    // parses without a precedence decision.
+    precedence {
+        // gram.y:832 `%left OR` -- `Expr::Or` (lbp 10).
+        left(bp = 10) { OR },
+        // gram.y:833 `%left AND` -- `Expr::And` (lbp 20).
+        left(bp = 20) { AND },
+        // gram.y:835 `%nonassoc IS ISNULL NOTNULL` ("IS sets precedence for
+        // IS NULL, etc") -- `Expr::BoolTest` and friends (bp 40).
+        nonassoc(bp = 40) { IS, ISNULL, NOTNULL },
+        // gram.y:836 `%nonassoc '<' '>' '=' LESS_EQUALS GREATER_EQUALS
+        // NOT_EQUALS` -- `Expr::Lt` and friends (lbp 50). PostgreSQL's
+        // scanner spells `<>` and `!=` as one `NOT_EQUALS`.
+        //
+        // `OVERLAPS` joins them, which gram.y does not do. gram.y needs no
+        // level for it because `a_expr: row OVERLAPS row` demands a row on
+        // the left, so `OVERLAPS` can never follow a bare column reference
+        // and the reduce is the only action there. pg-sql's `Expr::Overlaps`
+        // takes any operand, so `RANGE BETWEEN OVERLAPS ...` needs a level
+        // to settle `ColId: BETWEEN` against it; the level is the binding
+        // power `Expr::Overlaps` already carries, and it reduces, which is
+        // the answer gram.y arrives at without one.
+        nonassoc(bp = 50) { LT, GT, EQ, LTE, GTE, NEQ, BANGEQ, OVERLAPS },
+        // gram.y:837 `%nonassoc BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA` --
+        // `Expr::BetweenExpr`, `Expr::InExpr` and the LIKE family (bp 60).
+        // gram.y's `NOT_LA` is absent: in pg-sql it is a lookahead filter,
+        // not a token of its own, and the level it carries there is the
+        // binding power of `Expr::NotLike` and its siblings, which are
+        // already at 60.
+        nonassoc(bp = 60) { BETWEEN, IN, LIKE, ILIKE, SIMILAR },
+        // gram.y:838 `%nonassoc ESCAPE` ("ESCAPE must be just above
+        // LIKE/ILIKE/SIMILAR").
+        nonassoc(bp = 70) { ESCAPE },
+        // gram.y:886 `%nonassoc UNBOUNDED NESTED` ("ideally would have same
+        // precedence as IDENT"): deliberately just under the IDENT level so
+        // `UNBOUNDED PRECEDING` and `NESTED PATH` shift.
+        nonassoc(bp = 76) { UNBOUNDED, NESTED },
+        // gram.y:887-888 `%nonassoc IDENT PARTITION RANGE ROWS GROUPS
+        // PRECEDING FOLLOWING CUBE ROLLUP SET KEYS OBJECT_P SCALAR VALUE_P
+        // WITH WITHOUT PATH`: gram.y's reference level for keywords with no
+        // natural precedence, just under `Op`.
+        nonassoc(bp = 78) {
+            PARTITION,
+            RANGE,
+            ROWS,
+            GROUPS,
+            PRECEDING,
+            FOLLOWING,
+            CUBE,
+            ROLLUP,
+            SET,
+            KEYS,
+            OBJECT,
+            SCALAR,
+            VALUE,
+            WITH,
+            WITHOUT,
+            PATH
+        },
+        // gram.y:889 `%left Op OPERATOR` ("multi-character ops and
+        // user-defined operators") -- `Expr::CustomInfix` (lbp 80).
+        //
+        // PostgreSQL's scanner returns one `Op` token for every symbolic
+        // operator it does not name individually, so gram.y's single `Op`
+        // stands for the fixed operator tokens pg-sql spells out. Listed
+        // here are the ones pg-sql also admits as a Pratt prefix, which is
+        // where a decision falls outside Pratt: `RANGE BETWEEN ~ x ...`
+        // asks whether `BETWEEN` is the frame keyword with a prefixed bound
+        // or a column named `between`, and gram.y answers it by comparing
+        // `Op` against `BETWEEN`'s level.
+        left(bp = 80) {
+            CustomOp,
+            OPERATOR,
+            ATAT,
+            ATHASHAT,
+            ATMINUSAT,
+            ATSIGN,
+            BANGEQMINUS,
+            PIPEPIPESLASH,
+            PIPESLASH,
+            POUND,
+            QUESTIONDASH,
+            QUESTIONPIPE,
+            TILDE
+        },
+        // gram.y:894 `%left AT` ("sets precedence for AT TIME ZONE, AT
+        // LOCAL") -- `Expr::AtTimeZone` (lbp 90).
+        //
+        // The level is pg-sql's, not gram.y's: gram.y puts `AT` above `^`,
+        // while pg-sql's Pratt puts `AtTimeZone` between `Op` and `+`/`-`.
+        // That divergence predates this block. The block shares one scale
+        // with Pratt, so a level here must be the one Pratt already uses,
+        // and every state this level decides needs only `AT` above
+        // `BETWEEN`, which both placements give.
+        left(bp = 90) { AT },
+        // gram.y:890 `%left '+' '-'` -- `Expr::Add` and `Expr::Sub`
+        // (lbp 100), and the `Pos` / `Neg` prefixes.
+        left(bp = 100) { PLUS, MINUS },
+        // gram.y:896 `%right UMINUS`: a precedence-only name, carried by
+        // `#[parse(prec = UMINUS)]` on the parenthesised-query atom the way
+        // gram.y writes `'(' select_with_parens ')' %prec UMINUS`. It sits
+        // at `Expr::Neg`'s binding power (120).
+        right(bp = 120) { UMINUS },
     }
 }
 

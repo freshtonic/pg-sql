@@ -526,6 +526,7 @@ pub struct XmlNamespaceNamed<'input> {
     /// gram.y `xml_namespace_el: b_expr AS ColLabel` (exclusions as in
     /// `PositionInner`).
     #[parse(pratt(exclude(
+        Default,
         Collate,
         QuantifiedComparisonCmp,
         QuantifiedComparisonLike,
@@ -564,6 +565,7 @@ pub struct XmlNamespaceNamed<'input> {
 pub struct XmlNamespaceDefault<'input> {
     /// gram.y `xml_namespace_el: DEFAULT b_expr`.
     #[parse(pratt(exclude(
+        Default,
         Collate,
         QuantifiedComparisonCmp,
         QuantifiedComparisonLike,
@@ -618,6 +620,7 @@ pub struct XmlTableColumnPath<'input> {
     /// gram.y `xmltable_column_option_el: PATH b_expr` (exclusions as in
     /// `PositionInner`), so the path ends before a following `NOT NULL`.
     #[parse(pratt(exclude(
+        Default,
         Collate,
         QuantifiedComparisonCmp,
         QuantifiedComparisonLike,
@@ -660,6 +663,7 @@ pub struct XmlTableColumnDefault<'input> {
     /// gram.y `xmltable_column_option_el: DEFAULT b_expr` (exclusions as in
     /// `PositionInner`), so the default ends before a following `NOT NULL`.
     #[parse(pratt(exclude(
+        Default,
         Collate,
         QuantifiedComparisonCmp,
         QuantifiedComparisonLike,

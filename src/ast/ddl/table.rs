@@ -334,6 +334,7 @@ pub struct DefaultConstraint<'input> {
     /// `IN`, `IS NULL` or subquery extender, so `DEFAULT 1 NOT NULL` ends
     /// the default at `NOT`. The exclusions are those of `PositionInner`.
     #[parse(pratt(exclude(
+        Default,
         Collate,
         QuantifiedComparisonCmp,
         QuantifiedComparisonLike,

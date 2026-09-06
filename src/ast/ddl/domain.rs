@@ -43,6 +43,7 @@ pub struct DomainDefault<'input> {
     /// grammar; exclusions as in `PositionInner`), so `DEFAULT 1 NOT NULL`
     /// ends the default at `NOT`.
     #[parse(pratt(exclude(
+        Default,
         Collate,
         QuantifiedComparisonCmp,
         QuantifiedComparisonLike,

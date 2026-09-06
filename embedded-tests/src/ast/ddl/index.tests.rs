@@ -27,6 +27,21 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    /// A bare function element whose argument is an operator expression:
+    /// gram.y `index_elem: func_expr_windowless opt_collate ...`, whose
+    /// `func_application` argument is a full `a_expr`. The call's name is
+    /// `FuncCallName` (gram.y `func_name`), and dispatch must commit to the
+    /// call and let `Expr` run rather than deciding inside the first
+    /// argument, where an operator has no edge of its own (recursa #127).
+    #[test]
+    fn parse_create_index_bare_func_with_operator_argument() {
+        let lexed = crate::lex("CREATE INDEX i ON t (f(a + b))");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        assert!(input.is_eof());
+    }
+
     #[test]
     fn parse_create_index_with_desc() {
         let lexed = crate::lex("CREATE INDEX fooi ON foo (f1 DESC)");

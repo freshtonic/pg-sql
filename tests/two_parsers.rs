@@ -4,11 +4,32 @@
 //!
 //! The grammar must declare `parsers(rd = recursive_descent, lr =
 //! table_driven)` in `src/lib.rs` for `pg_sql::parsers::lr` to exist. That
-//! declaration is not yet in place: the table-driven construction still
-//! reports LR conflicts that only recursa changes can retire (recursa
-//! #120 to #127), and recursa treats every conflict as a hard build error. The
-//! `table-driven` cargo feature gates this test until the declaration lands;
-//! it is the seed of #69's gate, not the gate itself.
+//! declaration is still not in place. recursa #120 to #127 retired most of
+//! the LR conflicts -- 9,643 before the first pass, 522 after it, 33 now --
+//! but recursa refuses to generate the table-driven parser while any
+//! conflict remains (`RCA9105`: "the table-driven parser cannot be
+//! generated: 33 conflict(s)"), and the last 33 need changes pg-sql cannot
+//! make alone:
+//!
+//! - 23 have one root cause, recursa #129: recursive descent must commit
+//!   where two alternatives part, while LALR decides after the shared
+//!   prefix is on the stack, so pg-sql splits a nonterminal in two to keep
+//!   recursive descent working and LALR then reports the two halves as a
+//!   reduce/reduce. Mirroring gram.y's single nonterminal was tried for the
+//!   function-argument case and breaks `f(1, VARIADIC xs ORDER BY 1)`.
+//! - 1 is recursa #128: gram.y:837 gives `NOT_LA` a precedence level, and
+//!   recursa's `precedence { ... }` block cannot name a lookahead-filter
+//!   twin.
+//! - 9 are lexer matters PostgreSQL settles outside gram.y: 8 from pg-sql's
+//!   psql-variable extension (`SELECT int :'x'`, which psql substitutes
+//!   before the server ever lexes it) and 1 from `UESCAPE` after a `U&'...'`
+//!   literal, which `base_yylex` merges.
+//!
+//! The `table-driven` cargo feature therefore stays. It is not dead weight
+//! to be removed "now that both parsers exist": they do not both exist, and
+//! an unconditional test would fail to compile on every build. The feature
+//! comes off, and this becomes #69's gate, in the commit that adds the
+//! `parsers(...)` declaration.
 
 use pg_sql::{ast::Statement, lex, parsers::lr};
 
