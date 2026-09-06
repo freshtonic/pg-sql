@@ -12,25 +12,22 @@ use crate::tokens::{literal, punct};
 ///
 /// `gram.y` allows a bare IDENT plus a handful of keywords (`CONNECTION
 /// LIMIT`, `ENCODING`, `LOCATION`, `OWNER`, `TABLESPACE`, `TEMPLATE`) that
-/// would otherwise be reserved against the option name. `AliasName` admits
-/// every bareword including soft keywords, so it covers the IDENT branch
-/// and the bareword keyword cases. `CONNECTION LIMIT` is two tokens and
-/// gets its own variant. The kwlist.h `OWNER`, `TABLESPACE`, etc., are
-/// already either soft keywords or hard keywords in pg-sql — when soft,
-/// `AliasName::Bare` reclassifies them.
+/// would otherwise be reserved against the option name. `CreateDbOptWord`
+/// admits exactly the IDENT branch and those single-word keywords; the
+/// IDENT-only names (`is_template`, `allow_connections`, `strategy`,
+/// `locale`, `locale_provider`, `oid`, `icu_locale`, `icu_rules`,
+/// `builtin_locale`, `collation_version`, `lc_collate`, `lc_ctype`) are
+/// not keywords in pg-sql. Admitting every keyword here made `WITH`, `SET`
+/// and `REFRESH` ambiguous between the statement's own syntax and an
+/// option name. `CONNECTION LIMIT` is two tokens and gets its own variant.
 ///
 /// Variant ordering: the two-token `CONNECTION LIMIT` form before the
-/// general `AliasName` so the longer match wins.
+/// general word so the longer match wins.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CreateDbOptName<'input> {
     #[tok(CONNECTION, LIMIT)]
     ConnectionLimit,
-    /// Any bareword — covers IDENT and all the keyword-spelled option names
-    /// (`OWNER`, `TABLESPACE`, `TEMPLATE`, `ENCODING`, `LOCATION`, plus the
-    /// IDENT-only names like `is_template`, `allow_connections`, `strategy`,
-    /// `locale`, `locale_provider`, `oid`, `icu_locale`, `icu_rules`,
-    /// `builtin_locale`, `collation_version`, `lc_collate`, `lc_ctype`).
-    Name(literal::AliasName<'input>),
+    Name(literal::CreateDbOptWord<'input>),
 }
 
 /// The value of a CREATE DATABASE option — Postgres' `createdb_opt_item`.
@@ -85,9 +82,10 @@ pub enum DropDatabaseOption {
 /// `[WITH] (option [, ...])` option list on `DROP DATABASE`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DropDatabaseOptions {
+    /// gram.y `drop_option_list`: one or more options.
     #[tok(optional(WITH), LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub options: Vec<DropDatabaseOption>,
+    pub options: recursa::Vec1<DropDatabaseOption>,
 }
 
 /// `DROP DATABASE [IF EXISTS] name [[WITH] (FORCE)]` — no `CASCADE`/`RESTRICT`.
@@ -136,15 +134,12 @@ pub enum AlterDatabaseAction<'input> {
     Owner(OwnerTo<'input>),
     SetTablespace(SetTablespaceClause<'input>),
     RefreshCollVersion(RefreshCollVersion),
+    /// gram.y `AlterDatabaseSetStmt: ALTER DATABASE name SetResetClause`,
+    /// its `VariableResetStmt` half (`RESET TABLESPACE` is `RESET var_name`).
+    Reset(crate::ast::session::set_reset::ResetStmt<'input>),
     /// A single `createdb_opt_item` (no leading `WITH`). Listed last so
     /// the more specific `SET …`, `REFRESH …`, `OWNER TO …`, and
-    /// `RENAME TO …` branches win when they apply — `CreateDbOption`
-    /// starts with an `AliasName` (any bareword) and would otherwise
-    /// swallow `OWNER`, `TEMPLATE`, etc.
-    ///
-    /// This also represents `RESET TABLESPACE`: both tokens are valid as a
-    /// `CreateDbOption` name and value. A separate fixed-token variant would
-    /// duplicate that language and make the generated dispatcher ambiguous.
+    /// `RENAME TO …` branches win when they apply.
     WithOpt(CreateDbOption<'input>),
 }
 

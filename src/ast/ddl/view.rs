@@ -24,15 +24,20 @@ use crate::ast::shared::numbers::*;
 // ---------------------------------------------------------------------------
 
 /// CREATE VIEW statement.
+/// gram.y `ViewStmt: CREATE OptTemp VIEW ... | CREATE OR REPLACE OptTemp
+/// VIEW ...`. The optional keywords are plain presences so they inline into
+/// this rule, as gram.y spells them; a presence with a fixed token attached
+/// to it lowers to its own nonterminal, which has to be reduced before the
+/// `TEMP` that `CREATE TEMP TABLE` shifts.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(CREATE, this)]
 pub struct CreateViewStmt<'input> {
-    #[tok(CREATE, this)]
     #[presence(OR, REPLACE)]
     pub or_replace: bool,
     pub temp: Option<TempKw>,
-    #[tok(this, VIEW)]
     #[presence(RECURSIVE)]
     pub recursive: bool,
+    #[tok(VIEW, this)]
     pub name: QualifiedName<'input>,
     pub columns: Option<CreateViewColumnList<'input>>,
     /// Optional `USING access_method` (accepted by PG parser though rejected
@@ -85,14 +90,13 @@ pub enum ViewCheckMode {
 /// DROP VIEW [IF EXISTS] name [, name ...] [CASCADE | RESTRICT]
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, VIEW, this)]
 pub struct DropViewStmt<'input> {
-    #[tok(DROP, VIEW, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
-    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropViewStmt` (bison shift preference).
-    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
-    pub names: Vec<QualifiedName<'input>>,
+    /// gram.y `any_name_list`: one or more names.
+    pub names: recursa::Vec1<QualifiedName<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 

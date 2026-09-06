@@ -39,10 +39,6 @@ pub struct UsingIndexTablespace<'input> {
 #[tok(PRIMARY, KEY, this)]
 pub struct PrimaryKeyConstraint<'input> {
     pub index_tablespace: Option<UsingIndexTablespace<'input>>,
-    /// Greedy: a leading NOT starts this element instead of ending `PrimaryKeyConstraint` (bison shift preference).
-    #[greedy(NOT)]
-    /// Optional `[NOT] DEFERRABLE [INITIALLY {DEFERRED|IMMEDIATE}]` suffix.
-    pub attrs: ConstraintAttrs,
 }
 
 /// UNIQUE column constraint.
@@ -52,10 +48,6 @@ pub struct UniqueConstraint<'input> {
     /// Optional `NULLS [NOT] DISTINCT` qualifier (Postgres 15+).
     pub nulls: Option<NullsDistinctQualifier>,
     pub index_tablespace: Option<UsingIndexTablespace<'input>>,
-    /// Greedy: a leading NOT starts this element instead of ending `UniqueConstraint` (bison shift preference).
-    #[greedy(NOT)]
-    /// Optional `[NOT] DEFERRABLE [INITIALLY ...]` attributes.
-    pub attrs: ConstraintAttrs,
 }
 
 /// `NULLS DISTINCT` or `NULLS NOT DISTINCT` for UNIQUE constraints.
@@ -135,30 +127,18 @@ pub struct MatchClause {
     pub kind: MatchKind,
 }
 
-/// `DEFERRABLE | NOT DEFERRABLE`.
-///
-/// Variant ordering: `NotDeferrable` (two keywords) before `Deferrable`.
+/// gram.y `ConstraintAttr`: the deferrability entries of a column's
+/// constraint list (`ColConstraint: ConstraintAttr`).
 #[derive(recursa::Node, Debug, Clone)]
-pub enum DeferrableKind {
+pub enum ColumnConstraintAttr {
     #[tok(NOT, DEFERRABLE)]
     NotDeferrable,
     #[tok(DEFERRABLE)]
     Deferrable,
-}
-
-/// `INITIALLY DEFERRED | INITIALLY IMMEDIATE`.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct InitiallyClause {
-    #[tok(INITIALLY, this)]
-    pub mode: InitiallyMode,
-}
-
-#[derive(recursa::Node, Debug, Clone)]
-pub enum InitiallyMode {
-    #[tok(DEFERRED)]
-    Deferred,
-    #[tok(IMMEDIATE)]
-    Immediate,
+    #[tok(INITIALLY, DEFERRED)]
+    InitiallyDeferred,
+    #[tok(INITIALLY, IMMEDIATE)]
+    InitiallyImmediate,
 }
 
 /// `ON DELETE ...` or `ON UPDATE ...` trailing action on a REFERENCES
@@ -192,12 +172,6 @@ pub struct ReferencesConstraint<'input> {
     /// Greedy: a leading ON starts this element instead of ending `ReferencesConstraint` (bison shift preference).
     #[greedy(ON)]
     pub actions: Vec<OnAction<'input>>,
-    /// Greedy: a leading NOT starts this element instead of ending `ReferencesConstraint` (bison shift preference).
-    #[greedy(NOT)]
-    pub deferrable: Option<DeferrableKind>,
-    pub initially: Option<InitiallyClause>,
-    #[presence(NOT, VALID)]
-    pub not_valid: bool,
 }
 
 /// `CHECK (expr) [NO INHERIT] [NOT VALID]`
@@ -207,8 +181,18 @@ pub struct CheckConstraint<'input> {
     pub expr: crate::ast::shared::expr::Expr<'input>,
     #[presence(NO, INHERIT)]
     pub no_inherit: bool,
-    #[presence(NOT, VALID)]
-    pub not_valid: bool,
+}
+
+/// Table-level `CHECK (expr)` — gram.y `ConstraintElem: CHECK '(' a_expr ')'
+/// ConstraintAttributeSpec`, where the spec also carries `NO INHERIT` and
+/// `NOT VALID`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct TableCheck<'input> {
+    #[tok(CHECK, LPAREN, this, RPAREN)]
+    pub expr: crate::ast::shared::expr::Expr<'input>,
+    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `TableCheck` (bison shift preference).
+    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
+    pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
 /// `GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY` modifier.
@@ -300,11 +284,36 @@ pub struct SeqOptCache<'input> {
     pub value: crate::ast::shared::numbers::NumericOnly<'input>,
 }
 
-/// `GENERATED {ALWAYS | BY DEFAULT} AS (expr) STORED` column constraint.
+/// `GENERATED {ALWAYS | BY DEFAULT} AS {IDENTITY [(seq options)] | (expr)
+/// STORED}` — gram.y `ColConstraintElem`'s two `GENERATED generated_when AS`
+/// forms with their shared prefix factored, so the parser shifts `AS` before
+/// choosing.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct GeneratedStoredConstraint<'input> {
+pub struct GeneratedConstraint<'input> {
     #[tok(GENERATED, this)]
     pub mode: GeneratedIdentityMode,
+    pub body: GeneratedBody<'input>,
+}
+
+/// What follows `GENERATED generated_when`.
+///
+/// Variant ordering: both start with `AS`; `IDENTITY` or `(` decides.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum GeneratedBody<'input> {
+    Identity(GeneratedIdentityTail<'input>),
+    Stored(GeneratedStoredTail<'input>),
+}
+
+/// `AS IDENTITY [(seq options)]`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct GeneratedIdentityTail<'input> {
+    pub identity: AsIdentity,
+    pub seq_options: Option<IdentitySeqOptionList<'input>>,
+}
+
+/// `AS (expr) STORED`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct GeneratedStoredTail<'input> {
     #[tok(AS, LPAREN, this, RPAREN, STORED)]
     pub expr: crate::ast::shared::expr::Expr<'input>,
 }
@@ -320,7 +329,42 @@ pub struct CompressionConstraint<'input> {
 /// DEFAULT expr column constraint.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DefaultConstraint<'input> {
-    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `DefaultConstraint`.
+    /// gram.y `ColConstraintElem: DEFAULT b_expr`: the restricted
+    /// expression grammar, which has no `AND`, `OR`, `LIKE`, `BETWEEN`,
+    /// `IN`, `IS NULL` or subquery extender, so `DEFAULT 1 NOT NULL` ends
+    /// the default at `NOT`. The exclusions are those of `PositionInner`.
+    #[parse(pratt(exclude(
+        Collate,
+        QuantifiedComparisonCmp,
+        QuantifiedComparisonLike,
+        QuantifiedComparisonOp,
+        QuantifiedComparisonAdd,
+        QuantifiedComparisonMul,
+        QuantifiedComparisonPow,
+        IsJson,
+        IsNormalized,
+        BoolTest,
+        Notnull,
+        Isnull,
+        AtLocal,
+        AtTimeZone,
+        NotInExpr,
+        NotIlike,
+        NotSimilarTo,
+        NotLike,
+        SimilarTo,
+        Ilike,
+        Like,
+        Overlaps,
+        InExpr,
+        NotBetweenExpr,
+        BetweenExpr,
+        Or,
+        And
+    )))]
+    /// Greedy: `NOT` is not an extender of this restricted expression, but
+    /// the analysis does not consult the exclusion set for the overlap check
+    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
     #[greedy(NOT)]
     #[tok(DEFAULT, this)]
     pub expr: crate::ast::shared::expr::Expr<'input>,
@@ -335,8 +379,7 @@ pub struct DefaultConstraint<'input> {
 /// - References, Unique, Default, Check all start with distinct keywords
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ColumnConstraintKind<'input> {
-    GeneratedStored(GeneratedStoredConstraint<'input>),
-    GeneratedIdentity(GeneratedIdentityConstraint<'input>),
+    Generated(GeneratedConstraint<'input>),
     PrimaryKey(PrimaryKeyConstraint<'input>),
     #[tok(NOT, NULL)]
     NotNull,
@@ -344,6 +387,12 @@ pub enum ColumnConstraintKind<'input> {
     /// Bare `NULL` — redundant (columns are nullable by default) but
     /// syntactically accepted.
     Null,
+    /// gram.y `ColConstraint: ConstraintAttr`: `[NOT] DEFERRABLE` and
+    /// `INITIALLY {DEFERRED | IMMEDIATE}` are entries of the column's
+    /// constraint list in their own right, not a tail of the constraint
+    /// before them, so `UNIQUE NOT DEFERRABLE NOT NULL` needs no
+    /// two-token decision after `UNIQUE`.
+    Attr(ColumnConstraintAttr),
     Unique(UniqueConstraint<'input>),
     References(ReferencesConstraint<'input>),
     Default(DefaultConstraint<'input>),
@@ -441,7 +490,9 @@ pub struct ColumnDef<'input> {
         PRIMARY,
         REFERENCES,
         STORAGE,
-        UNIQUE
+        UNIQUE,
+        DEFERRABLE,
+        INITIALLY
     )]
     pub constraints: Vec<ColumnConstraint<'input>>,
 }
@@ -456,13 +507,6 @@ impl<'input> ColumnDef<'input> {
 }
 
 // --- Table-level constraints ---
-
-/// Optional trailing deferrable/initially pair shared by PK/UNIQUE/FK.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct ConstraintAttrs {
-    pub deferrable: Option<DeferrableKind>,
-    pub initially: Option<InitiallyClause>,
-}
 
 /// `USING INDEX name` — gram.y `ExistingIndex`. The named index must
 /// already exist on the table; used by `PRIMARY KEY USING INDEX name` and
@@ -519,9 +563,10 @@ pub struct IndexedConstraintColumns<'input> {
 pub struct TablePrimaryKey<'input> {
     #[tok(PRIMARY, KEY, this)]
     pub body: IndexedConstraintBody<'input>,
-    /// Greedy: a leading NOT starts this element instead of ending `TablePrimaryKey` (bison shift preference).
-    #[greedy(NOT)]
-    pub attrs: ConstraintAttrs,
+    /// gram.y `ConstraintAttributeSpec`.
+    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `TablePrimaryKey` (bison shift preference).
+    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
+    pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
 /// `INCLUDE (col, ...)` covering-index clause used on PRIMARY KEY / UNIQUE
@@ -548,9 +593,10 @@ pub struct TableUnique<'input> {
     /// semantic time; the diff oracle handles that case.
     pub nulls: Option<NullsDistinctQualifier>,
     pub body: IndexedConstraintBody<'input>,
-    /// Greedy: a leading NOT starts this element instead of ending `TableUnique` (bison shift preference).
-    #[greedy(NOT)]
-    pub attrs: ConstraintAttrs,
+    /// gram.y `ConstraintAttributeSpec`.
+    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `TableUnique` (bison shift preference).
+    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
+    pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
 /// Parenthesized local-column list in a table-level foreign-key constraint.
@@ -568,6 +614,10 @@ pub struct ForeignKeyColumnList<'input>(
 pub struct TableForeignKey<'input> {
     pub columns: ForeignKeyColumnList<'input>,
     pub references: ReferencesConstraint<'input>,
+    /// gram.y `ConstraintAttributeSpec` after `key_actions`.
+    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `TableForeignKey` (bison shift preference).
+    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
+    pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
 /// One entry in an EXCLUDE constraint's exclusion list: `index_elem WITH any_operator`.
@@ -578,7 +628,10 @@ pub struct TableForeignKey<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ExclusionConstraintElem<'input> {
     pub elem: crate::ast::ddl::index::IndexElem<'input>,
-    #[tok(WITH, this)]
+    /// gram.y writes a plain `WITH` here, so PostgreSQL rejects an operator
+    /// qualified by a schema named `time` or `ordinality`; pg-sql accepts
+    /// it, as it did before the marker.
+    pub with: crate::ast::shared::flags::AnyWith,
     pub op: ExclusionOperator<'input>,
 }
 
@@ -645,9 +698,10 @@ pub struct TableExclude<'input> {
     pub index_tablespace: Option<UsingIndexTablespace<'input>>,
     /// `WHERE (expr)` partial-constraint predicate (parens mandatory).
     pub where_clause: Option<ExclusionWhereClause<'input>>,
-    /// Greedy: a leading NOT starts this element instead of ending `TableExclude` (bison shift preference).
-    #[greedy(NOT)]
-    pub attrs: ConstraintAttrs,
+    /// gram.y `ConstraintAttributeSpec`.
+    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `TableExclude` (bison shift preference).
+    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
+    pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
 /// A table-level constraint kind.
@@ -660,7 +714,7 @@ pub enum TableConstraintKind<'input> {
     PrimaryKey(TablePrimaryKey<'input>),
     ForeignKey(TableForeignKey<'input>),
     Unique(TableUnique<'input>),
-    Check(CheckConstraint<'input>),
+    Check(TableCheck<'input>),
     Exclude(TableExclude<'input>),
 }
 
@@ -917,7 +971,9 @@ pub struct PartitionColumnOptionDef<'input> {
         PRIMARY,
         REFERENCES,
         STORAGE,
-        UNIQUE
+        UNIQUE,
+        DEFERRABLE,
+        INITIALLY
     )]
     pub constraints: Vec<ColumnConstraint<'input>>,
 }
@@ -1256,14 +1312,13 @@ pub struct CreatePartitionOfStmt<'input> {
 /// DROP TABLE [IF EXISTS] name [, name ...] [CASCADE | RESTRICT]
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, TABLE, this)]
 pub struct DropTableStmt<'input> {
-    #[tok(DROP, TABLE, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
-    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropTableStmt` (bison shift preference).
-    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
-    pub names: Vec<QualifiedName<'input>>,
+    /// gram.y `any_name_list`: one or more names.
+    pub names: recursa::Vec1<QualifiedName<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 
@@ -1545,17 +1600,13 @@ pub struct AddColumnCmd<'input> {
 /// variant for symmetry with the corpus' usage (it only ever sits at the end).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AddTableConstraintCmd<'input> {
+    /// gram.y `ADD_P TableConstraint`: `NOT VALID` is an entry of the
+    /// constraint's own `ConstraintAttributeSpec`, not a suffix of the
+    /// command.
     #[tok(ADD, this)]
     pub constraint: crate::ast::ddl::table::TableConstraint<'input>,
-    pub not_valid: Option<NotValid>,
 }
 
-/// `NOT VALID` — the unverified-constraint marker.
-#[derive(recursa::Node, Debug, Clone)]
-pub enum NotValid {
-    #[tok(NOT, VALID)]
-    Value,
-}
 
 /// `ADD columnDef` (no `COLUMN` keyword, no `IF NOT EXISTS`).
 ///
@@ -1574,7 +1625,10 @@ pub struct AddColumnBareCmd<'input> {
 pub struct AlterConstraintCmd<'input> {
     #[tok(ALTER, CONSTRAINT, this)]
     pub name: literal::Ident<'input>,
-    pub attrs: crate::ast::ddl::table::ConstraintAttrs,
+    /// gram.y `ConstraintAttributeSpec`.
+    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `AlterConstraintCmd` (bison shift preference).
+    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
+    pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
 /// `ALTER [COLUMN] colname …` — the big `ALTER COLUMN` cmd. The `colname`
