@@ -2332,7 +2332,13 @@ pub enum WithOrWithout {
 
 /// `{WITH|WITHOUT} UNIQUE [KEYS]` — duplicate-key handling for `JSON()` /
 /// `JSON_OBJECT()`.
+///
+/// gram.y `json_key_uniqueness_constraint_opt`: "KEYS is a noise word here.
+/// To avoid shift/reduce conflicts, assign the KEYS-less productions a
+/// precedence less than IDENT (i.e., less than KEYS). This prevents reducing
+/// them when the next token is KEYS." `UNBOUNDED` (gram.y:886) is that level.
 #[derive(recursa::Node, Debug, Clone)]
+#[parse(prec = UNBOUNDED)]
 pub struct JsonUniqueKeys {
     #[tok(this, UNIQUE)]
     pub with_or_without: WithOrWithout,
@@ -2791,7 +2797,14 @@ pub enum JsonTypeKind {
 
 /// The tail of an `IS JSON` predicate: `[NOT] JSON [{VALUE|SCALAR|ARRAY|OBJECT}]
 /// [{WITH|WITHOUT} UNIQUE [KEYS]]`.
+///
+/// gram.y `json_predicate_type_constraint: JSON %prec UNBOUNDED` and
+/// `json_key_uniqueness_constraint_opt: /* EMPTY */ %prec UNBOUNDED`: the
+/// tail-less productions sit below the `IDENT` level that carries `VALUE`,
+/// `SCALAR`, `OBJECT`, `WITH`, `WITHOUT` and `KEYS`, so the parser shifts the
+/// tail rather than ending the predicate.
 #[derive(recursa::Node, Debug, Clone)]
+#[parse(prec = UNBOUNDED)]
 pub struct IsJsonTail {
     #[tok(this, JSON)]
     #[presence(NOT)]
