@@ -11,7 +11,9 @@
 //! psql input *means* is the `pg-psql` crate's subject, and the tests that
 //! asserted a substituted reading moved there with the behaviour.
 
-use pg_sql::ast::{Statement, dml::select::SelectBody, dml::values::SelectClause};
+use pg_sql::ast::{
+    Statement, dml::select::SelectBody, dml::values::SelectClause, dml::values::SimpleSelect,
+};
 use pg_sql::document::{self, SqlParseError};
 use recursa::Span;
 
@@ -111,7 +113,8 @@ fn statements_are_semantically_typed() {
         Statement::Query(query)
             if matches!(
                 &query.clause,
-                SelectClause::Body(body) if matches!(&body.body, SelectBody::Select(_))
+                SelectClause::Simple(SimpleSelect::Body(body))
+                    if matches!(&body.body, SelectBody::Select(_))
             )
     ));
 }

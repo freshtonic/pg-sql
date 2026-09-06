@@ -69,30 +69,60 @@ pub struct QueryBody<'input> {
     pub for_update: Option<Box<crate::ast::dml::select::ForUpdateClause<'input>>>,
 }
 
-/// gram.y `select_clause: simple_select | select_with_parens`, with the
-/// set-operation forms of `simple_select` as the optional continuation of
-/// each member.
+/// gram.y `select_with_parens` (gram.y:12682):
 ///
-/// Variant ordering: `Paren` starts with `(`, `Table` with `TABLE`, `Body`
-/// with `SELECT` or `VALUES`.
+/// ```text
+/// select_with_parens: '(' select_no_parens ')' | '(' select_with_parens ')'
+/// ```
+///
+/// The second production needs no separate variant here: [`Subquery`] is
+/// `select_no_parens`, and its `select_clause` admits a further
+/// `SelectWithParens`, so `((SELECT 1))` reduces through this one rule.
+///
+/// This is the single nonterminal that [`SelectClause`] and [`SimpleSelect`]
+/// share. gram.y factors it for the same reason (gram.y:12658): spelling the
+/// parenthesized query once is what stops the two from carrying duplicate
+/// copies of every production below them.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum SelectClause<'input> {
-    Paren(CompoundParen<'input>),
+pub struct SelectWithParens<'input> {
+    pub open: crate::ast::shared::expr::ParenthesizedOpen,
+    pub inner: Box<Subquery<'input>>,
+    pub close: crate::ast::shared::expr::ParenthesizedClose,
+}
+
+/// A parenthesized left operand with its required set operation:
+/// gram.y `simple_select: select_clause UNION set_quantifier select_clause`
+/// (gram.y:12786) where the left `select_clause` is a `select_with_parens`,
+/// as in `(SELECT 1) UNION SELECT 2`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct ParenthesizedSetOp<'input> {
+    pub left: SelectWithParens<'input>,
+    pub set_op: SetOpCombiner<'input>,
+}
+
+/// gram.y `simple_select` (gram.y:12786): the set-operation members of a
+/// query, which are exactly the `select_clause` forms that carry no outer
+/// parentheses of their own.
+///
+/// Variant ordering: `ParenthesizedSet` starts with `(`, `Table` with
+/// `TABLE`, `Body` with `SELECT` or `VALUES`.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum SimpleSelect<'input> {
+    ParenthesizedSet(ParenthesizedSetOp<'input>),
     Table(TableStmt<'input>),
     Body(CompoundBody<'input>),
 }
 
-/// gram.y `select_with_parens` as a `select_clause`, with an optional set
-/// operation: `(SELECT ... UNION ALL ...) EXCEPT ...`.
+/// gram.y `select_clause: simple_select | select_with_parens`
+/// (gram.y:12757).
+///
+/// Variant ordering: both alternatives can begin with `(`, and they part
+/// company after the balanced group — a set operation there continues a
+/// `simple_select`, and anything else ends the `select_with_parens`.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct CompoundParen<'input> {
-    /// The parentheses are the shared markers every subquery position uses,
-    /// so `((SELECT 1) UNION SELECT 2)` reduces one `(` the same way on the
-    /// expression path and on the set-operation path.
-    pub open: crate::ast::shared::expr::ParenthesizedOpen,
-    pub inner: Box<Subquery<'input>>,
-    pub close: crate::ast::shared::expr::ParenthesizedClose,
-    pub set_op: Option<SetOpCombiner<'input>>,
+pub enum SelectClause<'input> {
+    Simple(SimpleSelect<'input>),
+    Parens(SelectWithParens<'input>),
 }
 
 /// A `SELECT` or `VALUES` `simple_select` with an optional set operation.
