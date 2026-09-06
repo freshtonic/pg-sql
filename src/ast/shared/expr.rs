@@ -3,7 +3,6 @@
 /// Handles atoms, prefix (NOT, unary minus), infix (AND, OR, comparisons,
 /// arithmetic), and postfix operators (::type cast, IS [NOT] TRUE/FALSE/UNKNOWN/NULL,
 /// IN (list)).
-use crate::ast::dml::select::SelectStmt;
 use crate::ast::dml::values::{SetOpCombiner, Subquery, TableStmt};
 use crate::tokens::literal;
 
@@ -25,14 +24,31 @@ pub enum ParenthesizedClose {
 /// Parentheses are accepted here only when followed by a required set
 /// operation, avoiding the exact `(SELECT ...)` language also represented by
 /// a scalar subquery expression.
+/// The query inside a parenthesized subquery position: gram.y
+/// `select_with_parens: '(' select_no_parens ')'` without the parentheses
+/// the position supplies, so the `with_clause`, the set-operation chain and
+/// the ORDER BY / LIMIT / FOR UPDATE tail of `select_no_parens` all live
+/// here. It differs from [`Subquery`] in one way: a parenthesized left
+/// operand must be followed by a set operation
+/// ([`DirectSelectClause::ParenthesizedSet`]); requiring the continuation
+/// keeps a plain `(SELECT ...)` expression on the ordinary
+/// parenthesized-expression path.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum DirectSubquery<'input> {
-    /// A parenthesized query followed by a required set operation. Requiring
-    /// the continuation keeps a plain `(SELECT ...)` expression on the
-    /// ordinary parenthesized-expression path.
+pub struct DirectSubquery<'input> {
+    pub with: Option<crate::ast::shared::with_clause::WithClause<'input>>,
+    pub clause: DirectSelectClause<'input>,
+    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
+    pub limit_offset: Option<Box<crate::ast::dml::select::LimitOffsetClause<'input>>>,
+    pub for_update: Option<Box<crate::ast::dml::select::ForUpdateClause<'input>>>,
+}
+
+/// `select_clause` inside a parenthesized subquery position, see
+/// [`DirectSubquery`].
+#[derive(recursa::Node, Debug, Clone)]
+pub enum DirectSelectClause<'input> {
     ParenthesizedSet(DirectParenthesizedSet<'input>),
     Table(TableStmt<'input>),
-    Body(DirectCompoundBody<'input>),
+    Body(crate::ast::dml::values::CompoundBody<'input>),
 }
 
 /// A query whose left operand is parenthesized and whose set-operation
@@ -43,55 +59,6 @@ pub struct DirectParenthesizedSet<'input> {
     pub left: Box<Subquery<'input>>,
     pub close: ParenthesizedClose,
     pub set_op: SetOpCombiner<'input>,
-    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
-    pub limit_offset: Option<Box<crate::ast::dml::select::LimitOffsetClause<'input>>>,
-}
-
-/// SELECT/WITH/VALUES query body with an optional set-operation continuation.
-/// The local VALUES form requires at least one row; the older shared
-/// `ValuesBody` uses a nullable row vector, which makes bare `VALUES`
-/// indistinguishable from a column expression in bounded lookahead.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct DirectCompoundBody<'input> {
-    pub body: DirectSelectBody<'input>,
-    pub set_op: Option<SetOpCombiner<'input>>,
-}
-
-#[derive(recursa::Node, Debug, Clone)]
-pub enum DirectSelectBody<'input> {
-    WithBody(Box<crate::ast::shared::with_clause::WithStatement<'input>>),
-    Select(Box<SelectStmt<'input>>),
-    Values(DirectValuesBody<'input>),
-}
-
-#[derive(recursa::Node, Debug, Clone)]
-#[tok(VALUES, this)]
-pub struct DirectValuesBody<'input> {
-    #[sep(COMMA)]
-    pub rows: recursa::Vec1<DirectValuesRow<'input>>,
-}
-
-/// A VALUES row with required delimiters represented as semantic markers.
-/// This prevents the nullable element list from hiding the leading `(` in
-/// FIRST-k analysis.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct DirectValuesRow<'input> {
-    pub open: DirectValuesOpen,
-    #[sep(COMMA)]
-    pub values: Option<recursa::Vec1<Expr<'input>>>,
-    pub close: DirectValuesClose,
-}
-
-#[derive(recursa::Node, Debug, Clone)]
-pub enum DirectValuesOpen {
-    #[tok(LPAREN)]
-    Value,
-}
-
-#[derive(recursa::Node, Debug, Clone)]
-pub enum DirectValuesClose {
-    #[tok(RPAREN)]
-    Value,
 }
 
 /// One or more adjacent string literals, concatenated by Postgres into a
@@ -317,6 +284,35 @@ pub struct QualifiedRef<'input> {
     pub table: crate::tokens::ColId<'input>,
     #[tok(DOT, this)]
     pub column: literal::AliasName<'input>,
+    /// The rest of gram.y `columnref: ColId indirection`: subscripts, each
+    /// with the field selectors that may follow it.
+    /// Greedy: a leading LBRACKET starts this element instead of ending `QualifiedRef` (bison shift preference).
+    #[greedy(LBRACKET)]
+    pub subscripts: Vec<SubscriptIndirection<'input>>,
+}
+
+/// gram.y `columnref: ColId | ColId indirection` for an unqualified name:
+/// the subscripts (and the field selectors after each) belong to the
+/// column reference. Subscripts are not a postfix operator of every
+/// expression: gram.y attaches `indirection` only to `columnref`,
+/// `PARAM`, `'(' a_expr ')'` and `select_with_parens`, so `x::int[1]` is a
+/// cast to an array type and `f(x)[1]` is rejected, as PostgreSQL has it.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct ColumnRef<'input> {
+    pub name: crate::tokens::ColId<'input>,
+    /// Greedy: a leading LBRACKET starts this element instead of ending `ColumnRef` (bison shift preference).
+    #[greedy(LBRACKET)]
+    pub subscripts: Vec<SubscriptIndirection<'input>>,
+}
+
+/// gram.y `PARAM opt_indirection`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct PositionalParam<'input> {
+    #[lex(matcher)]
+    pub param: literal::DollarNum<'input>,
+    /// Greedy: a leading LBRACKET starts this element instead of ending `PositionalParam` (bison shift preference).
+    #[greedy(LBRACKET)]
+    pub subscripts: Vec<SubscriptIndirection<'input>>,
 }
 
 /// Qualified wildcard: `table.*`
@@ -366,9 +362,9 @@ pub struct WindowPartitionBy<'input> {
     /// Greedy: a leading GROUPS, RANGE, ROWS starts this element instead of ending `WindowPartitionBy` (bison shift preference).
     /// `ORDER` is reserved, so a `ColId`-qualified `QualifiedRef` cannot begin
     /// an expression with it and the overlap no longer contains it.
-    #[greedy(GROUPS, RANGE, ROWS)]
+    /// gram.y `opt_partition_clause: PARTITION BY expr_list`: one or more.
     #[sep(COMMA)]
-    pub exprs: Vec<Expr<'input>>,
+    pub exprs: recursa::Vec1<Expr<'input>>,
 }
 
 /// Frame unit: `ROWS | RANGE | GROUPS`.
@@ -615,6 +611,28 @@ pub struct FunctionApplicationExpr<'input> {
     pub application: FunctionCallApplication<'input>,
 }
 
+/// Function name in call position: gram.y `func_name`.
+///
+/// PostgreSQL's `func_name` admits a `type_function_name` directly, while a
+/// dotted name begins with `ColId`. Keeping those two admission sets here is
+/// important: `QualifiedName` is intentionally broader and would also admit
+/// every `COL_NAME` keyword, making the dedicated XML/JSON expression forms
+/// indistinguishable from an ordinary function call.
+///
+/// This stays its own node: inlining the two names into the call variants
+/// (each carrying the call tail) makes recursa's predictive dispatch for the
+/// call walk into the first argument, where an operator has no edge, so
+/// `f(a + b)` fails before `Expr` runs. The table-driven lowering pays for
+/// the separate node with `$end` in its FOLLOW set (recursa #125).
+///
+/// Variant ordering: `Qualified` needs a dotted tail, `Name` a single
+/// `type_function_name`; they share their first token and part on the dot.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum FuncCallName<'input> {
+    Qualified(FuncCallQualifiedName<'input>),
+    Name(crate::tokens::type_function_name<'input>),
+}
+
 /// `WITHIN GROUP (ORDER BY ...)` clause for ordered-set aggregate functions.
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(WITHIN, GROUP, this)]
@@ -633,21 +651,9 @@ pub struct FilterClause<'input> {
     pub body: Box<crate::ast::dml::select::WhereClause<'input>>,
 }
 
-/// Function name in call position.
-///
-/// PostgreSQL's `func_name` admits a `type_function_name` directly, while a
-/// dotted name begins with `ColId`. Keeping those two admission sets here is
-/// important: `QualifiedName` is intentionally broader and would also admit
-/// every `COL_NAME` keyword, making the dedicated XML/JSON expression forms
-/// indistinguishable from an ordinary function call.
-#[derive(recursa::Node, Debug, Clone)]
-pub enum FuncCallName<'input> {
-    Qualified(FuncCallQualifiedName<'input>),
-    Name(crate::tokens::type_function_name<'input>),
-}
-
-/// A dotted function name. At least one dotted tail is required so this does
-/// not overlap the unqualified `type_function_name` alternative above.
+/// A dotted function name — the `ColId indirection` arm of gram.y's
+/// `func_name`. At least one dotted tail is required so this does not
+/// overlap the unqualified `type_function_name` arm of [`FuncCallName`].
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FuncCallQualifiedName<'input> {
     pub first: crate::tokens::ColId<'input>,
@@ -674,89 +680,48 @@ pub enum FunctionCallClose {
     Value,
 }
 
-/// Function application with no `WITHIN GROUP` suffix.
-///
-/// This state admits every PostgreSQL `func_application`; `FILTER` and
-/// `OVER` remain available independently.
+/// gram.y `func_expr: func_application within_group_clause filter_clause
+/// over_clause`: the argument list and every optional suffix in one shape.
+/// One shape rather than a "plain" and a "within group" tail: the two ended
+/// the argument list on the same `)` and could only be told apart after it,
+/// which a one-token parser cannot do.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct FunctionPlainTail<'input> {
+pub struct FunctionCallSuffix<'input> {
     pub open: FunctionCallOpen,
     pub body: Option<FunctionCallBody<'input>>,
     pub close: FunctionCallClose,
-    /// Greedy: a leading FILTER starts this element instead of ending `FunctionPlainTail` (bison shift preference).
-    #[greedy(FILTER)]
+    pub within_group: Option<WithinGroupClause<'input>>,
     pub filter: Option<FilterClause<'input>>,
-    /// Greedy: a leading OVER starts this element instead of ending `FunctionPlainTail` (bison shift preference).
-    #[greedy(OVER)]
     pub window: Option<WindowSpec<'input>>,
 }
 
-/// A required argument list with no inner aggregate order.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct FunctionWithinGroupArguments<'input> {
-    pub args: FunctionArgumentSequence<'input>,
-}
-
-/// `ALL` arguments eligible for a following `WITHIN GROUP`.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct FunctionWithinGroupAllArguments<'input> {
-    #[tok(ALL, this)]
-    pub args: FunctionArgumentSequence<'input>,
-}
-
-/// Application bodies that pass PostgreSQL's `func_expr` WITHIN checks.
-///
-/// DISTINCT, VARIADIC, and an inner ORDER BY have no representation here.
-#[derive(recursa::Node, Debug, Clone)]
-pub enum FunctionWithinGroupBody<'input> {
-    Star(FunctionCallStar),
-    All(FunctionWithinGroupAllArguments<'input>),
-    Args(FunctionWithinGroupArguments<'input>),
-}
-
-/// A parenthesized application restricted to WITHIN-compatible bodies.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct FunctionWithinGroupApplication<'input> {
-    pub open: FunctionCallOpen,
-    pub body: Option<FunctionWithinGroupBody<'input>>,
-    pub close: FunctionCallClose,
-}
-
-/// A function application whose required WITHIN suffix is valid by shape.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct FunctionWithinGroupTail<'input> {
-    pub open: FunctionCallOpen,
-    pub body: Option<FunctionWithinGroupBody<'input>>,
-    pub close: FunctionCallClose,
-    pub within_group: WithinGroupClause<'input>,
-    /// Greedy: a leading FILTER starts this element instead of ending `FunctionWithinGroupTail` (bison shift preference).
-    #[greedy(FILTER)]
-    pub filter: Option<FilterClause<'input>>,
-    /// Greedy: a leading OVER starts this element instead of ending `FunctionWithinGroupTail` (bison shift preference).
-    #[greedy(OVER)]
-    pub window: Option<WindowSpec<'input>>,
-}
-
-/// Function-style typed literal after a shared function/type name.
-///
-/// PostgreSQL requires a non-empty plain expression list here and rejects
-/// named arguments and aggregate ORDER BY in its grammar action. Keeping the
-/// type-modifier list as `Expr` makes all of those exclusions structural.
+/// gram.y `AexprConst: func_name '(' func_arg_list opt_sort_clause ')'
+/// Sconst`: a typed literal spelled like a call, `char(20) 'x'`. The
+/// argument list is `func_arg_list opt_sort_clause` and nothing more: `*`,
+/// `DISTINCT`, `ALL` and `VARIADIC` belong to `func_application` and are
+/// syntax errors here. A named argument or the sort clause is grammatical
+/// and gram.y rejects it in the rule's action ("type modifier cannot have
+/// parameter name" / "... ORDER BY"). It parts from [`FunctionCallSuffix`]
+/// on the string after `)`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionTypedLiteralTail<'input> {
     pub open: FunctionCallOpen,
-    #[sep(COMMA)]
-    pub typmods: recursa::Vec1<Expr<'input>>,
+    /// gram.y `func_arg_list`.
+    pub args: FunctionArgumentSequence<'input>,
+    /// gram.y `opt_sort_clause`.
+    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
     pub close: FunctionCallClose,
     pub value: TypeCastValue<'input>,
 }
 
-/// Valid continuations after a function/type name.
+/// What follows a function name in call position.
+///
+/// Variant ordering: both start with `(`; `TypedLiteral` is decided by the
+/// string after the closing parenthesis.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FunctionCallTail<'input> {
     TypedLiteral(FunctionTypedLiteralTail<'input>),
-    WithinGroup(FunctionWithinGroupTail<'input>),
-    Plain(FunctionPlainTail<'input>),
+    Call(FunctionCallSuffix<'input>),
 }
 
 /// Function expression with a staged, state-valid continuation.
@@ -830,18 +795,6 @@ pub struct ParenthesizedExpr<'input> {
     pub indirection: Vec<ParenthesizedIndirection<'input>>,
 }
 
-/// Array slice content: `lower : upper`, `: upper`, `lower :`, or `:`.
-///
-/// Both bounds are optional; the colon is required.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct SubscriptSlice<'input> {
-    /// Greedy: a leading COLON starts this element instead of ending `SubscriptSlice` (bison shift preference).
-    #[greedy(COLON)]
-    pub lower: Option<Box<Expr<'input>>>,
-    #[tok(COLON, this)]
-    pub upper: Option<Box<Expr<'input>>>,
-}
-
 /// Required `:` plus the optional upper bound of an array slice.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SubscriptSliceSuffix<'input> {
@@ -857,21 +810,16 @@ pub enum SubscriptColon {
 
 /// Colon-prefixed client value. In an ordinary expression this retains psql's
 /// `:name` / `:'name'` spelling. Inside a bracket it also gives the
-/// lower-unbounded slice forms (`[:2]`, `[:]`) one non-nullable expression
+/// lower-unbounded slice form with an upper bound (`[:2]`) one expression
 /// representation, avoiding an exact grammar overlap between a slice colon
-/// and a psql-variable colon.
+/// and a psql-variable colon; the bare `[:]` is
+/// [`BracketSubscriptValue::Unbounded`]. The value is required: a colon on
+/// its own is not an expression, so nothing decides between "the value
+/// follows" and "the expression has ended".
 #[derive(recursa::Node, Debug, Clone)]
 pub struct PsqlVariableExpr<'input> {
-    pub colon: PsqlColon,
-    /// Greedy: any kind that can start this element continues it instead of ending `PsqlVariableExpr` (bison shift preference).
-    #[greedy(all)]
-    pub value: Option<PsqlVariableExprValue<'input>>,
-}
-
-#[derive(recursa::Node, Debug, Clone)]
-pub enum PsqlColon {
-    #[tok(COLON)]
-    Value,
+    #[tok(COLON, this)]
+    pub value: PsqlVariableExprValue<'input>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
@@ -888,8 +836,22 @@ pub enum PsqlVariableExprValue<'input> {
     False,
 }
 
+/// Content between subscript brackets — gram.y `indirection_el`'s
+/// `'[' a_expr ']'` and `'[' opt_slice_bound ':' opt_slice_bound ']'`.
+///
+/// Variant ordering: `Unbounded` (`[:]`) first; a colon followed by a value
+/// is a `PsqlVariableExpr` lower bound and takes the `Bounded` path.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct BracketSubscriptValue<'input> {
+pub enum BracketSubscriptValue<'input> {
+    /// `[:]` — both slice bounds absent.
+    #[tok(COLON)]
+    Unbounded,
+    Bounded(BracketSubscriptBounds<'input>),
+}
+
+/// `lower [: [upper]]` inside subscript brackets.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct BracketSubscriptBounds<'input> {
     pub lower: Box<Expr<'input>>,
     pub slice: Option<SubscriptSliceSuffix<'input>>,
 }
@@ -917,10 +879,10 @@ pub enum SubscriptClose {
 /// A subscript followed by the field selectors that continue PostgreSQL's
 /// `opt_indirection` chain: `arr[i]`, `arr[i].field`, `arr[i].f.g`.
 ///
-/// Further subscripts are not repeated here — the postfix `Expr::Subscript`
-/// operator already re-applies to the result, so `a[1].b[2]` is a subscript
-/// carrying `.b` followed by a second subscript. Keeping brackets out of
-/// this tail leaves the two forms with disjoint continuations.
+/// Further subscripts are not repeated here — the owning atom keeps a list
+/// of these, so `a[1].b[2]` is a subscript carrying `.b` followed by a
+/// second subscript. Keeping brackets out of this tail leaves the two forms
+/// with disjoint continuations.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SubscriptIndirection<'input> {
     pub subscript: BracketSubscript<'input>,
@@ -951,9 +913,227 @@ pub enum IndirectionEl<'input> {
     Field(IndirectionField<'input>),
 }
 
-/// Operator in PostgreSQL's `subquery_Op` production.
+/// The operand of a custom prefix operator, gram.y `qual_Op a_expr %prec Op`.
+///
+/// gram.y gives that rule the precedence of `Op`, so the operand extends
+/// over the operators above `Op` (`@# a + b` is `@# (a + b)`) and stops
+/// at `Op` and below (`@# a = b` is `(@# a) = b`, `@# a @# b` is
+/// `(@# a) @# b`). A recursa Pratt prefix carries a precedence only with a
+/// fixed-token operator; a content-token operator makes this an atom, so
+/// the operand spells that precedence with an exclusion list naming every
+/// extender at or below `Op` (binding power 8 and under), the same
+/// `Expr[min 9]` a Pratt prefix at `Op`'s level would take (recursa #124).
 #[derive(recursa::Node, Debug, Clone)]
-pub enum QuantifiedComparisonOperator<'input> {
+pub struct CustomPrefixOperand<'input> {
+    #[parse(pratt(exclude(
+        Above,
+        Adjacent,
+        And,
+        BangEq,
+        BangEqEq,
+        Below,
+        BetweenExpr,
+        BoolTest,
+        Concat,
+        CustomInfix,
+        Eq,
+        GeomClosest,
+        GeomSame,
+        Gt,
+        Gte,
+        Horizontal,
+        Ilike,
+        InExpr,
+        Intersect,
+        IsDistinctFrom,
+        IsDocument,
+        IsJson,
+        IsNormalized,
+        IsNotDistinctFrom,
+        Isnull,
+        JsonPathExists,
+        Like,
+        LikeOp,
+        LikeOpI,
+        LikeOpINeg,
+        LikeOpNeg,
+        Lt,
+        Lte,
+        Neq,
+        NoExtendAbove,
+        NoExtendBelow,
+        NoExtendLeft,
+        NoExtendRight,
+        NotBetweenExpr,
+        NotIlike,
+        NotInExpr,
+        NotLike,
+        NotSimilarTo,
+        Notnull,
+        Or,
+        Overlaps,
+        Parallel,
+        Perpendicular,
+        QuantifiedComparisonCmp,
+        QuantifiedComparisonLike,
+        QuantifiedComparisonOp,
+        RecordEq,
+        RecordGt,
+        RecordGte,
+        RecordLt,
+        RecordLte,
+        RecordNeq,
+        RegexIMatch,
+        RegexMatch,
+        RegexNotIMatch,
+        RegexNotMatch,
+        SimilarTo,
+        StartsWith,
+        StrictlyAbove,
+        StrictlyBelow,
+        StrictlyLeft,
+        StrictlyRight,
+        SubsetEq,
+        SupersetEq,
+        TildeGeqTilde,
+        TildeGtTilde,
+        TildeLeqTilde,
+        TildeLtTilde,
+        TripleEq,
+        TripleGt,
+        TripleLt,
+        TsMatch,
+        TsMatch3
+    )))]
+    /// Greedy: none of these is an extender of this restricted operand, but
+    /// the analysis does not consult the exclusion set for the overlap check
+    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
+    /// Greedy: the operand keeps extending on every extender it admits, which
+    /// the enclosing expression's continuation also admits.
+    #[greedy(all)]
+    pub expr: Box<Expr<'input>>,
+}
+
+// Operators of PostgreSQL's `subquery_Op` production, one enum per
+// precedence level of pg-sql's `Expr`: gram.y decides the shift before a
+// quantified comparison by the operator token's own precedence, so each
+// `Expr::QuantifiedComparison*` variant carries the level of the same
+// token's infix variant. Together the six enums cover `OperatorName`,
+// `OPERATOR(...)` and the LIKE family exactly once.
+
+/// `subquery_Op` at the level of pg-sql's comparison operators (binding
+/// power 5): gram.y `MathOp`'s `< > = <= >= <>` and the operators pg-sql's
+/// `Expr` parses at that level.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum QuantifiedCmpOperator {
+    #[tok(STARLTE)]
+    StarLte,
+    #[tok(STARGTE)]
+    StarGte,
+    #[tok(STARNEQ)]
+    StarNeq,
+    #[tok(STARLT)]
+    StarLt,
+    #[tok(STARGT)]
+    StarGt,
+    #[tok(STAREQ)]
+    StarEq,
+    #[tok(TRIPLEEQ)]
+    TripleEq,
+    #[tok(BANGEQEQ)]
+    BangEqEq,
+    #[tok(BANGEQ)]
+    BangEq,
+    #[tok(LTLTLT)]
+    LtLtLt,
+    #[tok(LTLTEQ)]
+    LtLtEq,
+    #[tok(LTLTPIPE)]
+    LtLtPipe,
+    #[tok(LTLT)]
+    LtLt,
+    #[tok(LTCARET)]
+    LtCaret,
+    #[tok(GTGTGT)]
+    GtGtGt,
+    #[tok(GTGTEQ)]
+    GtGtEq,
+    #[tok(GTGT)]
+    GtGt,
+    #[tok(GTCARET)]
+    GtCaret,
+    #[tok(HASHHASH)]
+    HashHash,
+    #[tok(MINUSPIPEMINUS)]
+    MinusPipeMinus,
+    #[tok(PIPEGTGT)]
+    PipeGtGt,
+    #[tok(PIPEAMPGT)]
+    PipeAmpGt,
+    #[tok(QUESTIONPIPEPIPE)]
+    QuestionPipePipe,
+    #[tok(QUESTIONDASHPIPE)]
+    QuestionDashPipe,
+    #[tok(QUESTIONHASH)]
+    QuestionHash,
+    #[tok(QUESTIONDASH)]
+    QuestionDash,
+    #[tok(ATATAT)]
+    AtAtAt,
+    #[tok(ATAT)]
+    AtAt,
+    #[tok(ATQUESTION)]
+    AtQuestion,
+    #[tok(AMPLTPIPE)]
+    AmpLtPipe,
+    #[tok(AMPLT)]
+    AmpLt,
+    #[tok(AMPGT)]
+    AmpGt,
+    #[tok(TILDELEQTILDE)]
+    TildeLeqTilde,
+    #[tok(TILDEGEQTILDE)]
+    TildeGeqTilde,
+    #[tok(TILDELTTILDE)]
+    TildeLtTilde,
+    #[tok(TILDEGTTILDE)]
+    TildeGtTilde,
+    #[tok(BANGTILDETILDESTAR)]
+    BangTildeTildeStar,
+    #[tok(TILDETILDESTAR)]
+    TildeTildeStar,
+    #[tok(BANGTILDETILDE)]
+    BangTildeTilde,
+    #[tok(TILDETILDE)]
+    TildeTilde,
+    #[tok(BANGTILDESTAR)]
+    BangTildeStar,
+    #[tok(TILDESTAR)]
+    TildeStar,
+    #[tok(BANGTILDE)]
+    BangTilde,
+    #[tok(TILDEEQ)]
+    TildeEq,
+    #[tok(LTE)]
+    Lte,
+    #[tok(GTE)]
+    Gte,
+    #[tok(NEQ)]
+    Neq,
+    #[tok(LT)]
+    Lt,
+    #[tok(GT)]
+    Gt,
+    #[tok(EQ)]
+    Eq,
+    #[tok(TILDE)]
+    Tilde,
+}
+
+/// `subquery_Op`'s `LIKE | NOT_LA LIKE | ILIKE | NOT_LA ILIKE`, at the level
+/// of `Expr::Like` (binding power 6).
+#[derive(recursa::Node, Debug, Clone)]
+pub enum QuantifiedLikeOperator {
     #[tok(NOT, LIKE)]
     NotLike,
     #[tok(NOT, ILIKE)]
@@ -962,8 +1142,92 @@ pub enum QuantifiedComparisonOperator<'input> {
     Like,
     #[tok(ILIKE)]
     Ilike,
+}
+
+/// `subquery_Op` at gram.y's generic `Op` level (binding power 8): `||`,
+/// `^@`, every spelling that is only a prefix operator elsewhere in `Expr`,
+/// the multi-character custom operators, and `OPERATOR(any_operator)`
+/// (`%left Op OPERATOR`).
+#[derive(recursa::Node, Debug, Clone)]
+pub enum QuantifiedOpOperator<'input> {
+    #[tok(CONCAT)]
+    Concat,
+    #[tok(CARETAT)]
+    CaretAt,
+    #[tok(BANGEQMINUS)]
+    BangEqMinus,
+    #[tok(PIPEPIPESLASH)]
+    PipePipeSlash,
+    #[tok(PIPESLASH)]
+    PipeSlash,
+    #[tok(ATMINUSAT)]
+    AtMinusAt,
+    #[tok(ATHASHAT)]
+    AtHashAt,
+    #[tok(ATPLUSAT)]
+    AtPlusAt,
+    #[tok(ATSIGN)]
+    At,
+    Custom(literal::CustomOp<'input>),
     Decorated(QuantifiedDecoratedOperator<'input>),
-    Plain(crate::ast::shared::names::OperatorName<'input>),
+}
+
+/// `subquery_Op` at the level of `+` and `-` (binding power 10), which in
+/// pg-sql also holds the bitwise and JSON operators.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum QuantifiedAddOperator {
+    #[tok(LTMINUSGT)]
+    LtMinusGt,
+    #[tok(LTAT)]
+    LtAt,
+    #[tok(HASHARROWARROW)]
+    HashArrowArrow,
+    #[tok(HASHARROW)]
+    HashArrow,
+    #[tok(HASHMINUS)]
+    HashMinus,
+    #[tok(ARROWARROW)]
+    ArrowArrow,
+    #[tok(ARROW)]
+    Arrow,
+    #[tok(QUESTIONPIPE)]
+    QuestionPipe,
+    #[tok(QUESTIONAMP)]
+    QuestionAmp,
+    #[tok(ATGT)]
+    AtGt,
+    #[tok(AMPAMP)]
+    AmpAmp,
+    #[tok(PLUS)]
+    Plus,
+    #[tok(MINUS)]
+    Minus,
+    #[tok(POUND)]
+    Pound,
+    #[tok(AMP)]
+    Amp,
+    #[tok(PIPE)]
+    Pipe,
+    #[tok(QUESTION)]
+    Question,
+}
+
+/// `subquery_Op` at the level of `*`, `/` and `%` (binding power 11).
+#[derive(recursa::Node, Debug, Clone)]
+pub enum QuantifiedMulOperator {
+    #[tok(STAR)]
+    Star,
+    #[tok(SLASH)]
+    Slash,
+    #[tok(PERCENT)]
+    Percent,
+}
+
+/// `subquery_Op` at the level of `^` (binding power 13).
+#[derive(recursa::Node, Debug, Clone)]
+pub enum QuantifiedPowOperator {
+    #[tok(CARET)]
+    Caret,
 }
 
 /// `OPERATOR(any_operator)` in a quantified comparison.
@@ -991,14 +1255,61 @@ pub enum QuantifiedComparisonOperand<'input> {
     Expr(Box<Expr<'input>>),
 }
 
-/// `operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
+/// `{ANY|SOME|ALL} (expression-or-query)` — gram.y `sub_type '(' a_expr ')'`
+/// and `sub_type select_with_parens`, shared by every quantified variant.
 #[derive(recursa::Node, Debug, Clone)]
-#[pretty(break_before = soft)]
-pub struct QuantifiedComparisonSuffix<'input> {
-    pub operator: QuantifiedComparisonOperator<'input>,
+pub struct QuantifiedComparisonTail<'input> {
     pub kind: QuantifiedComparisonKind,
     #[tok(LPAREN, this, RPAREN)]
     pub operand: QuantifiedComparisonOperand<'input>,
+}
+
+/// `comparison operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
+#[derive(recursa::Node, Debug, Clone)]
+#[pretty(break_before = soft)]
+pub struct QuantifiedComparisonCmpSuffix<'input> {
+    pub operator: QuantifiedCmpOperator,
+    pub tail: QuantifiedComparisonTail<'input>,
+}
+
+/// `LIKE-family operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
+#[derive(recursa::Node, Debug, Clone)]
+#[pretty(break_before = soft)]
+pub struct QuantifiedComparisonLikeSuffix<'input> {
+    pub operator: QuantifiedLikeOperator,
+    pub tail: QuantifiedComparisonTail<'input>,
+}
+
+/// `generic operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
+#[derive(recursa::Node, Debug, Clone)]
+#[pretty(break_before = soft)]
+pub struct QuantifiedComparisonOpSuffix<'input> {
+    pub operator: QuantifiedOpOperator<'input>,
+    pub tail: QuantifiedComparisonTail<'input>,
+}
+
+/// `additive operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
+#[derive(recursa::Node, Debug, Clone)]
+#[pretty(break_before = soft)]
+pub struct QuantifiedComparisonAddSuffix<'input> {
+    pub operator: QuantifiedAddOperator,
+    pub tail: QuantifiedComparisonTail<'input>,
+}
+
+/// `multiplicative operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
+#[derive(recursa::Node, Debug, Clone)]
+#[pretty(break_before = soft)]
+pub struct QuantifiedComparisonMulSuffix<'input> {
+    pub operator: QuantifiedMulOperator,
+    pub tail: QuantifiedComparisonTail<'input>,
+}
+
+/// `exponentiation operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
+#[derive(recursa::Node, Debug, Clone)]
+#[pretty(break_before = soft)]
+pub struct QuantifiedComparisonPowSuffix<'input> {
+    pub operator: QuantifiedPowOperator,
+    pub tail: QuantifiedComparisonTail<'input>,
 }
 
 /// EXISTS subquery: `EXISTS (SELECT ...)`
@@ -1297,6 +1608,11 @@ pub enum TypeCastValue<'input> {
 /// function names.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FixedTypeCastFuncName {
+    /// gram.y `Numeric: DOUBLE_P PRECISION`; `double precision '1'` is a
+    /// `ConstTypename Sconst` literal. Listed first: the two-token spelling
+    /// must win over `double` as an identifier-spelled type name.
+    #[tok(DOUBLE, PRECISION)]
+    DoublePrecision,
     #[tok(BOOLEAN)]
     Boolean,
     #[tok(INTEGER)]
@@ -1339,9 +1655,13 @@ pub struct FixedTypeCastFunc<'input> {
 /// neither can be mistaken for an unquoted column name.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct NamedTypeCastFunc<'input> {
+    /// gram.y `AexprConst: func_name Sconst` — nothing stands between the
+    /// name and the string. `double precision '1'` is
+    /// `FixedTypeCastFuncName::DoublePrecision`; a `PRECISION` admitted
+    /// here would follow `type_function_name` where gram.y never has it,
+    /// and `precision` is also an operator class after a column in an
+    /// index element, which a table-driven parser could not tell apart.
     pub type_name: crate::tokens::type_function_name<'input>,
-    #[presence(PRECISION)]
-    pub precision: bool,
     pub value: literal::StringLit<'input>,
 }
 
@@ -1811,11 +2131,24 @@ pub struct TrimWithChars<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct TrimValues<'input> {
     pub first: Box<Expr<'input>>,
-    pub from: Option<TrimFromArgs<'input>>,
-    /// Greedy: a leading COMMA starts this element instead of ending `TrimValues` (bison shift preference).
-    #[greedy(COMMA)]
-    pub more: Vec<TrimMoreArg<'input>>,
+    /// gram.y `trim_list: a_expr FROM expr_list | expr_list`: after the first
+    /// expression either `FROM expr_list` or the rest of one `expr_list`,
+    /// never both, so a comma after `FROM b` continues that list.
+    pub rest: Option<TrimValuesRest<'input>>,
 }
+
+/// What follows the first expression of a `trim_list`.
+///
+/// Variant ordering: `From` starts with `FROM`, `More` with a comma.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum TrimValuesRest<'input> {
+    From(TrimFromArgs<'input>),
+    More(TrimMoreArgs<'input>),
+}
+
+/// `, expr [, expr ...]`.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+pub struct TrimMoreArgs<'input>(#[deref] pub recursa::Vec1<TrimMoreArg<'input>>);
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct TrimMoreArg<'input> {
@@ -1944,7 +2277,12 @@ pub struct SubstringCall<'input> {
 pub struct PositionInner<'input> {
     #[parse(pratt(exclude(
         Collate,
-        QuantifiedComparison,
+        QuantifiedComparisonCmp,
+        QuantifiedComparisonLike,
+        QuantifiedComparisonOp,
+        QuantifiedComparisonAdd,
+        QuantifiedComparisonMul,
+        QuantifiedComparisonPow,
         IsJson,
         IsNormalized,
         BoolTest,
@@ -2040,9 +2378,100 @@ pub struct UnicodeStringLitWithEscape<'input> {
 }
 
 /// `ESCAPE expr` clause on LIKE / SIMILAR TO / ILIKE operators.
+///
+/// gram.y `a_expr LIKE a_expr ESCAPE a_expr %prec LIKE` with `%nonassoc
+/// ESCAPE` one level above `LIKE`: the escape operand takes every operator
+/// above `ESCAPE` (`'$'::bytea`, `'$' || 'x'`) and stops before `LIKE`'s
+/// level and below. The exclusion list names the extenders at or below
+/// `LIKE` (binding power 7 and under), so the operand is the same
+/// `Expr[min 8]` a Pratt right operand at that level would be. The attached
+/// form (`#[tok(ESCAPE, this)] Option<Box<Self>>` on the variant) would
+/// carry the precedence itself but fails recursa's emission with `RCA9105`
+/// (recursa #123); the table-driven lowering gives this struct rule no
+/// precedence (recursa #120).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct EscapeClause<'input> {
-    /// Greedy: the expression keeps extending on every shared extender instead of yielding to what may follow `EscapeClause`.
+    #[parse(pratt(exclude(
+        Above,
+        Adjacent,
+        And,
+        BangEq,
+        BangEqEq,
+        Below,
+        BetweenExpr,
+        BoolTest,
+        Eq,
+        GeomClosest,
+        GeomSame,
+        Gt,
+        Gte,
+        Horizontal,
+        Ilike,
+        InExpr,
+        Intersect,
+        IsDistinctFrom,
+        IsDocument,
+        IsJson,
+        IsNormalized,
+        IsNotDistinctFrom,
+        Isnull,
+        JsonPathExists,
+        Like,
+        LikeOp,
+        LikeOpI,
+        LikeOpINeg,
+        LikeOpNeg,
+        Lt,
+        Lte,
+        Neq,
+        NoExtendAbove,
+        NoExtendBelow,
+        NoExtendLeft,
+        NoExtendRight,
+        NotBetweenExpr,
+        NotIlike,
+        NotInExpr,
+        NotLike,
+        NotSimilarTo,
+        Notnull,
+        Or,
+        Overlaps,
+        Parallel,
+        Perpendicular,
+        QuantifiedComparisonCmp,
+        QuantifiedComparisonLike,
+        RecordEq,
+        RecordGt,
+        RecordGte,
+        RecordLt,
+        RecordLte,
+        RecordNeq,
+        RegexIMatch,
+        RegexMatch,
+        RegexNotIMatch,
+        RegexNotMatch,
+        SimilarTo,
+        StrictlyAbove,
+        StrictlyBelow,
+        StrictlyLeft,
+        StrictlyRight,
+        SubsetEq,
+        SupersetEq,
+        TildeGeqTilde,
+        TildeGtTilde,
+        TildeLeqTilde,
+        TildeLtTilde,
+        TripleEq,
+        TripleGt,
+        TripleLt,
+        TsMatch,
+        TsMatch3
+    )))]
+    /// Greedy: none of these is an extender of this restricted operand, but
+    /// the analysis does not consult the exclusion set for the overlap check
+    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
+    /// Greedy: the operand keeps extending on every extender it admits, which
+    /// the enclosing expression's continuation also admits.
     #[greedy(all)]
     #[tok(ESCAPE, this)]
     pub char: Box<Expr<'input>>,
@@ -2250,20 +2679,44 @@ pub struct JsonArrayElement<'input> {
 ///
 /// Variant ordering: `Query` (leads with `SELECT`/`WITH`/`VALUES`/`TABLE`/`(`)
 /// before `Elements` so a subquery is not mis-parsed as a single element.
+/// gram.y `json_array_constructor`'s three argument forms.
+///
+/// Variant ordering: `Query` starts with a query keyword or `(`,
+/// `Elements` with an expression, `Empty` with `RETURNING` or nothing.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum JsonArrayBody<'input> {
-    Query(Box<DirectSubquery<'input>>),
-    Elements(#[sep(COMMA)] recursa::Vec1<JsonArrayElement<'input>>),
+pub enum JsonArrayArgs<'input> {
+    Query(JsonArrayQueryArgs<'input>),
+    Elements(JsonArrayElementsArgs<'input>),
+    Empty(JsonArrayEmptyArgs<'input>),
 }
 
-/// Inner contents of `JSON_ARRAY`: an optional value part (subquery or
-/// element list) followed by the optional `ON NULL` and `RETURNING` clauses.
+/// `select_no_parens json_format_clause_opt json_returning_clause_opt`: the
+/// query form has no `ON NULL` clause, so the query ends where its own
+/// syntax ends. The `FORMAT JSON` option is not admitted: `FORMAT` is also
+/// a table alias in the query's FROM list, which gram.y tells apart only
+/// through the `FORMAT_LA` token filter that recursive descent lacks.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct JsonArrayArgs<'input> {
-    pub body: Option<JsonArrayBody<'input>>,
+pub struct JsonArrayQueryArgs<'input> {
+    pub query: Box<DirectSubquery<'input>>,
+    pub returning: Option<JsonReturning<'input>>,
+}
+
+/// `json_value_expr_list json_array_constructor_null_clause_opt
+/// json_returning_clause_opt`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct JsonArrayElementsArgs<'input> {
+    #[sep(COMMA)]
+    pub elements: recursa::Vec1<JsonArrayElement<'input>>,
     pub on_null: Option<JsonOnNull>,
     pub returning: Option<JsonReturning<'input>>,
 }
+
+/// `json_returning_clause_opt` alone.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct JsonArrayEmptyArgs<'input> {
+    pub returning: Option<JsonReturning<'input>>,
+}
+
 
 /// `JSON_ARRAY ( ... )` — element-list or query form.
 #[derive(recursa::Node, Debug, Clone)]
@@ -2348,6 +2801,17 @@ pub struct JsonOnBehavior<'input> {
     pub trigger: EmptyOrError,
 }
 
+/// gram.y `json_behavior_clause_opt`: `json_behavior ON EMPTY`,
+/// `json_behavior ON ERROR`, or both. Each `JsonOnBehavior` names its own
+/// trigger, so the pair is order-independent and the second slot is simply
+/// optional; two independent optional slots would leave a single clause
+/// ambiguous between them.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct JsonBehaviorClause<'input> {
+    pub first: JsonOnBehavior<'input>,
+    pub second: Option<JsonOnBehavior<'input>>,
+}
+
 /// `CONDITIONAL` / `UNCONDITIONAL` modifier of a `WITH ... WRAPPER` clause.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum WrapperBehavior {
@@ -2426,12 +2890,8 @@ pub struct JsonValueInner<'input> {
     pub path: Box<Expr<'input>>,
     pub passing: Option<JsonPassing<'input>>,
     pub returning: Option<JsonReturning<'input>>,
-    // Two generic behavior slots: each `JsonOnBehavior` self-identifies its
-    // `ON EMPTY` / `ON ERROR` trigger, so the pair is order-independent.
-    /// Greedy: a leading token from any of 7 kinds starts this element instead of ending `JsonValueInner` (bison shift preference).
-    #[greedy(DEFAULT, EMPTY, ERROR, FALSE, NULL, TRUE, UNKNOWN)]
-    pub on_behavior_1: Option<JsonOnBehavior<'input>>,
-    pub on_behavior_2: Option<JsonOnBehavior<'input>>,
+    /// gram.y `json_behavior_clause_opt`.
+    pub on_behavior: Option<JsonBehaviorClause<'input>>,
 }
 
 /// `JSON_VALUE ( ... )` — extracts a scalar SQL value via a jsonpath.
@@ -2452,10 +2912,8 @@ pub struct JsonQueryInner<'input> {
     pub returning: Option<JsonReturning<'input>>,
     pub wrapper: Option<JsonWrapper>,
     pub quotes: Option<JsonQuotes>,
-    /// Greedy: a leading token from any of 7 kinds starts this element instead of ending `JsonQueryInner` (bison shift preference).
-    #[greedy(DEFAULT, EMPTY, ERROR, FALSE, NULL, TRUE, UNKNOWN)]
-    pub on_behavior_1: Option<JsonOnBehavior<'input>>,
-    pub on_behavior_2: Option<JsonOnBehavior<'input>>,
+    /// gram.y `json_behavior_clause_opt`.
+    pub on_behavior: Option<JsonBehaviorClause<'input>>,
 }
 
 /// `JSON_QUERY ( ... )` — extracts a JSON value via a jsonpath.
@@ -2561,12 +3019,11 @@ pub enum JsonFuncExpr<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 /// Greedy: this enum-level acceptance covers every left-denotation operand
 /// inside `Expr` (the right operands of infix and postfix variants and the
-/// operands of prefix forms) plus the optional `ESCAPE` tails of the LIKE
-/// family. An operand keeps extending on a shared extender instead of
-/// yielding to whatever may follow the enclosing expression, which is
-/// PostgreSQL's precedence resolution; `ESCAPE` starts the tail instead of
-/// ending the pattern operand.
-#[greedy(AND, ESCAPE, IN, NOT, SIMILAR)]
+/// operands of prefix forms). An operand keeps extending on a shared
+/// extender instead of yielding to whatever may follow the enclosing
+/// expression, which is PostgreSQL's precedence resolution. The optional
+/// `ESCAPE` tails of the LIKE family carry their own `#[greedy(ESCAPE)]`.
+#[greedy(AND, IN, NOT, SIMILAR)]
 #[pratt]
 pub enum Expr<'input> {
     // --- Prefix ---
@@ -2617,23 +3074,13 @@ pub enum Expr<'input> {
     // starter and retains the operator text plus its expression operand.
     CustomPrefix(
         literal::CustomOp<'input>,
-        /// Greedy: the operand of a custom prefix operator is a whole expression, so it
-        /// keeps extending on every shared extender, including the symbolic ones the
-        /// enum-level acceptance does not name, instead of yielding to what may follow.
-        #[greedy(all)]
-        #[pretty(break_before = soft)]
-        Box<Self>,
+        #[pretty(break_before = soft)] CustomPrefixOperand<'input>,
     ),
 
     // --- Postfix ---
     /// Postgres-style cast: `expr::type`
     #[parse(postfix, bp = 20)]
     Cast(Box<Self>, #[tok(COLONCOLON, this)] Box<CastType<'input>>),
-    /// Array index or slice, plus the field selectors that may follow it:
-    /// `expr[idx]`, `expr[low:high]`, `expr[:high]`, `expr[low:]`, `expr[:]`,
-    /// and `expr[idx].field`.
-    #[parse(postfix, bp = 20)]
-    Subscript(Box<Self>, SubscriptIndirection<'input>),
     /// `expr COLLATE "collation"` — collation specifier. Binds tighter than
     /// comparisons (bp 5) but looser than `::` cast (bp 20).
     #[parse(postfix, bp = 18)]
@@ -2641,44 +3088,69 @@ pub enum Expr<'input> {
         Box<Self>,
         #[tok(COLLATE, this)] crate::tokens::ColId<'input>,
     ),
-    /// `lhs operator {ANY|SOME|ALL} (expr-or-query)`.
+    /// `lhs operator {ANY|SOME|ALL} (expr-or-query)`: gram.y `a_expr
+    /// subquery_Op sub_type '(' a_expr ')' %prec Op` and its
+    /// `select_with_parens` twin. gram.y decides the shift before the
+    /// operator by the operator token's own precedence, so `1 + 2 / ANY (x)`
+    /// is `1 + (2 / ANY (x))` and `a = b + ANY (x)` is `a = (b + ANY (x))`;
+    /// one postfix variant per precedence level of `subquery_Op`, each at
+    /// the level of the same token's infix variant, reproduces that.
     ///
     /// PostgreSQL does not admit the quantified right-hand side as a
     /// standalone expression. Keeping the operator and quantifier in one
     /// Pratt continuation also makes `f(ALL(x))` unambiguously the function
     /// application's ALL-qualified argument production.
+    #[parse(postfix, bp = 5)]
+    QuantifiedComparisonCmp(Box<Self>, QuantifiedComparisonCmpSuffix<'input>),
+    /// `subquery_Op`'s `LIKE` family, at the level of `Like`.
+    #[parse(postfix, bp = 6)]
+    QuantifiedComparisonLike(Box<Self>, QuantifiedComparisonLikeSuffix<'input>),
+    /// `subquery_Op` at gram.y's generic `Op` level.
     #[parse(postfix, bp = 8)]
-    QuantifiedComparison(Box<Self>, QuantifiedComparisonSuffix<'input>),
+    QuantifiedComparisonOp(Box<Self>, QuantifiedComparisonOpSuffix<'input>),
+    /// `subquery_Op` at the level of `Add` / `Sub`.
+    #[parse(postfix, bp = 10)]
+    QuantifiedComparisonAdd(Box<Self>, QuantifiedComparisonAddSuffix<'input>),
+    /// `subquery_Op` at the level of `Mul` / `Div` / `Mod`.
+    #[parse(postfix, bp = 11)]
+    QuantifiedComparisonMul(Box<Self>, QuantifiedComparisonMulSuffix<'input>),
+    /// `subquery_Op` at the level of `Pow`.
+    #[parse(postfix, bp = 13)]
+    QuantifiedComparisonPow(Box<Self>, QuantifiedComparisonPowSuffix<'input>),
+    // The `IS` family sits at one level below the comparison operators, gram.y
+    // `%nonassoc IS ISNULL NOTNULL` (`a = b IS NULL` is `(a = b) IS NULL`);
+    // one level for every `IS` form is also what lets a table-driven parser
+    // settle `IS` by precedence. Binding power 4.
     /// `expr IS NOT DISTINCT FROM expr`. Declared before `IsDistinctFrom` so
     /// the longer `NOT` prefix wins disambiguation.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 4, rbp = 5)]
     IsNotDistinctFrom(Box<Self>, #[tok(IS, NOT, DISTINCT, FROM, this)] Box<Self>),
     /// `expr IS DISTINCT FROM expr`.
-    #[parse(infix, lbp = 5, rbp = 6)]
+    #[parse(infix, lbp = 4, rbp = 5)]
     IsDistinctFrom(Box<Self>, #[tok(IS, DISTINCT, FROM, this)] Box<Self>),
     /// `expr IS [NOT] JSON [{VALUE|SCALAR|ARRAY|OBJECT}] [{WITH|WITHOUT}
     /// UNIQUE [KEYS]]` — the SQL/JSON type predicate. Declared before
     /// `BoolTest` (both lead with `IS`); `BoolTest` rejects `JSON` as a
     /// `BoolTestKind`, so order is not load-bearing, only tidy.
-    #[parse(postfix, bp = 8)]
+    #[parse(postfix, bp = 4)]
     IsJson(Box<Self>, #[tok(IS, this)] IsJsonTail),
     /// `expr IS [NOT] [NFC|NFD|NFKC|NFKD] NORMALIZED` — the Unicode
     /// normalisation predicate (gram.y rules 15198/15205/15212/15220).
     /// Declared before `BoolTest` (both lead with `IS`); `BoolTest` rejects
     /// `NORMALIZED`/`NFx` as a `BoolTestKind`, so order is not load-bearing.
-    #[parse(postfix, bp = 8)]
+    #[parse(postfix, bp = 4)]
     IsNormalized(Box<Self>, #[tok(IS, this)] IsNormalizedTail),
     /// `expr IS [NOT] DOCUMENT` — the XML document predicate.
-    #[parse(postfix, bp = 8)]
+    #[parse(postfix, bp = 4)]
     IsDocument(Box<Self>, #[tok(IS, this)] IsDocumentTail),
     /// Boolean test: `expr IS [NOT] TRUE/FALSE/UNKNOWN/NULL`
-    #[parse(postfix, bp = 8)]
+    #[parse(postfix, bp = 4)]
     BoolTest(Box<Self>, #[tok(IS, this)] BoolTestKind),
     /// Postgres `expr NOTNULL` postfix null test (synonym for `IS NOT NULL`).
-    #[parse(postfix, bp = 8)]
+    #[parse(postfix, bp = 4)]
     Notnull(#[tok(this, NOTNULL)] Box<Self>),
     /// Postgres `expr ISNULL` postfix null test (synonym for `IS NULL`).
-    #[parse(postfix, bp = 8)]
+    #[parse(postfix, bp = 4)]
     Isnull(#[tok(this, ISNULL)] Box<Self>),
     /// `expr AT LOCAL` — convert to session timezone. Listed before
     /// `AtTimeZone` so `AT LOCAL` wins (distinct second token `LOCAL` vs `TIME`).
@@ -2690,51 +3162,58 @@ pub enum Expr<'input> {
     /// NOT IN list: `expr NOT IN (val, ...)`
     #[parse(postfix, bp = 6)]
     NotInExpr(Box<Self>, NotInSuffix<'input>),
+    // The LIKE family shares one level with `BETWEEN` and `IN`, gram.y
+    // `%nonassoc BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA`, one step above the
+    // comparison operators: `a = b LIKE c` is `a = (b LIKE c)`. Binding
+    // power 6; the pattern operand is the infix right operand at 7, so a
+    // LIKE never nests in a LIKE's pattern (gram.y makes the level
+    // non-associative) and an `ESCAPE` belongs to the LIKE it follows. The
+    // `ESCAPE` operand is `EscapeClause`, see there.
     /// `expr NOT ILIKE pattern [ESCAPE char]`. Declared before `NotLike` so the longer
     /// `NOT ILIKE` is tried first (matters only if any rule shares a prefix;
     /// here `NOT ILIKE` vs `NOT LIKE` differ on the second token).
-    #[parse(postfix, bp = 5)]
+    #[parse(infix, lbp = 6, rbp = 7)]
     NotIlike(
         Box<Self>,
         #[tok(NOT, ILIKE, this)] Box<Self>,
-        Option<EscapeClause<'input>>,
+        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
     ),
     /// `expr NOT SIMILAR TO pattern [ESCAPE char]`. Declared before `NotLike` so the longer
     /// `NOT SIMILAR TO` form wins longest-match-wins disambiguation.
-    #[parse(postfix, bp = 5)]
+    #[parse(infix, lbp = 6, rbp = 7)]
     NotSimilarTo(
         Box<Self>,
         #[tok(NOT, SIMILAR, TO, this)] Box<Self>,
-        Option<EscapeClause<'input>>,
+        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
     ),
     /// `expr NOT LIKE pattern [ESCAPE char]`. Must come before the `Not` prefix atom so
     /// longest-match-wins prefers the postfix form.
-    #[parse(postfix, bp = 5)]
+    #[parse(infix, lbp = 6, rbp = 7)]
     NotLike(
         Box<Self>,
         #[tok(NOT, LIKE, this)] Box<Self>,
-        Option<EscapeClause<'input>>,
+        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
     ),
     /// `expr SIMILAR TO pattern [ESCAPE char]` — SQL standard similar-to pattern match.
-    #[parse(postfix, bp = 5)]
+    #[parse(infix, lbp = 6, rbp = 7)]
     SimilarTo(
         Box<Self>,
         #[tok(SIMILAR, TO, this)] Box<Self>,
-        Option<EscapeClause<'input>>,
+        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
     ),
     /// `expr ILIKE pattern [ESCAPE char]`
-    #[parse(postfix, bp = 5)]
+    #[parse(infix, lbp = 6, rbp = 7)]
     Ilike(
         Box<Self>,
         #[tok(ILIKE, this)] Box<Self>,
-        Option<EscapeClause<'input>>,
+        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
     ),
     /// `expr LIKE pattern [ESCAPE char]`
-    #[parse(postfix, bp = 5)]
+    #[parse(infix, lbp = 6, rbp = 7)]
     Like(
         Box<Self>,
         #[tok(LIKE, this)] Box<Self>,
-        Option<EscapeClause<'input>>,
+        #[greedy(ESCAPE)] Option<EscapeClause<'input>>,
     ),
     // --- Locale-aware text comparison operators (4-char before 3-char) ---
     /// `expr ~<=~ expr` — locale-aware less-or-equal.
@@ -3174,9 +3653,9 @@ pub enum Expr<'input> {
     Default,
     /// Positional parameter reference: `$1`, `$2`, etc. Used in function bodies
     /// and prepared statements.
-    PositionalParam(#[lex(matcher)] literal::DollarNum<'input>),
-    /// Unqualified column reference: `f1` or `"Foo"`
-    ColumnRef(crate::tokens::ColId<'input>),
+    PositionalParam(PositionalParam<'input>),
+    /// Unqualified column reference: `f1` or `"Foo"`, with its subscripts
+    ColumnRef(ColumnRef<'input>),
     /// psql client variable substitution: `:foo`, `:'foo'`, `:"foo"`.
     PsqlVar(PsqlVariableExpr<'input>),
 }

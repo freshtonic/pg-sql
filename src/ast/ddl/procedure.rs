@@ -1,5 +1,5 @@
 /// CREATE PROCEDURE / DROP PROCEDURE / CALL statement AST.
-use crate::ast::ddl::function::{FuncOption, FunctionParameters};
+use crate::ast::ddl::function::{FuncOption, FunctionParameters, RoutineBody};
 use crate::ast::shared::expr::FuncArg;
 // ---------------------------------------------------------------------------
 // Additional imports for the ALTER/DROP types appended to this file as part
@@ -23,15 +23,18 @@ use crate::ast::shared::numbers::*;
 /// func_name`, where `func_name: type_function_name | ColId indirection`
 /// — accepting schema-qualified names like `testns.bar`).
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(CREATE, this)]
 pub struct CreateProcedureStmt<'input> {
-    #[tok(CREATE, this, PROCEDURE)]
     #[presence(OR, REPLACE)]
     pub or_replace: bool,
+    #[tok(PROCEDURE, this)]
     pub name: crate::ast::shared::names::QualifiedName<'input>,
     pub args: FunctionParameters<'input>,
     /// Greedy: any kind that can start this element continues it instead of ending `CreateProcedureStmt` (bison shift preference).
     #[greedy(all)]
     pub options: Vec<FuncOption<'input>>,
+    /// gram.y `opt_routine_body`, after `opt_createfunc_opt_list`.
+    pub body: Option<RoutineBody<'input>>,
 }
 
 /// One target of `DROP PROCEDURE`: `name [(args)]`.
@@ -46,14 +49,13 @@ pub struct DropProcedureTarget<'input> {
 /// Per gram.y `RemoveFuncStmt`: the target is a `function_with_argtypes_list`
 /// (one or more `name [(args)]` entries separated by commas).
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, PROCEDURE, this)]
 pub struct DropProcedureStmt<'input> {
-    #[tok(DROP, PROCEDURE, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
-    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropProcedureStmt` (bison shift preference).
-    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
-    pub targets: Vec<DropProcedureTarget<'input>>,
+    /// gram.y `function_with_argtypes_list`: one or more targets.
+    pub targets: recursa::Vec1<DropProcedureTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
 

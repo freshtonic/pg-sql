@@ -330,11 +330,8 @@ pub struct CommentTriggerObject<'input> {
 /// `CONSTRAINT name ON [DOMAIN] any_name` — the constraint object forms.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CommentConstraintObject<'input> {
-    #[tok(CONSTRAINT, this)]
+    #[tok(CONSTRAINT, this, ON)]
     pub name: crate::tokens::ColId<'input>,
-    /// Greedy: a leading DOMAIN starts this element instead of ending `CommentConstraintObject` (bison shift preference).
-    #[greedy(DOMAIN)]
-    #[tok(ON, this)]
     #[presence(DOMAIN)]
     pub domain: bool,
     pub container: QualifiedName<'input>,

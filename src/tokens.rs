@@ -817,11 +817,64 @@ recursa::tokens! {
         WindowRefName = ColId - { PARTITION, ORDER, ROWS, RANGE, GROUPS },
         TableFunctionName = type_function_name - { COLLATION },
         UpdateAliasName = ColId - { SET },
+        // gram.y resolves `a LIKE b escape`, `x IS JSON WITH UNIQUE keys`
+        // and `x IS JSON value` by precedence (`%nonassoc ESCAPE`, and the
+        // `%nonassoc IDENT ... KEYS OBJECT_P SCALAR VALUE_P ...` group), yet
+        // `SELECT a value` and `SELECT a escape` stay valid: the keyword is
+        // a bare label whenever no expression can continue. The set stays
+        // the full `bare_label`; the table-driven parser needs keyword
+        // precedence to settle those states (recursa #120).
         SelectBareAliasName = bare_label
             - { AND, OR, NOT, IS, IN, LIKE, ILIKE, COLLATE, SIMILAR, BETWEEN, OPERATOR, AT },
         PsqlVariableName = AllWordKinds - { NULL, TRUE, FALSE },
         UnquotedIdent = NonReservedWord,
         BareAliasName = AllWordKinds,
+        // gram.y `createdb_opt_name`: `IDENT` plus these keywords; the
+        // two-token `CONNECTION LIMIT` is its own variant of
+        // `CreateDbOptName`.
+        CreateDbOptWord = { ENCODING, LOCATION, OWNER, TABLESPACE, TEMPLATE },
+        // gram.y `utility_option_name`: `NonReservedWord | analyze_keyword |
+        // FORMAT_LA` (`FORMAT` is unreserved, so it is already a member;
+        // `ANALYSE` is not a pg-sql keyword and lexes as an identifier).
+        UtilityOptionName = NonReservedWord + { ANALYZE },
+        // gram.y `IDENT`: an identifier that is no keyword at all, the name
+        // of an old-style `CREATE AGGREGATE (name = value)` option
+        // (`old_aggr_elem: IDENT '=' def_arg`). Admitting `ColId` there put
+        // a column-name closure beside the parameter closure of the new
+        // syntax, and LALR merged that state with the target list's.
+        IdentOnly = AllWordKinds - AllWordKinds,
+    }
+    // Lookahead filters, one per case of PostgreSQL's `base_yylex`
+    // (`src/backend/parser/parser.c`): the table-driven parser reads the
+    // merged kind when the token is immediately followed by a trigger, the
+    // way `base_yylex` rewrites the token stream so that `gram.y` stays
+    // LALR(1). Recursive descent ignores the block. Nodes keep writing
+    // `#[tok(NOT, BETWEEN)]`; lowering substitutes the merged kind where a
+    // trigger can follow.
+    //
+    // `parser.c`'s sixth case, `NOT` before BETWEEN, IN, LIKE, ILIKE or
+    // SIMILAR (`NOT_LA`), is not declared. gram.y needs it twice: to give
+    // `a NOT LIKE b` the precedence of LIKE rather than of NOT, which the
+    // Pratt binding power of each `Expr` variant already does, and to let
+    // `DEFAULT b_expr` end before `NOT NULL`, which the `b_expr` positions
+    // (no LIKE, BETWEEN or IN extender) already do. gram.y also writes the
+    // prefix twin `NOT a_expr | NOT_LA a_expr` so that `NOT between` stays
+    // a negated column; recursa lowers such a twin only where the token ends
+    // its rule and rejects it inside a Pratt prefix (`RCA0404`), so the
+    // filter cannot be declared without losing that input (recursa #121).
+    lookahead {
+        // `parser.c`: `case NULLS_P:` -> `NULLS_LA` before FIRST, LAST
+        // (gram.y `opt_nulls_order`).
+        NULLS_LA = NULLS before { FIRST, LAST },
+        // `parser.c`: `case WITH:` -> `WITH_LA` before TIME, ORDINALITY
+        // (gram.y `ConstDatetime`, `func_table ... WITH_LA ORDINALITY`).
+        WITH_LA = WITH before { TIME, ORDINALITY },
+        // `parser.c`: `case WITHOUT:` -> `WITHOUT_LA` before TIME
+        // (gram.y `ConstDatetime`, `opt_timezone`).
+        WITHOUT_LA = WITHOUT before { TIME },
+        // `parser.c`: `case FORMAT:` -> `FORMAT_LA` before JSON (gram.y
+        // `json_format_clause`, `utility_option_name`).
+        FORMAT_LA = FORMAT before { JSON },
     }
 }
 
@@ -829,7 +882,7 @@ recursa::tokens! {
 // spellings. Keep that as one canonical content base; the generated admission
 // types below differ only in which fixed keyword kinds each grammar position
 // may reclaim.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ColId<'input> {
     Text(
         #[lex(
@@ -841,6 +894,27 @@ pub enum ColId<'input> {
 }
 
 impl ColId<'_> {
+    pub fn text(&self) -> &str {
+        match self {
+            Self::Text(text) => text.text(),
+        }
+    }
+}
+
+// gram.y `ColLabel`: every keyword class, the `attr_name` after a dot in
+// `qualified_name` and `func_name` indirection.
+#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ColLabel<'input> {
+    Text(
+        #[lex(
+            pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+            admits(ColLabel)
+        )]
+        ColLabelText<'input>,
+    ),
+}
+
+impl ColLabel<'_> {
     pub fn text(&self) -> &str {
         match self {
             Self::Text(text) => text.text(),
@@ -1161,6 +1235,78 @@ pub mod literal {
         pub fn text(&self) -> &str {
             match self {
                 Ident::Text(text) => text.text(),
+            }
+        }
+    }
+
+    /// Name of a `CREATE DATABASE` / `ALTER DATABASE` option: gram.y
+    /// `createdb_opt_name`, which admits a non-keyword identifier and the
+    /// keywords `ENCODING`, `LOCATION`, `OWNER`, `TABLESPACE` and
+    /// `TEMPLATE`. Every other keyword (`WITH`, `SET`, `REFRESH`, ...) is
+    /// the statement's own syntax and must not be reclaimed here.
+    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub enum CreateDbOptWord<'input> {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(CreateDbOptWord)
+            )]
+            CreateDbOptWordText<'input>,
+        ),
+    }
+
+    impl<'input> CreateDbOptWord<'input> {
+        /// The raw text of the option name.
+        pub fn text(&self) -> &str {
+            match self {
+                CreateDbOptWord::Text(text) => text.text(),
+            }
+        }
+    }
+
+    /// Name of an `EXPLAIN` / `VACUUM` / `ANALYZE` option: gram.y
+    /// `utility_option_name`, which is `NonReservedWord`, `analyze_keyword`
+    /// or `FORMAT` (`ANALYSE` is not a pg-sql keyword and lexes as an
+    /// identifier). Reserved words such as `SELECT`, `TABLE` and
+    /// `WITH` stay the statement's own syntax, so `EXPLAIN (SELECT 1)` is a
+    /// parenthesized statement and not an option list.
+    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub enum UtilityOptionName<'input> {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(UtilityOptionName)
+            )]
+            UtilityOptionNameText<'input>,
+        ),
+    }
+
+    impl<'input> UtilityOptionName<'input> {
+        /// The raw text of the option name.
+        pub fn text(&self) -> &str {
+            match self {
+                UtilityOptionName::Text(text) => text.text(),
+            }
+        }
+    }
+
+    /// gram.y `IDENT`: an identifier that is not a keyword.
+    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub enum IdentOnly<'input> {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(IdentOnly)
+            )]
+            IdentOnlyText<'input>,
+        ),
+    }
+
+    impl<'input> IdentOnly<'input> {
+        /// The raw text of the identifier.
+        pub fn text(&self) -> &str {
+            match self {
+                IdentOnly::Text(text) => text.text(),
             }
         }
     }

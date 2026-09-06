@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::ast::shared::expr::{
-        CastType, CastTypeHead, DirectParenthesizedSet, DirectSubquery, Expr, FunctionCallBody,
+        CastType, CastTypeHead, ColumnRef, DirectSelectClause, DirectSubquery, Expr,
+        FunctionCallBody,
         FunctionCallTail, ParenContent, ParenthesizedDotStar, ParenthesizedExpr,
         JsonObject, ParenthesizedIndirection, TypeName,
     };
@@ -541,7 +542,7 @@ mod tests {
                 .into_ast();
             match expr {
                 Expr::Func(call) if identifier_led => assert!(
-                    matches!(call.tail, FunctionCallTail::TypedLiteral(_)),
+                    matches!(&call.tail, FunctionCallTail::TypedLiteral(_)),
                     "missing typed-literal state for {src:?}",
                 ),
                 Expr::CastFunc(_) if !identifier_led => {}
@@ -753,16 +754,7 @@ mod tests {
             };
             let (actual_body, actual_tail) = match &call.tail {
                 FunctionCallTail::TypedLiteral(_) => ("typed", "typed-literal"),
-                FunctionCallTail::WithinGroup(tail) => {
-                    let body = match tail.body.as_ref() {
-                        None => "empty",
-                        Some(crate::ast::shared::expr::FunctionWithinGroupBody::Star(_)) => "star",
-                        Some(crate::ast::shared::expr::FunctionWithinGroupBody::All(_)) => "all",
-                        Some(crate::ast::shared::expr::FunctionWithinGroupBody::Args(_)) => "args",
-                    };
-                    (body, "within-group")
-                }
-                FunctionCallTail::Plain(tail) => {
+                FunctionCallTail::Call(tail) => {
                     let body = match tail.body.as_ref() {
                         None => "empty",
                         Some(FunctionCallBody::Star(_)) => "star",
@@ -775,7 +767,8 @@ mod tests {
                         Some(FunctionCallBody::Args(args)) if args.order_by.is_some() => "ordered",
                         Some(FunctionCallBody::Args(_)) => "args",
                     };
-                    (body, "plain")
+                    let kind = if tail.within_group.is_some() { "within-group" } else { "plain" };
+                    (body, kind)
                 }
             };
             assert_eq!(actual_body, expected_body, "application body for {src:?}");
@@ -795,12 +788,36 @@ mod tests {
             panic!("expected compact ALL-qualified function call");
         };
         assert!(matches!(
-            call.tail,
-            FunctionCallTail::Plain(crate::ast::shared::expr::FunctionPlainTail {
+            &call.tail,
+            FunctionCallTail::Call(crate::ast::shared::expr::FunctionCallSuffix {
                 body: Some(FunctionCallBody::All(_)),
                 ..
             })
         ));
+    }
+
+    /// Applications gram.y's `func_expr` admits: `func_application` is one
+    /// production for every argument shape, so an ordered, `DISTINCT` or
+    /// `VARIADIC` argument list before `WITHIN GROUP` is grammatical and only
+    /// parse analysis rejects it (`cannot use multiple ORDER BY clauses with
+    /// WITHIN GROUP`). The typed literal `func_name '(' func_arg_list
+    /// opt_sort_clause ')' Sconst` admits a named argument and a sort clause,
+    /// which gram.y rejects in the rule's action, not in its grammar.
+    #[test]
+    fn accept_function_applications_gram_y_admits() {
+        for src in [
+            "f(1 ORDER BY 1) WITHIN GROUP (ORDER BY 1)",
+            "f(DISTINCT 1) WITHIN GROUP (ORDER BY 1)",
+            "f(VARIADIC xs) WITHIN GROUP (ORDER BY 1)",
+            "char(n => 1) 'x'",
+            "char(1 ORDER BY 1) 'x'",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            Expr::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "leftover for {src:?}");
+        }
     }
 
     /// PostgreSQL's aggregate wildcard is an exclusive function-application
@@ -836,15 +853,10 @@ mod tests {
             "f(VARIADIC xs, VARIADIC ys)",
             "f(ALL VARIADIC xs)",
             "f(DISTINCT VARIADIC xs)",
-            "f(1 ORDER BY 1) WITHIN GROUP (ORDER BY 1)",
-            "f(DISTINCT 1) WITHIN GROUP (ORDER BY 1)",
-            "f(VARIADIC xs) WITHIN GROUP (ORDER BY 1)",
             "char() 'x'",
             "char(*) 'x'",
             "char(DISTINCT 1) 'x'",
             "char(VARIADIC xs) 'x'",
-            "char(n => 1) 'x'",
-            "char(1 ORDER BY 1) 'x'",
             "char(1) 'x' FILTER (WHERE true)",
         ] {
             let lexed = crate::lex(src);
@@ -1899,7 +1911,7 @@ mod tests {
                 content: ParenContent::Subquery(ref subquery),
                 ref indirection,
                 ..
-            }) if matches!(subquery.as_ref(), DirectSubquery::ParenthesizedSet(_))
+            }) if matches!(subquery.clause, DirectSelectClause::ParenthesizedSet(_))
                 && indirection.is_empty()
         ));
         assert!(input.is_eof());
@@ -1921,7 +1933,7 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let parsed = DirectParenthesizedSet::parse(&mut input);
+            let parsed = DirectSubquery::parse(&mut input);
             assert!(
                 parsed.is_err() || !input.is_eof(),
                 "invalid duplicate clause parsed to EOF: {src:?}"
@@ -1944,7 +1956,7 @@ mod tests {
             "(SELECT 1) UNION VALUES(2) OFFSET 3",
             "(SELECT 1) UNION VALUES(2) FETCH FIRST 2 ROWS ONLY",
         ] {
-            assert_eq!(roundtrip::<DirectParenthesizedSet>(src), src);
+            assert_eq!(roundtrip::<DirectSubquery>(src), src);
         }
     }
 
@@ -3000,7 +3012,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::QuantifiedComparison(..)));
+        assert!(matches!(expr, Expr::QuantifiedComparisonCmp(..)));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
         assert_eq!(
             format_tokens_sql(&expr, PrettyConfig::default()).trim(),
@@ -3015,7 +3027,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::QuantifiedComparison(..)));
+        assert!(matches!(expr, Expr::QuantifiedComparisonCmp(..)));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3026,7 +3038,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::QuantifiedComparison(..)));
+        assert!(matches!(expr, Expr::QuantifiedComparisonCmp(..)));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3039,7 +3051,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::QuantifiedComparison(..)));
+        assert!(matches!(expr, Expr::QuantifiedComparisonCmp(..)));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3052,7 +3064,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::Subscript(..)));
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3094,7 +3106,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::Subscript(..)));
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3105,7 +3117,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::Subscript(..)));
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3116,7 +3128,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::Subscript(..)));
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3127,7 +3139,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::Subscript(..)));
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 

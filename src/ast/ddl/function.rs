@@ -169,14 +169,10 @@ pub struct FunctionCastTypeTail<'input> {
     /// `PRECISION` in `DOUBLE PRECISION`.
     #[presence(PRECISION)]
     pub precision_keyword: bool,
-    /// Greedy: a leading VARYING starts this element instead of ending `FunctionCastTypeTail` (bison shift preference).
-    #[greedy(VARYING)]
     #[presence(VARYING)]
     pub varying: bool,
     pub precision: Option<TypePrecision<'input>>,
     pub tz: Option<TimeZoneQualifier>,
-    /// Greedy: a leading token from any of 6 kinds starts this element instead of ending `FunctionCastTypeTail` (bison shift preference).
-    #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, YEAR)]
     pub interval_qualifier: Option<IntervalQualifier<'input>>,
     /// Greedy: a leading LBRACKET starts this element instead of ending `FunctionCastTypeTail` (bison shift preference).
     #[greedy(LBRACKET)]
@@ -188,8 +184,6 @@ pub struct FunctionCastTypeTail<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionBuiltinType<'input> {
     pub base: FunctionBuiltinTypeName,
-    /// Greedy: a leading token from any of 8 kinds starts this element instead of ending `FunctionBuiltinType` (bison shift preference).
-    #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, VARYING, WITHOUT, YEAR)]
     pub tail: FunctionCastTypeTail<'input>,
 }
 
@@ -220,18 +214,28 @@ pub enum FunctionPctTypeSuffix {
 #[derive(recursa::Node, Debug, Clone)]
 pub enum FunctionIdentifierTypeSuffix<'input> {
     Pct(FunctionPctTypeSuffix),
-    Cast(
-        #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, VARYING, WITHOUT, YEAR)]
-        FunctionCastTypeTail<'input>,
-    ),
+    Cast(FunctionGenericTypeTail<'input>),
+}
+
+/// gram.y `GenericType: type_function_name [attrs] opt_type_modifiers` with
+/// `Typename`'s `opt_array_bounds` / `ARRAY` forms: an identifier-spelled
+/// type takes type modifiers and array bounds only. The datetime, interval
+/// and `VARYING` tails belong to the keyword-spelled types; on a generic
+/// type they made `f(mytype year)` ambiguous between a type with an
+/// interval qualifier and a parameter named `mytype` of type `year`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct FunctionGenericTypeTail<'input> {
+    pub precision: Option<TypePrecision<'input>>,
+    /// Greedy: a leading LBRACKET starts this element instead of ending `FunctionGenericTypeTail` (bison shift preference).
+    #[greedy(LBRACKET)]
+    pub array_suffixes: Vec<ArraySuffix<'input>>,
+    pub array_kw_suffix: Option<ArrayKwSuffix<'input>>,
 }
 
 /// Identifier-spelled cast type or `qualified%TYPE` reference.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionIdentifierType<'input> {
     pub name: FunctionTypeName<'input>,
-    /// Greedy: a leading token from any of 8 kinds starts this element instead of ending `FunctionIdentifierType` (bison shift preference).
-    #[greedy(DAY, HOUR, MINUTE, MONTH, SECOND, VARYING, WITHOUT, YEAR)]
     pub suffix: FunctionIdentifierTypeSuffix<'input>,
 }
 
@@ -251,30 +255,27 @@ pub struct FuncArgType<'input> {
 
 /// `[mode] name type [default]` -- a named function parameter with mode first.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct NamedFuncParam<'input> {
+pub struct NamedArg<'input> {
     pub mode: Option<ArgMode>,
     pub name: crate::tokens::type_function_name<'input>,
     pub type_name: FuncArgType<'input>,
-    pub default: Option<ParamDefault<'input>>,
 }
 
 /// `name mode type [default]` -- a named function parameter with mode after name.
 ///
 /// Postgres allows `f2 OUT anyelement` where the mode follows the name.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct NameModeParam<'input> {
+pub struct NameModeArg<'input> {
     pub name: crate::tokens::type_function_name<'input>,
     pub mode: ArgMode,
     pub type_name: FuncArgType<'input>,
-    pub default: Option<ParamDefault<'input>>,
 }
 
 /// `[mode] type [default]` -- an unnamed function parameter.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct UnnamedFuncParam<'input> {
+pub struct UnnamedArg<'input> {
     pub mode: Option<ArgMode>,
     pub type_name: FuncArgType<'input>,
-    pub default: Option<ParamDefault<'input>>,
 }
 
 /// Default value separator: `DEFAULT` or `=`.
@@ -293,31 +294,30 @@ pub struct ParamDefault<'input> {
     pub value: Expr<'input>,
 }
 
-/// The shared `[mode] type-or-name [type] [default]` shape of named and
-/// unnamed parameters. A second type means the first identifier is the
-/// parameter name; without it, the first value is the unnamed parameter's
-/// type. Factoring this shape avoids asking bounded lookahead to distinguish
-/// two arbitrarily long type prefixes.
+
+/// gram.y `func_arg: arg_class param_name func_type | param_name arg_class
+/// func_type | param_name func_type | arg_class func_type | func_type`; a
+/// `param_name` is one `type_function_name`, never a type.
+///
+/// Variant ordering: `NameMode` and `Named` start with a name; the token
+/// after it (an argument mode, a type, or the end of the argument) decides.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct StandardFuncParam<'input> {
-    pub mode: Option<ArgMode>,
-    pub first: FuncArgType<'input>,
-    pub named_type: Option<FuncArgType<'input>>,
-    pub default: Option<ParamDefault<'input>>,
+pub enum FunctionArg<'input> {
+    /// `param_name arg_class func_type`.
+    NameMode(NameModeArg<'input>),
+    /// `[arg_class] param_name func_type`.
+    Named(NamedArg<'input>),
+    /// `[arg_class] func_type`.
+    Unnamed(UnnamedArg<'input>),
 }
 
-/// A single function parameter.
-///
-/// Variant ordering:
-/// - `NameMode` (`ident mode type`) — longest, has ident then mode keyword
-/// - `Standard` factors `[mode] ident type` and `[mode] type` into one shape
-///
-/// `NameMode` must come first because `name mode type` would otherwise
-/// be parsed by `Named` as name=ident, type=mode_keyword (wrong).
+/// gram.y `func_arg_with_default: func_arg | func_arg DEFAULT a_expr |
+/// func_arg '=' a_expr`, the parameter of `CREATE FUNCTION` / `CREATE
+/// PROCEDURE`. Aggregates take a bare `func_arg`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum FuncParam<'input> {
-    NameMode(NameModeParam<'input>),
-    Standard(StandardFuncParam<'input>),
+pub struct FuncParam<'input> {
+    pub arg: FunctionArg<'input>,
+    pub default: Option<ParamDefault<'input>>,
 }
 
 // --- Function options (unordered list) ---
@@ -428,16 +428,24 @@ pub enum FuncOption<'input> {
     /// `TRANSFORM FOR TYPE typ [, ...]`.
     Transform(TransformOption<'input>),
     As(AsOption<'input>),
+}
+
+/// gram.y `opt_routine_body`, the SQL-standard body that follows the option
+/// list of `CREATE FUNCTION` / `CREATE PROCEDURE`: `RETURN a_expr` or
+/// `BEGIN ATOMIC ... END`. It comes after every option, so the `RETURN`
+/// expression is never followed by an option such as `NOT LEAKPROOF`.
+///
+/// Only the empty `BEGIN ATOMIC END` shape is modeled; populating the body
+/// would require a peek-time predicate on the inner statement list to stop
+/// before the closing `END` keyword. The corpus only exercises the empty
+/// form (`CREATE PROCEDURE ptest8(x text) BEGIN ATOMIC END`); non-empty
+/// bodies remain outside the issue-9 strict-statement grammar and surface
+/// as a structured parse error.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum RoutineBody<'input> {
     /// `RETURN expr` — SQL-standard single-expression function body.
     Return(ReturnOption<'input>),
-    /// `BEGIN ATOMIC ... END` — SQL-standard inline routine body
-    /// (gram.y `createfunc_opt_item: BEGIN_P ATOMIC routine_body_stmt_list END_P`).
-    /// Only the empty-body shape is modeled here; populating the body
-    /// would require a peek-time predicate on the inner statement list to
-    /// stop before the closing `END` keyword. The corpus only exercises
-    /// the empty form (`CREATE PROCEDURE ptest8(x text) BEGIN ATOMIC
-    /// END`); non-empty bodies remain outside the issue-9 strict-statement
-    /// grammar and surface as a structured parse error.
+    /// `BEGIN ATOMIC END`.
     BeginAtomicEmpty(BeginAtomicEmpty),
 }
 
@@ -452,8 +460,6 @@ pub enum BeginAtomicEmpty {
 /// `RETURN expr` option on CREATE FUNCTION (SQL-standard body form).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ReturnOption<'input> {
-    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `ReturnOption`.
-    #[greedy(NOT)]
     #[tok(RETURN, this)]
     pub expr: Expr<'input>,
 }
@@ -488,18 +494,16 @@ pub enum LeakproofOption {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CostOption<'input> {
-    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `CostOption`.
-    #[greedy(NOT)]
+    /// gram.y `common_func_opt_item: COST NumericOnly`.
     #[tok(COST, this)]
-    pub value: Expr<'input>,
+    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
 pub struct RowsOption<'input> {
-    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `RowsOption`.
-    #[greedy(NOT)]
+    /// gram.y `common_func_opt_item: ROWS NumericOnly`.
     #[tok(ROWS, this)]
-    pub value: Expr<'input>,
+    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
 }
 
 #[derive(recursa::Node, Debug, Clone)]
@@ -547,16 +551,19 @@ pub struct FunctionParameters<'input>(
 ///
 /// Function options after the signature/RETURNS may appear in any order.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(CREATE, this)]
 pub struct CreateFunctionStmt<'input> {
-    #[tok(CREATE, this, FUNCTION)]
     #[presence(OR, REPLACE)]
     pub or_replace: bool,
+    #[tok(FUNCTION, this)]
     pub name: crate::ast::shared::names::FuncDefName<'input>,
     pub args: FunctionParameters<'input>,
     pub returns: Option<FuncReturnsClause<'input>>,
     /// Greedy: any kind that can start this element continues it instead of ending `CreateFunctionStmt` (bison shift preference).
     #[greedy(all)]
     pub options: Vec<FuncOption<'input>>,
+    /// gram.y `opt_routine_body`, after `opt_createfunc_opt_list`.
+    pub body: Option<RoutineBody<'input>>,
 }
 
 impl<'input> CreateFunctionStmt<'input> {
@@ -626,28 +633,26 @@ pub struct DropFunctionTarget<'input> {
 /// The argument list on each target is optional: when the function name is
 /// unambiguous in the current schema, Postgres allows omitting the signature.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, FUNCTION, this)]
 pub struct DropFunctionStmt<'input> {
-    #[tok(DROP, FUNCTION, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
-    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropFunctionStmt` (bison shift preference).
-    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
-    pub targets: Vec<DropFunctionTarget<'input>>,
+    /// gram.y `function_with_argtypes_list`: one or more targets.
+    pub targets: recursa::Vec1<DropFunctionTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
 
 /// DROP ROUTINE statement — Postgres synonym for DROP FUNCTION/PROCEDURE
 /// that dispatches by name/signature at lookup time.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, ROUTINE, this)]
 pub struct DropRoutineStmt<'input> {
-    #[tok(DROP, ROUTINE, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
-    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropRoutineStmt` (bison shift preference).
-    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
-    pub targets: Vec<DropFunctionTarget<'input>>,
+    /// gram.y `function_with_argtypes_list`: one or more targets.
+    pub targets: recursa::Vec1<DropFunctionTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
 

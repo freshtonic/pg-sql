@@ -39,7 +39,41 @@ pub struct DomainCheckBody<'input> {
 /// `DEFAULT expr` clause — domain default value.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct DomainDefault<'input> {
-    /// Greedy: the expression keeps extending on NOT instead of yielding to what may follow `DomainDefault`.
+    /// gram.y `ColConstraintElem: DEFAULT b_expr` (the restricted expression
+    /// grammar; exclusions as in `PositionInner`), so `DEFAULT 1 NOT NULL`
+    /// ends the default at `NOT`.
+    #[parse(pratt(exclude(
+        Collate,
+        QuantifiedComparisonCmp,
+        QuantifiedComparisonLike,
+        QuantifiedComparisonOp,
+        QuantifiedComparisonAdd,
+        QuantifiedComparisonMul,
+        QuantifiedComparisonPow,
+        IsJson,
+        IsNormalized,
+        BoolTest,
+        Notnull,
+        Isnull,
+        AtLocal,
+        AtTimeZone,
+        NotInExpr,
+        NotIlike,
+        NotSimilarTo,
+        NotLike,
+        SimilarTo,
+        Ilike,
+        Like,
+        Overlaps,
+        InExpr,
+        NotBetweenExpr,
+        BetweenExpr,
+        Or,
+        And
+    )))]
+    /// Greedy: `NOT` is not an extender of this restricted expression, but
+    /// the analysis does not consult the exclusion set for the overlap check
+    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
     #[greedy(NOT)]
     #[tok(DEFAULT, this)]
     pub expr: Box<Expr<'input>>,

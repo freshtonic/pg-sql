@@ -39,35 +39,67 @@ pub struct RuleWhereClause<'input> {
     pub expr: Box<Expr<'input>>,
 }
 
-/// A single statement that may appear as a rule action — Postgres'
-/// `RuleActionStmt`: SELECT, INSERT, UPDATE, DELETE, or NOTIFY.
+/// A single statement that may appear as a rule action — gram.y
+/// `RuleActionStmt`: `SelectStmt`, `InsertStmt`, `UpdateStmt`, `DeleteStmt`
+/// or `NotifyStmt`. gram.y gives the three DML statements an
+/// `opt_with_clause` and `SelectStmt` its `with_clause`; pg-sql factors that
+/// prefix once as `With`, so a `WITH`-led action is decided after the CTE
+/// list.
 ///
 /// Each variant boxes its underlying statement type so the parent
 /// `RuleActions::Single` enum stays small. We reuse the existing statement
 /// AST types directly.
-///
-/// PG accepts a few additional forms in a rule body that gram.y models
-/// elsewhere but that the rules.sql / with.sql regression corpora exercise:
-/// - `WITH cte AS (...) {SELECT|INSERT|UPDATE|DELETE} ...` — a
-///   CTE-prefixed statement. Query-shaped `WITH` actions use the same
-///   `RuleQuery::Body` / `SelectBody::WithBody` path as other query bodies.
-/// - `VALUES (row), (row), ...` — a bare values clause, represented by the
-///   same consolidated query shape used by `Statement::Query`.
 ///
 /// Query actions deliberately exclude a parenthesized outer query because
 /// parentheses at this level delimit a multi-action rule list.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum RuleActionStmt<'input> {
     Query(Box<RuleQuery<'input>>),
+    With(Box<RuleWithAction<'input>>),
     Insert(Box<crate::ast::dml::insert::InsertStmt<'input>>),
     Update(Box<crate::ast::dml::update::UpdateStmt<'input>>),
     Delete(Box<crate::ast::dml::delete::DeleteStmt<'input>>),
     Notify(NotifyStmt<'input>),
 }
 
+/// gram.y `with_clause` followed by the rule action it prefixes: a query
+/// (`select_no_parens`), `insert_rest`, `update` or `delete`. `MERGE` is
+/// not a rule action in gram.y, so this is not `WithStatement`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct RuleWithAction<'input> {
+    pub with_clause: crate::ast::shared::with_clause::WithClause<'input>,
+    pub body: RuleWithBody<'input>,
+}
+
+/// The statement after a rule action's `WITH` clause.
+///
+/// Variant ordering: `Query` leads with `SELECT`, `VALUES` or `TABLE`; the
+/// three DML variants have disjoint leading keywords.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum RuleWithBody<'input> {
+    Query(Box<RuleQuery<'input>>),
+    Insert(Box<crate::ast::dml::insert::InsertStmt<'input>>),
+    Update(Box<crate::ast::dml::update::UpdateStmt<'input>>),
+    Delete(Box<crate::ast::dml::delete::DeleteStmt<'input>>),
+}
+
+/// gram.y `select_no_parens` less its `with_clause`: a non-parenthesized
+/// `select_clause` with its `opt_sort_clause`, `select_limit` and
+/// `for_locking_clause` tails.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct RuleQuery<'input> {
+    pub clause: RuleSelectClause<'input>,
+    #[pretty(break_before = soft)]
+    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
+    #[pretty(break_before = soft)]
+    pub limit_offset: Option<Box<crate::ast::dml::select::LimitOffsetClause<'input>>>,
+    #[pretty(break_before = soft)]
+    pub for_update: Option<Box<crate::ast::dml::select::ForUpdateClause<'input>>>,
+}
+
 /// Non-parenthesized query forms accepted as a single rule action.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum RuleQuery<'input> {
+pub enum RuleSelectClause<'input> {
     Table(crate::ast::dml::values::TableStmt<'input>),
     Body(crate::ast::dml::values::CompoundBody<'input>),
 }

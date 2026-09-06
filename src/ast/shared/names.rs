@@ -108,17 +108,41 @@ pub struct AggregateArgTypeList<'input>(
 /// DROP targets, ALTER targets, etc.).
 #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct QualifiedName<'input> {
-    #[sep(DOT)]
-    pub parts: recursa::Vec1<literal::Ident<'input>>,
+    /// gram.y `qualified_name: ColId | ColId indirection`: the first part is
+    /// a `ColId`, so `verbose`, `full` and the other `type_func_name`
+    /// keywords are not object names.
+    pub first: crate::tokens::ColId<'input>,
+    /// gram.y `indirection`: each part after a dot is `attr_name`, a
+    /// `ColLabel` (any keyword class).
+    /// Greedy: a leading DOT starts this element instead of ending `QualifiedName` (bison shift preference).
+    #[greedy(DOT)]
+    pub rest: Vec<QualifiedNamePart<'input>>,
+}
+
+/// One `'.' attr_name` of gram.y `indirection` inside a `qualified_name`.
+#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct QualifiedNamePart<'input> {
+    #[tok(DOT, this)]
+    pub name: crate::tokens::ColLabel<'input>,
 }
 
 impl<'input> QualifiedName<'input> {
     /// Returns the final (object) name part.
     pub fn object(&self) -> &str {
-        self.parts
-            .last()
-            .expect("qualified names contain at least one part")
-            .text()
+        match self.rest.last() {
+            Some(part) => part.name.text(),
+            None => self.first.text(),
+        }
+    }
+
+    /// Number of dotted parts, `catalog.schema.name` being three.
+    pub fn len(&self) -> usize {
+        1 + self.rest.len()
+    }
+
+    /// A qualified name always has one part.
+    pub fn is_empty(&self) -> bool {
+        false
     }
 }
 

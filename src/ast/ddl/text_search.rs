@@ -57,7 +57,9 @@ pub struct TextSearchTokenList<'input> {
 /// Dictionaries are dotted `any_name`s.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct TextSearchWithDicts<'input> {
-    #[tok(WITH, this)]
+    /// gram.y `any_with` (`WITH | WITH_LA`): a dictionary may be named
+    /// `time` or `ordinality`.
+    pub with: crate::ast::shared::flags::AnyWith,
     pub dicts: NameList<'input>,
 }
 
@@ -77,7 +79,8 @@ pub struct TextSearchWithDicts<'input> {
 pub struct TSConfigAddMapping<'input> {
     #[sep(COMMA)]
     pub tokens: recursa::Vec1<crate::tokens::ColId<'input>>,
-    #[tok(WITH, this)]
+    /// gram.y `any_with` (`WITH | WITH_LA`).
+    pub with: crate::ast::shared::flags::AnyWith,
     pub dicts: NameList<'input>,
 }
 
@@ -87,7 +90,8 @@ pub struct TSConfigAddMapping<'input> {
 pub struct TSConfigReplaceClause<'input> {
     #[tok(REPLACE, this)]
     pub old_dict: QualifiedName<'input>,
-    #[tok(WITH, this)]
+    /// gram.y `any_with` (`WITH | WITH_LA`).
+    pub with: crate::ast::shared::flags::AnyWith,
     pub new_dict: QualifiedName<'input>,
 }
 

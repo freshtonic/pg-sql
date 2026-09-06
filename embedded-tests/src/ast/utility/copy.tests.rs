@@ -14,6 +14,7 @@ mod tests {
         assert!(table.columns.is_none());
         assert!(!table.program);
         assert!(table.delimiter.is_none());
+        assert!(!table.with);
         assert!(table.options.is_none());
         assert!(table.where_clause.is_none());
         reparse_stable::<CopyStmt>("COPY t FROM STDIN");

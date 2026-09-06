@@ -19,8 +19,8 @@ mod tests {
         let mut input = lexed.input();
         let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
         assert_eq!(stmt.table_name.object(), "BOOLTBL1");
-        assert!(stmt.columns.is_some());
-        assert_eq!(stmt.columns.as_ref().unwrap().len(), 1);
+        assert!(stmt.rest.columns().is_some());
+        assert_eq!(stmt.rest.columns().unwrap().len(), 1);
         assert!(input.is_eof());
     }
 
@@ -53,7 +53,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.columns.as_ref().unwrap().len(), 3);
+        assert_eq!(stmt.rest.columns().unwrap().len(), 3);
     }
 
     #[test]
@@ -62,8 +62,8 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.columns.is_none());
-        assert!(matches!(*stmt.source, super::InsertSource::Select(_)));
+        assert!(stmt.rest.columns().is_none());
+        assert!(matches!(*stmt.rest.source(), super::InsertSource::Select(_)));
         assert!(input.is_eof());
     }
 
@@ -73,7 +73,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(*stmt.source, super::InsertSource::Default));
+        assert!(matches!(*stmt.rest.source(), super::InsertSource::Default));
         assert!(stmt.returning.is_some());
         assert!(input.is_eof());
     }
@@ -84,7 +84,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(*stmt.source, super::InsertSource::Select(_)));
+        assert!(matches!(*stmt.rest.source(), super::InsertSource::Select(_)));
         assert!(input.is_eof());
     }
 

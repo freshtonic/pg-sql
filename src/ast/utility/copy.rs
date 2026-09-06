@@ -59,7 +59,12 @@ pub struct CopyTableBody<'input> {
     pub program: bool,
     pub target: CopyTarget<'input>,
     pub delimiter: Option<CopyUsingDelimiters<'input>>,
-    #[tok(optional(WITH), this)]
+    /// gram.y `opt_with`: the noise word before `copy_options`, present
+    /// even when the `copy_opt_list` after it is empty (`COPY t FROM stdin
+    /// WITH` is a complete statement).
+    #[presence(WITH)]
+    pub with: bool,
+    /// gram.y `copy_options`; the empty `copy_opt_list` is the absent value.
     pub options: Option<CopyOptions<'input>>,
     pub where_clause: Option<CopyWhereClause<'input>>,
 }
@@ -81,7 +86,11 @@ pub struct CopyQueryBody<'input> {
     #[presence(PROGRAM)]
     pub program: bool,
     pub target: CopyTarget<'input>,
-    #[tok(optional(WITH), this)]
+    /// gram.y `opt_with`: the noise word before `copy_options`, present
+    /// even when the `copy_opt_list` after it is empty.
+    #[presence(WITH)]
+    pub with: bool,
+    /// gram.y `copy_options`; the empty `copy_opt_list` is the absent value.
     pub options: Option<CopyOptions<'input>>,
 }
 
@@ -210,11 +219,10 @@ pub enum CopyGenericOptionArg<'input> {
 /// stops at the first non-option token (typically `WHERE` or end-of-statement).
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CopyLegacyOptions<'input> {
-    /// Greedy: a leading token from any of 11 kinds starts this element instead of ending `CopyLegacyOptions` (bison shift preference).
-    #[greedy(
-        BINARY, CSV, DELIMITER, ENCODING, ESCAPE, FORCE, FREEZE, HEADER, NULL, OIDS, QUOTE
-    )]
-    pub items: Vec<CopyLegacyOptionItem<'input>>,
+    /// gram.y `copy_opt_list` may be empty, but the empty list is the absent
+    /// `options`; one node with no items would leave two derivations for
+    /// "no options".
+    pub items: recursa::Vec1<CopyLegacyOptionItem<'input>>,
 }
 
 /// One item in the legacy bareword options list — Postgres' `copy_opt_item`.

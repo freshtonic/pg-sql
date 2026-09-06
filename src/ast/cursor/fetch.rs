@@ -31,8 +31,6 @@ pub struct FetchRelative<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(FORWARD, this)]
 pub struct FetchForward<'input> {
-    /// Greedy: a leading ALL starts this element instead of ending `FetchForward` (bison shift preference).
-    #[greedy(ALL)]
     pub count: Option<FetchCountOrAll<'input>>,
 }
 
@@ -40,8 +38,6 @@ pub struct FetchForward<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(BACKWARD, this)]
 pub struct FetchBackward<'input> {
-    /// Greedy: a leading ALL starts this element instead of ending `FetchBackward` (bison shift preference).
-    #[greedy(ALL)]
     pub count: Option<FetchCountOrAll<'input>>,
 }
 
@@ -85,7 +81,8 @@ pub enum FetchDirection<'input> {
 pub struct FetchStmt<'input> {
     pub direction: Option<FetchDirection<'input>>,
     pub source: Option<FetchSource>,
-    pub cursor: literal::AliasName<'input>,
+    /// gram.y `cursor_name: name`, a `ColId`.
+    pub cursor: crate::tokens::ColId<'input>,
 }
 
 /// Target of a `CLOSE` statement: a named cursor or `ALL`.
@@ -116,5 +113,6 @@ pub struct CloseStmt<'input> {
 pub struct MoveStmt<'input> {
     pub direction: Option<FetchDirection<'input>>,
     pub source: Option<FetchSource>,
-    pub cursor: literal::AliasName<'input>,
+    /// gram.y `cursor_name: name`, a `ColId`.
+    pub cursor: crate::tokens::ColId<'input>,
 }

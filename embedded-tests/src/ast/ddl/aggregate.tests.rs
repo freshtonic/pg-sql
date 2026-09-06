@@ -184,21 +184,21 @@ mod tests {
         }
     }
 
-    /// The old-style group records its `= value` tail as a `def_arg`, not as
-    /// a parameter default: `aggr_arg` is gram.y's `func_arg`, which has no
-    /// default.
+    /// The old-style group is gram.y's `old_aggr_definition`, a list of
+    /// `IDENT '=' def_arg`, not a parameter list: `aggr_arg` is gram.y's
+    /// `func_arg`, which has no default.
     #[test]
     fn parse_create_aggregate_old_style_shape() {
         let lexed = crate::lex("CREATE AGGREGATE a(BASETYPE = int, STYPE = int[])");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = CreateAggregateStmt::parse(&mut input).unwrap().into_ast();
-        let CreateAggregateArgs::Args(lists) = &stmt.signature.args else {
-            panic!("expected a plain argument group");
+        let CreateAggregateArgs::Old(definition) = &stmt.signature.args else {
+            panic!("expected an old-style definition");
         };
-        assert_eq!(lists.direct.len(), 2);
-        assert!(lists.direct[0].value.is_some());
-        assert!(lists.direct[1].value.is_some());
+        assert_eq!(definition.elems.len(), 2);
+        assert_eq!(definition.elems[0].name.text(), "BASETYPE");
+        assert_eq!(definition.elems[1].name.text(), "STYPE");
         assert!(stmt.signature.definition.is_none());
         assert!(input.is_eof());
     }
@@ -214,7 +214,6 @@ mod tests {
             panic!("expected a plain argument group");
         };
         assert_eq!(lists.direct.len(), 2);
-        assert!(lists.direct[0].value.is_none());
         assert!(stmt.signature.definition.is_some());
         assert!(input.is_eof());
     }

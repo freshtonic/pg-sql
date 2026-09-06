@@ -83,8 +83,8 @@ pub struct AlterTablespaceStmt<'input> {
 
 /// `DROP TABLESPACE [IF EXISTS] name`
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, TABLESPACE, this)]
 pub struct DropTablespaceStmt<'input> {
-    #[tok(DROP, TABLESPACE, this)]
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
     pub name: crate::tokens::ColId<'input>,

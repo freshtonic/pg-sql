@@ -591,6 +591,7 @@ embedded-tests/src/ast/session/set_reset.tests.rs	parse_show_ident	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_show_param	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_show_time_zone	false
 embedded-tests/src/ast/session/set_reset.tests.rs	parse_show_transaction_isolation_level	false
+embedded-tests/src/ast/shared/expr.tests.rs	accept_function_applications_gram_y_admits	false
 embedded-tests/src/ast/shared/expr.tests.rs	and_binds_tighter_than_or	false
 embedded-tests/src/ast/shared/expr.tests.rs	between_does_not_break_and_parse	false
 embedded-tests/src/ast/shared/expr.tests.rs	bit_and_hex_string_literals_round_trip_without_space	false

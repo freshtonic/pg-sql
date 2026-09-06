@@ -32,7 +32,27 @@ pub enum CreateAggregateArgs<'input> {
     #[tok(LPAREN, STAR, RPAREN)]
     Star,
     OrderBy(CreateAggregateOrderBy<'input>),
+    /// gram.y `old_aggr_definition`: `(name = value, ...)`. Listed before
+    /// `Args`: both open with `(`, and `name =` decides for this form (an
+    /// `aggr_arg` takes no default, so `=` never follows one).
+    Old(OldAggregateDefinition<'input>),
     Args(CreateAggregateArgLists<'input>),
+}
+
+/// gram.y `old_aggr_definition: '(' old_aggr_list ')'`.
+#[derive(recursa::Node, Debug, Clone)]
+#[tok(LPAREN, this, RPAREN)]
+pub struct OldAggregateDefinition<'input> {
+    #[sep(COMMA)]
+    pub elems: recursa::Vec1<OldAggregateElem<'input>>,
+}
+
+/// gram.y `old_aggr_elem: IDENT '=' def_arg`.
+#[derive(recursa::Node, Debug, Clone)]
+pub struct OldAggregateElem<'input> {
+    pub name: crate::tokens::literal::IdentOnly<'input>,
+    #[tok(EQ, this)]
+    pub value: crate::ast::ddl::role::DefArg<'input>,
 }
 
 /// `(ORDER BY aggr_args_list)` — ordered-set aggregate with no plain args.
@@ -48,21 +68,9 @@ pub struct CreateAggregateOrderBy<'input> {
 #[tok(ORDER, BY, this)]
 pub struct CreateAggregateOrderByInner<'input> {
     #[sep(COMMA)]
-    pub args: recursa::Vec1<crate::ast::ddl::function::FuncParam<'input>>,
+    pub args: recursa::Vec1<crate::ast::ddl::function::FunctionArg<'input>>,
 }
 
-/// `= def_arg` — the value half of an old-style aggregate definition entry.
-///
-/// `aggr_arg` is gram.y's `func_arg`, which — unlike `func_arg_with_default`
-/// — carries no default, so an `=` in this group is always an
-/// `old_aggr_elem` value and never a parameter default. That makes
-/// `def_arg`'s wider value language available here: an array type
-/// (`STYPE = int[]`), a bare operator, a string, a signed number.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct CreateAggregateDefValue<'input> {
-    #[tok(EQ, this)]
-    pub value: crate::ast::ddl::role::DefArg<'input>,
-}
 
 /// One entry of `CREATE AGGREGATE`'s first parenthesized group — an
 /// `aggr_arg`, or an `old_aggr_elem` when it carries a `= value` tail.
@@ -76,13 +84,8 @@ pub struct CreateAggregateDefValue<'input> {
 /// bounded lookahead to choose between two arbitrarily long alternatives.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CreateAggregateArg<'input> {
-    pub mode: Option<crate::ast::ddl::function::ArgMode>,
-    pub first: crate::ast::ddl::function::FuncArgType<'input>,
-    /// `name mode type` — gram.y's `func_arg` also admits the mode after
-    /// the parameter name.
-    pub name_mode: Option<crate::ast::ddl::function::ArgMode>,
-    pub named_type: Option<crate::ast::ddl::function::FuncArgType<'input>>,
-    pub value: Option<CreateAggregateDefValue<'input>>,
+    /// gram.y `aggr_arg: func_arg`.
+    pub arg: crate::ast::ddl::function::FunctionArg<'input>,
 }
 
 /// `(aggr_args_list [ORDER BY aggr_args_list])` — regular arguments with an
@@ -103,7 +106,7 @@ pub struct CreateAggregateArgLists<'input> {
 #[tok(ORDER, BY, this)]
 pub struct CreateAggregateOrderedTail<'input> {
     #[sep(COMMA)]
-    pub ordered: recursa::Vec1<crate::ast::ddl::function::FuncParam<'input>>,
+    pub ordered: recursa::Vec1<crate::ast::ddl::function::FunctionArg<'input>>,
 }
 
 /// `CREATE [OR REPLACE] AGGREGATE func_name { aggr_args (def_list) | (def_list) }`.

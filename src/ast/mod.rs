@@ -51,7 +51,7 @@ use self::{
     dml::insert::InsertStmt,
     dml::merge::MergeStmt,
     dml::update::UpdateStmt,
-    dml::values::Subquery,
+    dml::values::QueryBody,
     session::discard::*,
     session::notify::*,
     session::set_reset::{
@@ -136,7 +136,7 @@ pub enum Statement<'input> {
     CreateSubscription(Box<CreateSubscriptionStmt<'input>>),
     CreateConversion(Box<CreateConversionStmt<'input>>),
     CreateServer(Box<CreateServerStmt<'input>>),
-    CreateLanguage(CreateLanguageStmt<'input>),
+    CreateLanguage(Box<CreateLanguageStmt<'input>>),
     CreateDatabase(CreateDatabaseStmt<'input>),
     CreateTable(Box<CreateTableStmt<'input>>),
     // DROP variants
@@ -187,14 +187,14 @@ pub enum Statement<'input> {
     DropTable(Box<DropTableStmt<'input>>),
     // ALTER variants: multi-keyword before single-keyword
     AlterDefaultPrivileges(Box<AlterDefaultPrivilegesStmt<'input>>),
-    AlterForeign(AlterForeignStmt<'input>),
+    AlterForeign(Box<AlterForeignStmt<'input>>),
     AlterEventTrigger(AlterEventTriggerStmt<'input>),
-    AlterTrigger(AlterTriggerStmt<'input>),
+    AlterTrigger(Box<AlterTriggerStmt<'input>>),
     AlterMaterializedView(Box<AlterMaterializedViewStmt<'input>>),
     AlterTextSearch(Box<AlterTextSearchStmt<'input>>),
     AlterLargeObject(AlterLargeObjectStmt<'input>),
     AlterTablespace(AlterTablespaceStmt<'input>),
-    AlterTable(AlterTableStmt<'input>),
+    AlterTable(Box<AlterTableStmt<'input>>),
     AlterRule(AlterRuleStmt<'input>),
     AlterGroup(AlterGroupStmt<'input>),
     AlterRole(Box<AlterRoleStmt<'input>>),
@@ -205,9 +205,9 @@ pub enum Statement<'input> {
     AlterUser(Box<AlterUserStmt<'input>>),
     AlterSchema(AlterSchemaStmt<'input>),
     AlterSequence(Box<AlterSequenceStmt<'input>>),
-    AlterType(AlterTypeStmt<'input>),
-    AlterDomain(AlterDomainStmt<'input>),
-    AlterAggregate(AlterAggregateStmt<'input>),
+    AlterType(Box<AlterTypeStmt<'input>>),
+    AlterDomain(Box<AlterDomainStmt<'input>>),
+    AlterAggregate(Box<AlterAggregateStmt<'input>>),
     // `ALTER OPERATOR CLASS ...` and `ALTER OPERATOR FAMILY ...` are
     // three-keyword leads and must precede the bare `ALTER OPERATOR ...`
     // variant so longest-match-wins picks the specific path.
@@ -216,7 +216,7 @@ pub enum Statement<'input> {
     AlterOperator(Box<AlterOperatorStmt<'input>>),
     AlterCollation(AlterCollationStmt<'input>),
     AlterExtension(AlterExtensionStmt<'input>),
-    AlterPolicy(AlterPolicyStmt<'input>),
+    AlterPolicy(Box<AlterPolicyStmt<'input>>),
     AlterStatistics(AlterStatisticsStmt<'input>),
     AlterPublication(AlterPublicationStmt<'input>),
     AlterSubscription(AlterSubscriptionStmt<'input>),
@@ -259,7 +259,7 @@ pub enum Statement<'input> {
     Truncate(TruncateStmt<'input>),
     Reindex(Box<ReindexStmt<'input>>),
     Refresh(RefreshStmt<'input>),
-    Cluster(ClusterStmt<'input>),
+    Cluster(Box<ClusterStmt<'input>>),
     Checkpoint(CheckpointStmt),
     Vacuum(Box<VacuumStmt<'input>>),
     Lock(LockStmt<'input>),
@@ -288,7 +288,10 @@ pub enum Statement<'input> {
     Show(ShowStmt<'input>),
     Load(LoadStmt<'input>),
     Analyze(AnalyzeStmt<'input>),
-    // Query. `Subquery` owns the common prefix so the top-level dispatcher
-    // does not compare duplicate languages for WITH/SELECT/VALUES/TABLE.
-    Query(Box<Subquery<'input>>),
+    /// A query without a `WITH` prefix: gram.y `SelectStmt` less its
+    /// `with_clause` forms, which `With` owns.
+    Query(Box<QueryBody<'input>>),
+    /// `WITH ... { query | INSERT | UPDATE | DELETE | MERGE }`: the CTE list
+    /// is the shared prefix of five statements, so it is factored once.
+    With(Box<crate::ast::shared::with_clause::WithStatement<'input>>),
 }

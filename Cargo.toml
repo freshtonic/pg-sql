@@ -29,6 +29,12 @@ doctest = false
 [features]
 arbitrary = ["dep:arbitrary", "recursa/arbitrary"]
 postgres-oracle = ["dep:pg-oracle"]
+# The two-parser build (#68): gates `tests/two_parsers.rs`, which needs the
+# grammar to declare `parsers(rd = recursive_descent, lr = table_driven)`.
+# The declaration waits on recursa changes that retire the remaining LR
+# conflicts. Until it lands, `pg_sql::parsers::lr` does not exist and the
+# test does not compile: do not enable the feature yet.
+table-driven = []
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -76,6 +82,11 @@ required-features = ["postgres-oracle"]
 name = "accepted_legacy_gaps"
 path = "tests/accepted_legacy_gaps.rs"
 required-features = ["postgres-oracle"]
+
+[[test]]
+name = "two_parsers"
+path = "tests/two_parsers.rs"
+required-features = ["table-driven"]
 
 [build-dependencies]
 recursa-codegen = { path = "../recursa/recursa-codegen", features = ["diagrams", "explorer"] }

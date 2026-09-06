@@ -5,7 +5,7 @@
 //! tests cover the reviewed happy-path matrix, the exact source-ownership
 //! partition, the strict rejection of invalid input, and psql rejection.
 
-use pg_sql::ast::{Statement, dml::select::SelectBody, dml::values::Subquery};
+use pg_sql::ast::{Statement, dml::select::SelectBody, dml::values::SelectClause};
 use pg_sql::document::{self, SqlParseError};
 use recursa::Span;
 
@@ -104,8 +104,8 @@ fn statements_are_semantically_typed() {
         statement,
         Statement::Query(query)
             if matches!(
-                query.as_ref(),
-                Subquery::Body(body) if matches!(&body.body, SelectBody::Select(_))
+                &query.clause,
+                SelectClause::Body(body) if matches!(&body.body, SelectBody::Select(_))
             )
     ));
 }

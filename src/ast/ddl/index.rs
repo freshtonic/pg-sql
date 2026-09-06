@@ -3,7 +3,7 @@ pub use crate::ast::shared::flags::{DropBehavior, IfExists, IfNotExists};
 
 use crate::ast::dml::select::{NullsOrder, SortDir, WhereClause};
 use crate::ast::session::set_reset::SetValue;
-use crate::ast::shared::expr::{Expr, FuncCall, JsonFuncExpr};
+use crate::ast::shared::expr::{Expr, FunctionApplicationExpr, JsonFuncExpr};
 use crate::tokens::literal;
 
 // ---------------------------------------------------------------------------
@@ -140,7 +140,9 @@ pub struct IncludeClause<'input> {
 pub enum IndexTarget<'input> {
     Expr(#[tok(LPAREN, this, RPAREN)] Box<Expr<'input>>),
     Json(Box<JsonFuncExpr<'input>>),
-    Func(Box<FuncCall<'input>>),
+    /// gram.y `func_expr_windowless`: no `WITHIN GROUP`, `FILTER` or `OVER`
+    /// suffix, which are also operator class names after the call.
+    Func(Box<FunctionApplicationExpr<'input>>),
     Col(crate::tokens::ColId<'input>),
 }
 
@@ -228,17 +230,14 @@ pub enum NullsDistinctClause {
 /// DROP INDEX [CONCURRENTLY] [IF EXISTS] name [, name ...] [CASCADE | RESTRICT]
 /// ```
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(DROP, INDEX, this)]
 pub struct DropIndexStmt<'input> {
-    /// Greedy: a leading CONCURRENTLY starts this element instead of ending `DropIndexStmt` (bison shift preference).
-    #[greedy(CONCURRENTLY)]
-    #[tok(DROP, INDEX, this)]
     #[presence(CONCURRENTLY)]
     pub concurrently: bool,
     pub if_exists: Option<IfExists>,
-    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropIndexStmt` (bison shift preference).
-    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
-    pub names: Vec<crate::ast::shared::names::QualifiedName<'input>>,
+    /// gram.y `any_name_list`: one or more names.
+    pub names: recursa::Vec1<crate::ast::shared::names::QualifiedName<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 
