@@ -942,7 +942,36 @@ recursa::tokens! {
         },
         // gram.y:889 `%left Op OPERATOR` ("multi-character ops and
         // user-defined operators") -- `Expr::CustomInfix` (lbp 80).
-        left(bp = 80) { CustomOp, OPERATOR },
+        //
+        // PostgreSQL's scanner returns one `Op` token for every symbolic
+        // operator it does not name individually, so gram.y's single `Op`
+        // stands for the fixed operator tokens pg-sql spells out. Listed
+        // here are the ones pg-sql also admits as a Pratt prefix, which is
+        // where a decision falls outside Pratt: `RANGE BETWEEN ~ x ...`
+        // asks whether `BETWEEN` is the frame keyword with a prefixed bound
+        // or a column named `between`, and gram.y answers it by comparing
+        // `Op` against `BETWEEN`'s level.
+        left(bp = 80) {
+            CustomOp,
+            OPERATOR,
+            ATAT,
+            ATHASHAT,
+            ATMINUSAT,
+            ATSIGN,
+            BANGEQMINUS,
+            PIPEPIPESLASH,
+            PIPESLASH,
+            POUND,
+            QUESTIONDASH,
+            QUESTIONPIPE,
+            TILDE
+        },
+        // gram.y:894 `%left AT` ("sets precedence for AT TIME ZONE, AT
+        // LOCAL") -- `Expr::AtTimeZone` (lbp 90).
+        left(bp = 90) { AT },
+        // gram.y:890 `%left '+' '-'` -- `Expr::Add` and `Expr::Sub`
+        // (lbp 100), and the `Pos` / `Neg` prefixes.
+        left(bp = 100) { PLUS, MINUS },
         // gram.y:896 `%right UMINUS`: a precedence-only name, carried by
         // `#[parse(prec = UMINUS)]` on the parenthesised-query atom the way
         // gram.y writes `'(' select_with_parens ')' %prec UMINUS`. It sits
