@@ -1005,12 +1005,10 @@ pub struct CustomPrefixOperand<'input> {
         TsMatch,
         TsMatch3
     )))]
-    /// Greedy: none of these is an extender of this restricted operand, but
-    /// the analysis does not consult the exclusion set for the overlap check
-    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
-    /// Greedy: the operand keeps extending on every extender it admits, which
-    /// the enclosing expression's continuation also admits.
-    #[greedy(all)]
+    // No acceptance: the exclusion list leaves this operand no extender that
+    // the enclosing expression's continuation also admits, so analysis finds
+    // no overlap here (recursa #126 made the overlap check honour
+    // `pratt(exclude(...))`).
     pub expr: Box<Expr<'input>>,
 }
 
@@ -2304,8 +2302,8 @@ pub struct PositionInner<'input> {
         Or,
         And
     )))]
-    /// Greedy: the expression keeps extending on IN instead of yielding to what may follow `PositionInner`.
-    #[greedy(IN)]
+    // No acceptance: the exclusion list already stops this operand before
+    // `IN`, so analysis finds no overlap here (recursa #126).
     pub needle: Box<Expr<'input>>,
     #[tok(IN, this)]
     pub haystack: Box<Expr<'input>>,
@@ -3023,7 +3021,13 @@ pub enum JsonFuncExpr<'input> {
 /// extender instead of yielding to whatever may follow the enclosing
 /// expression, which is PostgreSQL's precedence resolution. The optional
 /// `ESCAPE` tails of the LIKE family carry their own `#[greedy(ESCAPE)]`.
-#[greedy(AND, IN, NOT, SIMILAR)]
+///
+/// The overlap here is every extender of `Expr` — each infix and postfix
+/// operator in this enum both continues an operand and may follow the
+/// enclosing expression — so the acceptance is `all` rather than a
+/// hand-copied list of every operator kind, which would say no more and
+/// would need editing for each operator added.
+#[greedy(all)]
 #[pratt]
 pub enum Expr<'input> {
     // --- Prefix ---
