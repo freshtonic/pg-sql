@@ -619,11 +619,16 @@ pub struct FunctionApplicationExpr<'input> {
 /// every `COL_NAME` keyword, making the dedicated XML/JSON expression forms
 /// indistinguishable from an ordinary function call.
 ///
-/// This stays its own node: inlining the two names into the call variants
-/// (each carrying the call tail) makes recursa's predictive dispatch for the
-/// call walk into the first argument, where an operator has no edge, so
-/// `f(a + b)` fails before `Expr` runs. The table-driven lowering pays for
-/// the separate node with `$end` in its FOLLOW set (recursa #125).
+/// This stays its own node because gram.y writes it as one:
+/// `func_name: type_function_name | ColId indirection`. The dispatch bug
+/// that once forced the shape is gone -- recursa #127 makes enum dispatch
+/// commit where the variants part, so inlining the two names into the call
+/// variants would no longer break `f(a + b)` (see
+/// `parse_create_index_bare_func_with_operator_argument`) -- and the
+/// table-driven cost of the separate node, `$end` in its FOLLOW set, is now
+/// settled by declaration order without a diagnostic (recursa #125).
+/// Inlining would duplicate the call tail across both name shapes and part
+/// from gram.y, so the node stays.
 ///
 /// Variant ordering: `Qualified` needs a dotted tail, `Name` a single
 /// `type_function_name`; they share their first token and part on the dot.
