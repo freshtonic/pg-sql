@@ -163,9 +163,6 @@ made the overlap check honour `pratt(exclude(...))`.
 | RCA0300 | `ast::dml::update::SingleAssignment` `indirection` | DOT, LBRACKET | A leading DOT, LBRACKET starts this element instead of ending `SingleAssignment` (bison shift preference). |
 | RCA0300 | `ast::dml::update::UpdateStmt` `returning` | RETURNING | A leading RETURNING starts this element instead of ending `UpdateStmt` (bison shift preference). |
 | RCA0300 | `ast::dml::values::CompoundBody` `set_op` | EXCEPT, INTERSECT, UNION | A leading EXCEPT, INTERSECT, UNION starts this element instead of ending `CompoundBody` (bison shift preference). |
-| RCA0300 | `ast::dml::values::CompoundParen` `limit_offset` | FETCH, LIMIT, OFFSET | A leading FETCH, LIMIT, OFFSET starts this element instead of ending `CompoundParen` (bison shift preference). |
-| RCA0300 | `ast::dml::values::CompoundParen` `order_by` | ORDER | A leading ORDER starts this element instead of ending `CompoundParen` (bison shift preference). |
-| RCA0300 | `ast::dml::values::CompoundParen` `set_op` | EXCEPT, INTERSECT, UNION | A leading EXCEPT, INTERSECT, UNION starts this element instead of ending `CompoundParen` (bison shift preference). |
 | RCA0300 | `ast::dml::values::TableStmt` `limit_offset` | FETCH, LIMIT, OFFSET | A leading FETCH, LIMIT, OFFSET starts this element instead of ending `TableStmt` (bison shift preference). |
 | RCA0300 | `ast::dml::values::TableStmt` `order_by` | ORDER | A leading ORDER starts this element instead of ending `TableStmt` (bison shift preference). |
 | RCA0300 | `ast::shared::expr::CaseSearched` `rest_arms` | WHEN | A leading WHEN starts this element instead of ending `CaseSearched` (bison shift preference). |

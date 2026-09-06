@@ -24,7 +24,7 @@
 //!   The 18 that used to head this list are gone. They were `SelectClause`
 //!   against `DirectSelectClause`, and the diagnosis in this note was wrong:
 //!   `DirectSelectClause` was never a second copy of `select_clause`, it is
-//!   `simple_select` (gram.y:12786). What the two really shared, each
+//!   `simple_select` (gram.y:12790). What the two really shared, each
 //!   carrying its own copy, was `select_with_parens` (gram.y:12682). Giving
 //!   that its own node, as gram.y does and for the reason gram.y states
 //!   (gram.y:12658), retired all 18. Note that substituting `Subquery` for
@@ -36,8 +36,9 @@
 //!   position that admits both a parenthesized query and a parenthesized
 //!   expression as two alternatives that each own their `(`: `in_expr:
 //!   select_with_parens | '(' expr_list ')'` (gram.y:16715), and likewise
-//!   `c_expr` (gram.y:15391), `table_ref` (gram.y:13492) and `sub_type`
-//!   (gram.y:15152). recursa cannot express that shape. Written directly it
+//!   `c_expr` (gram.y:15391), `table_ref` (gram.y:13492) and the
+//!   `subquery_Op sub_type` operand (gram.y:15152). recursa cannot express
+//!   that shape. Written directly it
 //!   is `RCA0200`, witness `( -> ( -> SELECT -> U&'...' -> SELECT`,
 //!   `lookahead=Some(5)->None`: balanced dispatch does not engage, because
 //!   both alternatives close on the same `)` and their residuals after it are
@@ -84,7 +85,7 @@
 //!   breaks `f(1, VARIADIC xs ORDER BY 1)` under recursive descent, whose
 //!   `list1` eats the comma and then demands a `FuncArg`. The real blocker is
 //!   that `FunctionCallTail`'s two variants must share every nonterminal up
-//!   to `')'`, as `func_application` and `AexprConst` (gram.y:17223) do, and
+//!   to `')'`, as `func_application` and `AexprConst` (gram.y:17231) do, and
 //!   pg-sql's do not. Merging them into one `open body close continuation`,
 //!   parting on the `Sconst` after `')'`, would do it -- but `body` is
 //!   `FunctionCallBody`, so the typed-literal form would then admit `*`,

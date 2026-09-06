@@ -92,7 +92,7 @@ pub struct SelectWithParens<'input> {
 
 /// A parenthesized left operand with its required set operation:
 /// gram.y `simple_select: select_clause UNION set_quantifier select_clause`
-/// (gram.y:12786) where the left `select_clause` is a `select_with_parens`,
+/// (gram.y:12844) where the left `select_clause` is a `select_with_parens`,
 /// as in `(SELECT 1) UNION SELECT 2`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ParenthesizedSetOp<'input> {
@@ -100,7 +100,7 @@ pub struct ParenthesizedSetOp<'input> {
     pub set_op: SetOpCombiner<'input>,
 }
 
-/// gram.y `simple_select` (gram.y:12786): the set-operation members of a
+/// gram.y `simple_select` (gram.y:12790): the set-operation members of a
 /// query, which are exactly the `select_clause` forms that carry no outer
 /// parentheses of their own.
 ///
