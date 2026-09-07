@@ -10,9 +10,10 @@ mod tests {
         let lexed = crate::lex("CREATE ACCESS METHOD gist2 TYPE INDEX HANDLER gisthandler");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateAccessMethodStmt::parse(&mut input)
+        let stmt_parsed = CreateAccessMethodStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.text(), "gist2");
         assert!(matches!(stmt.am_type, AccessMethodType::Index));
         assert_eq!(stmt.handler_name.object(), "gisthandler");
@@ -26,9 +27,10 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateAccessMethodStmt::parse(&mut input)
+        let stmt_parsed = CreateAccessMethodStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.text(), "heap2");
         assert!(matches!(stmt.am_type, AccessMethodType::Table));
         assert!(input.is_eof());

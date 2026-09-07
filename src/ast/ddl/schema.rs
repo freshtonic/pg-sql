@@ -11,14 +11,14 @@ use crate::ast::utility::grant::GrantStmt;
 use crate::tokens::{literal, punct};
 
 /// `AUTHORIZATION role_spec` clause on `CREATE SCHEMA`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SchemaAuthorization<'input> {
     #[tok(AUTHORIZATION, this)]
     pub role: RoleSpec<'input>,
 }
 
 /// `name [AUTHORIZATION role]` — schema name with optional authorization.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SchemaNameAndAuth<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub authorization: Option<SchemaAuthorization<'input>>,
@@ -32,7 +32,7 @@ pub struct SchemaNameAndAuth<'input> {
 /// `AUTHORIZATION` keyword does not get consumed as the schema-name `Ident`
 /// (soft keywords are reclaimable as identifiers, and `AUTHORIZATION` is
 /// soft).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SchemaNameClause<'input> {
     Authorization(SchemaAuthorization<'input>),
     Named(SchemaNameAndAuth<'input>),
@@ -50,17 +50,17 @@ pub enum SchemaNameClause<'input> {
 /// REPLACE] [TEMP|TEMPORARY] [RECURSIVE] VIEW …`) is the most specific.
 /// The other CREATE variants disambiguate on their `CREATE { TABLE | INDEX
 /// | SEQUENCE | TRIGGER }` second-token.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SchemaElement<'input> {
     Grant(GrantStmt<'input>),
-    CreateView(Box<crate::ast::ddl::view::CreateViewStmt<'input>>),
-    CreateTable(Box<crate::ast::ddl::table::CreateTableStmt<'input>>),
-    CreateIndex(Box<crate::ast::ddl::index::CreateIndexStmt<'input>>),
+    CreateView(recursa::ArenaBox<'input, crate::ast::ddl::view::CreateViewStmt<'input>>),
+    CreateTable(recursa::ArenaBox<'input, crate::ast::ddl::table::CreateTableStmt<'input>>),
+    CreateIndex(recursa::ArenaBox<'input, crate::ast::ddl::index::CreateIndexStmt<'input>>),
     CreateSequence(CreateSequenceStmt<'input>),
-    CreateTrigger(Box<CreateTriggerStmt<'input>>),
+    CreateTrigger(recursa::ArenaBox<'input, CreateTriggerStmt<'input>>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(CREATE, SCHEMA, this)]
 pub struct CreateSchemaStmt<'input> {
     pub if_not_exists: Option<crate::ast::shared::flags::IfNotExists>,
@@ -70,11 +70,11 @@ pub struct CreateSchemaStmt<'input> {
     /// Nested `schema_element` statements — `OptSchemaEltList`. Each element
     /// is a top-level statement type; the surrounding semicolons live on the
     /// enclosing statement, not on the nested ones.
-    pub elements: Vec<SchemaElement<'input>>,
+    pub elements: recursa::ArenaVec<'input, SchemaElement<'input>>,
 }
 
 /// `DROP SCHEMA [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, SCHEMA, this)]
 pub struct DropSchemaStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -88,7 +88,7 @@ pub struct DropSchemaStmt<'input> {
 ///
 /// Variant ordering: variants begin with distinct keywords (`RENAME`,
 /// `OWNER`), so order is for clarity only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterSchemaAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -96,7 +96,7 @@ pub enum AlterSchemaAction<'input> {
 
 /// `ALTER SCHEMA name action` — Postgres' `RenameStmt` /
 /// `AlterOwnerStmt` branches for schemas.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterSchemaStmt<'input> {
     #[tok(ALTER, SCHEMA, this)]
     pub name: crate::tokens::ColId<'input>,

@@ -14,27 +14,27 @@ use crate::tokens::literal;
 /// grammar (`SELECT`, set operations, `VALUES`, `TABLE`, and `WITH`). The
 /// other four variants have disjoint leading keywords, so variant order does
 /// not affect disambiguation.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum PreparableStmt<'input> {
-    Query(Box<crate::ast::dml::values::QueryBody<'input>>),
+    Query(recursa::ArenaBox<'input, crate::ast::dml::values::QueryBody<'input>>),
     /// `WITH ...` before a query or a DML statement, factored as in `Statement`.
-    With(Box<crate::ast::shared::with_clause::WithStatement<'input>>),
-    Insert(Box<crate::ast::dml::insert::InsertStmt<'input>>),
-    Update(Box<crate::ast::dml::update::UpdateStmt<'input>>),
-    Delete(Box<crate::ast::dml::delete::DeleteStmt<'input>>),
-    Merge(Box<crate::ast::dml::merge::MergeStmt<'input>>),
+    With(recursa::ArenaBox<'input, crate::ast::shared::with_clause::WithStatement<'input>>),
+    Insert(recursa::ArenaBox<'input, crate::ast::dml::insert::InsertStmt<'input>>),
+    Update(recursa::ArenaBox<'input, crate::ast::dml::update::UpdateStmt<'input>>),
+    Delete(recursa::ArenaBox<'input, crate::ast::dml::delete::DeleteStmt<'input>>),
+    Merge(recursa::ArenaBox<'input, crate::ast::dml::merge::MergeStmt<'input>>),
 }
 
 /// `( typename [, ...] )` parameter-type list on a `PREPARE` statement
 /// (`prep_type_clause` in `gram.y`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PrepareTypes<'input> {
     #[tok(LPAREN, this, RPAREN)]
     pub types: TypeNameList<'input>,
 }
 
 /// Body of a standard `PREPARE name [(types)] AS stmt` statement.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PrepareStandardBody<'input> {
     pub name: literal::AliasName<'input>,
     pub types: Option<PrepareTypes<'input>>,
@@ -46,7 +46,7 @@ pub struct PrepareStandardBody<'input> {
 /// form (`gram.y::TransactionStmt: PREPARE TRANSACTION Sconst`). Distinct
 /// from the `PREPARE name … AS stmt` form modelled by
 /// [`PrepareStandardBody`].
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PrepareTransactionBody<'input> {
     #[tok(TRANSACTION, this)]
     pub gid: literal::StringLit<'input>,
@@ -58,7 +58,7 @@ pub struct PrepareTransactionBody<'input> {
 /// an ordinary prepared-statement name; the grammar keeps these surface forms
 /// separate so the LR table can distinguish the following string from `AS` or
 /// a type list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum PrepareStmtBody<'input> {
     Transaction(PrepareTransactionBody<'input>),
     Standard(PrepareStandardBody<'input>),
@@ -68,7 +68,7 @@ pub enum PrepareStmtBody<'input> {
 /// PREPARE name [ (typename [, ...]) ] AS PreparableStmt
 /// PREPARE TRANSACTION 'gid'
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PrepareStmt<'input> {
     #[tok(PREPARE, this)]
     pub body: PrepareStmtBody<'input>,
@@ -76,17 +76,17 @@ pub struct PrepareStmt<'input> {
 
 /// `( expr [, ...] )` argument list on an `EXECUTE` statement
 /// (`execute_param_clause` in `gram.y`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct ExecuteParams<'input> {
     #[sep(COMMA)]
-    pub params: Vec<Expr<'input>>,
+    pub params: recursa::ArenaVec<'input, Expr<'input>>,
 }
 
 /// ```sql
 /// EXECUTE name [ (expr [, ...]) ]
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ExecuteStmt<'input> {
     #[tok(EXECUTE, this)]
     pub name: literal::AliasName<'input>,
@@ -97,7 +97,7 @@ pub struct ExecuteStmt<'input> {
 ///
 /// Variant ordering: `All` (the `ALL` keyword) before `Name` so the reserved
 /// word is not swallowed as a statement name.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum DeallocateTarget<'input> {
     #[tok(ALL)]
     All,
@@ -107,7 +107,7 @@ pub enum DeallocateTarget<'input> {
 /// ```sql
 /// DEALLOCATE [PREPARE] { name | ALL }
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DEALLOCATE, this)]
 pub struct DeallocateStmt<'input> {
     #[presence(PREPARE)]

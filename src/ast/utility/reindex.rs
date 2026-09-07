@@ -5,7 +5,7 @@ use crate::ast::shared::names::QualifiedName;
 use crate::ast::utility::vacuum::VacuumOptions;
 
 /// `REINDEX … { INDEX | TABLE } [CONCURRENTLY] qualified_name`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ReindexRelation<'input> {
     pub kind: ReindexRelationKind,
     #[presence(CONCURRENTLY)]
@@ -13,7 +13,7 @@ pub struct ReindexRelation<'input> {
     pub name: QualifiedName<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ReindexRelationKind {
     #[tok(INDEX)]
     Index,
@@ -23,7 +23,7 @@ pub enum ReindexRelationKind {
 
 /// `REINDEX … SCHEMA [CONCURRENTLY] name` — Postgres' `reindex_target_relation`
 /// branch for `SCHEMA`, which always requires a name.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ReindexSchemaTarget<'input> {
     #[tok(SCHEMA, this)]
     #[presence(CONCURRENTLY)]
@@ -34,7 +34,7 @@ pub struct ReindexSchemaTarget<'input> {
 /// `REINDEX … { SYSTEM | DATABASE } [CONCURRENTLY] [name]` — Postgres'
 /// `reindex_target_all`, where the trailing name is optional
 /// (`opt_single_name`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ReindexAllTarget<'input> {
     pub kind: ReindexAllKind,
     #[presence(CONCURRENTLY)]
@@ -42,7 +42,7 @@ pub struct ReindexAllTarget<'input> {
     pub name: Option<crate::tokens::ColId<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ReindexAllKind {
     #[tok(SYSTEM)]
     System,
@@ -55,7 +55,7 @@ pub enum ReindexAllKind {
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`INDEX` / `TABLE` / `SCHEMA` / `SYSTEM` / `DATABASE`) so first-set
 /// disambiguation is unambiguous.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ReindexTarget<'input> {
     Relation(ReindexRelation<'input>),
     Schema(ReindexSchemaTarget<'input>),
@@ -68,7 +68,7 @@ pub enum ReindexTarget<'input> {
 ///   | SCHEMA            [CONCURRENTLY] name
 ///   | { SYSTEM | DATABASE } [CONCURRENTLY] [name] }
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(REINDEX, this)]
 pub struct ReindexStmt<'input> {
     pub options: Option<VacuumOptions<'input>>,

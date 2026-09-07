@@ -8,7 +8,7 @@ use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
 /// `CREATE [DEFAULT] CONVERSION name FOR 'src_enc' TO 'dst_enc' FROM func`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateConversionStmt<'input> {
     #[tok(CREATE, this, CONVERSION)]
     #[presence(DEFAULT)]
@@ -23,7 +23,7 @@ pub struct CreateConversionStmt<'input> {
 }
 
 /// `DROP CONVERSION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, CONVERSION, this)]
 pub struct DropConversionStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -37,7 +37,7 @@ pub struct DropConversionStmt<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`RENAME`, `OWNER`, `SET`), so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterConversionAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -46,7 +46,7 @@ pub enum AlterConversionAction<'input> {
 
 /// `ALTER CONVERSION any_name action` — Postgres' `RenameStmt` /
 /// `AlterOwnerStmt` / `AlterObjectSchemaStmt` branches for conversions.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterConversionStmt<'input> {
     #[tok(ALTER, CONVERSION, this)]
     pub name: QualifiedName<'input>,

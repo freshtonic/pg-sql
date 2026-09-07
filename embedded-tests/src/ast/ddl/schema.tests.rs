@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("CREATE SCHEMA s1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateSchemaStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateSchemaStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt.head, SchemaNameClause::Named(_)));
         assert!(stmt.elements.is_empty());
         assert!(input.is_eof());
@@ -21,7 +22,8 @@ mod tests {
         let lexed = crate::lex("CREATE SCHEMA AUTHORIZATION alice");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateSchemaStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateSchemaStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt.head, SchemaNameClause::Authorization(_)));
         assert!(input.is_eof());
     }
@@ -31,7 +33,8 @@ mod tests {
         let lexed = crate::lex("CREATE SCHEMA IF NOT EXISTS s1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateSchemaStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateSchemaStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_not_exists.is_some());
         assert!(input.is_eof());
     }
@@ -41,7 +44,8 @@ mod tests {
         let lexed = crate::lex("CREATE SCHEMA s1 AUTHORIZATION alice");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateSchemaStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateSchemaStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         match &stmt.head {
             SchemaNameClause::Named(n) => {
                 assert_eq!(n.name.text(), "s1");
@@ -57,7 +61,8 @@ mod tests {
         let lexed = crate::lex("DROP SCHEMA IF EXISTS s1, s2 CASCADE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropSchemaStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropSchemaStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists.is_some());
         assert_eq!(stmt.names.len(), 2);
         assert!(stmt.behavior.is_some());
@@ -69,7 +74,8 @@ mod tests {
         let lexed = crate::lex("ALTER SCHEMA test_ns_schema_1 RENAME TO test_ns_schema_renamed");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterSchemaStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterSchemaStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -78,7 +84,8 @@ mod tests {
         let lexed = crate::lex("ALTER SCHEMA testns OWNER TO regress_schemauser2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterSchemaStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterSchemaStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 }

@@ -9,7 +9,7 @@ use crate::ast::utility::copy::CopySconst;
 use crate::tokens::{literal, punct};
 
 /// `SCHEMA name` option on `CREATE EXTENSION`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ExtensionSchemaOption<'input> {
     #[tok(SCHEMA, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -17,7 +17,7 @@ pub struct ExtensionSchemaOption<'input> {
 
 /// `VERSION { sconst | ident }` option on `CREATE EXTENSION`. Postgres'
 /// `NonReservedWord_or_Sconst` allows either a quoted string or a bareword.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ExtensionVersionValue<'input> {
     String(CopySconst<'input>),
     /// Any bareword (incl. soft keywords) — `NonReservedWord`.
@@ -25,7 +25,7 @@ pub enum ExtensionVersionValue<'input> {
 }
 
 /// `VERSION value` option on `CREATE EXTENSION`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ExtensionVersionOption<'input> {
     #[tok(VERSION, this)]
     pub value: ExtensionVersionValue<'input>,
@@ -33,7 +33,7 @@ pub struct ExtensionVersionOption<'input> {
 
 /// A single CREATE EXTENSION option — Postgres' `create_extension_opt_item`.
 /// Options are unordered and repeatable.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ExtensionOption<'input> {
     Schema(ExtensionSchemaOption<'input>),
     Version(ExtensionVersionOption<'input>),
@@ -41,17 +41,17 @@ pub enum ExtensionOption<'input> {
     Cascade,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(CREATE, EXTENSION, this)]
 pub struct CreateExtensionStmt<'input> {
     pub if_not_exists: Option<crate::ast::shared::flags::IfNotExists>,
     pub name: crate::tokens::ColId<'input>,
     #[tok(optional(WITH), this)]
-    pub options: Vec<ExtensionOption<'input>>,
+    pub options: recursa::ArenaVec<'input, ExtensionOption<'input>>,
 }
 
 /// `DROP EXTENSION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, EXTENSION, this)]
 pub struct DropExtensionStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -64,14 +64,14 @@ pub struct DropExtensionStmt<'input> {
 ///
 /// pg-sql accepts `TO sconst` (a string literal); the bare-identifier
 /// form is not exercised by the corpus.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterExtensionUpdateTo<'input> {
     #[tok(TO, this)]
     pub version: literal::StringLit<'input>,
 }
 
 /// `UPDATE [TO version]` — Postgres' `AlterExtensionStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(UPDATE, this)]
 pub struct AlterExtensionUpdate<'input> {
     pub to: Option<AlterExtensionUpdateTo<'input>>,
@@ -83,7 +83,7 @@ pub struct AlterExtensionUpdate<'input> {
 ///
 /// Variant ordering: longer multi-keyword variants first (e.g.
 /// `MATERIALIZED VIEW` before `VIEW`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ExtensionObjectTypeAnyName {
     #[tok(MATERIALIZED, VIEW)]
     MaterializedView,
@@ -119,7 +119,7 @@ pub enum ExtensionObjectTypeAnyName {
 /// the dedicated `ALTER EXTENSION ... LANGUAGE` branch below).
 ///
 /// Variant ordering: longest multi-keyword forms first.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ExtensionObjectTypeName {
     #[tok(FOREIGN, DATA, WRAPPER)]
     ForeignDataWrapper,
@@ -147,7 +147,7 @@ pub enum ExtensionObjectTypeName {
 
 /// `add_drop object_type_any_name any_name` — the dotted-name branch of
 /// Postgres' `AlterExtensionContentsStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterExtensionAnyNameMember<'input> {
     pub object_type: ExtensionObjectTypeAnyName,
     pub name: QualifiedName<'input>,
@@ -155,7 +155,7 @@ pub struct AlterExtensionAnyNameMember<'input> {
 
 /// `add_drop object_type_name name` — the simple-name branch of
 /// Postgres' `AlterExtensionContentsStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterExtensionNameMember<'input> {
     pub object_type: ExtensionObjectTypeName,
     pub name: crate::tokens::ColId<'input>,
@@ -164,7 +164,7 @@ pub struct AlterExtensionNameMember<'input> {
 /// `add_drop [PROCEDURAL] LANGUAGE name` — Postgres'
 /// `AlterExtensionContentsStmt` LANGUAGE branch (via the
 /// `opt_procedural LANGUAGE` arm of `drop_type_name`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterExtensionLanguageMember<'input> {
     #[tok(optional(PROCEDURAL), LANGUAGE, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -190,7 +190,7 @@ pub struct AlterExtensionLanguageMember<'input> {
 /// `TEXT SEARCH …` / `MATERIALIZED VIEW` / `FOREIGN TABLE` multi-keyword
 /// forms win over their single-keyword cousins in
 /// `ExtensionObjectTypeName`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterExtensionMember<'input> {
     Language(AlterExtensionLanguageMember<'input>),
     AnyName(AlterExtensionAnyNameMember<'input>),
@@ -198,14 +198,14 @@ pub enum AlterExtensionMember<'input> {
 }
 
 /// `ADD member` — Postgres' `AlterExtensionContentsStmt` ADD branch.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterExtensionAdd<'input> {
     #[tok(ADD, this)]
     pub member: AlterExtensionMember<'input>,
 }
 
 /// `DROP member` — Postgres' `AlterExtensionContentsStmt` DROP branch.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterExtensionDrop<'input> {
     #[tok(DROP, this)]
     pub member: AlterExtensionMember<'input>,
@@ -218,7 +218,7 @@ pub struct AlterExtensionDrop<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`UPDATE`, `ADD`, `DROP`, `SET`), so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterExtensionAction<'input> {
     Update(AlterExtensionUpdate<'input>),
     Add(AlterExtensionAdd<'input>),
@@ -229,7 +229,7 @@ pub enum AlterExtensionAction<'input> {
 /// `ALTER EXTENSION name action` — Postgres' `AlterExtensionStmt` and
 /// `AlterExtensionContentsStmt` plus the extension branch of
 /// `AlterObjectSchemaStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterExtensionStmt<'input> {
     #[tok(ALTER, EXTENSION, this)]
     pub name: crate::tokens::ColId<'input>,

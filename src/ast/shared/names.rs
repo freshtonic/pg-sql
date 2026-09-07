@@ -4,10 +4,10 @@ use crate::tokens::literal;
 
 /// A comma-separated list of qualified (dotted) names — Postgres'
 /// `any_name_list` / `name_list` in DROP-family statements.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(recursa::Node, Debug, PartialEq, Eq, Hash)]
 pub struct NameList<'input> {
     #[sep(COMMA)]
-    pub names: recursa::Vec1<QualifiedName<'input>>,
+    pub names: recursa::ArenaVec1<'input, QualifiedName<'input>>,
 }
 
 impl<'input> NameList<'input> {
@@ -29,16 +29,16 @@ impl<'input> NameList<'input> {
 /// pseudo-roles `CURRENT_ROLE` / `CURRENT_USER` / `SESSION_USER` are not yet
 /// modelled — when a corpus statement needs one, add reserved-keyword tokens
 /// and extend this enum to a tuple variant per form.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(recursa::Node, Debug, PartialEq, Eq, Hash)]
 pub struct RoleSpec<'input> {
     pub name: crate::tokens::NonReservedWord<'input>,
 }
 
 /// A comma-separated list of roles — Postgres' `role_list`.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(recursa::Node, Debug, PartialEq, Eq, Hash)]
 pub struct RoleList<'input> {
     #[sep(COMMA)]
-    pub roles: recursa::Vec1<RoleSpec<'input>>,
+    pub roles: recursa::ArenaVec1<'input, RoleSpec<'input>>,
 }
 
 impl<'input> RoleList<'input> {
@@ -68,10 +68,10 @@ pub use crate::ast::shared::expr::TypeName;
 /// (`int[]`, `text[]`) survives. PG's `type_name_list` is built from
 /// `Typename`, which includes the `[]`/`[N]` array suffix(es) — the bare
 /// `TypeName` enum in pg-sql models only `SimpleTypename`.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub struct TypeNameList<'input> {
     #[sep(COMMA)]
-    pub types: recursa::Vec1<crate::ast::shared::expr::CastType<'input>>,
+    pub types: recursa::ArenaVec1<'input, crate::ast::shared::expr::CastType<'input>>,
 }
 
 /// The `(...)` argument signature on `DROP AGGREGATE name(...)`.
@@ -79,7 +79,7 @@ pub struct TypeNameList<'input> {
 /// The corpus only exercises `(*)` (zero-argument aggregate) and a plain
 /// comma-separated type list. The ordered-set `(... ORDER BY ...)` forms and
 /// named/moded `aggr_arg`s are not used by any DROP corpus statement.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum AggregateArgs<'input> {
     #[tok(LPAREN, STAR, RPAREN)]
     /// `(*)` — the zero-argument aggregate (spelled like `COUNT(*)`).
@@ -92,12 +92,12 @@ pub enum AggregateArgs<'input> {
 ///
 /// The parentheses surround the whole list; a field-level attachment would
 /// bind to each element and declare `(int), (text)`.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, derive_more::Deref)]
+#[derive(recursa::Node, Debug, PartialEq, Eq, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct AggregateArgTypeList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<TypeName<'input>>,
+    pub recursa::ArenaVec1<'input, TypeName<'input>>,
 );
 
 /// A dotted name: `name`, `schema.name`, or `catalog.schema.name`.
@@ -106,7 +106,7 @@ pub struct AggregateArgTypeList<'input>(
 /// Must NOT collide with `Expr::QualRef` at the Pratt level because
 /// `QualifiedName` is only used in non-expression positions (FROM targets,
 /// DROP targets, ALTER targets, etc.).
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(recursa::Node, Debug, PartialEq, Eq, Hash)]
 pub struct QualifiedName<'input> {
     /// gram.y `qualified_name: ColId | ColId indirection`: the first part is
     /// a `ColId`, so `verbose`, `full` and the other `type_func_name`
@@ -114,11 +114,11 @@ pub struct QualifiedName<'input> {
     pub first: crate::tokens::ColId<'input>,
     /// gram.y `indirection`: each part after a dot is `attr_name`, a
     /// `ColLabel` (any keyword class).
-    pub rest: Vec<QualifiedNamePart<'input>>,
+    pub rest: recursa::ArenaVec<'input, QualifiedNamePart<'input>>,
 }
 
 /// One `'.' attr_name` of gram.y `indirection` inside a `qualified_name`.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(recursa::Node, Debug, PartialEq, Eq, Hash)]
 pub struct QualifiedNamePart<'input> {
     #[tok(DOT, this)]
     pub name: crate::tokens::ColLabel<'input>,
@@ -150,7 +150,7 @@ impl<'input> QualifiedName<'input> {
 /// unreserved keywords such as `SET`. [`QualifiedName`] already uses the
 /// generated identifier admission set containing those keywords, so one
 /// canonical variant covers both ordinary and keyword-spelled names.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FuncDefName<'input> {
     Name(QualifiedName<'input>),
 }
@@ -168,7 +168,7 @@ impl<'input> FuncDefName<'input> {
 /// statements. Postgres routes most of these through `RenameStmt`, but
 /// pg-sql keeps one LR production family per leading `ALTER objtype ...`
 /// form, so each `Alter*Stmt` re-models its own rename branch.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct RenameTo<'input> {
     #[tok(RENAME, TO, this)]
     pub new_name: literal::Ident<'input>,
@@ -179,7 +179,7 @@ pub struct RenameTo<'input> {
 /// but pg-sql keeps one LR production family per leading
 /// `ALTER objtype ...` form, so each `Alter*Stmt` re-models its own owner
 /// branch.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OwnerTo<'input> {
     #[tok(OWNER, TO, this)]
     pub new_owner: RoleSpec<'input>,
@@ -190,7 +190,7 @@ pub struct OwnerTo<'input> {
 /// Postgres routes most of these through `AlterObjectSchemaStmt`, but
 /// pg-sql keeps one LR production family per leading `ALTER objtype ...`
 /// form, so each `Alter*Stmt` re-models its own set-schema branch.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetSchemaClause<'input> {
     #[tok(SET, SCHEMA, this)]
     pub new_schema: literal::Ident<'input>,
@@ -216,7 +216,7 @@ pub struct SetSchemaClause<'input> {
 /// an operator name, and excluding it lets the few corpus `CREATE OPERATOR
 /// =>` lines surface as file-level parse errors, matching
 /// PG's rejection on both sides of the differential oracle.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum OperatorName<'input> {
     // Multi-char tokens whose spelling is purely operator chars. Each is
     // a single logos token kind so their peek regexes are disjoint.
@@ -401,7 +401,7 @@ pub enum OperatorName<'input> {
 /// Variant ordering: `Qualified` starts with `Ident`, `Plain` starts with a
 /// punct/operator token. Their first sets are disjoint, so order is for
 /// clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QualifiedOperatorName<'input> {
     /// `[schema.]op` — at least one `Ident.` segment followed by an
     /// `OperatorName`.
@@ -412,15 +412,15 @@ pub enum QualifiedOperatorName<'input> {
 
 /// A schema-qualified operator name: one or more `Ident.` segments followed
 /// by an `OperatorName`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct QualifiedOperatorPath<'input> {
     pub first: QualifiedOperatorPrefix<'input>,
-    pub rest: Vec<QualifiedOperatorPrefix<'input>>,
+    pub rest: recursa::ArenaVec<'input, QualifiedOperatorPrefix<'input>>,
     pub name: OperatorName<'input>,
 }
 
 /// One `Ident.` segment of a qualified operator name's schema prefix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct QualifiedOperatorPrefix<'input> {
     #[tok(this, DOT)]
     pub name: literal::Ident<'input>,
@@ -437,7 +437,7 @@ pub struct QualifiedOperatorPrefix<'input> {
 ///
 /// Variant ordering: `None` first, because the literal `NONE` keyword is the
 /// specific match and `Type` would otherwise have to reject it.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum OperatorArgType<'input> {
     #[tok(NONE)]
     None,
@@ -467,7 +467,7 @@ impl<'input> OperatorArgType<'input> {
 /// alternative for. PostgreSQL rejects that pair semantically ("an operator
 /// must have at least one operand"), so the over-acceptance costs nothing a
 /// parser can decide.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct OperatorArgtypes<'input> {
     pub left_type: OperatorArgType<'input>,
@@ -493,7 +493,7 @@ impl<'input> OperatorArgtypes<'input> {
 /// full reference to a specific operator (including overload signature)
 /// used by `DROP OPERATOR`, `ALTER OPERATOR`, `COMMENT ON OPERATOR`,
 /// `SECURITY LABEL ON OPERATOR`, etc.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OperatorWithArgtypes<'input> {
     pub name: QualifiedOperatorName<'input>,
     pub args: OperatorArgtypes<'input>,

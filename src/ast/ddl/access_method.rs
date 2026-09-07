@@ -8,7 +8,7 @@ use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
 /// `INDEX | TABLE` — the access-method type keyword in `CREATE ACCESS METHOD`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AccessMethodType {
     #[tok(INDEX)]
     Index,
@@ -19,7 +19,7 @@ pub enum AccessMethodType {
 /// `CREATE ACCESS METHOD name TYPE { INDEX | TABLE } HANDLER handler_name` —
 /// Postgres' `CreateAmStmt`. `handler_name` is a possibly-qualified function
 /// name (`name [.name …]`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateAccessMethodStmt<'input> {
     #[tok(CREATE, ACCESS, METHOD, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -30,7 +30,7 @@ pub struct CreateAccessMethodStmt<'input> {
 }
 
 /// `DROP ACCESS METHOD [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, ACCESS, METHOD, this)]
 pub struct DropAccessMethodStmt<'input> {
     pub if_exists: Option<IfExists>,

@@ -29,7 +29,7 @@ use crate::ast::shared::numbers::*;
 /// this rule, as gram.y spells them; a presence with a fixed token attached
 /// to it lowers to its own nonterminal, which has to be reduced before the
 /// `TEMP` that `CREATE TEMP TABLE` shifts.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(CREATE, this)]
 pub struct CreateViewStmt<'input> {
     #[presence(OR, REPLACE)]
@@ -54,29 +54,29 @@ pub struct CreateViewStmt<'input> {
 }
 
 /// Optional parenthesized, nonempty CREATE VIEW output-column list.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct CreateViewColumnList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<literal::AliasName<'input>>,
+    pub recursa::ArenaVec1<'input, literal::AliasName<'input>>,
 );
 
 /// `USING access_method` trailer on CREATE VIEW.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ViewUsing<'input> {
     #[tok(USING, this)]
     pub method: literal::AliasName<'input>,
 }
 
 /// `WITH [CASCADED | LOCAL] CHECK OPTION` trailer on CREATE VIEW.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(WITH, this, CHECK, OPTION)]
 pub struct ViewCheckOption {
     pub mode: Option<ViewCheckMode>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ViewCheckMode {
     #[tok(CASCADED)]
     Cascaded,
@@ -89,14 +89,14 @@ pub enum ViewCheckMode {
 /// ```sql
 /// DROP VIEW [IF EXISTS] name [, name ...] [CASCADE | RESTRICT]
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, VIEW, this)]
 pub struct DropViewStmt<'input> {
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
     #[sep(COMMA)]
     /// gram.y `any_name_list`: one or more names.
-    pub names: recursa::Vec1<QualifiedName<'input>>,
+    pub names: recursa::ArenaVec1<'input, QualifiedName<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 
@@ -107,18 +107,18 @@ pub struct DropViewStmt<'input> {
 /// `ALTER [COLUMN] name SET DEFAULT expr` — Postgres' alter_table_cmd
 /// branch for setting a column default. Used by ALTER VIEW (the only
 /// alter-table-cmd subset exercised by the corpus for views).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterColumnSetDefault<'input> {
     #[tok(ALTER, optional(COLUMN), this)]
     pub name: literal::Ident<'input>,
     #[tok(SET, DEFAULT, this)]
-    pub expr: Box<Expr<'input>>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `ALTER [COLUMN] name DROP DEFAULT` — Postgres' alter_table_cmd branch
 /// for dropping a column default. Used by ALTER VIEW (sister of
 /// `AlterColumnSetDefault`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterColumnDropDefault<'input> {
     #[tok(ALTER, optional(COLUMN), this, DROP, DEFAULT)]
     pub name: literal::Ident<'input>,
@@ -127,7 +127,7 @@ pub struct AlterColumnDropDefault<'input> {
 /// One `ALTER COLUMN …` cmd on ALTER VIEW. Both forms start with `ALTER
 /// [COLUMN] name`; the disambiguation token after the column name is
 /// `SET`/`DROP`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterColumnViewCmd<'input> {
     SetDefault(AlterColumnSetDefault<'input>),
     DropDefault(AlterColumnDropDefault<'input>),
@@ -135,7 +135,7 @@ pub enum AlterColumnViewCmd<'input> {
 
 /// `RENAME [COLUMN] old TO new` — Postgres' RenameStmt branch for renaming
 /// a view column. Used by ALTER VIEW / ALTER MATERIALIZED VIEW.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct RenameColumnClause<'input> {
     #[tok(RENAME, optional(COLUMN), this)]
     pub old_name: literal::Ident<'input>,
@@ -155,7 +155,7 @@ pub struct RenameColumnClause<'input> {
 ///   second tokens.
 /// - `AlterColumn` (`ALTER`) keyword-disjoint from `SET`/`RESET`/`RENAME`/
 ///   `OWNER`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterViewAction<'input> {
     SetSchema(SetSchemaClause<'input>),
     SetReloptions(SetReloptions<'input>),
@@ -169,7 +169,7 @@ pub enum AlterViewAction<'input> {
 /// `ALTER VIEW [IF EXISTS] name action` — Postgres' `AlterTableStmt`
 /// branches that begin with `ALTER VIEW …`, plus the view branches of
 /// `RenameStmt` / `AlterObjectSchemaStmt` / `AlterOwnerStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ALTER, VIEW, this)]
 pub struct AlterViewStmt<'input> {
     pub if_exists: Option<IfExists>,

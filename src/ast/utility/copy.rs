@@ -17,7 +17,7 @@ use crate::tokens::literal;
 /// the table form (`COPY qualified_name [(cols)] {FROM|TO} ...`) — drive the
 /// `CopyBody` enum. The query form is selected by the `(` lookahead immediately
 /// after `COPY`, before the table form's optional `BINARY` keyword.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyStmt<'input> {
     #[tok(COPY, this)]
     pub body: CopyBody<'input>,
@@ -33,7 +33,7 @@ pub struct CopyStmt<'input> {
 /// `BinaryTable` is a separate variant (rather than `Option<BINARY>` on
 /// `CopyTableBody`) so the legacy prefix remains an explicit grammar
 /// production alongside the ordinary identifier-led table form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CopyBody<'input> {
     Query(CopyQueryBody<'input>),
     BinaryTable(CopyBinaryTableBody<'input>),
@@ -47,7 +47,7 @@ pub enum CopyBody<'input> {
 /// The `where_clause` field is FROM-only by Postgres' semantics, but we accept
 /// it unconditionally and let the server reject `WHERE` with `TO`. This keeps
 /// the grammar context-free.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyTableBody<'input> {
     pub table: QualifiedName<'input>,
     pub columns: Option<CopyColumnList<'input>>,
@@ -68,17 +68,17 @@ pub struct CopyTableBody<'input> {
 
 /// Table-form COPY body with the legacy `BINARY` prefix:
 /// `BINARY name [(cols)] {FROM|TO} ...`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyBinaryTableBody<'input> {
     #[tok(BINARY, this)]
     pub inner: CopyTableBody<'input>,
 }
 
 /// Query-form COPY body: `(PreparableStmt) TO [PROGRAM] target [WITH] [options]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyQueryBody<'input> {
     #[tok(LPAREN, this, RPAREN)]
-    pub query: Box<PreparableStmt<'input>>,
+    pub query: recursa::ArenaBox<'input, PreparableStmt<'input>>,
     #[tok(TO, this)]
     #[presence(PROGRAM)]
     pub program: bool,
@@ -92,15 +92,15 @@ pub struct CopyQueryBody<'input> {
 }
 
 /// `(col [, ...])` column list on the table-form COPY statement.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct CopyColumnList<'input> {
     #[sep(COMMA)]
-    pub cols: recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub cols: recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
 }
 
 /// `FROM` or `TO` direction marker on the table-form COPY statement.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CopyDirection {
     #[tok(FROM)]
     From,
@@ -118,7 +118,7 @@ pub enum CopyDirection {
 /// `STDIN` / `STDOUT` are tokenized as their keyword kinds, while a quoted
 /// filename is a string token, so the three alternatives have distinct LR
 /// actions.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CopyTarget<'input> {
     #[tok(STDIN)]
     Stdin,
@@ -129,7 +129,7 @@ pub enum CopyTarget<'input> {
 
 /// Legacy `[USING] DELIMITERS 'c'` clause — Postgres' `copy_delimiter`
 /// production. `USING` is optional.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyUsingDelimiters<'input> {
     #[tok(optional(USING), DELIMITERS, this)]
     pub value: CopySconst<'input>,
@@ -141,7 +141,7 @@ pub struct CopyUsingDelimiters<'input> {
 ///
 /// The lexer assigns the prefixed forms (`U&`, `E`, `B`, `X`) their own token
 /// kinds before the parser sees them.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CopySconst<'input> {
     Unicode(literal::UnicodeStringLit<'input>),
     Escape(literal::EscapeStringLit<'input>),
@@ -156,34 +156,34 @@ pub enum CopySconst<'input> {
 /// `Generic` begins with `(`. `Legacy` is the bareword form starting with one of
 /// `BINARY`/`FREEZE`/`OIDS`/`DELIMITER`/`NULL`/`CSV`/`HEADER`/`QUOTE`/`ESCAPE`/
 /// `FORCE`/`ENCODING`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CopyOptions<'input> {
     Generic(CopyGenericOptions<'input>),
     Legacy(CopyLegacyOptions<'input>),
 }
 
 /// Parenthesised, comma-separated generic options: `(name [arg] [, ...])`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct CopyGenericOptions<'input> {
     #[sep(COMMA)]
-    pub list: recursa::Vec1<CopyGenericOption<'input>>,
+    pub list: recursa::ArenaVec1<'input, CopyGenericOption<'input>>,
 }
 
 /// Parenthesized list used as a generic COPY option argument.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct CopyGenericOptionNameList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<literal::AliasName<'input>>,
+    pub recursa::ArenaVec1<'input, literal::AliasName<'input>>,
 );
 
 /// One entry in the parenthesised generic options list: `name [arg]`.
 ///
 /// `name` is `AliasName` so unreserved keywords (e.g. `format`, `freeze`,
 /// `header`) and identifiers are both accepted.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyGenericOption<'input> {
     pub name: literal::AliasName<'input>,
     pub arg: Option<CopyGenericOptionArg<'input>>,
@@ -197,7 +197,7 @@ pub struct CopyGenericOption<'input> {
 /// `Numeric` precedes `NameOrString` so an integer like `42` is not parsed
 /// as an identifier (it would not be — different lex kind — but listing
 /// fixed-shape variants first preserves longest-match-wins semantics).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CopyGenericOptionArg<'input> {
     #[tok(DEFAULT)]
     Default,
@@ -214,12 +214,12 @@ pub enum CopyGenericOptionArg<'input> {
 ///
 /// Listed as `Vec` (not `Seq`) because the items are separator-free. The Vec
 /// stops at the first non-option token (typically `WHERE` or end-of-statement).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyLegacyOptions<'input> {
     /// gram.y `copy_opt_list` may be empty, but the empty list is the absent
     /// `options`; one node with no items would leave two derivations for
     /// "no options".
-    pub items: recursa::Vec1<CopyLegacyOptionItem<'input>>,
+    pub items: recursa::ArenaVec1<'input, CopyLegacyOptionItem<'input>>,
 }
 
 /// One item in the legacy bareword options list — Postgres' `copy_opt_item`.
@@ -229,7 +229,7 @@ pub struct CopyLegacyOptions<'input> {
 /// The keyword `FORCE` is a separate token so the multi-keyword forms are not
 /// in conflict with each other (`FORCE NOT NULL` vs `FORCE NULL` vs `FORCE QUOTE`
 /// — the second token disambiguates).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CopyLegacyOptionItem<'input> {
     ForceNotNull(CopyForceNotNullOpt<'input>),
     ForceQuote(CopyForceQuoteOpt<'input>),
@@ -252,56 +252,56 @@ pub enum CopyLegacyOptionItem<'input> {
 }
 
 /// `DELIMITER [AS] 'c'` — legacy delimiter option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyDelimiterOpt<'input> {
     #[tok(DELIMITER, optional(AS), this)]
     pub value: CopySconst<'input>,
 }
 
 /// `NULL [AS] 'str'` — legacy null-marker option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyNullOpt<'input> {
     #[tok(NULL, optional(AS), this)]
     pub value: CopySconst<'input>,
 }
 
 /// `QUOTE [AS] 'c'` — legacy CSV-quote option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyQuoteOpt<'input> {
     #[tok(QUOTE, optional(AS), this)]
     pub value: CopySconst<'input>,
 }
 
 /// `ESCAPE [AS] 'c'` — legacy CSV-escape option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyEscapeOpt<'input> {
     #[tok(ESCAPE, optional(AS), this)]
     pub value: CopySconst<'input>,
 }
 
 /// `ENCODING 'name'` — legacy encoding option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyEncodingOpt<'input> {
     #[tok(ENCODING, this)]
     pub value: CopySconst<'input>,
 }
 
 /// `FORCE QUOTE { * | columnList }` — legacy force-quote option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyForceQuoteOpt<'input> {
     #[tok(FORCE, QUOTE, this)]
     pub target: CopyForceTarget<'input>,
 }
 
 /// `FORCE NOT NULL { * | columnList }` — legacy force-not-null option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyForceNotNullOpt<'input> {
     #[tok(FORCE, NOT, NULL, this)]
     pub target: CopyForceTarget<'input>,
 }
 
 /// `FORCE NULL { * | columnList }` — legacy force-null option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyForceNullOpt<'input> {
     #[tok(FORCE, NULL, this)]
     pub target: CopyForceTarget<'input>,
@@ -310,16 +310,16 @@ pub struct CopyForceNullOpt<'input> {
 /// Target of a `FORCE QUOTE` / `FORCE NULL` / `FORCE NOT NULL` legacy option:
 /// either `*` (all columns) or a bare `columnList` (no parentheses — note
 /// `columnList` in `gram.y` does not include outer `()`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CopyForceTarget<'input> {
     #[tok(STAR)]
     Star,
-    Columns(#[sep(COMMA)] recursa::Vec1<crate::tokens::ColId<'input>>),
+    Columns(#[sep(COMMA)] recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>),
 }
 
 /// `WHERE expr` clause on a `COPY ... FROM` (the only direction that accepts
 /// it per Postgres' grammar; the server enforces the FROM-only restriction).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CopyWhereClause<'input> {
     #[tok(WHERE, this)]
     pub condition: Expr<'input>,

@@ -5,7 +5,8 @@ mod tests {
 
     #[test]
     fn truncate_bare_is_modelled() {
-        let stmt: TruncateStmt = parse_stmt("TRUNCATE t");
+        let stmt = parse_stmt::<TruncateStmt>("TRUNCATE t");
+        let stmt = stmt.ast();
         assert_eq!(stmt.relations.len(), 1);
         assert!(stmt.restart_seqs.is_none());
         assert!(stmt.behavior.is_none());
@@ -19,21 +20,24 @@ mod tests {
 
     #[test]
     fn truncate_only_roundtrips() {
-        let stmt: TruncateStmt = parse_stmt("TRUNCATE ONLY trunc_f");
+        let stmt = parse_stmt::<TruncateStmt>("TRUNCATE ONLY trunc_f");
+        let stmt = stmt.ast();
         assert_eq!(stmt.relations.len(), 1);
         reparse_stable::<TruncateStmt>("TRUNCATE ONLY trunc_f");
     }
 
     #[test]
     fn truncate_multiple_relations_roundtrips() {
-        let stmt: TruncateStmt = parse_stmt("TRUNCATE ONLY trunc_fb, ONLY trunc_fa");
+        let stmt = parse_stmt::<TruncateStmt>("TRUNCATE ONLY trunc_fb, ONLY trunc_fa");
+        let stmt = stmt.ast();
         assert_eq!(stmt.relations.len(), 2);
         reparse_stable::<TruncateStmt>("TRUNCATE ONLY trunc_fb, ONLY trunc_fa");
     }
 
     #[test]
     fn truncate_cascade_roundtrips() {
-        let stmt: TruncateStmt = parse_stmt("TRUNCATE TABLE truncate_a CASCADE");
+        let stmt = parse_stmt::<TruncateStmt>("TRUNCATE TABLE truncate_a CASCADE");
+        let stmt = stmt.ast();
         assert!(stmt.behavior.is_some());
         reparse_stable::<TruncateStmt>("TRUNCATE TABLE truncate_a CASCADE");
     }
@@ -45,7 +49,8 @@ mod tests {
 
     #[test]
     fn truncate_restart_identity_roundtrips() {
-        let stmt: TruncateStmt = parse_stmt("TRUNCATE truncate_a RESTART IDENTITY");
+        let stmt = parse_stmt::<TruncateStmt>("TRUNCATE truncate_a RESTART IDENTITY");
+        let stmt = stmt.ast();
         assert!(stmt.restart_seqs.is_some());
         reparse_stable::<TruncateStmt>("TRUNCATE truncate_a RESTART IDENTITY");
     }

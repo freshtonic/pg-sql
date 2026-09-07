@@ -14,12 +14,12 @@ use crate::tokens::{literal, punct};
 /// Optional parenthesized materialized-view output-column list.
 ///
 /// The wrapper owns the delimiters around the complete comma-separated list.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct CreateMatViewColumnList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
 );
 
 /// `create_mv_target` — Postgres' materialized-view target clause:
@@ -28,7 +28,7 @@ pub struct CreateMatViewColumnList<'input>(
 /// Field order matches gram.y. Each trailer is optional and re-uses the
 /// shared CREATE TABLE machinery (`UsingAccessMethodClause`, `WithStorage`,
 /// `TablespaceClause`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateMatViewTarget<'input> {
     pub name: QualifiedName<'input>,
     pub column_list: Option<CreateMatViewColumnList<'input>>,
@@ -40,7 +40,7 @@ pub struct CreateMatViewTarget<'input> {
 /// `CREATE [UNLOGGED] MATERIALIZED VIEW [IF NOT EXISTS] target AS query
 /// [WITH [NO] DATA]` — Postgres' `CreateMatViewStmt`. `target` carries the
 /// optional column list, access method, storage options, and tablespace.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateMaterializedViewStmt<'input> {
     #[tok(CREATE, this, MATERIALIZED, VIEW)]
     #[presence(UNLOGGED)]
@@ -48,12 +48,12 @@ pub struct CreateMaterializedViewStmt<'input> {
     pub if_not_exists: Option<IfNotExists>,
     pub target: CreateMatViewTarget<'input>,
     #[tok(AS, this)]
-    pub query: Box<crate::ast::dml::values::Subquery<'input>>,
+    pub query: recursa::ArenaBox<'input, crate::ast::dml::values::Subquery<'input>>,
     pub with_data: Option<crate::ast::ddl::table::WithDataClause>,
 }
 
 /// `DROP MATERIALIZED VIEW [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, MATERIALIZED, VIEW, this)]
 pub struct DropMaterializedViewStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -66,7 +66,7 @@ pub struct DropMaterializedViewStmt<'input> {
 /// MATERIALIZED VIEW (and ALTER TABLE).
 ///
 /// Variant ordering: `Default` (keyword) before `Name` (`Ident`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetAccessMethodTarget<'input> {
     #[tok(DEFAULT)]
     Default,
@@ -75,7 +75,7 @@ pub enum SetAccessMethodTarget<'input> {
 
 /// `SET ACCESS METHOD { name | DEFAULT }` — Postgres' alter_table_cmd
 /// branch.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetAccessMethodClause<'input> {
     #[tok(SET, ACCESS, METHOD, this)]
     pub target: SetAccessMethodTarget<'input>,
@@ -84,7 +84,7 @@ pub struct SetAccessMethodClause<'input> {
 /// `COMPRESSION { name | DEFAULT }` — Postgres' `column_compression`.
 ///
 /// Variant ordering: `Default` (keyword) before `Name` (`AliasName`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ColumnCompressionTarget<'input> {
     #[tok(DEFAULT)]
     Default,
@@ -94,7 +94,7 @@ pub enum ColumnCompressionTarget<'input> {
 /// `ALTER [COLUMN] name SET COMPRESSION cm` — Postgres' alter_table_cmd
 /// branch for changing a column's compression method. Used by ALTER
 /// MATERIALIZED VIEW (and ALTER TABLE).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterColumnSetCompression<'input> {
     #[tok(ALTER, optional(COLUMN), this)]
     pub name: crate::tokens::ColId<'input>,
@@ -112,7 +112,7 @@ pub struct AlterColumnSetCompression<'input> {
 /// tokens are distinct (`TABLESPACE` / `ACCESS` / `SCHEMA`); `Owner` /
 /// `Rename` / `AlterColumn` start with distinct keywords. The
 /// `RenameColumn` form precedes `Rename` because both start with `RENAME`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterMatViewCmd<'input> {
     SetTablespace(SetTablespaceClause<'input>),
     SetAccessMethod(SetAccessMethodClause<'input>),
@@ -127,15 +127,15 @@ pub enum AlterMatViewCmd<'input> {
 }
 
 /// Comma-separated `alter_table_cmds` on ALTER MATERIALIZED VIEW.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterMatViewCmds<'input> {
     #[sep(COMMA)]
-    pub cmds: recursa::Vec1<AlterMatViewCmd<'input>>,
+    pub cmds: recursa::ArenaVec1<'input, AlterMatViewCmd<'input>>,
 }
 
 /// `[IF EXISTS] name action` — the per-matview branch of ALTER
 /// MATERIALIZED VIEW.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterMaterializedViewSingle<'input> {
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
@@ -148,7 +148,7 @@ pub struct AlterMaterializedViewSingle<'input> {
 /// `AlterTableStmt` branches that begin with `ALTER MATERIALIZED VIEW …`.
 ///
 /// Variant ordering: `All` (`ALL`) before `Single` (`[IF EXISTS] name`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterMatViewBody<'input> {
     All(AllInTablespaceBody<'input>),
     Single(AlterMaterializedViewSingle<'input>),
@@ -156,7 +156,7 @@ pub enum AlterMatViewBody<'input> {
 
 /// `ALTER MATERIALIZED VIEW [IF EXISTS] name action` — corpus-exercised
 /// subset of `alter_table_cmds` plus the bulk `ALL IN TABLESPACE` form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterMaterializedViewStmt<'input> {
     #[tok(ALTER, MATERIALIZED, VIEW, this)]
     pub body: AlterMatViewBody<'input>,

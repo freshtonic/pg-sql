@@ -5,7 +5,8 @@ mod tests {
 
     #[test]
     fn lock_plain_relation_is_modelled() {
-        let stmt: LockStmt = parse_stmt("LOCK atestc");
+        let stmt = parse_stmt::<LockStmt>("LOCK atestc");
+        let stmt = stmt.ast();
         assert!(stmt.mode.is_none());
         assert!(!stmt.nowait);
         assert_eq!(roundtrip::<LockStmt>("LOCK atestc"), "LOCK atestc");
@@ -37,7 +38,8 @@ mod tests {
 
     #[test]
     fn lock_with_access_exclusive_mode_roundtrips() {
-        let stmt: LockStmt = parse_stmt("LOCK atest1 IN ACCESS EXCLUSIVE MODE");
+        let stmt = parse_stmt::<LockStmt>("LOCK atest1 IN ACCESS EXCLUSIVE MODE");
+        let stmt = stmt.ast();
         assert!(stmt.mode.is_some());
         assert_eq!(
             roundtrip::<LockStmt>("LOCK atest1 IN ACCESS EXCLUSIVE MODE"),
@@ -63,7 +65,8 @@ mod tests {
 
     #[test]
     fn lock_with_nowait_keeps_nowait() {
-        let stmt: LockStmt = parse_stmt("LOCK TABLE lock_tbl1 IN ACCESS EXCLUSIVE MODE NOWAIT");
+        let stmt = parse_stmt::<LockStmt>("LOCK TABLE lock_tbl1 IN ACCESS EXCLUSIVE MODE NOWAIT");
+        let stmt = stmt.ast();
         assert!(stmt.nowait);
         assert_eq!(
             roundtrip::<LockStmt>("LOCK TABLE lock_tbl1 IN ACCESS EXCLUSIVE MODE NOWAIT"),

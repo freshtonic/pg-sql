@@ -107,7 +107,8 @@ fn multi_statement_document_keeps_source_order() {
 #[test]
 fn statements_are_semantically_typed() {
     let doc = parse("SELECT 1;");
-    let statement = doc.statements().first().expect("one statement");
+    let statements = doc.statements();
+    let statement = statements.first().expect("one statement");
     assert!(matches!(
         statement,
         Statement::Query(query)

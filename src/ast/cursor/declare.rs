@@ -9,7 +9,7 @@ use crate::tokens::literal;
 /// Postgres' `cursor_options` is a repeatable, order-free list. `NO SCROLL`
 /// (2 tokens) is declared before bare `SCROLL` so longest-match-wins picks
 /// it; the rest have disjoint first-sets.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CursorOption {
     #[tok(NO, SCROLL)]
     NoScroll,
@@ -24,7 +24,7 @@ pub enum CursorOption {
 }
 
 /// `{ WITH | WITHOUT } HOLD` cursor-hold clause (`opt_hold` in `gram.y`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CursorHold {
     #[tok(WITH, HOLD)]
     With,
@@ -39,19 +39,19 @@ pub enum CursorHold {
 ///
 /// `query` is `Subquery` — Postgres' `SelectStmt`, which already covers
 /// `SELECT`, set operations, `VALUES`, `TABLE`, and `WITH`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DeclareStmt<'input> {
     #[tok(DECLARE, this)]
     pub name: literal::AliasName<'input>,
-    pub options: Vec<CursorOption>,
+    pub options: recursa::ArenaVec<'input, CursorOption>,
     pub cursor: CursorKeyword,
     pub hold: Option<CursorHold>,
     #[tok(FOR, this)]
-    pub query: Box<crate::ast::dml::values::Subquery<'input>>,
+    pub query: recursa::ArenaBox<'input, crate::ast::dml::values::Subquery<'input>>,
 }
 
 /// Required `CURSOR` marker between declaration options and hold mode.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CursorKeyword {
     #[tok(CURSOR)]
     Cursor,

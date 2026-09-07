@@ -3,7 +3,7 @@
 use crate::tokens::literal;
 
 /// `FROM` or `IN` cursor-source keyword in FETCH/MOVE.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FetchSource {
     #[tok(FROM)]
     From,
@@ -14,35 +14,35 @@ pub enum FetchSource {
 /// `ABSOLUTE n` form. `n` is a `SignedIconst` per gram.y's
 /// `fetch_args: ABSOLUTE_P SignedIconst opt_from_in cursor_name` — so a
 /// leading sign (e.g. `ABSOLUTE -1`) is accepted.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FetchAbsolute<'input> {
     #[tok(ABSOLUTE, this)]
     pub count: crate::ast::shared::numbers::SignedIconst<'input>,
 }
 
 /// `RELATIVE n` form. `n` is a `SignedIconst` (see [`FetchAbsolute`]).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FetchRelative<'input> {
     #[tok(RELATIVE, this)]
     pub count: crate::ast::shared::numbers::SignedIconst<'input>,
 }
 
 /// `FORWARD [n|ALL]` form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(FORWARD, this)]
 pub struct FetchForward<'input> {
     pub count: Option<FetchCountOrAll<'input>>,
 }
 
 /// `BACKWARD [n|ALL]` form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(BACKWARD, this)]
 pub struct FetchBackward<'input> {
     pub count: Option<FetchCountOrAll<'input>>,
 }
 
 /// A count or `ALL` marker following `FORWARD`/`BACKWARD`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FetchCountOrAll<'input> {
     #[tok(ALL)]
     All,
@@ -54,7 +54,7 @@ pub enum FetchCountOrAll<'input> {
 /// Variant ordering: multi-token forms (`ABSOLUTE n`, `RELATIVE n`,
 /// `FORWARD [...]`, `BACKWARD [...]`) before single-keyword directions.
 /// `Count` (bare integer) listed last since it has no keyword prefix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FetchDirection<'input> {
     Absolute(FetchAbsolute<'input>),
     Relative(FetchRelative<'input>),
@@ -76,7 +76,7 @@ pub enum FetchDirection<'input> {
 /// ```sql
 /// FETCH [direction] [FROM|IN] cursor_name
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(FETCH, this)]
 pub struct FetchStmt<'input> {
     pub direction: Option<FetchDirection<'input>>,
@@ -89,7 +89,7 @@ pub struct FetchStmt<'input> {
 ///
 /// Variant ordering: `All` (the `ALL` keyword) before `Cursor` so the
 /// reserved word is not swallowed as a cursor name.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CloseTarget<'input> {
     #[tok(ALL)]
     All,
@@ -99,7 +99,7 @@ pub enum CloseTarget<'input> {
 /// ```sql
 /// CLOSE { cursor_name | ALL }
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CloseStmt<'input> {
     #[tok(CLOSE, this)]
     pub target: CloseTarget<'input>,
@@ -108,7 +108,7 @@ pub struct CloseStmt<'input> {
 /// ```sql
 /// MOVE [direction] [FROM|IN] cursor_name
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(MOVE, this)]
 pub struct MoveStmt<'input> {
     pub direction: Option<FetchDirection<'input>>,

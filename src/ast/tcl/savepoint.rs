@@ -1,7 +1,7 @@
 //! Savepoint statements: SAVEPOINT, RELEASE.
 
 /// SAVEPOINT name
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SavepointStmt<'input> {
     #[tok(SAVEPOINT, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -10,7 +10,7 @@ pub struct SavepointStmt<'input> {
 /// ```sql
 /// RELEASE [SAVEPOINT] name
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(RELEASE, this)]
 pub struct ReleaseStmt<'input> {
     #[presence(SAVEPOINT)]

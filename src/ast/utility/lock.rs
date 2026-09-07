@@ -10,7 +10,7 @@ use crate::ast::shared::names::QualifiedName;
 /// `ONLY name` excludes inheritance children; a trailing `*` makes the
 /// (default) inheritance behaviour explicit. The `ONLY (name)` parenthesised
 /// form is not exercised by any corpus statement, so it is not modelled.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LockRelation<'input> {
     #[presence(ONLY)]
     pub only: bool,
@@ -25,7 +25,7 @@ pub struct LockRelation<'input> {
 /// Variant ordering: the three-word `SHARE ROW EXCLUSIVE` /
 /// `SHARE UPDATE EXCLUSIVE` forms precede the two-word `ROW EXCLUSIVE` and the
 /// bare `SHARE`, so longest-match-wins picks the most specific spelling.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum LockType {
     #[tok(ACCESS, SHARE)]
     AccessShare,
@@ -46,7 +46,7 @@ pub enum LockType {
 }
 
 /// The `IN lock_type MODE` clause on a `LOCK` statement — Postgres' `opt_lock`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LockMode {
     #[tok(IN, this, MODE)]
     pub lock_type: LockType,
@@ -55,13 +55,13 @@ pub struct LockMode {
 /// ```sql
 /// LOCK [TABLE] name [, ...] [IN mode MODE] [NOWAIT]
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LockStmt<'input> {
     #[tok(LOCK, this)]
     #[presence(TABLE)]
     pub table: bool,
     #[sep(COMMA)]
-    pub relations: recursa::Vec1<LockRelation<'input>>,
+    pub relations: recursa::ArenaVec1<'input, LockRelation<'input>>,
     pub mode: Option<LockMode>,
     #[presence(NOWAIT)]
     pub nowait: bool,

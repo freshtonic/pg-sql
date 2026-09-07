@@ -10,14 +10,15 @@ mod tests {
         let lexed = crate::lex("ALTER RULE InsertRule ON rule_v1 RENAME TO NewInsertRule");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterRuleStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterRuleStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_rule_nothing() {
-        let stmt: CreateRuleStmt =
-            parse_stmt("CREATE RULE r AS ON INSERT TO tbl DO INSTEAD NOTHING");
+        let stmt = parse_stmt::<CreateRuleStmt>("CREATE RULE r AS ON INSERT TO tbl DO INSTEAD NOTHING");
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.text(), "r");
         assert_eq!(stmt.table.object(), "tbl");
         assert!(!stmt.or_replace);

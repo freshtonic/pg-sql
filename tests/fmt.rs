@@ -58,8 +58,7 @@ fn format_sql(src: &str, style: PrettyConfig) -> String {
     let mut input = lexed.input();
     let parsed = Statement::parse(&mut input).expect("strict PostgreSQL statement");
     assert!(input.is_eof(), "formatter fixture contains trailing input");
-    let ast = parsed.into_ast();
-    format!("{};", format_tokens_sql(&ast, style))
+    format!("{};", format_tokens_sql(parsed.ast(), style))
 }
 
 fn run_fixture(name: &str) {

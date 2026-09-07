@@ -7,14 +7,14 @@ use crate::ast::dml::values::Subquery;
 use crate::tokens::literal;
 
 /// Required opening delimiter for structurally parenthesized SQL forms.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ParenthesizedOpen {
     #[tok(LPAREN)]
     Value,
 }
 
 /// Required closing delimiter for structurally parenthesized SQL forms.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ParenthesizedClose {
     #[tok(RPAREN)]
     Value,
@@ -23,7 +23,7 @@ pub enum ParenthesizedClose {
 /// One PostgreSQL string value, either a single literal or a scanner-valid
 /// newline-concatenated sequence. The sequence is one lexical token so ignored
 /// block-comment trivia cannot disappear between its fragments.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum StringLitSeq0<'input> {
     Sequence(literal::StringLitSequence<'input>),
     Single(literal::StringLit<'input>),
@@ -44,14 +44,14 @@ pub enum StringLitSeq0<'input> {
 /// This keeps both the expression-list form (`IN ((SELECT 1), (SELECT 2))`)
 /// and a grouped set query (`IN ((SELECT 1) UNION SELECT 2)`) reachable
 /// without declaration-order priority or parser-specific source scanning.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum InContent<'input> {
-    Exprs(#[sep(COMMA)] recursa::Vec1<Expr<'input>>),
-    Subquery(Box<Subquery<'input>>),
+    Exprs(#[sep(COMMA)] recursa::ArenaVec1<'input, Expr<'input>>),
+    Subquery(recursa::ArenaBox<'input, Subquery<'input>>),
 }
 
 /// `IN (expr, ...)` or `IN (subquery)` postfix suffix.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 pub struct InList<'input>(
     #[tok(LPAREN, this, RPAREN)]
     #[deref]
@@ -62,14 +62,14 @@ pub struct InList<'input>(
 /// gram.y allows `expr_list` here, but the corpus only exercises signed
 /// integers (e.g. `numeric(3, -6)` in numeric.sql), so we model only that
 /// shape. A leading `+` or `-` is permitted to mirror PG's behavior.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub struct TypeModifierArg<'input> {
     pub sign: Option<TypeModifierSign>,
     pub value: literal::IntegerLit<'input>,
 }
 
 /// Leading sign of a typmod argument.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum TypeModifierSign {
     #[tok(MINUS)]
     Neg,
@@ -78,16 +78,16 @@ pub enum TypeModifierSign {
 }
 
 /// Parenthesized precision/scale for type names: `(10,2)`, `(3)`, `(3,-6)`.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, derive_more::Deref)]
+#[derive(recursa::Node, Debug, PartialEq, Eq, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct TypePrecision<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub Vec<TypeModifierArg<'input>>,
+    pub recursa::ArenaVec<'input, TypeModifierArg<'input>>,
 );
 
 /// Type name for casts.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum TypeName<'input> {
     #[tok(BOOL)]
     Bool,
@@ -126,18 +126,15 @@ pub enum TypeName<'input> {
 /// Identifier-spelled type name using the type-name-specific admission set.
 /// Fixed legacy spellings are excluded so they retain their public enum
 /// variants; `json` is included despite its `COL_NAME` keyword category.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TypeNameIdent<'input> {
     #[sep(DOT)]
-    pub parts: recursa::Vec1<crate::tokens::type_name_ident<'input>>,
+    pub parts: recursa::ArenaVec1<'input, crate::tokens::type_name_ident<'input>>,
 }
 
 impl<'input> TypeNameIdent<'input> {
     pub fn object(&self) -> &str {
-        self.parts
-            .last()
-            .expect("Recursa Vec1 always contains at least one value")
-            .text()
+        self.parts.last().text()
     }
 }
 
@@ -158,7 +155,7 @@ impl Eq for TypeNameIdent<'_> {}
 ///
 /// NOT variants are listed first so the combined peek regex disambiguates
 /// via longest match (e.g., `NOT TRUE` is longer than `TRUE`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum BoolTestKind {
     #[tok(NOT, TRUE)]
     IsNotTrue,
@@ -180,7 +177,7 @@ pub enum BoolTestKind {
 
 /// Unicode normalisation form keyword — gram.y `unicode_normal_form`.
 /// Used by `expr IS [NOT] [NFx] NORMALIZED` and `NORMALIZE(expr, NFx)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum UnicodeNormalForm {
     #[tok(NFKC)]
     Nfkc,
@@ -199,7 +196,7 @@ pub enum UnicodeNormalForm {
 /// Variant ordering: NOT-leading forms first (longer prefix), and within
 /// each NOT/non-NOT bucket the form-prefixed variants come before the bare
 /// `NORMALIZED` so the peek regex prefers the longer match.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum IsNormalizedTail {
     NotForm(IsNotFormNormalizedTail),
     #[tok(NOT, NORMALIZED)]
@@ -209,13 +206,13 @@ pub enum IsNormalizedTail {
     Plain,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct IsFormNormalizedTail {
     #[tok(this, NORMALIZED)]
     pub form: UnicodeNormalForm,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct IsNotFormNormalizedTail {
     #[tok(NOT, this, NORMALIZED)]
     pub form: UnicodeNormalForm,
@@ -237,7 +234,7 @@ pub struct IsNotFormNormalizedTail {
 /// admitted every keyword would put `UNION`, `EXCEPT`, `INTERSECT` and every
 /// other reserved word into that selector and make a targetless `SELECT`
 /// unusable as a set-operation operand (issue #55).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct QualifiedRef<'input> {
     pub table: crate::tokens::ColId<'input>,
     /// Requiring the first indirection here keeps this branch disjoint from
@@ -245,7 +242,7 @@ pub struct QualifiedRef<'input> {
     /// chain mirrors gram.y's `columnref: ColId indirection` for references
     /// of any supported qualification depth.
     pub first: QualifiedRefFirstIndirection<'input>,
-    pub rest: Vec<ParenthesizedIndirection<'input>>,
+    pub rest: recursa::ArenaVec<'input, ParenthesizedIndirection<'input>>,
     /// A dotted function name and a dotted column reference share the same
     /// unbounded prefix. Owning the optional call tail here lets the parser
     /// decide at the first non-indirection token instead of trying to peek
@@ -255,7 +252,7 @@ pub struct QualifiedRef<'input> {
 
 /// The first indirection of a qualified reference must start with a dot.
 /// Later elements may also be subscripts.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QualifiedRefFirstIndirection<'input> {
     Field(IndirectionField<'input>),
     Star(ParenthesizedDotStar),
@@ -267,22 +264,22 @@ pub enum QualifiedRefFirstIndirection<'input> {
 /// expression: gram.y attaches `indirection` only to `columnref`,
 /// `PARAM`, `'(' a_expr ')'` and `select_with_parens`, so `x::int[1]` is a
 /// cast to an array type and `f(x)[1]` is rejected, as PostgreSQL has it.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ColumnRef<'input> {
     pub name: crate::tokens::ColId<'input>,
-    pub subscripts: Vec<SubscriptIndirection<'input>>,
+    pub subscripts: recursa::ArenaVec<'input, SubscriptIndirection<'input>>,
 }
 
 /// gram.y `PARAM opt_indirection`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PositionalParam<'input> {
     #[lex(matcher)]
     pub param: literal::DollarNum<'input>,
-    pub subscripts: Vec<SubscriptIndirection<'input>>,
+    pub subscripts: recursa::ArenaVec<'input, SubscriptIndirection<'input>>,
 }
 
 /// Window specification: `OVER window_name` or `OVER (inline_spec)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(OVER, this)]
 pub struct WindowSpec<'input> {
     #[pretty(break_before = soft)]
@@ -294,7 +291,7 @@ pub struct WindowSpec<'input> {
 /// Variant ordering: Inline (starts with `(`) before Named (starts with an
 /// identifier). They start with different tokens so peek disambiguation is
 /// trivial.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum WindowSpecBody<'input> {
     Inline(#[tok(LPAREN, this, RPAREN)] InlineWindowSpec<'input>),
     Named(crate::tokens::ColId<'input>),
@@ -306,7 +303,7 @@ pub enum WindowSpecBody<'input> {
 /// `WINDOW w2 AS (w1 ORDER BY x)`). It relies on `Option<literal::Ident>`
 /// peek-disambiguating cleanly against `PARTITION`/`ORDER`/`ROWS`/etc.
 /// because keywords are rejected by `literal::Ident`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct InlineWindowSpec<'input> {
     pub ref_name: Option<literal::WindowRefNameIdent<'input>>,
     pub partition_by: Option<WindowPartitionBy<'input>>,
@@ -315,18 +312,18 @@ pub struct InlineWindowSpec<'input> {
 }
 
 /// PARTITION BY in window: `PARTITION BY expr, ...`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(PARTITION, BY, this)]
 pub struct WindowPartitionBy<'input> {
     /// `ORDER` is reserved, so a `ColId`-qualified `QualifiedRef` cannot begin
     /// an expression with it and the overlap no longer contains it.
     /// gram.y `opt_partition_clause: PARTITION BY expr_list`: one or more.
     #[sep(COMMA)]
-    pub exprs: recursa::Vec1<Expr<'input>>,
+    pub exprs: recursa::ArenaVec1<'input, Expr<'input>>,
 }
 
 /// Frame unit: `ROWS | RANGE | GROUPS`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum WindowFrameUnit {
     #[tok(ROWS)]
     Rows,
@@ -339,20 +336,20 @@ pub enum WindowFrameUnit {
 /// `WINDOW` frame clause: `unit (BETWEEN start AND end | bound) [EXCLUDE ...]`.
 /// The common unit prefix is represented once so the two LR productions part
 /// at `BETWEEN` versus the first bound token.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct WindowFrameClause<'input> {
     pub unit: WindowFrameUnit,
     pub body: WindowFrameBody<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum WindowFrameBody<'input> {
     Between(WindowFrameBetween<'input>),
     Single(WindowFrameSingle<'input>),
 }
 
 /// `unit BETWEEN start AND end [EXCLUDE ...]`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct WindowFrameBetween<'input> {
     #[tok(BETWEEN, this)]
     pub start: WindowFrameBound<'input>,
@@ -362,7 +359,7 @@ pub struct WindowFrameBetween<'input> {
 }
 
 /// `unit start [EXCLUDE ...]`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct WindowFrameSingle<'input> {
     pub bound: WindowFrameBound<'input>,
     pub exclude: Option<WindowFrameExclude>,
@@ -373,20 +370,20 @@ pub struct WindowFrameSingle<'input> {
 /// `UNBOUNDED` is admitted as an expression word and therefore shares the
 /// ordinary expression-plus-direction representation. `CURRENT ROW` remains
 /// the one fixed form without a direction suffix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum WindowFrameBound<'input> {
     #[tok(CURRENT, ROW)]
     CurrentRow,
     Offset(WindowFrameOffset<'input>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct WindowFrameOffset<'input> {
-    pub expr: Box<Expr<'input>>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
     pub direction: WindowFrameDirection,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum WindowFrameDirection {
     #[tok(PRECEDING)]
     Preceding,
@@ -395,13 +392,13 @@ pub enum WindowFrameDirection {
 }
 
 /// `EXCLUDE { CURRENT ROW | GROUP | TIES | NO OTHERS }` frame exclusion.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct WindowFrameExclude {
     #[tok(EXCLUDE, this)]
     pub target: WindowFrameExcludeTarget,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum WindowFrameExcludeTarget {
     #[tok(CURRENT, ROW)]
     CurrentRow,
@@ -418,17 +415,17 @@ pub enum WindowFrameExcludeTarget {
 /// `VARIADIC` is deliberately not an argument variant. PostgreSQL admits it
 /// only as the sole argument or after the final comma, so the surrounding
 /// application states own that token and make its cardinality structural.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FuncArg<'input> {
     Named(NamedFuncArg<'input>),
-    Plain(Box<Expr<'input>>),
+    Plain(recursa::ArenaBox<'input, Expr<'input>>),
 }
 
 /// `=>` or `:=` — the two named-argument operators PostgreSQL accepts.
 ///
 /// Variant ordering: both are distinct two-character punctuation tokens,
 /// no ambiguity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum NamedArgOp {
     #[tok(FATARROW)]
     FatArrow,
@@ -437,15 +434,15 @@ pub enum NamedArgOp {
 }
 
 /// Named function argument: `name => value` or `name := value` (Postgres).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct NamedFuncArg<'input> {
     pub name: crate::tokens::type_function_name<'input>,
     pub arrow: NamedArgOp,
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// The `VARIADIC func_arg_expr` at either legal variadic site.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionVariadicArgument<'input> {
     #[tok(VARIADIC, this)]
     pub argument: FuncArg<'input>,
@@ -458,7 +455,7 @@ pub struct FunctionVariadicArgument<'input> {
 /// LR lowering: a token attachment on a repeated field is repeated
 /// with that field, whereas these modifiers occur exactly once before the
 /// complete list.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[parse(lr_conflict(
     action = reduce,
     against = ast::shared::expr::FunctionOrdinaryArguments,
@@ -468,14 +465,14 @@ pub struct FunctionVariadicArgument<'input> {
 pub struct FunctionArgumentList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<FuncArg<'input>>,
+    pub recursa::ArenaVec1<'input, FuncArg<'input>>,
 );
 
 /// The sole `VARIADIC func_arg_expr` application form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionLeadingVariadicArguments<'input> {
     pub variadic: FunctionVariadicArgument<'input>,
-    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
+    pub order_by: Option<recursa::ArenaBox<'input, crate::ast::dml::select::OrderByClause<'input>>>,
 }
 
 /// The final `, VARIADIC func_arg_expr` of a function application.
@@ -484,7 +481,7 @@ pub struct FunctionLeadingVariadicArguments<'input> {
 /// list lowering recognises that its separator is this suffix's first token,
 /// and that `VARIADIC` cannot start [`FuncArg`], producing the same shared
 /// `func_arg_list ',' VARIADIC func_arg_expr` production as gram.y.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionTrailingVariadicArgument<'input> {
     #[tok(COMMA, this)]
     pub variadic: FunctionVariadicArgument<'input>,
@@ -492,7 +489,7 @@ pub struct FunctionTrailingVariadicArgument<'input> {
 
 /// A plain non-empty argument list, optionally ending in one variadic
 /// argument, followed by the aggregate's optional inner `ORDER BY`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[parse(lr_conflict(
     action = reduce,
     against = ast::shared::expr::FunctionArgumentList,
@@ -501,30 +498,30 @@ pub struct FunctionTrailingVariadicArgument<'input> {
 ))]
 pub struct FunctionOrdinaryArguments<'input> {
     #[sep(COMMA)]
-    pub args: recursa::Vec1<FuncArg<'input>>,
+    pub args: recursa::ArenaVec1<'input, FuncArg<'input>>,
     pub trailing_variadic: Option<FunctionTrailingVariadicArgument<'input>>,
-    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
+    pub order_by: Option<recursa::ArenaBox<'input, crate::ast::dml::select::OrderByClause<'input>>>,
 }
 
 /// `ALL` followed by a required ordinary argument list and optional order.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionAllArguments<'input> {
     #[tok(ALL, this)]
     pub args: FunctionArgumentList<'input>,
-    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
+    pub order_by: Option<recursa::ArenaBox<'input, crate::ast::dml::select::OrderByClause<'input>>>,
 }
 
 /// `DISTINCT` followed by a required ordinary argument list and optional
 /// aggregate order.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionDistinctArguments<'input> {
     #[tok(DISTINCT, this)]
     pub args: FunctionArgumentList<'input>,
-    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
+    pub order_by: Option<recursa::ArenaBox<'input, crate::ast::dml::select::OrderByClause<'input>>>,
 }
 
 /// The dedicated PostgreSQL `func_name '(' '*' ')'` application body.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionCallStar {
     #[tok(STAR)]
     Value,
@@ -535,7 +532,7 @@ pub enum FunctionCallStar {
 /// A wildcard is not an expression in PostgreSQL. Its exclusive alternative
 /// here prevents invalid authored states such as `f(*, 1)` or
 /// `f(DISTINCT *)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionCallBody<'input> {
     Star(FunctionCallStar),
     All(FunctionAllArguments<'input>),
@@ -545,7 +542,7 @@ pub enum FunctionCallBody<'input> {
 }
 
 /// A complete PostgreSQL `func_application` after its function name.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionCallApplication<'input> {
     pub open: FunctionCallOpen,
     pub body: Option<FunctionCallBody<'input>>,
@@ -555,7 +552,7 @@ pub struct FunctionCallApplication<'input> {
 /// A named `func_application` without aggregate/window suffixes.
 ///
 /// PostgreSQL reuses this exact grammar in function-table positions.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionApplicationExpr<'input> {
     pub name: FuncCallName<'input>,
     pub application: FunctionCallApplication<'input>,
@@ -582,54 +579,54 @@ pub struct FunctionApplicationExpr<'input> {
 ///
 /// Variant ordering: `Qualified` needs a dotted tail, `Name` a single
 /// `type_function_name`; they share their first token and part on the dot.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FuncCallName<'input> {
     Qualified(FuncCallQualifiedName<'input>),
     Name(crate::tokens::type_function_name<'input>),
 }
 
 /// `WITHIN GROUP (ORDER BY ...)` clause for ordered-set aggregate functions.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(WITHIN, GROUP, this)]
 pub struct WithinGroupClause<'input> {
     #[tok(LPAREN, this, RPAREN)]
     #[pretty(break_before = soft)]
-    pub order_by: Box<crate::ast::dml::select::OrderByClause<'input>>,
+    pub order_by: recursa::ArenaBox<'input, crate::ast::dml::select::OrderByClause<'input>>,
 }
 
 /// `FILTER (WHERE condition)` clause for filtered aggregates.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(FILTER, this)]
 pub struct FilterClause<'input> {
     #[tok(LPAREN, this, RPAREN)]
     #[pretty(break_before = soft)]
-    pub body: Box<crate::ast::dml::select::WhereClause<'input>>,
+    pub body: recursa::ArenaBox<'input, crate::ast::dml::select::WhereClause<'input>>,
 }
 
 /// A dotted function name — the `ColId indirection` arm of gram.y's
 /// `func_name`. At least one dotted tail is required so this does not
 /// overlap the unqualified `type_function_name` arm of [`FuncCallName`].
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncCallQualifiedName<'input> {
     pub first: crate::tokens::ColId<'input>,
-    pub tail: recursa::Vec1<FuncCallNamePart<'input>>,
+    pub tail: recursa::ArenaVec1<'input, FuncCallNamePart<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncCallNamePart<'input> {
     #[tok(DOT, this)]
     pub name: literal::Ident<'input>,
 }
 
 /// Required opening delimiter shared by ordinary and quoted function calls.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionCallOpen {
     #[tok(LPAREN)]
     Value,
 }
 
 /// Required closing delimiter shared by ordinary and quoted function calls.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionCallClose {
     #[tok(RPAREN)]
     Value,
@@ -640,7 +637,7 @@ pub enum FunctionCallClose {
 /// One shape rather than a "plain" and a "within group" tail: the two ended
 /// the argument list on the same `)` and could only be told apart after it,
 /// which a one-token parser cannot do.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionCallSuffix<'input> {
     pub open: FunctionCallOpen,
     pub body: Option<FunctionCallBody<'input>>,
@@ -660,7 +657,7 @@ pub struct FunctionCallSuffix<'input> {
 /// must exclude it. Named function arguments are a separate pre-existing
 /// semantic-action gap and remain structurally accepted here. It parts from
 /// [`FunctionCallSuffix`] on the string after `)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionTypedLiteralTail<'input> {
     pub open: FunctionCallOpen,
     /// gram.y `func_arg_list`.
@@ -673,7 +670,7 @@ pub struct FunctionTypedLiteralTail<'input> {
 ///
 /// Variant ordering: both start with `(`; `TypedLiteral` is decided by the
 /// string after the closing parenthesis.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionCallTail<'input> {
     TypedLiteral(FunctionTypedLiteralTail<'input>),
     Call(FunctionCallSuffix<'input>),
@@ -683,7 +680,7 @@ pub enum FunctionCallTail<'input> {
 ///
 /// Dotted function calls are represented by [`QualifiedRef`], which owns the
 /// common unbounded dotted prefix shared with qualified column references.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncCall<'input> {
     pub name: crate::tokens::type_function_name<'input>,
     pub tail: FunctionCallTail<'input>,
@@ -694,7 +691,7 @@ pub struct FuncCall<'input> {
 /// Expression parsing admits quoted names through [`FuncCallName`] and
 /// [`Expr::Func`]; this wrapper remains public for callers that parse or
 /// construct [`QuotedFuncCall`] directly.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QuotedFuncName<'input> {
     Name(crate::tokens::literal::Ident<'input>),
 }
@@ -704,7 +701,7 @@ pub enum QuotedFuncName<'input> {
 /// [`Expr`] routes quoted function names through [`Expr::Func`] and
 /// [`FuncCallName`]. This public type remains available to callers that use
 /// the narrower unqualified quoted-call grammar directly.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct QuotedFuncCall<'input> {
     pub name: QuotedFuncName<'input>,
     pub tail: FunctionCallTail<'input>,
@@ -712,7 +709,7 @@ pub struct QuotedFuncCall<'input> {
 
 /// Content inside parentheses: either a query or a non-empty,
 /// comma-separated expression list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ParenContent<'input> {
     #[parse(prec = UMINUS)]
     #[parse(lr_conflict(
@@ -727,12 +724,12 @@ pub enum ParenContent<'input> {
         lookahead = { RPAREN_SELECT_LA },
         expect = 1
     ))]
-    Subquery(Box<Subquery<'input>>),
-    Exprs(#[sep(COMMA)] recursa::Vec1<Expr<'input>>),
+    Subquery(recursa::ArenaBox<'input, Subquery<'input>>),
+    Exprs(#[sep(COMMA)] recursa::ArenaVec1<'input, Expr<'input>>),
 }
 
 /// Terminal dot-star indirection.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ParenthesizedDotStar {
     #[tok(DOT, STAR)]
     Value,
@@ -740,7 +737,7 @@ pub enum ParenthesizedDotStar {
 
 /// One non-star element in the indirection chain following parenthesized
 /// content.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ParenthesizedIndirection<'input> {
     Field(IndirectionField<'input>),
     Subscript(BracketSubscript<'input>),
@@ -749,22 +746,22 @@ pub enum ParenthesizedIndirection<'input> {
 
 /// Parenthesized scalar, row, or subquery content, optionally followed by an
 /// arbitrary field, wildcard, or subscript indirection chain.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ParenthesizedExpr<'input> {
     pub open: ParenthesizedOpen,
     pub content: ParenContent<'input>,
     pub close: ParenthesizedClose,
-    pub indirection: Vec<ParenthesizedIndirection<'input>>,
+    pub indirection: recursa::ArenaVec<'input, ParenthesizedIndirection<'input>>,
 }
 
 /// Required `:` plus the optional upper bound of an array slice.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SubscriptSliceSuffix<'input> {
     pub colon: SubscriptColon,
-    pub upper: Option<Box<Expr<'input>>>,
+    pub upper: Option<recursa::ArenaBox<'input, Expr<'input>>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SubscriptColon {
     #[tok(COLON)]
     Value,
@@ -785,7 +782,7 @@ pub enum SubscriptColon {
 ///
 /// Variant ordering: only the lower-unbounded forms can begin with a colon,
 /// and no expression can, so the two are disjoint.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum BracketSubscriptValue<'input> {
     /// `[:]` and `[: upper]` — the lower `opt_slice_bound` is empty.
     LowerUnbounded(SubscriptSliceSuffix<'input>),
@@ -794,27 +791,27 @@ pub enum BracketSubscriptValue<'input> {
 }
 
 /// `lower [: [upper]]` inside subscript brackets.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct BracketSubscriptBounds<'input> {
-    pub lower: Box<Expr<'input>>,
+    pub lower: recursa::ArenaBox<'input, Expr<'input>>,
     pub slice: Option<SubscriptSliceSuffix<'input>>,
 }
 
 /// Shared payload for both an index and a slice.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct BracketSubscript<'input> {
     pub open: SubscriptOpen,
     pub content: BracketSubscriptValue<'input>,
     pub close: SubscriptClose,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SubscriptOpen {
     #[tok(LBRACKET)]
     Value,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SubscriptClose {
     #[tok(RBRACKET)]
     Value,
@@ -827,14 +824,14 @@ pub enum SubscriptClose {
 /// of these, so `a[1].b[2]` is a subscript carrying `.b` followed by a
 /// second subscript. Keeping brackets out of this tail leaves the two forms
 /// with disjoint continuations.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SubscriptIndirection<'input> {
     pub subscript: BracketSubscript<'input>,
-    pub fields: Vec<IndirectionField<'input>>,
+    pub fields: recursa::ArenaVec<'input, IndirectionField<'input>>,
 }
 
 /// `.field` accessor in an indirection chain.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct IndirectionField<'input> {
     #[tok(DOT, this)]
     pub name: literal::AliasName<'input>,
@@ -845,7 +842,7 @@ pub struct IndirectionField<'input> {
 ///
 /// Variant ordering: `Slice` before `Index` — both open with `[`, the
 /// colon-containing slice form is tried first.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum IndirectionEl<'input> {
     Subscript(BracketSubscript<'input>),
     Field(IndirectionField<'input>),
@@ -861,7 +858,7 @@ pub enum IndirectionEl<'input> {
 /// `subquery_Op` at the level of pg-sql's comparison operators (binding
 /// power 5): gram.y `MathOp`'s `< > = <= >= <>` and the operators pg-sql's
 /// `Expr` parses at that level.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QuantifiedCmpOperator {
     #[tok(STARLTE)]
     StarLte,
@@ -969,7 +966,7 @@ pub enum QuantifiedCmpOperator {
 
 /// `subquery_Op`'s `LIKE | NOT_LA LIKE | ILIKE | NOT_LA ILIKE`, at the level
 /// of `Expr::Like` (binding power 60).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QuantifiedLikeOperator {
     #[tok(NOT, LIKE)]
     NotLike,
@@ -985,7 +982,7 @@ pub enum QuantifiedLikeOperator {
 /// `^@`, every spelling that is only a prefix operator elsewhere in `Expr`,
 /// the multi-character custom operators, and `OPERATOR(any_operator)`
 /// (`%left Op OPERATOR`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QuantifiedOpOperator<'input> {
     #[tok(CONCAT)]
     Concat,
@@ -1011,7 +1008,7 @@ pub enum QuantifiedOpOperator<'input> {
 
 /// `subquery_Op` at the level of `+` and `-` (binding power 100), which in
 /// pg-sql also holds the bitwise and JSON operators.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QuantifiedAddOperator {
     #[tok(LTMINUSGT)]
     LtMinusGt,
@@ -1050,7 +1047,7 @@ pub enum QuantifiedAddOperator {
 }
 
 /// `subquery_Op` at the level of `*`, `/` and `%` (binding power 110).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QuantifiedMulOperator {
     #[tok(STAR)]
     Star,
@@ -1061,21 +1058,21 @@ pub enum QuantifiedMulOperator {
 }
 
 /// `subquery_Op` at the level of `^` (binding power 130).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QuantifiedPowOperator {
     #[tok(CARET)]
     Caret,
 }
 
 /// `OPERATOR(any_operator)` in a quantified comparison.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct QuantifiedDecoratedOperator<'input> {
     #[tok(OPERATOR, LPAREN, this, RPAREN)]
     pub name: crate::ast::shared::names::QualifiedOperatorName<'input>,
 }
 
 /// `ANY`, `SOME`, or `ALL` following a comparison operator.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QuantifiedComparisonKind {
     #[tok(ANY)]
     Any,
@@ -1086,15 +1083,15 @@ pub enum QuantifiedComparisonKind {
 }
 
 /// The single expression or query inside a quantified comparison.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum QuantifiedComparisonOperand<'input> {
-    Subquery(Box<Subquery<'input>>),
-    Expr(Box<Expr<'input>>),
+    Subquery(recursa::ArenaBox<'input, Subquery<'input>>),
+    Expr(recursa::ArenaBox<'input, Expr<'input>>),
 }
 
 /// `{ANY|SOME|ALL} (expression-or-query)` — gram.y `sub_type '(' a_expr ')'`
 /// and `sub_type select_with_parens`, shared by every quantified variant.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct QuantifiedComparisonTail<'input> {
     pub kind: QuantifiedComparisonKind,
     #[tok(LPAREN, this, RPAREN)]
@@ -1102,7 +1099,7 @@ pub struct QuantifiedComparisonTail<'input> {
 }
 
 /// `comparison operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(break_before = soft)]
 pub struct QuantifiedComparisonCmpSuffix<'input> {
     pub operator: QuantifiedCmpOperator,
@@ -1110,7 +1107,7 @@ pub struct QuantifiedComparisonCmpSuffix<'input> {
 }
 
 /// `LIKE-family operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(break_before = soft)]
 pub struct QuantifiedComparisonLikeSuffix<'input> {
     pub operator: QuantifiedLikeOperator,
@@ -1118,7 +1115,7 @@ pub struct QuantifiedComparisonLikeSuffix<'input> {
 }
 
 /// `generic operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(break_before = soft)]
 pub struct QuantifiedComparisonOpSuffix<'input> {
     pub operator: QuantifiedOpOperator<'input>,
@@ -1126,7 +1123,7 @@ pub struct QuantifiedComparisonOpSuffix<'input> {
 }
 
 /// `additive operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(break_before = soft)]
 pub struct QuantifiedComparisonAddSuffix<'input> {
     pub operator: QuantifiedAddOperator,
@@ -1134,7 +1131,7 @@ pub struct QuantifiedComparisonAddSuffix<'input> {
 }
 
 /// `multiplicative operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(break_before = soft)]
 pub struct QuantifiedComparisonMulSuffix<'input> {
     pub operator: QuantifiedMulOperator,
@@ -1142,7 +1139,7 @@ pub struct QuantifiedComparisonMulSuffix<'input> {
 }
 
 /// `exponentiation operator {ANY|SOME|ALL} (expression-or-query)` after a left operand.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(break_before = soft)]
 pub struct QuantifiedComparisonPowSuffix<'input> {
     pub operator: QuantifiedPowOperator,
@@ -1150,10 +1147,10 @@ pub struct QuantifiedComparisonPowSuffix<'input> {
 }
 
 /// EXISTS subquery: `EXISTS (SELECT ...)`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ExistsExpr<'input> {
     #[tok(EXISTS, LPAREN, this, RPAREN)]
-    pub subquery: Box<Subquery<'input>>,
+    pub subquery: recursa::ArenaBox<'input, Subquery<'input>>,
 }
 
 /// One element of an `ARRAY[...]` constructor: either an ordinary
@@ -1162,18 +1159,18 @@ pub struct ExistsExpr<'input> {
 ///
 /// Variant ordering: `Nested` leads with `[`, which no expression atom
 /// does, so dispatch is unambiguous.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ArrayElement<'input> {
     Nested(NestedArrayElements<'input>),
-    Expr(Box<Expr<'input>>),
+    Expr(recursa::ArenaBox<'input, Expr<'input>>),
 }
 
 /// One bracketed sub-list inside a multi-dimensional `ARRAY[...]` literal.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LBRACKET, this, RBRACKET)]
 pub struct NestedArrayElements<'input> {
     #[sep(COMMA)]
-    pub elements: Vec<ArrayElement<'input>>,
+    pub elements: recursa::ArenaVec<'input, ArrayElement<'input>>,
 }
 
 /// ARRAY bracket constructor: `ARRAY[expr, ...]`, including the
@@ -1183,25 +1180,25 @@ pub struct NestedArrayElements<'input> {
 /// element list is nullable. The `ARRAY` keyword still leads the node, which
 /// keeps the opening bracket visible to FIRST-k analysis, exactly as the
 /// nested `NestedArrayElements` list above already relies on.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ARRAY, LBRACKET, this, RBRACKET)]
 pub struct ArrayBracket<'input> {
     #[sep(COMMA)]
-    pub elements: Vec<ArrayElement<'input>>,
+    pub elements: recursa::ArenaVec<'input, ArrayElement<'input>>,
 }
 
 /// ARRAY subquery constructor: `ARRAY(subquery)`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ArraySubquery<'input> {
     #[tok(ARRAY, LPAREN, this, RPAREN)]
-    pub subquery: Box<Subquery<'input>>,
+    pub subquery: recursa::ArenaBox<'input, Subquery<'input>>,
 }
 
 /// ARRAY constructor: `ARRAY[expr, ...]` or `ARRAY(subquery)`
 ///
 /// Variant ordering: Bracket (`ARRAY[`) has a longer first_pattern than
 /// Subquery (`ARRAY(`) because `[` is a different token than `(`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ArrayExpr<'input> {
     Bracket(ArrayBracket<'input>),
     Subquery(ArraySubquery<'input>),
@@ -1213,11 +1210,11 @@ pub enum ArrayExpr<'input> {
 /// ')'`. `GROUPING` is a `COL_NAME` keyword, so it is a `ColId` but not a
 /// `type_function_name`: it can be a bare column reference, never an
 /// ordinary function name, and the call form needs its own production.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(GROUPING, LPAREN, this, RPAREN)]
 pub struct GroupingCall<'input> {
     #[sep(COMMA)]
-    pub args: recursa::Vec1<Expr<'input>>,
+    pub args: recursa::ArenaVec1<'input, Expr<'input>>,
 }
 
 /// ROW constructor: `ROW(expr, ...)` or the empty `ROW()`.
@@ -1226,54 +1223,54 @@ pub struct GroupingCall<'input> {
 /// `ROW '(' ')'` as separate alternatives, so the field list is nullable
 /// here. The `ROW` keyword still leads the node, so the empty form does not
 /// hide the opening parenthesis from FIRST-k analysis.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ROW, LPAREN, this, RPAREN)]
 pub struct RowExpr<'input> {
     #[sep(COMMA)]
-    pub values: Option<recursa::Vec1<Expr<'input>>>,
+    pub values: Option<recursa::ArenaVec1<'input, Expr<'input>>>,
 }
 
 /// `WHEN cond THEN result` arm of a CASE expression.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CaseWhenArm<'input> {
     #[tok(WHEN, this)]
-    pub condition: Box<Expr<'input>>,
+    pub condition: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(THEN, this)]
-    pub result: Box<Expr<'input>>,
+    pub result: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `ELSE result` clause of a CASE expression.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CaseElse<'input> {
     #[tok(ELSE, this)]
-    pub result: Box<Expr<'input>>,
+    pub result: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// Searched CASE body: `WHEN cond THEN result [...] [ELSE result]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CaseSearched<'input> {
     pub first_arm: CaseWhenArm<'input>,
-    pub rest_arms: Vec<CaseWhenArm<'input>>,
+    pub rest_arms: recursa::ArenaVec<'input, CaseWhenArm<'input>>,
     pub else_clause: Option<CaseElse<'input>>,
 }
 
 /// Simple CASE body: `operand WHEN val THEN result [...] [ELSE result]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CaseSimple<'input> {
-    pub operand: Box<Expr<'input>>,
+    pub operand: recursa::ArenaBox<'input, Expr<'input>>,
     pub first_arm: CaseWhenArm<'input>,
-    pub rest_arms: Vec<CaseWhenArm<'input>>,
+    pub rest_arms: recursa::ArenaVec<'input, CaseWhenArm<'input>>,
     pub else_clause: Option<CaseElse<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CaseBody<'input> {
     Searched(CaseSearched<'input>),
     Simple(CaseSimple<'input>),
 }
 
 /// CASE expression with its common `CASE` / `END` delimiters factored out.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CaseExpr<'input> {
     #[tok(CASE, this, END)]
     pub body: CaseBody<'input>,
@@ -1286,21 +1283,21 @@ pub struct CaseExpr<'input> {
 /// ordering: `Sized` (`[N]`, 3 tokens) before `Empty` (`[]`, 2 tokens) so
 /// longest-match-wins picks the longer form when an integer literal is
 /// present between the brackets.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum ArraySuffix<'input> {
     Sized(ArraySuffixSized<'input>),
     Empty(ArraySuffixEmpty),
 }
 
 /// `[N]` array bound.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub struct ArraySuffixSized<'input> {
     #[tok(LBRACKET, this, RBRACKET)]
     pub bounds: literal::IntegerLit<'input>,
 }
 
 /// `[]` array suffix (unbounded).
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum ArraySuffixEmpty {
     #[tok(LBRACKET, RBRACKET)]
     Value,
@@ -1309,10 +1306,10 @@ pub enum ArraySuffixEmpty {
 /// Cast type with a base-specific modifier and zero-or-more array suffixes:
 /// `numeric(10,0)`, `timestamp with time zone`, `interval day to minute`,
 /// `integer[]`, `int4[][][]`, `varchar(4)[2][3]`.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub struct CastType<'input> {
     pub head: CastTypeHead<'input>,
-    pub array_suffixes: Vec<ArraySuffix<'input>>,
+    pub array_suffixes: recursa::ArenaVec<'input, ArraySuffix<'input>>,
     /// PG gram.y also accepts `SimpleTypename ARRAY` and
     /// `SimpleTypename ARRAY '[' Iconst ']'` — the keyword form for
     /// declaring an array type (e.g. `integer ARRAY[4]`, `text ARRAY`).
@@ -1328,7 +1325,7 @@ pub struct CastType<'input> {
 /// particular, `WITH/WITHOUT TIME ZONE` is not a suffix on an arbitrary type;
 /// keeping it structural prevents a following `WITH UNIQUE KEYS` JSON clause
 /// from being consumed as part of a `json` cast.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum CastTypeHead<'input> {
     DateTime(DateTimeCastType<'input>),
     Interval(IntervalCastType<'input>),
@@ -1336,14 +1333,14 @@ pub enum CastTypeHead<'input> {
 }
 
 /// `TIMESTAMP` or `TIME`, with their optional precision and timezone suffix.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub struct DateTimeCastType<'input> {
     pub base: DateTimeCastTypeName,
     pub precision: Option<TypePrecision<'input>>,
     pub tz: Option<TimeZoneQualifier>,
 }
 
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum DateTimeCastTypeName {
     #[tok(TIMESTAMP)]
     Timestamp,
@@ -1352,20 +1349,20 @@ pub enum DateTimeCastTypeName {
 }
 
 /// `INTERVAL`, optionally with either a full-type precision or a field range.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 #[tok(INTERVAL, this)]
 pub struct IntervalCastType<'input> {
     pub modifier: Option<IntervalCastTypeModifier<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum IntervalCastTypeModifier<'input> {
     Precision(TypePrecision<'input>),
     Qualifier(IntervalQualifier<'input>),
 }
 
 /// A type without the date/time- or interval-specific suffix grammar.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub struct GeneralCastType<'input> {
     pub base: GeneralCastTypeName<'input>,
     #[presence(VARYING)]
@@ -1379,7 +1376,7 @@ pub struct GeneralCastType<'input> {
 ///
 /// This mirrors [`TypeName`] for the general PostgreSQL type production while
 /// making the three suffix-bearing families disjoint by construction.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum GeneralCastTypeName<'input> {
     #[tok(BOOL)]
     Bool,
@@ -1410,14 +1407,14 @@ pub enum GeneralCastTypeName<'input> {
 
 /// `ARRAY` or `ARRAY[N]` post-type-name array suffix
 /// (PG gram.y: `SimpleTypename ARRAY | SimpleTypename ARRAY '[' Iconst ']'`).
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 #[tok(ARRAY, this)]
 pub struct ArrayKwSuffix<'input> {
     pub bound: Option<ArraySuffixSized<'input>>,
 }
 
 /// NOT IN list: `expr NOT IN (val, ...)` suffix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct NotInSuffix<'input> {
     #[tok(NOT, IN, this)]
     pub list: InList<'input>,
@@ -1428,7 +1425,7 @@ pub struct NotInSuffix<'input> {
 ///
 /// These are `COL_NAME` keywords and therefore cannot also be generic
 /// function names.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FixedTypeCastFuncName {
     /// gram.y `Numeric: DOUBLE_P PRECISION`; `double precision '1'` is a
     /// `ConstTypename Sconst` literal. Listed first: the two-token spelling
@@ -1454,7 +1451,7 @@ pub enum FixedTypeCastFuncName {
 /// Function-style typed literal for a fixed-keyword type. The optional typmod
 /// list is kept on this same node so `numeric '1'` and
 /// `numeric(10, 2) '1.00'` share their prefix honestly.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FixedTypeCastFunc<'input> {
     pub type_name: FixedTypeCastFuncName,
     #[presence(VARYING)]
@@ -1473,7 +1470,7 @@ pub struct FixedTypeCastFunc<'input> {
 /// SQL/JSON `key : value` entry of `JSON_OBJECT` and `JSON_OBJECTAGG`; psql
 /// now has its own grammar, so a colon after a type name is only ever that
 /// entry separator.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct NamedTypeCastFunc<'input> {
     /// gram.y `AexprConst: func_name Sconst` — nothing stands between the
     /// name and the string. `double precision '1'` is
@@ -1493,7 +1490,7 @@ pub struct NamedTypeCastFunc<'input> {
 /// modifiers, so none are modelled here — which also keeps this node
 /// disjoint from the `JSON ( ... )` SQL/JSON value constructor at the second
 /// token.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonTypeCastFunc<'input> {
     #[tok(JSON, this)]
     pub value: literal::StringLit<'input>,
@@ -1507,7 +1504,7 @@ pub struct JsonTypeCastFunc<'input> {
 /// Variant ordering is immaterial: `Fixed` leads with one of its own
 /// keywords, `Json` with `JSON`, and `Named` with a `type_function_name`,
 /// which admits neither.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TypeCastFunc<'input> {
     Fixed(FixedTypeCastFunc<'input>),
     Json(JsonTypeCastFunc<'input>),
@@ -1515,7 +1512,7 @@ pub enum TypeCastFunc<'input> {
 }
 
 /// `WITH TIME ZONE` or `WITHOUT TIME ZONE` suffix for `TIMESTAMP`/`TIME`.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum TimeZoneQualifier {
     #[tok(WITH, TIME, ZONE)]
     With,
@@ -1524,7 +1521,7 @@ pub enum TimeZoneQualifier {
 }
 
 /// `TIMESTAMP [WITH|WITHOUT TIME ZONE] 'string'`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(TIMESTAMP, this)]
 pub struct TimestampLit<'input> {
     /// Optional precision, e.g., `timestamp(6)`.
@@ -1534,7 +1531,7 @@ pub struct TimestampLit<'input> {
 }
 
 /// `TIME [WITH|WITHOUT TIME ZONE] 'string'`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(TIME, this)]
 pub struct TimeLit<'input> {
     /// Optional precision, e.g., `time(2)`.
@@ -1546,7 +1543,7 @@ pub struct TimeLit<'input> {
 /// `SECOND [(p)]` — the SECOND keyword with optional fractional-second
 /// precision. Used in interval qualifiers like `SECOND(2)` or
 /// `DAY TO SECOND(2)`.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 #[tok(SECOND, this)]
 pub struct SecondWithPrecision<'input> {
     pub precision: Option<TypePrecision<'input>>,
@@ -1558,7 +1555,7 @@ pub struct SecondWithPrecision<'input> {
 /// single-keyword forms so longest-match-wins picks the fuller qualifier
 /// when available. `*ToSecond` variants use `SecondWithPrecision` which
 /// allows optional `(p)` precision.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq)]
+#[derive(recursa::Node, Debug, PartialEq, Eq)]
 pub enum IntervalQualifier<'input> {
     #[tok(YEAR, TO, MONTH)]
     YearToMonth,
@@ -1585,7 +1582,7 @@ pub enum IntervalQualifier<'input> {
 }
 
 /// `INTERVAL 'str' [qualifier]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct IntervalLit<'input> {
     pub interval: IntervalKeyword,
     /// Optional precision, e.g. `interval(2)` or `interval(0)`.
@@ -1594,7 +1591,7 @@ pub struct IntervalLit<'input> {
     pub qualifier: Option<IntervalQualifier<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum IntervalKeyword {
     #[tok(INTERVAL)]
     Value,
@@ -1612,14 +1609,14 @@ pub enum IntervalKeyword {
 // They are modeled here as dedicated atoms declared before `FuncCall`.
 
 /// A `name [AS alias]` argument to `xmlattributes` / `xmlforest`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlNamedArg<'input> {
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
     pub alias: Option<XmlNamedArgAlias<'input>>,
 }
 
 /// `AS alias` suffix on an XML named argument.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlNamedArgAlias<'input> {
     #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
@@ -1627,15 +1624,15 @@ pub struct XmlNamedArgAlias<'input> {
 
 /// `xmlattributes(expr [AS alias], ...)` — used as a positional argument
 /// to `xmlelement`, but also can be parsed standalone.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(XMLATTRIBUTES, LPAREN, this, RPAREN)]
 pub struct XmlAttributes<'input> {
     #[sep(COMMA)]
-    pub args: recursa::Vec1<XmlNamedArg<'input>>,
+    pub args: recursa::ArenaVec1<'input, XmlNamedArg<'input>>,
 }
 
 /// Optional `, xmlattributes(...) [, content_exprs]` tail of `xmlelement`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlElementAttrsTail<'input> {
     #[tok(COMMA, this)]
     pub attrs: XmlAttributes<'input>,
@@ -1643,11 +1640,11 @@ pub struct XmlElementAttrsTail<'input> {
 }
 
 /// Optional `, content_exprs` tail of `xmlelement`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(COMMA, this)]
 pub struct XmlElementContentTail<'input> {
     #[sep(COMMA)]
-    pub exprs: recursa::Vec1<Expr<'input>>,
+    pub exprs: recursa::ArenaVec1<'input, Expr<'input>>,
 }
 
 /// Body of `xmlelement(NAME ident [, xmlattributes(...)] [, content_exprs])`.
@@ -1658,7 +1655,7 @@ pub struct XmlElementContentTail<'input> {
 pub type XmlElementTail<'input> = XmlElementContentTail<'input>;
 
 /// Inner contents of an `xmlelement(...)` call.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlElementInner<'input> {
     #[tok(NAME, this)]
     pub element_name: literal::AliasName<'input>,
@@ -1666,29 +1663,29 @@ pub struct XmlElementInner<'input> {
 }
 
 /// `xmlelement(NAME ident [, xmlattributes(...)] [, content_exprs])`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlElement<'input> {
     #[tok(XMLELEMENT, LPAREN, this, RPAREN)]
     pub inner: XmlElementInner<'input>,
 }
 
 /// `xmlforest(expr [AS alias], ...)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(XMLFOREST, LPAREN, this, RPAREN)]
 pub struct XmlForest<'input> {
     #[sep(COMMA)]
-    pub args: recursa::Vec1<XmlNamedArg<'input>>,
+    pub args: recursa::ArenaVec1<'input, XmlNamedArg<'input>>,
 }
 
 /// `xmlpi(NAME ident [, content])`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlPi<'input> {
     #[tok(XMLPI, LPAREN, this, RPAREN)]
     pub inner: XmlPiInner<'input>,
 }
 
 /// Inner contents of an `xmlpi(...)` call.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlPiInner<'input> {
     #[tok(NAME, this)]
     pub target: literal::AliasName<'input>,
@@ -1696,10 +1693,10 @@ pub struct XmlPiInner<'input> {
 }
 
 /// Optional `, content_expr` tail of `xmlpi`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlPiContentTail<'input> {
     #[tok(COMMA, this)]
-    pub expr: Box<Expr<'input>>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 // --- More XML function atoms: XMLSERIALIZE / XMLPARSE / XMLROOT / XMLEXISTS ---
@@ -1708,7 +1705,7 @@ pub struct XmlPiContentTail<'input> {
 // `VERSION`, `PASSING BY REF`, …) that a plain `FuncCall` cannot express.
 
 /// `DOCUMENT` / `CONTENT` — the XML value category in `XMLSERIALIZE` / `XMLPARSE`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum XmlDocOrContent {
     #[tok(DOCUMENT)]
     Document,
@@ -1719,7 +1716,7 @@ pub enum XmlDocOrContent {
 /// `INDENT` / `NO INDENT` — output indentation option of `XMLSERIALIZE`.
 ///
 /// Variant ordering: `NoIndent` (`NO INDENT`, two tokens) before `Indent`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum XmlIndentOption {
     #[tok(NO, INDENT)]
     NoIndent,
@@ -1728,31 +1725,31 @@ pub enum XmlIndentOption {
 }
 
 /// Inner of `XMLSERIALIZE ( {DOCUMENT|CONTENT} ‹expr› AS ‹type› [[NO] INDENT] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlSerializeInner<'input> {
     pub which: XmlDocOrContent,
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(AS, this)]
     pub ty: CastType<'input>,
     pub indent: Option<XmlIndentOption>,
 }
 
 /// `XMLSERIALIZE ( {DOCUMENT|CONTENT} ‹expr› AS ‹type› [[NO] INDENT] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlSerialize<'input> {
     #[tok(XMLSERIALIZE, LPAREN, this, RPAREN)]
     pub inner: XmlSerializeInner<'input>,
 }
 
 /// Inner of `XMLPARSE ( {DOCUMENT|CONTENT} ‹expr› )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlParseInner<'input> {
     pub which: XmlDocOrContent,
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `XMLPARSE ( {DOCUMENT|CONTENT} ‹expr› )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlParse<'input> {
     #[tok(XMLPARSE, LPAREN, this, RPAREN)]
     pub inner: XmlParseInner<'input>,
@@ -1761,15 +1758,15 @@ pub struct XmlParse<'input> {
 /// `VERSION {‹expr› | NO VALUE}` — the version argument of `XMLROOT`.
 ///
 /// Variant ordering: `NoValue` (`NO VALUE`) before the catch-all `Expr`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum XmlVersionValue<'input> {
     #[tok(NO, VALUE)]
     NoValue,
-    Expr(Box<Expr<'input>>),
+    Expr(recursa::ArenaBox<'input, Expr<'input>>),
 }
 
 /// `VERSION {…}` clause of `XMLROOT`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlRootVersion<'input> {
     #[tok(VERSION, this)]
     pub value: XmlVersionValue<'input>,
@@ -1778,7 +1775,7 @@ pub struct XmlRootVersion<'input> {
 /// `STANDALONE {YES | NO [VALUE]}`.
 ///
 /// Variant ordering: `NoValue` (`NO VALUE`) before bare `No`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum XmlStandaloneValue {
     #[tok(YES)]
     Yes,
@@ -1789,30 +1786,30 @@ pub enum XmlStandaloneValue {
 }
 
 /// `, STANDALONE {…}` clause of `XMLROOT`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlRootStandalone {
     #[tok(COMMA, STANDALONE, this)]
     pub value: XmlStandaloneValue,
 }
 
 /// Inner of `XMLROOT ( ‹xml› , VERSION {…} [, STANDALONE {…}] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlRootInner<'input> {
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(COMMA, this)]
     pub version: XmlRootVersion<'input>,
     pub standalone: Option<XmlRootStandalone>,
 }
 
 /// `XMLROOT ( ‹xml› , VERSION {…} [, STANDALONE {…}] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlRoot<'input> {
     #[tok(XMLROOT, LPAREN, this, RPAREN)]
     pub inner: XmlRootInner<'input>,
 }
 
 /// `BY REF` / `BY VALUE` qualifier of an `XMLEXISTS` / `XMLTABLE` PASSING clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum XmlRefOrValue {
     #[tok(REF)]
     Ref,
@@ -1821,21 +1818,21 @@ pub enum XmlRefOrValue {
 }
 
 /// `BY {REF|VALUE}` qualifier.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlPassingBy {
     #[tok(BY, this)]
     pub which: XmlRefOrValue,
 }
 
 /// Inner of `XMLEXISTS ( ‹xpath› PASSING [BY {REF|VALUE}] ‹doc› [BY {REF|VALUE}] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlExistsInner<'input> {
-    pub xpath: Box<Expr<'input>>,
+    pub xpath: recursa::ArenaBox<'input, Expr<'input>>,
     pub passing: XmlExistsPassing<'input>,
 }
 
 /// Required `PASSING` clause of `XMLEXISTS`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlExistsPassing<'input> {
     #[tok(PASSING, this)]
     pub document: XmlExistsDocument<'input>,
@@ -1843,27 +1840,27 @@ pub struct XmlExistsPassing<'input> {
 }
 
 /// The document expression, optionally introduced by `BY REF` / `BY VALUE`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum XmlExistsDocument<'input> {
     Qualified(XmlExistsQualifiedDocument<'input>),
-    Plain(Box<Expr<'input>>),
+    Plain(recursa::ArenaBox<'input, Expr<'input>>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlExistsQualifiedDocument<'input> {
     pub by: XmlPassingBy,
-    pub doc: Box<Expr<'input>>,
+    pub doc: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `XMLEXISTS ( ‹xpath› PASSING [BY {REF|VALUE}] ‹doc› [BY {REF|VALUE}] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlExists<'input> {
     #[tok(XMLEXISTS, LPAREN, this, RPAREN)]
     pub inner: XmlExistsInner<'input>,
 }
 
 /// The tail of an `IS DOCUMENT` predicate: `[NOT] DOCUMENT`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct IsDocumentTail {
     #[tok(this, DOCUMENT)]
     #[presence(NOT)]
@@ -1876,7 +1873,7 @@ pub struct IsDocumentTail {
 // separators inside parens that don't fit a comma-separated FuncCall.
 
 /// Trim direction: `LEADING | TRAILING | BOTH`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TrimDir {
     #[tok(LEADING)]
     Leading,
@@ -1897,7 +1894,7 @@ pub enum TrimDir {
 /// `from_args` carries the explicit-FROM tail when present; otherwise
 /// `bare_args` carries the bare expression list (single expr in PG's
 /// regression corpus, but PG admits multiple).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TrimInner<'input> {
     pub dir: Option<TrimDir>,
     pub tail: TrimTail<'input>,
@@ -1909,7 +1906,7 @@ pub struct TrimInner<'input> {
 /// distinct from any `Expr` atom; `WithChars` second because the `[chars]
 /// FROM source` form starts with an Expr; `BareArgs` last as the catch-all
 /// `[expr, ...]` (no `FROM`) form for `trim(LEADING ' foo ')` shapes.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TrimTail<'input> {
     /// `FROM expr_list` — explicit-FROM, no leading chars.
     FromArgs(TrimFromArgs<'input>),
@@ -1918,27 +1915,27 @@ pub enum TrimTail<'input> {
 }
 
 /// `FROM expr_list` tail of `TRIM(...)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(FROM, this)]
 pub struct TrimFromArgs<'input> {
     #[sep(COMMA)]
-    pub args: recursa::Vec1<Expr<'input>>,
+    pub args: recursa::ArenaVec1<'input, Expr<'input>>,
 }
 
 /// `chars FROM source` tail of `TRIM(...)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TrimWithChars<'input> {
-    pub chars: Box<Expr<'input>>,
+    pub chars: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(FROM, this)]
     #[sep(COMMA)]
-    pub args: recursa::Vec1<Expr<'input>>,
+    pub args: recursa::ArenaVec1<'input, Expr<'input>>,
 }
 
 /// A value-led TRIM tail. A following `FROM` turns the first value into the
 /// trim character; comma suffixes represent the ordinary function form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TrimValues<'input> {
-    pub first: Box<Expr<'input>>,
+    pub first: recursa::ArenaBox<'input, Expr<'input>>,
     /// gram.y `trim_list: a_expr FROM expr_list | expr_list`: after the first
     /// expression either `FROM expr_list` or the rest of one `expr_list`,
     /// never both, so a comma after `FROM b` continues that list.
@@ -1948,51 +1945,51 @@ pub struct TrimValues<'input> {
 /// What follows the first expression of a `trim_list`.
 ///
 /// Variant ordering: `From` starts with `FROM`, `More` with a comma.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TrimValuesRest<'input> {
     From(TrimFromArgs<'input>),
     More(TrimMoreArgs<'input>),
 }
 
 /// `, expr [, expr ...]`.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
-pub struct TrimMoreArgs<'input>(#[deref] pub recursa::Vec1<TrimMoreArg<'input>>);
+#[derive(recursa::Node, Debug, derive_more::Deref)]
+pub struct TrimMoreArgs<'input>(#[deref] pub recursa::ArenaVec1<'input, TrimMoreArg<'input>>);
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TrimMoreArg<'input> {
     #[tok(COMMA, this)]
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `TRIM([LEADING|TRAILING|BOTH] [chars] FROM source)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TrimCall<'input> {
     #[tok(TRIM, LPAREN, this, RPAREN)]
     pub inner: TrimInner<'input>,
 }
 
 /// `FOR len` suffix in `SUBSTRING(... FROM ... FOR ...)` / `OVERLAY(...)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ForCount<'input> {
     #[tok(FOR, this)]
-    pub count: Box<Expr<'input>>,
+    pub count: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `FROM start [FOR len]` form for SUBSTRING.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SubstringFromFor<'input> {
     #[tok(FROM, this)]
-    pub start: Box<Expr<'input>>,
+    pub start: recursa::ArenaBox<'input, Expr<'input>>,
     pub for_count: Option<ForCount<'input>>,
 }
 
 /// `SIMILAR pattern ESCAPE escape` form for SUBSTRING.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SubstringSimilar<'input> {
     #[tok(SIMILAR, this)]
-    pub pattern: Box<Expr<'input>>,
+    pub pattern: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(ESCAPE, this)]
-    pub escape: Box<Expr<'input>>,
+    pub escape: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// Tail of a SUBSTRING call after the source expression.
@@ -2000,10 +1997,10 @@ pub struct SubstringSimilar<'input> {
 /// Variant ordering: `Similar` (`SIMILAR`) before `FromFor` (`FROM`) — distinct
 /// first tokens, so order is not strictly required, but listed by length.
 /// One `, arg` of the ordinary function-call spelling of `SUBSTRING`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SubstringMoreArg<'input> {
     #[tok(COMMA, this)]
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// The tail of `SUBSTRING(...)` after its first argument.
@@ -2016,46 +2013,46 @@ pub struct SubstringMoreArg<'input> {
 ///
 /// Variant ordering is immaterial: the four alternatives lead with SIMILAR,
 /// FROM, FOR and COMMA respectively.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SubstringTail<'input> {
     Similar(SubstringSimilar<'input>),
     FromFor(SubstringFromFor<'input>),
     For(ForCount<'input>),
-    Args(recursa::Vec1<SubstringMoreArg<'input>>),
+    Args(recursa::ArenaVec1<'input, SubstringMoreArg<'input>>),
 }
 
 /// Inner of `SUBSTRING(...)`: `source` followed by FROM/SIMILAR tail.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SubstringInner<'input> {
-    pub source: Box<Expr<'input>>,
+    pub source: recursa::ArenaBox<'input, Expr<'input>>,
     pub tail: SubstringTail<'input>,
 }
 
 /// `COLLATION FOR (expr)` — SQL-standard collation introspection.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CollationForCall<'input> {
     #[tok(COLLATION, FOR, LPAREN, this, RPAREN)]
-    pub arg: Box<Expr<'input>>,
+    pub arg: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `expr AS cast_type [COLLATE "c"]` — inner of `CAST(...)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CastAsInner<'input> {
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(AS, this)]
     pub target: CastType<'input>,
     pub collate: Option<CollateSuffix<'input>>,
 }
 
 /// `COLLATE "name"` suffix appearing after a cast target type.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CollateSuffix<'input> {
     #[tok(COLLATE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `CAST(expr AS type [COLLATE "c"])` — SQL-standard cast form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CastCall<'input> {
     #[tok(CAST, LPAREN, this, RPAREN)]
     pub inner: CastAsInner<'input>,
@@ -2063,7 +2060,7 @@ pub struct CastCall<'input> {
 
 /// `SUBSTRING(source FROM start [FOR len])` /
 /// `SUBSTRING(source SIMILAR pattern ESCAPE escape)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SubstringCall<'input> {
     #[tok(SUBSTRING, LPAREN, this, RPAREN)]
     pub inner: SubstringInner<'input>,
@@ -2079,7 +2076,7 @@ pub struct SubstringCall<'input> {
 /// casts, `IS [NOT] DISTINCT FROM`, and `IS [NOT] DOCUMENT` remain enabled.
 /// Parentheses start a fresh unrestricted expression, matching PostgreSQL's
 /// rule that `(a_expr)` is itself a `b_expr` atom.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PositionInner<'input> {
     #[parse(pratt(exclude(
         // gram.y's `b_expr` reaches no `DEFAULT`: the keyword is not a
@@ -2117,31 +2114,31 @@ pub struct PositionInner<'input> {
     )))]
     // No acceptance: the exclusion list already stops this operand before
     // `IN`, so analysis finds no overlap here (recursa #126).
-    pub needle: Box<Expr<'input>>,
+    pub needle: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(IN, this)]
-    pub haystack: Box<Expr<'input>>,
+    pub haystack: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `POSITION(needle IN haystack)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PositionCall<'input> {
     #[tok(POSITION, LPAREN, this, RPAREN)]
     pub inner: PositionInner<'input>,
 }
 
 /// Inner of `OVERLAY(source PLACING new FROM start [FOR len])`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OverlayInner<'input> {
-    pub source: Box<Expr<'input>>,
+    pub source: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(PLACING, this)]
-    pub new: Box<Expr<'input>>,
+    pub new: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(FROM, this)]
-    pub start: Box<Expr<'input>>,
+    pub start: recursa::ArenaBox<'input, Expr<'input>>,
     pub for_count: Option<ForCount<'input>>,
 }
 
 /// `OVERLAY(source PLACING new FROM start [FOR len])`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OverlayCall<'input> {
     #[tok(OVERLAY, LPAREN, this, RPAREN)]
     pub inner: OverlayInner<'input>,
@@ -2152,36 +2149,36 @@ pub struct OverlayCall<'input> {
 /// Variant ordering: `StringLit` before `Ident` — string literal has a
 /// distinct first token (`'`) so order is not strictly required; listed
 /// first to match the Postgres docs ordering.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ExtractField<'input> {
     StringLit(StringLitSeq0<'input>),
     Ident(literal::AliasName<'input>),
 }
 
 /// Inner of `EXTRACT(field FROM source)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ExtractInner<'input> {
     pub field: ExtractField<'input>,
     #[tok(FROM, this)]
-    pub source: Box<Expr<'input>>,
+    pub source: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `EXTRACT(field FROM source)` — Postgres-specific function syntax.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ExtractCall<'input> {
     #[tok(EXTRACT, LPAREN, this, RPAREN)]
     pub inner: ExtractInner<'input>,
 }
 
 /// `UESCAPE 'c'` suffix that may follow a `U&'...'` literal.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct UescapeSuffix<'input> {
     #[tok(UESCAPE, this)]
     pub escape_char: literal::StringLit<'input>,
 }
 
 /// `U&'...'` unicode string literal with optional `UESCAPE 'c'` suffix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct UnicodeStringLitWithEscape<'input> {
     #[lex(pattern = r"(?i:U)&'(?:[^']|'')*'")]
     pub lit: literal::UnicodeStringLit<'input>,
@@ -2204,21 +2201,21 @@ pub struct UnicodeStringLitWithEscape<'input> {
 // comma-separated call falls through to the ordinary `Func` atom.
 
 /// `ENCODING ‹name›` suffix of a `FORMAT JSON` clause (e.g. `ENCODING UTF8`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonEncoding<'input> {
     #[tok(ENCODING, this)]
     pub name: literal::AliasName<'input>,
 }
 
 /// `FORMAT JSON [ENCODING ‹name›]` — SQL/JSON input/output format specifier.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(FORMAT, JSON, this)]
 pub struct JsonFormat<'input> {
     pub encoding: Option<JsonEncoding<'input>>,
 }
 
 /// `RETURNING ‹data_type› [FORMAT JSON [ENCODING ...]]` — output type clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonReturning<'input> {
     #[tok(RETURNING, this)]
     pub ty: CastType<'input>,
@@ -2226,7 +2223,7 @@ pub struct JsonReturning<'input> {
 }
 
 /// `WITH` / `WITHOUT` lead-in of a `UNIQUE KEYS` constraint.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum WithOrWithout {
     #[tok(WITH)]
     With,
@@ -2241,7 +2238,7 @@ pub enum WithOrWithout {
 /// To avoid shift/reduce conflicts, assign the KEYS-less productions a
 /// precedence less than IDENT (i.e., less than KEYS). This prevents reducing
 /// them when the next token is KEYS." `UNBOUNDED` (gram.y:886) is that level.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[parse(prec = UNBOUNDED)]
 pub struct JsonUniqueKeys {
     #[tok(this, UNIQUE)]
@@ -2253,7 +2250,7 @@ pub struct JsonUniqueKeys {
 }
 
 /// `NULL` / `ABSENT` lead-in of an `ON NULL` clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum NullOrAbsent {
     #[tok(NULL)]
     Null,
@@ -2263,51 +2260,51 @@ pub enum NullOrAbsent {
 
 /// `{NULL|ABSENT} ON NULL` — null-input handling for `JSON_OBJECT()` /
 /// `JSON_ARRAY()`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonOnNull {
     #[tok(this, ON, NULL)]
     pub which: NullOrAbsent,
 }
 
 /// Inner contents of `JSON ( ‹expr› [FORMAT JSON ...] [{WITH|WITHOUT} UNIQUE [KEYS]] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonConstructorInner<'input> {
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
     pub unique: Option<JsonUniqueKeys>,
 }
 
 /// `JSON ( ‹expr› [FORMAT JSON ...] [{WITH|WITHOUT} UNIQUE [KEYS]] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonConstructor<'input> {
     #[tok(JSON, LPAREN, this, RPAREN)]
     pub inner: JsonConstructorInner<'input>,
 }
 
 /// `JSON_SCALAR ( ‹expr› )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonScalar<'input> {
     #[tok(JSON_SCALAR, LPAREN, this, RPAREN)]
-    pub inner: Box<Expr<'input>>,
+    pub inner: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// Inner contents of `JSON_SERIALIZE ( ‹expr› [FORMAT JSON ...] [RETURNING ...] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonSerializeInner<'input> {
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
     pub returning: Option<JsonReturning<'input>>,
 }
 
 /// `JSON_SERIALIZE ( ‹expr› [FORMAT JSON ...] [RETURNING ‹type› ...] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonSerialize<'input> {
     #[tok(JSON_SERIALIZE, LPAREN, this, RPAREN)]
     pub inner: JsonSerializeInner<'input>,
 }
 
 /// Key/value separator inside a `JSON_OBJECT` entry: `:` or the `VALUE` keyword.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JsonKeyValueSep {
     #[tok(COLON)]
     Colon,
@@ -2316,10 +2313,10 @@ pub enum JsonKeyValueSep {
 }
 
 /// The `{: | VALUE} ‹value› [FORMAT JSON ...]` part of a `JSON_OBJECT` item.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonObjectEntryValue<'input> {
     pub sep: JsonKeyValueSep,
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
 }
 
@@ -2338,28 +2335,28 @@ pub struct JsonObjectEntryValue<'input> {
 /// PostgreSQL's `func_arg_list` also admits the `name => value` spelling.
 /// That form is not modelled here: no `json_object` call uses it, and a
 /// named argument is not a legal SQL/JSON entry key.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonObjectEntry<'input> {
-    pub key: Box<Expr<'input>>,
+    pub key: recursa::ArenaBox<'input, Expr<'input>>,
     pub value: Option<JsonObjectEntryValue<'input>>,
 }
 
 /// One `‹key› {: | VALUE} ‹value› [FORMAT JSON ...]` entry of
 /// `JSON_OBJECTAGG`, whose gram.y production admits only the SQL/JSON
 /// spelling and therefore requires the value.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonObjectAggEntry<'input> {
-    pub key: Box<Expr<'input>>,
+    pub key: recursa::ArenaBox<'input, Expr<'input>>,
     pub value: JsonObjectEntryValue<'input>,
 }
 
 /// Non-empty item list of `JSON_OBJECT`, followed by the optional `ON NULL`,
 /// `UNIQUE` and `RETURNING` clauses. Those clauses belong to the SQL/JSON
 /// entry production only; the legacy function form never carries them.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonObjectArgs<'input> {
     #[sep(COMMA)]
-    pub entries: recursa::Vec1<JsonObjectEntry<'input>>,
+    pub entries: recursa::ArenaVec1<'input, JsonObjectEntry<'input>>,
     pub on_null: Option<JsonOnNull>,
     pub unique: Option<JsonUniqueKeys>,
     pub returning: Option<JsonReturning<'input>>,
@@ -2369,7 +2366,7 @@ pub struct JsonObjectArgs<'input> {
 /// list and for the empty/returning-only form. Keeping those paths distinct
 /// prevents the expression-led entry parser from claiming the reserved
 /// `RETURNING` token as an entry key.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JsonObject<'input> {
     Entries(#[tok(JSON_OBJECT, LPAREN, this, RPAREN)] JsonObjectArgs<'input>),
     Returning(#[tok(JSON_OBJECT, LPAREN, this, RPAREN)] JsonReturning<'input>),
@@ -2378,9 +2375,9 @@ pub enum JsonObject<'input> {
 }
 
 /// One `‹expr› [FORMAT JSON ...]` element of a `JSON_ARRAY` element list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonArrayElement<'input> {
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
 }
 
@@ -2397,7 +2394,7 @@ pub struct JsonArrayElement<'input> {
 ///
 /// Variant ordering: `Query` starts with a query keyword or `(`,
 /// `Elements` with an expression, `Empty` with `RETURNING` or nothing.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JsonArrayArgs<'input> {
     Query(JsonArrayQueryArgs<'input>),
     Elements(JsonArrayElementsArgs<'input>),
@@ -2409,30 +2406,30 @@ pub enum JsonArrayArgs<'input> {
 /// syntax ends. The `FORMAT JSON` option is not admitted: `FORMAT` is also
 /// a table alias in the query's FROM list, which the `FORMAT_LA` token filter
 /// distinguishes in the LR grammar.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonArrayQueryArgs<'input> {
-    pub query: Box<Subquery<'input>>,
+    pub query: recursa::ArenaBox<'input, Subquery<'input>>,
     pub returning: Option<JsonReturning<'input>>,
 }
 
 /// `json_value_expr_list json_array_constructor_null_clause_opt
 /// json_returning_clause_opt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonArrayElementsArgs<'input> {
     #[sep(COMMA)]
-    pub elements: recursa::Vec1<JsonArrayElement<'input>>,
+    pub elements: recursa::ArenaVec1<'input, JsonArrayElement<'input>>,
     pub on_null: Option<JsonOnNull>,
     pub returning: Option<JsonReturning<'input>>,
 }
 
 /// `json_returning_clause_opt` alone.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonArrayEmptyArgs<'input> {
     pub returning: Option<JsonReturning<'input>>,
 }
 
 /// `JSON_ARRAY ( ... )` — element-list or query form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonArray<'input> {
     #[tok(JSON_ARRAY, LPAREN, this, RPAREN)]
     pub args: JsonArrayArgs<'input>,
@@ -2447,26 +2444,26 @@ pub struct JsonArray<'input> {
 // express. Modeled as dedicated atoms before `Func`.
 
 /// One `‹value› AS ‹name›` binding of a `PASSING` clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonPassingArg<'input> {
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
 }
 
 /// `PASSING ‹value› AS ‹name› [, ...]` — jsonpath variable bindings.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(PASSING, this)]
 pub struct JsonPassing<'input> {
     #[sep(COMMA)]
-    pub args: recursa::Vec1<JsonPassingArg<'input>>,
+    pub args: recursa::ArenaVec1<'input, JsonPassingArg<'input>>,
 }
 
 /// `DEFAULT ‹expr›` — the default-value form of an `ON EMPTY`/`ON ERROR` behavior.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonDefault<'input> {
     #[tok(DEFAULT, this)]
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// The behavior of an `ON EMPTY` / `ON ERROR` clause — the union of every
@@ -2476,7 +2473,7 @@ pub struct JsonDefault<'input> {
 ///
 /// Variant ordering: the two-keyword `EMPTY ARRAY`/`EMPTY OBJECT` forms
 /// before bare `Empty` so longest-match-wins picks them.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JsonBehavior<'input> {
     #[tok(EMPTY, ARRAY)]
     EmptyArray,
@@ -2498,7 +2495,7 @@ pub enum JsonBehavior<'input> {
 }
 
 /// `EMPTY` or `ERROR` — the trigger of an `ON` behavior clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum EmptyOrError {
     #[tok(EMPTY)]
     Empty,
@@ -2507,7 +2504,7 @@ pub enum EmptyOrError {
 }
 
 /// `‹behavior› ON {EMPTY|ERROR}` clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonOnBehavior<'input> {
     pub behavior: JsonBehavior<'input>,
     #[tok(ON, this)]
@@ -2519,14 +2516,14 @@ pub struct JsonOnBehavior<'input> {
 /// trigger, so the pair is order-independent and the second slot is simply
 /// optional; two independent optional slots would leave a single clause
 /// ambiguous between them.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonBehaviorClause<'input> {
     pub first: JsonOnBehavior<'input>,
     pub second: Option<JsonOnBehavior<'input>>,
 }
 
 /// `CONDITIONAL` / `UNCONDITIONAL` modifier of a `WITH ... WRAPPER` clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum WrapperBehavior {
     #[tok(CONDITIONAL)]
     Conditional,
@@ -2536,7 +2533,7 @@ pub enum WrapperBehavior {
 
 /// `{WITH [CONDITIONAL|UNCONDITIONAL] | WITHOUT} [ARRAY] WRAPPER` — the
 /// `JSON_QUERY` array-wrapper clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonWrapper {
     pub with_or_without: WithOrWithout,
     pub behavior: Option<WrapperBehavior>,
@@ -2546,14 +2543,14 @@ pub struct JsonWrapper {
 }
 
 /// `ON SCALAR STRING` suffix of a `JSON_QUERY` quotes clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JsonQuotesOnScalar {
     #[tok(ON, SCALAR, STRING)]
     Value,
 }
 
 /// `KEEP` / `OMIT` lead-in of a `JSON_QUERY` quotes clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum KeepOrOmit {
     #[tok(KEEP)]
     Keep,
@@ -2562,7 +2559,7 @@ pub enum KeepOrOmit {
 }
 
 /// `{KEEP|OMIT} QUOTES [ON SCALAR STRING]` — the `JSON_QUERY` quotes clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonQuotes {
     pub keep_or_omit: KeepOrOmit,
     pub quotes: JsonQuotesKeyword,
@@ -2570,37 +2567,37 @@ pub struct JsonQuotes {
 }
 
 /// Required `QUOTES` keyword in a `JSON_QUERY` quotes clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JsonQuotesKeyword {
     #[tok(QUOTES)]
     Value,
 }
 
 /// Inner contents of `JSON_EXISTS ( ‹context› , ‹path› [PASSING ...] [‹behavior› ON ERROR] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonExistsInner<'input> {
-    pub context: Box<Expr<'input>>,
+    pub context: recursa::ArenaBox<'input, Expr<'input>>,
     pub context_format: Option<JsonFormat<'input>>,
     #[tok(COMMA, this)]
-    pub path: Box<Expr<'input>>,
+    pub path: recursa::ArenaBox<'input, Expr<'input>>,
     pub passing: Option<JsonPassing<'input>>,
     pub on_error: Option<JsonOnBehavior<'input>>,
 }
 
 /// `JSON_EXISTS ( ... )` — tests whether a jsonpath matches.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonExists<'input> {
     #[tok(JSON_EXISTS, LPAREN, this, RPAREN)]
     pub inner: JsonExistsInner<'input>,
 }
 
 /// Inner contents of `JSON_VALUE`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonValueInner<'input> {
-    pub context: Box<Expr<'input>>,
+    pub context: recursa::ArenaBox<'input, Expr<'input>>,
     pub context_format: Option<JsonFormat<'input>>,
     #[tok(COMMA, this)]
-    pub path: Box<Expr<'input>>,
+    pub path: recursa::ArenaBox<'input, Expr<'input>>,
     pub passing: Option<JsonPassing<'input>>,
     pub returning: Option<JsonReturning<'input>>,
     /// gram.y `json_behavior_clause_opt`.
@@ -2608,19 +2605,19 @@ pub struct JsonValueInner<'input> {
 }
 
 /// `JSON_VALUE ( ... )` — extracts a scalar SQL value via a jsonpath.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonValue<'input> {
     #[tok(JSON_VALUE, LPAREN, this, RPAREN)]
     pub inner: JsonValueInner<'input>,
 }
 
 /// Inner contents of `JSON_QUERY`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonQueryInner<'input> {
-    pub context: Box<Expr<'input>>,
+    pub context: recursa::ArenaBox<'input, Expr<'input>>,
     pub context_format: Option<JsonFormat<'input>>,
     #[tok(COMMA, this)]
-    pub path: Box<Expr<'input>>,
+    pub path: recursa::ArenaBox<'input, Expr<'input>>,
     pub passing: Option<JsonPassing<'input>>,
     pub returning: Option<JsonReturning<'input>>,
     pub wrapper: Option<JsonWrapper>,
@@ -2630,7 +2627,7 @@ pub struct JsonQueryInner<'input> {
 }
 
 /// `JSON_QUERY ( ... )` — extracts a JSON value via a jsonpath.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonQuery<'input> {
     #[tok(JSON_QUERY, LPAREN, this, RPAREN)]
     pub inner: JsonQueryInner<'input>,
@@ -2644,7 +2641,7 @@ pub struct JsonQuery<'input> {
 // the ordinary `FILTER (WHERE ...)` and `OVER (...)` suffixes.
 
 /// Inner contents of `JSON_OBJECTAGG`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonObjectAggInner<'input> {
     pub entry: JsonObjectAggEntry<'input>,
     pub on_null: Option<JsonOnNull>,
@@ -2653,7 +2650,7 @@ pub struct JsonObjectAggInner<'input> {
 }
 
 /// `JSON_OBJECTAGG ( ‹key› {: | VALUE} ‹value› ... ) [FILTER (...)] [OVER (...)]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonObjectAgg<'input> {
     #[tok(JSON_OBJECTAGG, LPAREN, this, RPAREN)]
     pub inner: JsonObjectAggInner<'input>,
@@ -2662,17 +2659,17 @@ pub struct JsonObjectAgg<'input> {
 }
 
 /// Inner contents of `JSON_ARRAYAGG`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonArrayAggInner<'input> {
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
     pub format: Option<JsonFormat<'input>>,
-    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
+    pub order_by: Option<recursa::ArenaBox<'input, crate::ast::dml::select::OrderByClause<'input>>>,
     pub on_null: Option<JsonOnNull>,
     pub returning: Option<JsonReturning<'input>>,
 }
 
 /// `JSON_ARRAYAGG ( ‹value› [ORDER BY ...] ... ) [FILTER (...)] [OVER (...)]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonArrayAgg<'input> {
     #[tok(JSON_ARRAYAGG, LPAREN, this, RPAREN)]
     pub inner: JsonArrayAggInner<'input>,
@@ -2683,7 +2680,7 @@ pub struct JsonArrayAgg<'input> {
 // --- `IS JSON` predicate ---
 
 /// The JSON item type tested by an `IS JSON` predicate.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JsonTypeKind {
     #[tok(VALUE)]
     Value,
@@ -2703,7 +2700,7 @@ pub enum JsonTypeKind {
 /// tail-less productions sit below the `IDENT` level that carries `VALUE`,
 /// `SCALAR`, `OBJECT`, `WITH`, `WITHOUT` and `KEYS`, so the parser shifts the
 /// tail rather than ending the predicate.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[parse(prec = UNBOUNDED)]
 pub struct IsJsonTail {
     #[tok(this, JSON)]
@@ -2719,16 +2716,16 @@ pub struct IsJsonTail {
 /// Lets non-Pratt contexts (e.g. a `CREATE INDEX` expression element)
 /// accept the whole family. Aggregates and `JSON_TABLE` are excluded:
 /// neither is a plain value expression usable as an index element.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JsonFuncExpr<'input> {
-    Ctor(Box<JsonConstructor<'input>>),
-    Scalar(Box<JsonScalar<'input>>),
-    Serialize(Box<JsonSerialize<'input>>),
-    Object(Box<JsonObject<'input>>),
-    Array(Box<JsonArray<'input>>),
-    Exists(Box<JsonExists<'input>>),
-    Value(Box<JsonValue<'input>>),
-    Query(Box<JsonQuery<'input>>),
+    Ctor(recursa::ArenaBox<'input, JsonConstructor<'input>>),
+    Scalar(recursa::ArenaBox<'input, JsonScalar<'input>>),
+    Serialize(recursa::ArenaBox<'input, JsonSerialize<'input>>),
+    Object(recursa::ArenaBox<'input, JsonObject<'input>>),
+    Array(recursa::ArenaBox<'input, JsonArray<'input>>),
+    Exists(recursa::ArenaBox<'input, JsonExists<'input>>),
+    Value(recursa::ArenaBox<'input, JsonValue<'input>>),
+    Query(recursa::ArenaBox<'input, JsonQuery<'input>>),
 }
 
 // --- Pratt expression enum ---
@@ -2741,49 +2738,49 @@ pub enum JsonFuncExpr<'input> {
 // shape a rule precedence reproduces (`RCA0402`).
 
 /// SQL expression whose Pratt declarations lower into LR productions.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pratt]
 pub enum Expr<'input> {
     // --- Prefix ---
     #[parse(prefix, bp = 150)]
-    Not(#[tok(NOT, this)] Box<Self>),
+    Not(#[tok(NOT, this)] recursa::ArenaBox<'input, Self>),
     #[parse(prefix, bp = 120)]
-    Neg(#[tok(MINUS, this)] Box<Self>),
+    Neg(#[tok(MINUS, this)] recursa::ArenaBox<'input, Self>),
     /// Unary plus: `+expr` — identity operator on numeric types.
     #[parse(prefix, bp = 120)]
-    Pos(#[tok(PLUS, this)] Box<Self>),
+    Pos(#[tok(PLUS, this)] recursa::ArenaBox<'input, Self>),
     /// Unary geometric "center point": `@@ expr`. Postgres uses `@@` as
     /// a prefix operator on box / polygon / etc. (in addition to the
     /// text-search infix form).
     #[parse(prefix, bp = 120)]
-    GeomCenter(#[tok(ATAT, this)] Box<Self>),
+    GeomCenter(#[tok(ATAT, this)] recursa::ArenaBox<'input, Self>),
     /// Bitwise NOT: `~ expr` (e.g. inet / bit / int bitwise complement).
     /// Must come before any infix `~` variant so the prefix form wins when
     /// `~` appears at the start of an operand.
     #[parse(prefix, bp = 120)]
-    BitNot(#[tok(TILDE, this)] Box<Self>),
+    BitNot(#[tok(TILDE, this)] recursa::ArenaBox<'input, Self>),
     /// Geometric path/lseg length: `@-@ expr`. Must come before `Abs` (`@`)
     /// since `@-@` is longer.
     #[parse(prefix, bp = 120)]
-    PathLength(#[tok(ATMINUSAT, this)] Box<Self>),
+    PathLength(#[tok(ATMINUSAT, this)] recursa::ArenaBox<'input, Self>),
     /// User-defined prefix: `@#@ expr` (e.g. factorial).
     #[parse(prefix, bp = 120)]
-    AtHashAtPrefix(#[tok(ATHASHAT, this)] Box<Self>),
+    AtHashAtPrefix(#[tok(ATHASHAT, this)] recursa::ArenaBox<'input, Self>),
     /// Geometric point-count: `# path` — number of points in a path.
     #[parse(prefix, bp = 120)]
-    PointCount(#[tok(POUND, this)] Box<Self>),
+    PointCount(#[tok(POUND, this)] recursa::ArenaBox<'input, Self>),
     /// Absolute value: `@ expr` (Postgres unary `@` operator).
     #[parse(prefix, bp = 120)]
-    Abs(#[tok(ATSIGN, this)] Box<Self>),
+    Abs(#[tok(ATSIGN, this)] recursa::ArenaBox<'input, Self>),
     /// User-defined prefix: `!=- expr`.
     #[parse(prefix, bp = 120)]
-    BangEqMinusPrefix(#[tok(BANGEQMINUS, this)] Box<Self>),
+    BangEqMinusPrefix(#[tok(BANGEQMINUS, this)] recursa::ArenaBox<'input, Self>),
     /// Square root: `|/ expr` (Postgres unary `|/` operator).
     #[parse(prefix, bp = 120)]
-    Sqrt(#[tok(PIPESLASH, this)] Box<Self>),
+    Sqrt(#[tok(PIPESLASH, this)] recursa::ArenaBox<'input, Self>),
     /// Cube root: `||/ expr` (Postgres unary `||/` operator).
     #[parse(prefix, bp = 120)]
-    Cbrt(#[tok(PIPEPIPESLASH, this)] Box<Self>),
+    Cbrt(#[tok(PIPEPIPESLASH, this)] recursa::ArenaBox<'input, Self>),
 
     /// Catch-all prefix: any user-defined prefix operator not matched by a
     /// specific token. Declared LAST among prefixes.
@@ -2798,18 +2795,21 @@ pub enum Expr<'input> {
     #[parse(prefix, bp = 81)]
     CustomPrefix(
         literal::CustomOp<'input>,
-        #[pretty(break_before = soft)] Box<Self>,
+        #[pretty(break_before = soft)] recursa::ArenaBox<'input, Self>,
     ),
 
     // --- Postfix ---
     /// Postgres-style cast: `expr::type`
     #[parse(postfix, bp = 200)]
-    Cast(Box<Self>, #[tok(COLONCOLON, this)] Box<CastType<'input>>),
+    Cast(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(COLONCOLON, this)] recursa::ArenaBox<'input, CastType<'input>>,
+    ),
     /// `expr COLLATE "collation"` — collation specifier. Binds tighter than
     /// comparisons (bp 5) but looser than `::` cast (bp 20).
     #[parse(postfix, bp = 180)]
     Collate(
-        Box<Self>,
+        recursa::ArenaBox<'input, Self>,
         #[tok(COLLATE, this)] crate::tokens::ColId<'input>,
     ),
     /// `lhs operator {ANY|SOME|ALL} (expr-or-query)`: gram.y `a_expr
@@ -2825,22 +2825,40 @@ pub enum Expr<'input> {
     /// Pratt continuation also makes `f(ALL(x))` unambiguously the function
     /// application's ALL-qualified argument production.
     #[parse(postfix, bp = 50)]
-    QuantifiedComparisonCmp(Box<Self>, QuantifiedComparisonCmpSuffix<'input>),
+    QuantifiedComparisonCmp(
+        recursa::ArenaBox<'input, Self>,
+        QuantifiedComparisonCmpSuffix<'input>,
+    ),
     /// `subquery_Op`'s `LIKE` family, at the level of `Like`.
     #[parse(postfix, bp = 60)]
-    QuantifiedComparisonLike(Box<Self>, QuantifiedComparisonLikeSuffix<'input>),
+    QuantifiedComparisonLike(
+        recursa::ArenaBox<'input, Self>,
+        QuantifiedComparisonLikeSuffix<'input>,
+    ),
     /// `subquery_Op` at gram.y's generic `Op` level.
     #[parse(postfix, bp = 80)]
-    QuantifiedComparisonOp(Box<Self>, QuantifiedComparisonOpSuffix<'input>),
+    QuantifiedComparisonOp(
+        recursa::ArenaBox<'input, Self>,
+        QuantifiedComparisonOpSuffix<'input>,
+    ),
     /// `subquery_Op` at the level of `Add` / `Sub`.
     #[parse(postfix, bp = 100)]
-    QuantifiedComparisonAdd(Box<Self>, QuantifiedComparisonAddSuffix<'input>),
+    QuantifiedComparisonAdd(
+        recursa::ArenaBox<'input, Self>,
+        QuantifiedComparisonAddSuffix<'input>,
+    ),
     /// `subquery_Op` at the level of `Mul` / `Div` / `Mod`.
     #[parse(postfix, bp = 110)]
-    QuantifiedComparisonMul(Box<Self>, QuantifiedComparisonMulSuffix<'input>),
+    QuantifiedComparisonMul(
+        recursa::ArenaBox<'input, Self>,
+        QuantifiedComparisonMulSuffix<'input>,
+    ),
     /// `subquery_Op` at the level of `Pow`.
     #[parse(postfix, bp = 130)]
-    QuantifiedComparisonPow(Box<Self>, QuantifiedComparisonPowSuffix<'input>),
+    QuantifiedComparisonPow(
+        recursa::ArenaBox<'input, Self>,
+        QuantifiedComparisonPowSuffix<'input>,
+    ),
     // The `IS` family sits at one level below the comparison operators, gram.y
     // `%nonassoc IS ISNULL NOTNULL` (`a = b IS NULL` is `(a = b) IS NULL`);
     // one level for every `IS` form is also what lets the LR parser
@@ -2848,44 +2866,62 @@ pub enum Expr<'input> {
     /// `expr IS NOT DISTINCT FROM expr`. Declared before `IsDistinctFrom` so
     /// the longer `NOT` prefix wins disambiguation.
     #[parse(infix, lbp = 40, rbp = 41)]
-    IsNotDistinctFrom(Box<Self>, #[tok(IS, NOT, DISTINCT, FROM, this)] Box<Self>),
+    IsNotDistinctFrom(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(IS, NOT, DISTINCT, FROM, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr IS DISTINCT FROM expr`.
     #[parse(infix, lbp = 40, rbp = 41)]
-    IsDistinctFrom(Box<Self>, #[tok(IS, DISTINCT, FROM, this)] Box<Self>),
+    IsDistinctFrom(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(IS, DISTINCT, FROM, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr IS [NOT] JSON [{VALUE|SCALAR|ARRAY|OBJECT}] [{WITH|WITHOUT}
     /// UNIQUE [KEYS]]` — the SQL/JSON type predicate. Declared before
     /// `BoolTest` (both lead with `IS`); `BoolTest` rejects `JSON` as a
     /// `BoolTestKind`, so order is not load-bearing, only tidy.
     #[parse(postfix, bp = 40)]
-    IsJson(Box<Self>, #[tok(IS, this)] IsJsonTail),
+    IsJson(recursa::ArenaBox<'input, Self>, #[tok(IS, this)] IsJsonTail),
     /// `expr IS [NOT] [NFC|NFD|NFKC|NFKD] NORMALIZED` — the Unicode
     /// normalisation predicate (gram.y rules 15198/15205/15212/15220).
     /// Declared before `BoolTest` (both lead with `IS`); `BoolTest` rejects
     /// `NORMALIZED`/`NFx` as a `BoolTestKind`, so order is not load-bearing.
     #[parse(postfix, bp = 40)]
-    IsNormalized(Box<Self>, #[tok(IS, this)] IsNormalizedTail),
+    IsNormalized(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(IS, this)] IsNormalizedTail,
+    ),
     /// `expr IS [NOT] DOCUMENT` — the XML document predicate.
     #[parse(postfix, bp = 40)]
-    IsDocument(Box<Self>, #[tok(IS, this)] IsDocumentTail),
+    IsDocument(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(IS, this)] IsDocumentTail,
+    ),
     /// Boolean test: `expr IS [NOT] TRUE/FALSE/UNKNOWN/NULL`
     #[parse(postfix, bp = 40)]
-    BoolTest(Box<Self>, #[tok(IS, this)] BoolTestKind),
+    BoolTest(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(IS, this)] BoolTestKind,
+    ),
     /// Postgres `expr NOTNULL` postfix null test (synonym for `IS NOT NULL`).
     #[parse(postfix, bp = 40)]
-    Notnull(#[tok(this, NOTNULL)] Box<Self>),
+    Notnull(#[tok(this, NOTNULL)] recursa::ArenaBox<'input, Self>),
     /// Postgres `expr ISNULL` postfix null test (synonym for `IS NULL`).
     #[parse(postfix, bp = 40)]
-    Isnull(#[tok(this, ISNULL)] Box<Self>),
+    Isnull(#[tok(this, ISNULL)] recursa::ArenaBox<'input, Self>),
     /// `expr AT LOCAL` — convert to session timezone. Listed before
     /// `AtTimeZone` so `AT LOCAL` wins (distinct second token `LOCAL` vs `TIME`).
     #[parse(postfix, bp = 90)]
-    AtLocal(#[tok(this, AT, LOCAL)] Box<Self>),
+    AtLocal(#[tok(this, AT, LOCAL)] recursa::ArenaBox<'input, Self>),
     /// `expr AT TIME ZONE zone_expr` — convert to specified timezone.
     #[parse(infix, lbp = 90, rbp = 91)]
-    AtTimeZone(Box<Self>, #[tok(AT, TIME, ZONE, this)] Box<Self>),
+    AtTimeZone(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(AT, TIME, ZONE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// NOT IN list: `expr NOT IN (val, ...)`
     #[parse(postfix, bp = 60)]
-    NotInExpr(Box<Self>, NotInSuffix<'input>),
+    NotInExpr(recursa::ArenaBox<'input, Self>, NotInSuffix<'input>),
     // The LIKE family shares one level with `BETWEEN` and `IN`, gram.y
     // `%nonassoc BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA`, one step above the
     // comparison operators: `a = b LIKE c` is `a = (b LIKE c)`. Binding
@@ -2913,128 +2949,191 @@ pub enum Expr<'input> {
     /// here `NOT ILIKE` vs `NOT LIKE` differ on the second token).
     #[parse(infix, lbp = 60, rbp = 61)]
     NotIlike(
-        Box<Self>,
-        #[tok(NOT, ILIKE, this)] Box<Self>,
-        #[tok(ESCAPE, this)] Option<Box<Self>>,
+        recursa::ArenaBox<'input, Self>,
+        #[tok(NOT, ILIKE, this)] recursa::ArenaBox<'input, Self>,
+        #[tok(ESCAPE, this)] Option<recursa::ArenaBox<'input, Self>>,
     ),
     /// `expr NOT SIMILAR TO pattern [ESCAPE char]`. Declared before `NotLike` so the longer
     /// `NOT SIMILAR TO` form wins longest-match-wins disambiguation.
     #[parse(infix, lbp = 60, rbp = 61)]
     NotSimilarTo(
-        Box<Self>,
-        #[tok(NOT, SIMILAR, TO, this)] Box<Self>,
-        #[tok(ESCAPE, this)] Option<Box<Self>>,
+        recursa::ArenaBox<'input, Self>,
+        #[tok(NOT, SIMILAR, TO, this)] recursa::ArenaBox<'input, Self>,
+        #[tok(ESCAPE, this)] Option<recursa::ArenaBox<'input, Self>>,
     ),
     /// `expr NOT LIKE pattern [ESCAPE char]`. Must come before the `Not` prefix atom so
     /// longest-match-wins prefers the postfix form.
     #[parse(infix, lbp = 60, rbp = 61)]
     NotLike(
-        Box<Self>,
-        #[tok(NOT, LIKE, this)] Box<Self>,
-        #[tok(ESCAPE, this)] Option<Box<Self>>,
+        recursa::ArenaBox<'input, Self>,
+        #[tok(NOT, LIKE, this)] recursa::ArenaBox<'input, Self>,
+        #[tok(ESCAPE, this)] Option<recursa::ArenaBox<'input, Self>>,
     ),
     /// `expr SIMILAR TO pattern [ESCAPE char]` — SQL standard similar-to pattern match.
     #[parse(infix, lbp = 60, rbp = 61)]
     SimilarTo(
-        Box<Self>,
-        #[tok(SIMILAR, TO, this)] Box<Self>,
-        #[tok(ESCAPE, this)] Option<Box<Self>>,
+        recursa::ArenaBox<'input, Self>,
+        #[tok(SIMILAR, TO, this)] recursa::ArenaBox<'input, Self>,
+        #[tok(ESCAPE, this)] Option<recursa::ArenaBox<'input, Self>>,
     ),
     /// `expr ILIKE pattern [ESCAPE char]`
     #[parse(infix, lbp = 60, rbp = 61)]
     Ilike(
-        Box<Self>,
-        #[tok(ILIKE, this)] Box<Self>,
-        #[tok(ESCAPE, this)] Option<Box<Self>>,
+        recursa::ArenaBox<'input, Self>,
+        #[tok(ILIKE, this)] recursa::ArenaBox<'input, Self>,
+        #[tok(ESCAPE, this)] Option<recursa::ArenaBox<'input, Self>>,
     ),
     /// `expr LIKE pattern [ESCAPE char]`
     #[parse(infix, lbp = 60, rbp = 61)]
     Like(
-        Box<Self>,
-        #[tok(LIKE, this)] Box<Self>,
-        #[tok(ESCAPE, this)] Option<Box<Self>>,
+        recursa::ArenaBox<'input, Self>,
+        #[tok(LIKE, this)] recursa::ArenaBox<'input, Self>,
+        #[tok(ESCAPE, this)] Option<recursa::ArenaBox<'input, Self>>,
     ),
     // --- Locale-aware text comparison operators (4-char before 3-char) ---
     /// `expr ~<=~ expr` — locale-aware less-or-equal.
     #[parse(infix, lbp = 50, rbp = 51)]
-    TildeLeqTilde(Box<Self>, #[tok(TILDELEQTILDE, this)] Box<Self>),
+    TildeLeqTilde(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(TILDELEQTILDE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr ~>=~ expr` — locale-aware greater-or-equal.
     #[parse(infix, lbp = 50, rbp = 51)]
-    TildeGeqTilde(Box<Self>, #[tok(TILDEGEQTILDE, this)] Box<Self>),
+    TildeGeqTilde(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(TILDEGEQTILDE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr ~<~ expr` — locale-aware less-than.
     #[parse(infix, lbp = 50, rbp = 51)]
-    TildeLtTilde(Box<Self>, #[tok(TILDELTTILDE, this)] Box<Self>),
+    TildeLtTilde(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(TILDELTTILDE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr ~>~ expr` — locale-aware greater-than.
     #[parse(infix, lbp = 50, rbp = 51)]
-    TildeGtTilde(Box<Self>, #[tok(TILDEGTTILDE, this)] Box<Self>),
+    TildeGtTilde(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(TILDEGTTILDE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr !~* pattern` — POSIX case-insensitive negated regex match.
     #[parse(infix, lbp = 50, rbp = 51)]
-    RegexNotIMatch(Box<Self>, #[tok(BANGTILDESTAR, this)] Box<Self>),
+    RegexNotIMatch(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(BANGTILDESTAR, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr ~* pattern` — POSIX case-insensitive regex match.
     #[parse(infix, lbp = 50, rbp = 51)]
-    RegexIMatch(Box<Self>, #[tok(TILDESTAR, this)] Box<Self>),
+    RegexIMatch(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(TILDESTAR, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr !~ pattern` — POSIX negated regex match.
     #[parse(infix, lbp = 50, rbp = 51)]
-    RegexNotMatch(Box<Self>, #[tok(BANGTILDE, this)] Box<Self>),
+    RegexNotMatch(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(BANGTILDE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr ~= expr` — geometric "same as" operator. Declared before `RegexMatch`
     /// so the longer `~=` wins longest-match.
     #[parse(infix, lbp = 50, rbp = 51)]
-    GeomSame(Box<Self>, #[tok(TILDEEQ, this)] Box<Self>),
+    GeomSame(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(TILDEEQ, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr ~ pattern` — POSIX regex match.
     #[parse(infix, lbp = 50, rbp = 51)]
-    RegexMatch(Box<Self>, #[tok(TILDE, this)] Box<Self>),
+    RegexMatch(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(TILDE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr !~~* pattern` — operator-form `NOT ILIKE` (gram.y 14897).
     /// Declared before `LikeOpINeg` (`!~~`) so the longer `!~~*` wins.
     #[parse(infix, lbp = 50, rbp = 51)]
-    LikeOpINeg(Box<Self>, #[tok(BANGTILDETILDESTAR, this)] Box<Self>),
+    LikeOpINeg(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(BANGTILDETILDESTAR, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr ~~* pattern` — operator-form `ILIKE` (gram.y 14888).
     /// Declared before `LikeOpI` would be (no `~~*` longer prefix).
     #[parse(infix, lbp = 50, rbp = 51)]
-    LikeOpI(Box<Self>, #[tok(TILDETILDESTAR, this)] Box<Self>),
+    LikeOpI(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(TILDETILDESTAR, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr !~~ pattern` — operator-form `NOT LIKE` (gram.y 14874).
     #[parse(infix, lbp = 50, rbp = 51)]
-    LikeOpNeg(Box<Self>, #[tok(BANGTILDETILDE, this)] Box<Self>),
+    LikeOpNeg(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(BANGTILDETILDE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr ~~ pattern` — operator-form `LIKE` (gram.y 14860).
     #[parse(infix, lbp = 50, rbp = 51)]
-    LikeOp(Box<Self>, #[tok(TILDETILDE, this)] Box<Self>),
+    LikeOp(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(TILDETILDE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `(start, end) OVERLAPS (start, end)` — SQL time-period overlap test.
     /// Each operand is an ordinary parenthesized expression to the parser.
     #[parse(infix, lbp = 50, rbp = 51)]
-    Overlaps(Box<Self>, #[tok(OVERLAPS, this)] Box<Self>),
+    Overlaps(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(OVERLAPS, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Record comparison operators: `expr *= expr`, `*<>`, `*<`, `*<=`,
     /// `*>`, `*>=` — compare ROW/composite values field by field.
     #[parse(infix, lbp = 50, rbp = 51)]
-    RecordLte(Box<Self>, #[tok(STARLTE, this)] Box<Self>),
+    RecordLte(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(STARLTE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    RecordGte(Box<Self>, #[tok(STARGTE, this)] Box<Self>),
+    RecordGte(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(STARGTE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    RecordNeq(Box<Self>, #[tok(STARNEQ, this)] Box<Self>),
+    RecordNeq(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(STARNEQ, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    RecordLt(Box<Self>, #[tok(STARLT, this)] Box<Self>),
+    RecordLt(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(STARLT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    RecordGt(Box<Self>, #[tok(STARGT, this)] Box<Self>),
+    RecordGt(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(STARGT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    RecordEq(Box<Self>, #[tok(STAREQ, this)] Box<Self>),
+    RecordEq(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(STAREQ, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// IN list: `expr IN (val, ...)`
     #[parse(postfix, bp = 60)]
-    InExpr(Box<Self>, #[tok(IN, this)] InList<'input>),
+    InExpr(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(IN, this)] InList<'input>,
+    ),
     /// `expr NOT BETWEEN low AND high`. Declared before `BetweenExpr` so
     /// the longer `NOT BETWEEN` prefix wins disambiguation. Recursive fields
     /// in this postfix tail inherit `bp = 60`, so the low/high operands stop
     /// before the literal `AND` infix at `bp = 20`.
     #[parse(postfix, bp = 60)]
     NotBetweenExpr(
-        Box<Self>,
-        #[tok(NOT, BETWEEN, this)] Box<Self>,
-        #[tok(AND, this)] Box<Self>,
+        recursa::ArenaBox<'input, Self>,
+        #[tok(NOT, BETWEEN, this)] recursa::ArenaBox<'input, Self>,
+        #[tok(AND, this)] recursa::ArenaBox<'input, Self>,
     ),
     /// `expr BETWEEN low AND high`. See `NotBetweenExpr` for the recursive
     /// postfix-tail binding-power rationale.
     #[parse(postfix, bp = 60)]
     BetweenExpr(
-        Box<Self>,
-        #[tok(BETWEEN, this)] Box<Self>,
-        #[tok(AND, this)] Box<Self>,
+        recursa::ArenaBox<'input, Self>,
+        #[tok(BETWEEN, this)] recursa::ArenaBox<'input, Self>,
+        #[tok(AND, this)] recursa::ArenaBox<'input, Self>,
     ),
 
     // --- Infix ---
@@ -3046,58 +3145,103 @@ pub enum Expr<'input> {
     // bp = 100; generic `Op` spellings such as `||` use the lower bp = 80 tier.
     /// JSON path as text: `expr #>> path`
     #[parse(infix, lbp = 100, rbp = 101)]
-    JsonPathText(Box<Self>, #[tok(HASHARROWARROW, this)] Box<Self>),
+    JsonPathText(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(HASHARROWARROW, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// JSON path: `expr #> path`
     #[parse(infix, lbp = 100, rbp = 101)]
-    JsonPath(Box<Self>, #[tok(HASHARROW, this)] Box<Self>),
+    JsonPath(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(HASHARROW, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// JSON field as text: `expr ->> field`
     #[parse(infix, lbp = 100, rbp = 101)]
-    JsonFieldText(Box<Self>, #[tok(ARROWARROW, this)] Box<Self>),
+    JsonFieldText(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(ARROWARROW, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// JSON field: `expr -> field`
     #[parse(infix, lbp = 100, rbp = 101)]
-    JsonField(Box<Self>, #[tok(ARROW, this)] Box<Self>),
+    JsonField(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(ARROW, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Geometric parallel: `a ?|| b`. Must precede `JsonAnyKey` (`?|`)
     /// so the 3-char token wins over the 2-char token.
     #[parse(infix, lbp = 50, rbp = 51)]
-    Parallel(Box<Self>, #[tok(QUESTIONPIPEPIPE, this)] Box<Self>),
+    Parallel(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(QUESTIONPIPEPIPE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// JSON any-key-exists: `expr ?| keys`
     #[parse(infix, lbp = 100, rbp = 101)]
-    JsonAnyKey(Box<Self>, #[tok(QUESTIONPIPE, this)] Box<Self>),
+    JsonAnyKey(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(QUESTIONPIPE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// JSON all-keys-exist: `expr ?& keys`
     #[parse(infix, lbp = 100, rbp = 101)]
-    JsonAllKeys(Box<Self>, #[tok(QUESTIONAMP, this)] Box<Self>),
+    JsonAllKeys(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(QUESTIONAMP, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Geometric intersect: `a ?# b`. Must precede `JsonKey` (`?`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    Intersect(Box<Self>, #[tok(QUESTIONHASH, this)] Box<Self>),
+    Intersect(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(QUESTIONHASH, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Geometric perpendicular: `a ?-| b`. Must precede `Horizontal` (`?-`)
     /// so the 3-char token wins over the 2-char token.
     #[parse(infix, lbp = 50, rbp = 51)]
-    Perpendicular(Box<Self>, #[tok(QUESTIONDASHPIPE, this)] Box<Self>),
+    Perpendicular(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(QUESTIONDASHPIPE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Geometric horizontal: `a ?- b`. Must precede `JsonKey` (`?`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    Horizontal(Box<Self>, #[tok(QUESTIONDASH, this)] Box<Self>),
+    Horizontal(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(QUESTIONDASH, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Geometric "is horizontal" prefix: `?- s` — tests whether the
     /// LSEG/LINE `s` is horizontal. PG's geometry.sql uses this in WHERE.
     #[parse(prefix, bp = 120)]
-    IsHorizontal(#[tok(QUESTIONDASH, this)] Box<Self>),
+    IsHorizontal(#[tok(QUESTIONDASH, this)] recursa::ArenaBox<'input, Self>),
     /// Geometric "is vertical" prefix: `?| s`.
     #[parse(prefix, bp = 120)]
-    IsVertical(#[tok(QUESTIONPIPE, this)] Box<Self>),
+    IsVertical(#[tok(QUESTIONPIPE, this)] recursa::ArenaBox<'input, Self>),
     /// Geometric "below": `a <^ b`.
     #[parse(infix, lbp = 50, rbp = 51)]
-    Below(Box<Self>, #[tok(LTCARET, this)] Box<Self>),
+    Below(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(LTCARET, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Geometric "above": `a >^ b`.
     #[parse(infix, lbp = 50, rbp = 51)]
-    Above(Box<Self>, #[tok(GTCARET, this)] Box<Self>),
+    Above(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(GTCARET, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// JSON key-exists: `expr ? key`
     #[parse(infix, lbp = 100, rbp = 101)]
-    JsonKey(Box<Self>, #[tok(QUESTION, this)] Box<Self>),
+    JsonKey(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(QUESTION, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// JSONB contains: `expr @> expr`
     #[parse(infix, lbp = 100, rbp = 101)]
-    JsonContains(Box<Self>, #[tok(ATGT, this)] Box<Self>),
+    JsonContains(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(ATGT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// JSONB contained-by: `expr <@ expr`
     #[parse(infix, lbp = 100, rbp = 101)]
-    JsonContainedBy(Box<Self>, #[tok(LTAT, this)] Box<Self>),
+    JsonContainedBy(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(LTAT, this)] recursa::ArenaBox<'input, Self>,
+    ),
 
     // --- Postgres text-search / jsonpath / range / geometric 3-char operators ---
     //
@@ -3109,100 +3253,190 @@ pub enum Expr<'input> {
     // to compare with it.
     /// Text-search / jsonb path match: `expr @@@ expr`.
     #[parse(infix, lbp = 50, rbp = 51)]
-    TsMatch3(Box<Self>, #[tok(ATATAT, this)] Box<Self>),
+    TsMatch3(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(ATATAT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// User-defined triple-less-than: `a <<< b`. Before `StrictlyLeft` (`<<`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    TripleLt(Box<Self>, #[tok(LTLTLT, this)] Box<Self>),
+    TripleLt(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(LTLTLT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Geometric strictly-below: `a <<| b`. Before `StrictlyLeft` (`<<`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    StrictlyBelow(Box<Self>, #[tok(LTLTPIPE, this)] Box<Self>),
+    StrictlyBelow(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(LTLTPIPE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Inet is-subset-or-equal: `a <<= b`. Before `StrictlyLeft` (`<<`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    SubsetEq(Box<Self>, #[tok(LTLTEQ, this)] Box<Self>),
+    SubsetEq(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(LTLTEQ, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Distance: `a <-> b`. Before any `<` variant.
     #[parse(infix, lbp = 100, rbp = 101)]
-    Distance(Box<Self>, #[tok(LTMINUSGT, this)] Box<Self>),
+    Distance(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(LTMINUSGT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// User-defined triple-greater-than: `a >>> b`. Before `StrictlyRight` (`>>`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    TripleGt(Box<Self>, #[tok(GTGTGT, this)] Box<Self>),
+    TripleGt(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(GTGTGT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Inet is-superset-or-equal: `a >>= b`. Before `StrictlyRight` (`>>`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    SupersetEq(Box<Self>, #[tok(GTGTEQ, this)] Box<Self>),
+    SupersetEq(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(GTGTEQ, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Range adjacent: `a -|- b`. Before `Sub` (`-`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    Adjacent(Box<Self>, #[tok(MINUSPIPEMINUS, this)] Box<Self>),
+    Adjacent(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(MINUSPIPEMINUS, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Geometric strictly-above: `a |>> b`. Before `Concat` (`||`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    StrictlyAbove(Box<Self>, #[tok(PIPEGTGT, this)] Box<Self>),
+    StrictlyAbove(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(PIPEGTGT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Geometric no-extend-below: `a |&> b`. Before `Concat` (`||`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    NoExtendBelow(Box<Self>, #[tok(PIPEAMPGT, this)] Box<Self>),
+    NoExtendBelow(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(PIPEAMPGT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Geometric no-extend-above: `a &<| b`. Before `NoExtendRight` (`&<`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    NoExtendAbove(Box<Self>, #[tok(AMPLTPIPE, this)] Box<Self>),
+    NoExtendAbove(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(AMPLTPIPE, this)] recursa::ArenaBox<'input, Self>,
+    ),
 
     // --- 2-char operators ---
     /// Text-search / jsonb path match: `expr @@ expr`.
     #[parse(infix, lbp = 50, rbp = 51)]
-    TsMatch(Box<Self>, #[tok(ATAT, this)] Box<Self>),
+    TsMatch(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(ATAT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Jsonpath exists: `expr @? path`.
     #[parse(infix, lbp = 50, rbp = 51)]
-    JsonPathExists(Box<Self>, #[tok(ATQUESTION, this)] Box<Self>),
+    JsonPathExists(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(ATQUESTION, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Range / array overlap: `a && b`.
     #[parse(infix, lbp = 100, rbp = 101)]
-    Overlap(Box<Self>, #[tok(AMPAMP, this)] Box<Self>),
+    Overlap(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(AMPAMP, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Range does-not-extend-right: `a &< b`.
     #[parse(infix, lbp = 50, rbp = 51)]
-    NoExtendRight(Box<Self>, #[tok(AMPLT, this)] Box<Self>),
+    NoExtendRight(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(AMPLT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Range does-not-extend-left: `a &> b`.
     #[parse(infix, lbp = 50, rbp = 51)]
-    NoExtendLeft(Box<Self>, #[tok(AMPGT, this)] Box<Self>),
+    NoExtendLeft(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(AMPGT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Range strictly-left-of: `a << b`.
     #[parse(infix, lbp = 50, rbp = 51)]
-    StrictlyLeft(Box<Self>, #[tok(LTLT, this)] Box<Self>),
+    StrictlyLeft(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(LTLT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Range strictly-right-of: `a >> b`.
     #[parse(infix, lbp = 50, rbp = 51)]
-    StrictlyRight(Box<Self>, #[tok(GTGT, this)] Box<Self>),
+    StrictlyRight(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(GTGT, this)] recursa::ArenaBox<'input, Self>,
+    ),
 
     // --- User-defined / custom infix operators ---
     /// `expr === expr` — user-defined triple-equal. Must come before `Eq` (`=`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    TripleEq(Box<Self>, #[tok(TRIPLEEQ, this)] Box<Self>),
+    TripleEq(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(TRIPLEEQ, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr !== expr` — user-defined not-equal. Must come before `BangEq` (`!=`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    BangEqEq(Box<Self>, #[tok(BANGEQEQ, this)] Box<Self>),
+    BangEqEq(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(BANGEQEQ, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// `expr ## expr` — geometric closest-point / path intersection.
     /// Must come before `BitXor` (`#`).
     #[parse(infix, lbp = 50, rbp = 51)]
-    GeomClosest(Box<Self>, #[tok(HASHHASH, this)] Box<Self>),
+    GeomClosest(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(HASHHASH, this)] recursa::ArenaBox<'input, Self>,
+    ),
 
     #[parse(infix, lbp = 10, rbp = 11)]
-    Or(Box<Self>, #[tok(OR, this)] Box<Self>),
+    Or(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(OR, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 20, rbp = 21)]
-    And(Box<Self>, #[tok(AND, this)] Box<Self>),
+    And(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(AND, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    BangEq(Box<Self>, #[tok(BANGEQ, this)] Box<Self>),
+    BangEq(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(BANGEQ, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    Neq(Box<Self>, #[tok(NEQ, this)] Box<Self>),
+    Neq(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(NEQ, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    Lte(Box<Self>, #[tok(LTE, this)] Box<Self>),
+    Lte(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(LTE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    Gte(Box<Self>, #[tok(GTE, this)] Box<Self>),
+    Gte(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(GTE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    Eq(Box<Self>, #[tok(EQ, this)] Box<Self>),
+    Eq(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(EQ, this)] recursa::ArenaBox<'input, Self>,
+    ),
 
     /// Text starts-with: `expr ^@ expr` (PostgreSQL `starts_with` operator).
     /// `^@` is a single token (see `punct::CaretAt`); declared before
     /// `CustomInfix` so it wins the declaration-order tiebreak. bp=8 matches
     /// Postgres's generic `Op` precedence.
     #[parse(infix, lbp = 80, rbp = 81)]
-    StartsWith(Box<Self>, #[tok(CARETAT, this)] Box<Self>),
+    StartsWith(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(CARETAT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// JSONB delete-path: `expr #- path` (PostgreSQL jsonb delete-at-path
     /// operator). `#-` is a single token (see `punct::HashMinus`); declared
     /// before `CustomInfix` so it wins the declaration-order tiebreak. bp=10
     /// matches the neighbouring `#>`/`#>>` JSON path operators.
     #[parse(infix, lbp = 100, rbp = 101)]
-    JsonDeletePath(Box<Self>, #[tok(HASHMINUS, this)] Box<Self>),
+    JsonDeletePath(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(HASHMINUS, this)] recursa::ArenaBox<'input, Self>,
+    ),
 
     /// Catch-all infix: any user-defined operator not matched by a specific
     /// token above. Declared BEFORE single-char operators so 2+ char custom
@@ -3213,45 +3447,81 @@ pub enum Expr<'input> {
     /// bp=5 and additive bp=10).
     #[parse(infix, lbp = 80, rbp = 81)]
     CustomInfix(
-        Box<Self>,
+        recursa::ArenaBox<'input, Self>,
         #[pretty(break_before = soft, break_after = soft)] literal::CustomOp<'input>,
-        Box<Self>,
+        recursa::ArenaBox<'input, Self>,
     ),
 
     #[parse(infix, lbp = 50, rbp = 51)]
-    Lt(Box<Self>, #[tok(LT, this)] Box<Self>),
+    Lt(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(LT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 50, rbp = 51)]
-    Gt(Box<Self>, #[tok(GT, this)] Box<Self>),
+    Gt(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(GT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// String concatenation: `expr || expr`. PostgreSQL scans `||` as a
     /// generic `Op`, below additive operators in the precedence hierarchy.
     #[parse(infix, lbp = 80, rbp = 81)]
-    Concat(Box<Self>, #[tok(CONCAT, this)] Box<Self>),
+    Concat(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(CONCAT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Bitwise OR: `expr | expr`. Must come after `Concat` (`||`) so the
     /// longer token matches first at the punctuation level.
     #[parse(infix, lbp = 100, rbp = 101)]
-    BitOr(Box<Self>, #[tok(PIPE, this)] Box<Self>),
+    BitOr(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(PIPE, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Bitwise AND: `expr & expr`.
     #[parse(infix, lbp = 100, rbp = 101)]
-    BitAnd(Box<Self>, #[tok(AMP, this)] Box<Self>),
+    BitAnd(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(AMP, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Bitwise XOR: `expr # expr` (Postgres bit-string / integer operator).
     #[parse(infix, lbp = 100, rbp = 101)]
-    BitXor(Box<Self>, #[tok(POUND, this)] Box<Self>),
+    BitXor(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(POUND, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 100, rbp = 101)]
-    Add(Box<Self>, #[tok(PLUS, this)] Box<Self>),
+    Add(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(PLUS, this)] recursa::ArenaBox<'input, Self>,
+    ),
     #[parse(infix, lbp = 100, rbp = 101)]
-    Sub(Box<Self>, #[tok(MINUS, this)] Box<Self>),
+    Sub(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(MINUS, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Multiplication: `expr * expr`
     #[parse(infix, lbp = 110, rbp = 111)]
-    Mul(Box<Self>, #[tok(STAR, this)] Box<Self>),
+    Mul(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(STAR, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Division: `expr / expr`
     #[parse(infix, lbp = 110, rbp = 111)]
-    Div(Box<Self>, #[tok(SLASH, this)] Box<Self>),
+    Div(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(SLASH, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Modulo: `expr % expr`
     #[parse(infix, lbp = 110, rbp = 111)]
-    Mod(Box<Self>, #[tok(PERCENT, this)] Box<Self>),
+    Mod(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(PERCENT, this)] recursa::ArenaBox<'input, Self>,
+    ),
     /// Exponentiation: `expr ^ expr` (Postgres numeric power operator).
     #[parse(infix, lbp = 130, rbp = 131)]
-    Pow(Box<Self>, #[tok(CARET, this)] Box<Self>),
+    Pow(
+        recursa::ArenaBox<'input, Self>,
+        #[tok(CARET, this)] recursa::ArenaBox<'input, Self>,
+    ),
 
     // --- Atoms ---
     /// EXISTS subquery: `EXISTS (SELECT ...)`
@@ -3288,7 +3558,7 @@ pub enum Expr<'input> {
     CastFunc(TypeCastFunc<'input>),
     /// `xmlelement(NAME ident [, xmlattributes(...)] [, content])`. Must come
     /// before `Func` so `xmlelement(` is matched as the special form.
-    XmlElement(Box<XmlElement<'input>>),
+    XmlElement(recursa::ArenaBox<'input, XmlElement<'input>>),
     /// `xmlforest(expr [AS alias], ...)`. Before `Func` for the same reason.
     XmlForest(XmlForest<'input>),
     /// `xmlattributes(expr [AS alias], ...)`. Before `Func`.
@@ -3296,13 +3566,13 @@ pub enum Expr<'input> {
     /// `xmlpi(NAME ident [, content])`. Before `Func`.
     XmlPi(XmlPi<'input>),
     /// `XMLSERIALIZE({DOCUMENT|CONTENT} expr AS type [[NO] INDENT])`. Before `Func`.
-    XmlSerialize(Box<XmlSerialize<'input>>),
+    XmlSerialize(recursa::ArenaBox<'input, XmlSerialize<'input>>),
     /// `XMLPARSE({DOCUMENT|CONTENT} expr)`. Before `Func`.
-    XmlParse(Box<XmlParse<'input>>),
+    XmlParse(recursa::ArenaBox<'input, XmlParse<'input>>),
     /// `XMLROOT(xml, VERSION ... [, STANDALONE ...])`. Before `Func`.
-    XmlRoot(Box<XmlRoot<'input>>),
+    XmlRoot(recursa::ArenaBox<'input, XmlRoot<'input>>),
     /// `XMLEXISTS(xpath PASSING ... doc ...)`. Before `Func`.
-    XmlExists(Box<XmlExists<'input>>),
+    XmlExists(recursa::ArenaBox<'input, XmlExists<'input>>),
     /// `TRIM([LEADING|TRAILING|BOTH] [chars] FROM source)`. Before `Func`
     /// since `trim` is also a valid function-call identifier.
     Trim(TrimCall<'input>),
@@ -3319,27 +3589,27 @@ pub enum Expr<'input> {
     /// `EXTRACT(field FROM source)`. Before `Func`.
     Extract(ExtractCall<'input>),
     /// `JSON(...)` SQL/JSON value constructor. Before `Func`.
-    JsonCtor(Box<JsonConstructor<'input>>),
+    JsonCtor(recursa::ArenaBox<'input, JsonConstructor<'input>>),
     /// `JSON_SCALAR(...)`. Before `Func`.
-    JsonScalar(Box<JsonScalar<'input>>),
+    JsonScalar(recursa::ArenaBox<'input, JsonScalar<'input>>),
     /// `JSON_SERIALIZE(...)`. Before `Func`.
-    JsonSerialize(Box<JsonSerialize<'input>>),
+    JsonSerialize(recursa::ArenaBox<'input, JsonSerialize<'input>>),
     /// `JSON_OBJECT(...)` SQL/JSON object constructor. Before `Func`.
-    JsonObject(Box<JsonObject<'input>>),
+    JsonObject(recursa::ArenaBox<'input, JsonObject<'input>>),
     /// `JSON_ARRAY(...)` SQL/JSON array constructor. Before `Func`.
-    JsonArray(Box<JsonArray<'input>>),
+    JsonArray(recursa::ArenaBox<'input, JsonArray<'input>>),
     /// `JSON_EXISTS(...)` SQL/JSON path predicate. Before `Func`.
-    JsonExists(Box<JsonExists<'input>>),
+    JsonExists(recursa::ArenaBox<'input, JsonExists<'input>>),
     /// `JSON_VALUE(...)` SQL/JSON scalar extraction. Before `Func`.
-    JsonValue(Box<JsonValue<'input>>),
+    JsonValue(recursa::ArenaBox<'input, JsonValue<'input>>),
     /// `JSON_QUERY(...)` SQL/JSON value extraction. Before `Func`.
-    JsonQuery(Box<JsonQuery<'input>>),
+    JsonQuery(recursa::ArenaBox<'input, JsonQuery<'input>>),
     /// `JSON_OBJECTAGG(...)` SQL/JSON object aggregate. Before `Func`.
-    JsonObjectAgg(Box<JsonObjectAgg<'input>>),
+    JsonObjectAgg(recursa::ArenaBox<'input, JsonObjectAgg<'input>>),
     /// `JSON_ARRAYAGG(...)` SQL/JSON array aggregate. Before `Func`.
-    JsonArrayAgg(Box<JsonArrayAgg<'input>>),
+    JsonArrayAgg(recursa::ArenaBox<'input, JsonArrayAgg<'input>>),
     /// Function call: `func(args)` -- must come before ColumnRef
-    Func(Box<FuncCall<'input>>),
+    Func(recursa::ArenaBox<'input, FuncCall<'input>>),
     #[tok(USER)]
     /// `USER` — the reserved-keyword spelling of `CURRENT_USER` as a
     /// zero-arg function reference. PG's gram.y `func_expr_common_subexpr`

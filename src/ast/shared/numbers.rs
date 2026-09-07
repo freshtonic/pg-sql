@@ -2,7 +2,7 @@
 use crate::tokens::literal;
 
 /// Leading `+` or `-` sign on a number.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum NumericSignToken {
     #[tok(MINUS)]
     Neg,
@@ -11,7 +11,7 @@ pub enum NumericSignToken {
 }
 
 /// Either an integer or a numeric (decimal/exponent) literal.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum UnsignedNumberLit<'input> {
     /// Decimal/exponent forms come first so longest-match-wins picks them
     /// over a bare integer when a `.` or `e` is present.
@@ -22,7 +22,7 @@ pub enum UnsignedNumberLit<'input> {
 /// Postgres' `NumericOnly`: optionally signed integer or floating-point
 /// literal. Used by CREATE DATABASE options like `CONNECTION LIMIT n` and
 /// `ENCODING -1`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct NumericOnly<'input> {
     pub sign: Option<NumericSignToken>,
     pub value: UnsignedNumberLit<'input>,
@@ -30,7 +30,7 @@ pub struct NumericOnly<'input> {
 
 /// Postgres' `SignedIconst`: optionally signed integer literal. Used by
 /// `SYSID n` in CREATE ROLE.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SignedIconst<'input> {
     pub sign: Option<NumericSignToken>,
     pub value: literal::IntegerLit<'input>,

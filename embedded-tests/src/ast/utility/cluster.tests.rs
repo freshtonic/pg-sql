@@ -5,7 +5,8 @@ mod tests {
 
     #[test]
     fn cluster_bare_is_modelled() {
-        let stmt: ClusterStmt = parse_stmt("CLUSTER");
+        let stmt = parse_stmt::<ClusterStmt>("CLUSTER");
+        let stmt = stmt.ast();
         assert!(stmt.options.is_none());
         assert!(!stmt.verbose);
         assert!(stmt.target.is_none());
@@ -24,14 +25,16 @@ mod tests {
 
     #[test]
     fn cluster_verbose_roundtrips() {
-        let stmt: ClusterStmt = parse_stmt("CLUSTER VERBOSE clstr_2");
+        let stmt = parse_stmt::<ClusterStmt>("CLUSTER VERBOSE clstr_2");
+        let stmt = stmt.ast();
         assert!(stmt.verbose);
         reparse_stable::<ClusterStmt>("CLUSTER VERBOSE clstr_2");
     }
 
     #[test]
     fn cluster_options_roundtrips() {
-        let stmt: ClusterStmt = parse_stmt("CLUSTER (VERBOSE) clstr_2 USING clstr_2_pkey");
+        let stmt = parse_stmt::<ClusterStmt>("CLUSTER (VERBOSE) clstr_2 USING clstr_2_pkey");
+        let stmt = stmt.ast();
         assert!(stmt.options.is_some());
         reparse_stable::<ClusterStmt>("CLUSTER (VERBOSE) clstr_2 USING clstr_2_pkey");
     }

@@ -13,9 +13,10 @@ mod tests {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = Statement::parse(&mut input)
+        let _stmt_parsed = Statement::parse(&mut input)
             .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-            .into_ast();
+            ;
+        let _stmt = _stmt_parsed.ast();
         let cursor = input.cursor();
         assert!(input.is_eof(), "parser cursor: {cursor}");
     }
@@ -35,9 +36,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = Statement::parse(&mut input)
+            let _stmt_parsed = Statement::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -55,9 +57,10 @@ mod tests {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = Statement::parse(&mut input)
+        let _stmt_parsed = Statement::parse(&mut input)
             .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-            .into_ast();
+            ;
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -83,9 +86,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = Statement::parse(&mut input)
+            let _stmt_parsed = Statement::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -109,9 +113,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = Statement::parse(&mut input)
+            let _stmt_parsed = Statement::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -553,7 +558,8 @@ mod tests {
         let lexed = crate::lex("SELECT 1 AS one");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = Statement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = Statement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         // All query forms share the Subquery path so SELECT, VALUES, TABLE,
         // WITH, parentheses, and set operations share one Subquery path.
         assert!(matches!(stmt, Statement::Query(_)));
@@ -564,7 +570,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (f1 bool)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = Statement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = Statement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt, Statement::CreateTable(_)));
     }
 
@@ -573,7 +580,8 @@ mod tests {
         let lexed = crate::lex("INSERT INTO t (f1) VALUES (true)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = Statement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = Statement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt, Statement::Insert(_)));
     }
 
@@ -582,7 +590,8 @@ mod tests {
         let lexed = crate::lex("DELETE FROM t WHERE a > 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = Statement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = Statement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt, Statement::Delete(_)));
     }
 
@@ -591,7 +600,8 @@ mod tests {
         let lexed = crate::lex("DROP TABLE t");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = Statement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = Statement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt, Statement::DropTable(_)));
     }
 
@@ -600,7 +610,8 @@ mod tests {
         let lexed = crate::lex("SELECT 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = Statement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = Statement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt, Statement::Query(_)));
         assert!(input.is_eof());
     }
@@ -617,7 +628,8 @@ mod tests {
         let lexed = crate::lex("SELECT f1 FROM BOOLTBL1 WHERE f1 IS TRUE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = Statement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = Statement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt, Statement::Query(_)));
         assert!(input.is_eof());
     }
@@ -627,7 +639,8 @@ mod tests {
         let lexed = crate::lex("INSERT INTO BOOLTBL1 (f1) VALUES (bool 't')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = Statement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = Statement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt, Statement::Insert(_)));
         assert!(input.is_eof());
     }

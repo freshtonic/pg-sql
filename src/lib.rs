@@ -2,6 +2,7 @@
 
 recursa::grammar! {
     module = crate,
+    arena_ast,
     derives(Pretty, Visit, VisitMut),
     keyword_matching = ascii_insensitive,
     diagrams,

@@ -23,7 +23,7 @@ use crate::tokens::{literal, punct};
 ///
 /// Variant ordering: the two-token `CONNECTION LIMIT` form before the
 /// general word so the longer match wins.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CreateDbOptName<'input> {
     #[tok(CONNECTION, LIMIT)]
     ConnectionLimit,
@@ -36,7 +36,7 @@ pub enum CreateDbOptName<'input> {
 /// Variant ordering: `Default` (keyword) first, then `Numeric` (digits or
 /// `+`/`-`), then `Boolean` (`TRUE`/`FALSE`/`ON`), then `String` (quoted),
 /// then the catch-all `Word` (bareword incl. `off`, identifier-like values).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CreateDbOptValue<'input> {
     #[tok(DEFAULT)]
     Default,
@@ -54,51 +54,51 @@ pub enum CreateDbOptValue<'input> {
 
 /// A single CREATE DATABASE option — Postgres' `createdb_opt_item`. Options
 /// are unordered and repeatable, with an optional `=` between name and value.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateDbOption<'input> {
     pub name: CreateDbOptName<'input>,
     #[tok(optional(EQ), this)]
     pub value: CreateDbOptValue<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateDatabaseStmt<'input> {
     #[tok(CREATE, DATABASE, this)]
     pub name: crate::tokens::ColId<'input>,
     #[tok(optional(WITH), this)]
-    pub options: Vec<CreateDbOption<'input>>,
+    pub options: recursa::ArenaVec<'input, CreateDbOption<'input>>,
 }
 
 /// A single `DROP DATABASE` option. Postgres currently defines only `FORCE`,
 /// but the grammar is comma-separated and extensible.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum DropDatabaseOption {
     #[tok(FORCE)]
     Force,
 }
 
 /// `[WITH] (option [, ...])` option list on `DROP DATABASE`.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct DropDatabaseOptions {
+#[derive(recursa::Node, Debug)]
+pub struct DropDatabaseOptions<'input> {
     /// gram.y `drop_option_list`: one or more options.
     #[tok(optional(WITH), LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub options: recursa::Vec1<DropDatabaseOption>,
+    pub options: recursa::ArenaVec1<'input, DropDatabaseOption>,
 }
 
 /// `DROP DATABASE [IF EXISTS] name [[WITH] (FORCE)]` — no `CASCADE`/`RESTRICT`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, DATABASE, this)]
 pub struct DropDatabaseStmt<'input> {
     pub if_exists: Option<IfExists>,
     pub name: crate::tokens::ColId<'input>,
-    pub options: Option<DropDatabaseOptions>,
+    pub options: Option<DropDatabaseOptions<'input>>,
 }
 
 /// `SET TABLESPACE name` — Postgres' dedicated `ALTER DATABASE name
 /// SET TABLESPACE name` branch (also used by ALTER INDEX, ALTER MATVIEW,
 /// ALTER TABLE). The value is a tablespace name (an `Ident`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetTablespaceClause<'input> {
     #[tok(SET, TABLESPACE, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -106,7 +106,7 @@ pub struct SetTablespaceClause<'input> {
 
 /// `REFRESH COLLATION VERSION` — Postgres'
 /// `AlterDatabaseRefreshCollStmt`. Three fixed keywords with no operands.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum RefreshCollVersion {
     #[tok(REFRESH, COLLATION, VERSION)]
     Value,
@@ -125,8 +125,8 @@ pub enum RefreshCollVersion {
 /// single-option form as `WithOpt` — taking one `CreateDbOption` directly,
 /// not a `[WITH] (list)`. When a corpus statement uses more than one
 /// option or a leading `WITH`, extend this to a struct that wraps a
-/// `Vec<CreateDbOption>` plus an optional `WITH` keyword.
-#[derive(recursa::Node, Debug, Clone)]
+/// `recursa::ArenaVec<'input, CreateDbOption>` plus an optional `WITH` keyword.
+#[derive(recursa::Node, Debug)]
 pub enum AlterDatabaseAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -144,7 +144,7 @@ pub enum AlterDatabaseAction<'input> {
 /// `ALTER DATABASE name action` — Postgres' `AlterDatabaseStmt`,
 /// `AlterDatabaseRefreshCollStmt`, `AlterDatabaseSetStmt`, `RenameStmt`,
 /// and `AlterOwnerStmt` branches for databases.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterDatabaseStmt<'input> {
     #[tok(ALTER, DATABASE, this)]
     pub name: crate::tokens::ColId<'input>,

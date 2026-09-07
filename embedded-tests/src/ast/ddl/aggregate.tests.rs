@@ -22,9 +22,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = crate::ast::Statement::parse(&mut input)
+            let _stmt_parsed = crate::ast::Statement::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -38,7 +39,8 @@ mod tests {
         let lexed = crate::lex("DROP AGGREGATE myavg(numeric)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropAggregateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.targets.len(), 1);
         assert!(input.is_eof());
     }
@@ -48,7 +50,8 @@ mod tests {
         let lexed = crate::lex("DROP AGGREGATE IF EXISTS test_agg(*)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropAggregateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists.is_some());
         assert!(matches!(
             stmt.targets.first().unwrap().args,
@@ -64,7 +67,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateAggregateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.signature.definition.is_some());
         assert!(input.is_eof());
     }
@@ -76,18 +80,19 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateAggregateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.signature.definition.is_none());
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_aggregate_zero_args() {
-        let lexed =
-            crate::lex("CREATE AGGREGATE newcnt (*) (sfunc = int8inc, stype = int8)");
+        let lexed = crate::lex("CREATE AGGREGATE newcnt (*) (sfunc = int8inc, stype = int8)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateAggregateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.signature.definition.is_some());
         assert!(input.is_eof());
     }
@@ -100,7 +105,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateAggregateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.signature.definition.is_some());
         assert!(input.is_eof());
     }
@@ -112,15 +118,16 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateAggregateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.or_replace);
         assert!(input.is_eof());
     }
 
     #[test]
     fn alter_aggregate_rename() {
-        let stmt: AlterAggregateStmt =
-            parse_stmt("ALTER AGGREGATE alt_agg1(int) RENAME TO alt_agg2");
+        let stmt = parse_stmt::<AlterAggregateStmt>("ALTER AGGREGATE alt_agg1(int) RENAME TO alt_agg2");
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.object(), "alt_agg1");
         assert!(matches!(stmt.action, AlterAggregateAction::Rename(_)));
         reparse_stable::<AlterAggregateStmt>("ALTER AGGREGATE alt_agg1(int) RENAME TO alt_agg2");
@@ -173,9 +180,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = crate::ast::Statement::parse(&mut input)
+            let _stmt_parsed = crate::ast::Statement::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -192,7 +200,8 @@ mod tests {
         let lexed = crate::lex("CREATE AGGREGATE a(BASETYPE = int, STYPE = int[])");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateAggregateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let CreateAggregateArgs::Old(definition) = &stmt.signature.args else {
             panic!("expected an old-style definition");
         };
@@ -209,7 +218,8 @@ mod tests {
         let lexed = crate::lex("CREATE AGGREGATE sum2(int8, int8) (SFUNC = sum3, STYPE = int8)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateAggregateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateAggregateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let CreateAggregateArgs::Args(lists) = &stmt.signature.args else {
             panic!("expected a plain argument group");
         };

@@ -29,14 +29,14 @@ use crate::ast::shared::numbers::*;
 /// The method name can be an identifier or one of the built-in method
 /// keywords (`btree`, `gin`, ...). We accept `literal::AliasName` so both
 /// identifiers and keywords are allowed in this position.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct UsingMethod<'input> {
     #[tok(USING, this)]
     pub method: literal::AliasName<'input>,
 }
 
 /// A single opclass option: `name = value`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OpclassOption<'input> {
     pub name: literal::AliasName<'input>,
     #[tok(EQ, this)]
@@ -44,23 +44,23 @@ pub struct OpclassOption<'input> {
 }
 
 /// Parenthesized opclass option list: `(name = value, ...)`.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct OpclassOptions<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub Vec<OpclassOption<'input>>,
+    pub recursa::ArenaVec<'input, OpclassOption<'input>>,
 );
 
 /// Opclass name plus optional options: `int4_ops [(opt = val, ...)]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OpclassSpec<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub options: Option<OpclassOptions<'input>>,
 }
 
 /// A storage parameter entry: `name [= value]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct StorageParam<'input> {
     pub name: StorageParamName<'input>,
     pub value: Option<StorageParamValue<'input>>,
@@ -71,14 +71,14 @@ pub struct StorageParam<'input> {
 /// Parsing the first word unconditionally keeps the optional suffix's first
 /// token (`.`) disjoint from the first word. In particular, a bare name does
 /// not speculatively commit to the qualified form and then require a dot.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct StorageParamName<'input> {
     pub head: literal::AliasName<'input>,
     pub qualified_tail: Option<StorageParamQualifiedTail<'input>>,
 }
 
 /// `.name` suffix on a qualified storage parameter name.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct StorageParamQualifiedTail<'input> {
     #[tok(DOT, this)]
     pub name: literal::AliasName<'input>,
@@ -103,26 +103,26 @@ impl<'input> StorageParamName<'input> {
 /// The value is a permissive SetValue (keywords like `off`, `on`, string/numeric
 /// literals, identifiers) rather than a full `Expr` — storage param values are
 /// simple literals and `Expr::ColumnRef` rejects keywords like `off`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct StorageParamValue<'input> {
     #[tok(EQ, this)]
     pub value: SetValue<'input>,
 }
 
 /// `WITH (name = value, ...)` storage parameters clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(WITH, LPAREN, this, RPAREN)]
 pub struct WithStorage<'input> {
     #[sep(COMMA)]
-    pub params: Vec<StorageParam<'input>>,
+    pub params: recursa::ArenaVec<'input, StorageParam<'input>>,
 }
 
 /// `INCLUDE (col, ...)` covering-index clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(INCLUDE, LPAREN, this, RPAREN)]
 pub struct IncludeClause<'input> {
     #[sep(COMMA)]
-    pub columns: Vec<crate::tokens::ColId<'input>>,
+    pub columns: recursa::ArenaVec<'input, crate::tokens::ColId<'input>>,
 }
 
 /// Index column target: a parenthesized expression, a bare SQL/JSON
@@ -136,18 +136,18 @@ pub struct IncludeClause<'input> {
 ///   would otherwise reclaim it as an ordinary function name.
 /// - `Func` (`ident(`) must come before `Col` (`ident`) so longest-match
 ///   prefers the function call form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum IndexTarget<'input> {
-    Expr(#[tok(LPAREN, this, RPAREN)] Box<Expr<'input>>),
-    Json(Box<JsonFuncExpr<'input>>),
+    Expr(#[tok(LPAREN, this, RPAREN)] recursa::ArenaBox<'input, Expr<'input>>),
+    Json(recursa::ArenaBox<'input, JsonFuncExpr<'input>>),
     /// gram.y `func_expr_windowless`: no `WITHIN GROUP`, `FILTER` or `OVER`
     /// suffix, which are also operator class names after the call.
-    Func(Box<FunctionApplicationExpr<'input>>),
+    Func(recursa::ArenaBox<'input, FunctionApplicationExpr<'input>>),
     Col(crate::tokens::ColId<'input>),
 }
 
 /// `COLLATE "name"` on an index element.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct IndexCollate<'input> {
     #[tok(COLLATE, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -155,7 +155,7 @@ pub struct IndexCollate<'input> {
 
 /// An index element:
 /// `column_or_expr [COLLATE "name"] [opclass [(options)]] [ASC|DESC] [NULLS FIRST|LAST]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct IndexElem<'input> {
     pub target: IndexTarget<'input>,
     pub collate: Option<IndexCollate<'input>>,
@@ -169,12 +169,12 @@ pub struct IndexElem<'input> {
 /// The legacy grammar represented this as `Seq0`, so this wrapper retains a
 /// zero-or-more [`Vec`] while applying the delimiters to the whole list rather
 /// than to each element.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct IndexElementList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub Vec<IndexElem<'input>>,
+    pub recursa::ArenaVec<'input, IndexElem<'input>>,
 );
 
 /// CREATE INDEX statement.
@@ -188,7 +188,7 @@ pub struct IndexElementList<'input>(
 /// ```
 ///
 /// The index name is optional (Postgres allows it to be omitted).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateIndexStmt<'input> {
     #[tok(CREATE, this, INDEX)]
     #[presence(UNIQUE)]
@@ -203,20 +203,20 @@ pub struct CreateIndexStmt<'input> {
     /// without descending into inheritance children (partitioned tables).
     pub only: bool,
     pub table_name: crate::ast::shared::names::QualifiedName<'input>,
-    pub using: Option<Box<UsingMethod<'input>>>,
+    pub using: Option<recursa::ArenaBox<'input, UsingMethod<'input>>>,
     pub columns: IndexElementList<'input>,
-    pub include: Option<Box<IncludeClause<'input>>>,
+    pub include: Option<recursa::ArenaBox<'input, IncludeClause<'input>>>,
     pub nulls_distinct: Option<NullsDistinctClause>,
-    pub with_storage: Option<Box<WithStorage<'input>>>,
+    pub with_storage: Option<recursa::ArenaBox<'input, WithStorage<'input>>>,
     pub tablespace: Option<crate::ast::ddl::table::TablespaceClause<'input>>,
-    pub where_clause: Option<Box<WhereClause<'input>>>,
+    pub where_clause: Option<recursa::ArenaBox<'input, WhereClause<'input>>>,
 }
 
 /// `NULLS [NOT] DISTINCT` modifier on a unique index.
 ///
 /// Variant ordering: `NotDistinct` (`NULLS NOT DISTINCT`, longer) before
 /// `Distinct` (`NULLS DISTINCT`, shorter).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum NullsDistinctClause {
     #[tok(NULLS, NOT, DISTINCT)]
     NotDistinct,
@@ -229,7 +229,7 @@ pub enum NullsDistinctClause {
 /// ```sql
 /// DROP INDEX [CONCURRENTLY] [IF EXISTS] name [, name ...] [CASCADE | RESTRICT]
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, INDEX, this)]
 pub struct DropIndexStmt<'input> {
     #[presence(CONCURRENTLY)]
@@ -237,7 +237,7 @@ pub struct DropIndexStmt<'input> {
     pub if_exists: Option<IfExists>,
     #[sep(COMMA)]
     /// gram.y `any_name_list`: one or more names.
-    pub names: recursa::Vec1<crate::ast::shared::names::QualifiedName<'input>>,
+    pub names: recursa::ArenaVec1<'input, crate::ast::shared::names::QualifiedName<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 
@@ -249,11 +249,11 @@ pub struct DropIndexStmt<'input> {
 /// ALTER VIEW / ALTER MATERIALIZED VIEW / ALTER TABLE — modifies storage
 /// parameters. Differs from `WithStorage` (`WITH (...)` on CREATE) only in
 /// the leading keyword.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(SET, LPAREN, this, RPAREN)]
 pub struct SetReloptions<'input> {
     #[sep(COMMA)]
-    pub params: recursa::Vec1<crate::ast::ddl::index::StorageParam<'input>>,
+    pub params: recursa::ArenaVec1<'input, crate::ast::ddl::index::StorageParam<'input>>,
 }
 
 /// `RESET (param_name [= value], ...)` action shared by ALTER INDEX /
@@ -262,16 +262,16 @@ pub struct SetReloptions<'input> {
 /// `ColLabel [. ColLabel] [= def_arg]`, so the syntax accepts `name = value`
 /// in RESET too (PG ignores the value semantically). Modeled via the same
 /// `StorageParam` type used by `WITH (...)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(RESET, LPAREN, this, RPAREN)]
 pub struct ResetReloptions<'input> {
     #[sep(COMMA)]
-    pub params: recursa::Vec1<crate::ast::ddl::index::StorageParam<'input>>,
+    pub params: recursa::ArenaVec1<'input, crate::ast::ddl::index::StorageParam<'input>>,
 }
 
 /// `ATTACH PARTITION qualified_name` — Postgres' `index_partition_cmd` (the
 /// single ALTER INDEX form that takes a partition operation).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AttachPartitionClause<'input> {
     #[tok(ATTACH, PARTITION, this)]
     pub name: QualifiedName<'input>,
@@ -284,21 +284,21 @@ pub struct AttachPartitionClause<'input> {
 ///
 /// Variant ordering: `Number` first (lex token kind disjoint from
 /// `Ident`), then `Name`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ColumnRef<'input> {
     Number(SignedIconst<'input>),
     Name(crate::tokens::ColId<'input>),
 }
 
 /// `SET STATISTICS …` tail of an ALTER COLUMN command.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterColumnStatisticsAction<'input> {
     #[tok(SET, STATISTICS, this)]
     pub value: SetStatisticsValue<'input>,
 }
 
 /// Action following the shared `ALTER [COLUMN] col_ref` prefix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterColumnIndexAction<'input> {
     Statistics(AlterColumnStatisticsAction<'input>),
     Reloptions(SetReloptions<'input>),
@@ -311,7 +311,7 @@ pub enum AlterColumnIndexAction<'input> {
 /// The common prefix is represented once so the LR alternatives part at the
 /// keyword or parenthesis immediately following `SET`, rather than duplicating
 /// a potentially multi-token signed column reference.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterColumnIndexCmd<'input> {
     #[tok(ALTER, optional(COLUMN), this)]
     pub col_ref: ColumnRef<'input>,
@@ -331,7 +331,7 @@ pub struct AlterColumnIndexCmd<'input> {
 /// - `Depends` allows a bare `DEPENDS …` (without `NO`), and `NoDepends`
 ///   is reached via the `Depends` arm since both share the
 ///   `DependsOnExtension` type (with `NO` as an `Option`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterIndexAction<'input> {
     SetTablespace(SetTablespaceClause<'input>),
     SetReloptions(SetReloptions<'input>),
@@ -346,7 +346,7 @@ pub enum AlterIndexAction<'input> {
 /// [NOWAIT]` — Postgres' bulk-relocate action on ALTER INDEX (and ALTER
 /// MATERIALIZED VIEW). Moves every index in the named tablespace to a new
 /// tablespace, optionally filtered by owner role(s).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AllInTablespaceBody<'input> {
     #[tok(ALL, IN, TABLESPACE, this)]
     pub source: crate::tokens::ColId<'input>,
@@ -358,7 +358,7 @@ pub struct AllInTablespaceBody<'input> {
 
 /// `OWNED BY role_list` — owner filter on the bulk `ALL IN TABLESPACE`
 /// action.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OwnedByRoles<'input> {
     #[tok(OWNED, BY, this)]
     pub roles: RoleList<'input>,
@@ -371,14 +371,14 @@ pub struct OwnedByRoles<'input> {
 ///
 /// Variant ordering: `All` (starts with `ALL`) before `Single`
 /// (starts with `[IF EXISTS] qualified_name` — never `ALL`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterIndexBody<'input> {
     All(AllInTablespaceBody<'input>),
     Single(AlterIndexSingle<'input>),
 }
 
 /// `[IF EXISTS] name action` — the per-index branch of ALTER INDEX.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterIndexSingle<'input> {
     pub if_exists: Option<IfExists>,
     pub name: QualifiedName<'input>,
@@ -390,7 +390,7 @@ pub struct AlterIndexSingle<'input> {
 ///   new [NOWAIT]` — the two top-level shapes of Postgres' `AlterTableStmt`
 /// branches that begin with `ALTER INDEX …`, plus the index branches of
 /// `RenameStmt` / `AlterObjectDependsStmt` (single form).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterIndexStmt<'input> {
     #[tok(ALTER, INDEX, this)]
     pub body: AlterIndexBody<'input>,

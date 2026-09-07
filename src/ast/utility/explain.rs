@@ -7,7 +7,7 @@ use crate::tokens::literal;
 /// `opt_boolean_or_string` / `NumericOnly`, so it accepts `ON`/`OFF`,
 /// `TRUE`/`FALSE`, bare identifiers, numeric literals, and string literals
 /// (e.g. `format 'json'`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ExplainOptValue<'input> {
     #[tok(ON)]
     On,
@@ -26,14 +26,14 @@ pub enum ExplainOptValue<'input> {
 
 /// A single explain option: `name value` (e.g., `costs off`); gram.y
 /// `utility_option_elem`, whose name is `utility_option_name`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ExplainOption<'input> {
     pub name: literal::UtilityOptionName<'input>,
     pub value: Option<ExplainOptValue<'input>>,
 }
 
 /// Explain options: `(opt, ...)`.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 pub struct ExplainOptions<'input> {
     /// The shared parenthesis markers: after `EXPLAIN` a `(` opens either
     /// this list or a parenthesized query, and both reduce the same marker
@@ -41,7 +41,7 @@ pub struct ExplainOptions<'input> {
     pub open: crate::ast::shared::expr::ParenthesizedOpen,
     #[sep(COMMA)]
     #[deref]
-    pub options: recursa::Vec1<ExplainOption<'input>>,
+    pub options: recursa::ArenaVec1<'input, ExplainOption<'input>>,
     pub close: crate::ast::shared::expr::ParenthesizedClose,
 }
 
@@ -52,22 +52,25 @@ pub struct ExplainOptions<'input> {
 /// and `Query` (`SELECT`, `WITH`, `VALUES`, `TABLE`, parenthesized, and set
 /// operations) comes last as the shared-prefix form. gram.y's `CreateAsStmt`
 /// maps to `CreateTableStmt`, whose body carries the CTAS forms.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ExplainableStmt<'input> {
     CreateMaterializedView(
-        Box<crate::ast::ddl::materialized_view::CreateMaterializedViewStmt<'input>>,
+        recursa::ArenaBox<
+            'input,
+            crate::ast::ddl::materialized_view::CreateMaterializedViewStmt<'input>,
+        >,
     ),
-    CreateTable(Box<crate::ast::ddl::table::CreateTableStmt<'input>>),
-    Insert(Box<crate::ast::dml::insert::InsertStmt<'input>>),
-    Update(Box<crate::ast::dml::update::UpdateStmt<'input>>),
-    Merge(Box<crate::ast::dml::merge::MergeStmt<'input>>),
-    Delete(Box<crate::ast::dml::delete::DeleteStmt<'input>>),
+    CreateTable(recursa::ArenaBox<'input, crate::ast::ddl::table::CreateTableStmt<'input>>),
+    Insert(recursa::ArenaBox<'input, crate::ast::dml::insert::InsertStmt<'input>>),
+    Update(recursa::ArenaBox<'input, crate::ast::dml::update::UpdateStmt<'input>>),
+    Merge(recursa::ArenaBox<'input, crate::ast::dml::merge::MergeStmt<'input>>),
+    Delete(recursa::ArenaBox<'input, crate::ast::dml::delete::DeleteStmt<'input>>),
     Execute(crate::ast::tcl::prepared::ExecuteStmt<'input>),
     Refresh(crate::ast::utility::refresh::RefreshStmt<'input>),
     Declare(crate::ast::cursor::declare::DeclareStmt<'input>),
-    Query(Box<crate::ast::dml::values::QueryBody<'input>>),
+    Query(recursa::ArenaBox<'input, crate::ast::dml::values::QueryBody<'input>>),
     /// `WITH ...` before a query or a DML statement, factored as in `Statement`.
-    With(Box<crate::ast::shared::with_clause::WithStatement<'input>>),
+    With(recursa::ArenaBox<'input, crate::ast::shared::with_clause::WithStatement<'input>>),
 }
 
 /// An EXPLAIN option list followed by the statement being explained.
@@ -75,21 +78,21 @@ pub enum ExplainableStmt<'input> {
 /// Keeping the optional prefix and required statement in one enum branch lets
 /// the LR state after the option-list delimiter distinguish this form from a
 /// parenthesized statement.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ExplainOptionsAndStatement<'input> {
     pub options: ExplainOptions<'input>,
-    pub statement: Box<ExplainableStmt<'input>>,
+    pub statement: recursa::ArenaBox<'input, ExplainableStmt<'input>>,
 }
 
 /// The input following `EXPLAIN`, with or without an option list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ExplainInput<'input> {
     WithOptions(ExplainOptionsAndStatement<'input>),
-    Statement(Box<ExplainableStmt<'input>>),
+    Statement(recursa::ArenaBox<'input, ExplainableStmt<'input>>),
 }
 
 /// EXPLAIN statement: `EXPLAIN [(options)] statement`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(EXPLAIN, this)]
 pub struct ExplainStmt<'input> {
     pub input: ExplainInput<'input>,

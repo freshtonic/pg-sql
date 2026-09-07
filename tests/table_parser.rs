@@ -82,7 +82,7 @@ fn string_continuation_rejects_block_comments_and_preserves_newlines() {
     let parsed = Statement::parse(&mut input)
         .unwrap_or_else(|error| panic!("Recursa parser rejects {valid:?}: {error}"));
     assert!(input.is_eof(), "Recursa parser left input for {valid:?}");
-    let formatted = format_tokens_sql(&parsed.into_ast(), PrettyConfig::default());
+    let formatted = format_tokens_sql(parsed.ast(), PrettyConfig::default());
     assert!(
         formatted.contains("'first line'")
             && formatted.contains("\n' - next line'")

@@ -16,14 +16,14 @@ use crate::ast::shared::numbers::*;
 // ---------------------------------------------------------------------------
 
 /// SETOF type: `SETOF typename`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetofReturn<'input> {
     #[tok(SETOF, this)]
     pub type_name: TypeName<'input>,
 }
 
 /// Function return type: `SETOF type` or plain `type`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ReturnType<'input> {
     Setof(SetofReturn<'input>),
     Plain(TypeName<'input>),
@@ -31,13 +31,13 @@ pub enum ReturnType<'input> {
 
 /// LANGUAGE clause: `LANGUAGE name` or `LANGUAGE 'name'`. Postgres accepts
 /// the language name as an identifier or as a single-quoted string literal.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum LanguageName<'input> {
     Ident(literal::AliasName<'input>),
     String(literal::StringLit<'input>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LanguageOption<'input> {
     #[tok(LANGUAGE, this)]
     pub name: LanguageName<'input>,
@@ -52,7 +52,7 @@ pub struct LanguageOption<'input> {
 ///
 /// Variant ordering: dollar-quoted before single-quoted (different first
 /// chars).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FuncBodyPart<'input> {
     Dollar(literal::DollarStringLit<'input>),
     String(literal::StringLit<'input>),
@@ -61,7 +61,7 @@ pub enum FuncBodyPart<'input> {
 /// Full function body — `AS body [, symbol]`. The second comma-separated
 /// form is used for C-language functions where the first part names the
 /// shared object file and the second names the exported C symbol.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncBody<'input> {
     pub obj_file: FuncBodyPart<'input>,
     #[tok(COMMA, this)]
@@ -70,38 +70,38 @@ pub struct FuncBody<'input> {
 
 /// Function return type name, including both ordinary cast types and the
 /// PostgreSQL-specific `qualified%TYPE` reference form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncReturnTypeName<'input> {
     pub value: FunctionType<'input>,
 }
 
 /// RETURNS clause for functions: `RETURNS [SETOF] type`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncReturnsClause<'input> {
     #[tok(RETURNS, this)]
     pub return_type: FuncReturnType<'input>,
 }
 
 /// A single column in `RETURNS TABLE(col type, ...)`: `name type`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TableColumn<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub type_name: CastType<'input>,
 }
 
 /// `TABLE(col type, ...)` — tabular function return type.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(TABLE, LPAREN, this, RPAREN)]
 pub struct FuncReturnsTable<'input> {
     #[sep(COMMA)]
-    pub columns: recursa::Vec1<TableColumn<'input>>,
+    pub columns: recursa::ArenaVec1<'input, TableColumn<'input>>,
 }
 
 /// Function return type: TABLE(...), SETOF type, or plain type.
 ///
 /// `Table` before `Setof` and `Plain` — `TABLE` is a keyword that won't
 /// match as an identifier-based type.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FuncReturnType<'input> {
     Table(FuncReturnsTable<'input>),
     Setof(FuncSetofReturn<'input>),
@@ -109,7 +109,7 @@ pub enum FuncReturnType<'input> {
 }
 
 /// SETOF type for function returns.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncSetofReturn<'input> {
     #[tok(SETOF, this)]
     pub type_name: FuncReturnTypeName<'input>,
@@ -118,7 +118,7 @@ pub struct FuncSetofReturn<'input> {
 // --- Function parameters ---
 
 /// Argument mode prefix: `IN | OUT | INOUT | VARIADIC`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ArgMode {
     #[tok(IN)]
     In,
@@ -139,7 +139,7 @@ pub enum ArgMode {
 /// (gram.y `SimpleTypename: … | JsonType`), which is what makes
 /// `RETURNS json` and `f(node json)` legal while keeping `json` out of
 /// `func_name`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionBuiltinTypeName {
     #[tok(BOOLEAN)]
     Boolean,
@@ -166,7 +166,7 @@ pub enum FunctionBuiltinTypeName {
 }
 
 /// Suffix shared by built-in and identifier-spelled cast types.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionCastTypeTail<'input> {
     /// `PRECISION` in `DOUBLE PRECISION`.
     #[presence(PRECISION)]
@@ -176,40 +176,40 @@ pub struct FunctionCastTypeTail<'input> {
     pub precision: Option<TypePrecision<'input>>,
     pub tz: Option<TimeZoneQualifier>,
     pub interval_qualifier: Option<IntervalQualifier<'input>>,
-    pub array_suffixes: Vec<ArraySuffix<'input>>,
+    pub array_suffixes: recursa::ArenaVec<'input, ArraySuffix<'input>>,
     pub array_kw_suffix: Option<ArrayKwSuffix<'input>>,
 }
 
 /// A built-in type plus the ordinary cast-type suffixes.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionBuiltinType<'input> {
     pub base: FunctionBuiltinTypeName,
     pub tail: FunctionCastTypeTail<'input>,
 }
 
 /// One dotted attribute in an identifier-spelled function type.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionTypeNamePart<'input> {
     #[tok(DOT, this)]
     pub name: literal::AliasName<'input>,
 }
 
 /// Shared qualified-name prefix of a cast type and `%TYPE` reference.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionTypeName<'input> {
     pub first: crate::tokens::type_function_name<'input>,
-    pub rest: Vec<FunctionTypeNamePart<'input>>,
+    pub rest: recursa::ArenaVec<'input, FunctionTypeNamePart<'input>>,
 }
 
 /// `%TYPE` suffix on a function type reference.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionPctTypeSuffix {
     #[tok(PERCENT, TYPE)]
     Value,
 }
 
 /// The suffix following a shared identifier-spelled type name.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionIdentifierTypeSuffix<'input> {
     Pct(FunctionPctTypeSuffix),
     Cast(FunctionGenericTypeTail<'input>),
@@ -221,15 +221,15 @@ pub enum FunctionIdentifierTypeSuffix<'input> {
 /// and `VARYING` tails belong to the keyword-spelled types; on a generic
 /// type they made `f(mytype year)` ambiguous between a type with an
 /// interval qualifier and a parameter named `mytype` of type `year`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionGenericTypeTail<'input> {
     pub precision: Option<TypePrecision<'input>>,
-    pub array_suffixes: Vec<ArraySuffix<'input>>,
+    pub array_suffixes: recursa::ArenaVec<'input, ArraySuffix<'input>>,
     pub array_kw_suffix: Option<ArrayKwSuffix<'input>>,
 }
 
 /// Identifier-spelled cast type or `qualified%TYPE` reference.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FunctionIdentifierType<'input> {
     pub name: FunctionTypeName<'input>,
     pub suffix: FunctionIdentifierTypeSuffix<'input>,
@@ -237,20 +237,20 @@ pub struct FunctionIdentifierType<'input> {
 
 /// A function type with the qualified identifier prefix factored before the
 /// `%TYPE` versus cast-suffix decision.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionType<'input> {
     Builtin(FunctionBuiltinType<'input>),
     Identifier(FunctionIdentifierType<'input>),
 }
 
 /// A function parameter type uses the same factored grammar as a return type.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncArgType<'input> {
     pub value: FunctionType<'input>,
 }
 
 /// `[mode] name type [default]` -- a named function parameter with mode first.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct NamedArg<'input> {
     pub mode: Option<ArgMode>,
     pub name: crate::tokens::type_function_name<'input>,
@@ -260,7 +260,7 @@ pub struct NamedArg<'input> {
 /// `name mode type [default]` -- a named function parameter with mode after name.
 ///
 /// Postgres allows `f2 OUT anyelement` where the mode follows the name.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct NameModeArg<'input> {
     pub name: crate::tokens::type_function_name<'input>,
     pub mode: ArgMode,
@@ -268,14 +268,14 @@ pub struct NameModeArg<'input> {
 }
 
 /// `[mode] type [default]` -- an unnamed function parameter.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct UnnamedArg<'input> {
     pub mode: Option<ArgMode>,
     pub type_name: FuncArgType<'input>,
 }
 
 /// Default value separator: `DEFAULT` or `=`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ParamDefaultSep {
     #[tok(DEFAULT)]
     Default,
@@ -284,7 +284,7 @@ pub enum ParamDefaultSep {
 }
 
 /// `DEFAULT expr` or `= expr` trailing default on a function parameter.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ParamDefault<'input> {
     pub sep: ParamDefaultSep,
     pub value: Expr<'input>,
@@ -296,7 +296,7 @@ pub struct ParamDefault<'input> {
 ///
 /// Variant ordering: `NameMode` and `Named` start with a name; the token
 /// after it (an argument mode, a type, or the end of the argument) decides.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionArg<'input> {
     /// `param_name arg_class func_type`.
     NameMode(NameModeArg<'input>),
@@ -309,7 +309,7 @@ pub enum FunctionArg<'input> {
 /// gram.y `func_arg_with_default: func_arg | func_arg DEFAULT a_expr |
 /// func_arg '=' a_expr`, the parameter of `CREATE FUNCTION` / `CREATE
 /// PROCEDURE`. Aggregates take a bare `func_arg`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncParam<'input> {
     pub arg: FunctionArg<'input>,
     pub default: Option<ParamDefault<'input>>,
@@ -318,7 +318,7 @@ pub struct FuncParam<'input> {
 // --- Function options (unordered list) ---
 
 /// `IMMUTABLE` / `STABLE` / `VOLATILE` volatility.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum VolatilityOption {
     #[tok(IMMUTABLE)]
     Immutable,
@@ -330,7 +330,7 @@ pub enum VolatilityOption {
 
 /// `PARALLEL SAFE` / `PARALLEL RESTRICTED` / `PARALLEL UNSAFE` parallelism
 /// declaration.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ParallelMode {
     #[tok(SAFE)]
     Safe,
@@ -341,7 +341,7 @@ pub enum ParallelMode {
 }
 
 /// `PARALLEL { SAFE | RESTRICTED | UNSAFE }` function option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ParallelOption {
     #[tok(PARALLEL, this)]
     pub mode: ParallelMode,
@@ -349,7 +349,7 @@ pub struct ParallelOption {
 
 /// Separator between a SET config parameter name and its value — either
 /// `=` or `TO`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetAssignSep {
     #[tok(EQ)]
     Eq,
@@ -363,19 +363,19 @@ pub enum SetAssignSep {
 /// Postgres `set_rest_more: ColId TO var_list | ColId '=' var_list` admits a
 /// comma-separated `var_list`, so values like `SET datestyle to iso, mdy`
 /// (rules.sql) parse cleanly.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetFuncOption<'input> {
     #[tok(SET, this)]
     pub name: literal::AliasName<'input>,
     pub sep: SetAssignSep,
     #[sep(COMMA)]
-    pub values: recursa::Vec1<crate::ast::session::set_reset::SetValue<'input>>,
+    pub values: recursa::ArenaVec1<'input, crate::ast::session::set_reset::SetValue<'input>>,
 }
 
 /// `STRICT` / `CALLED ON NULL INPUT` / `RETURNS NULL ON NULL INPUT`.
 ///
 /// Variant ordering: longer (multi-keyword) forms before `Strict`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum StrictnessOption {
     #[tok(CALLED, ON, NULL, INPUT)]
     CalledOnNullInput,
@@ -386,7 +386,7 @@ pub enum StrictnessOption {
 }
 
 /// `AS body` clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AsOption<'input> {
     #[tok(AS, this)]
     pub body: FuncBody<'input>,
@@ -397,7 +397,7 @@ pub struct AsOption<'input> {
 /// Variant ordering: multi-token options listed before single-keyword
 /// options, and `StrictnessOption` (which itself has multi-keyword variants)
 /// listed before plain `VolatilityOption`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FuncOption<'input> {
     Strictness(StrictnessOption),
     Volatility(VolatilityOption),
@@ -436,7 +436,7 @@ pub enum FuncOption<'input> {
 /// form (`CREATE PROCEDURE ptest8(x text) BEGIN ATOMIC END`); non-empty
 /// bodies remain outside the issue-9 strict-statement grammar and surface
 /// as a structured parse error.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[allow(
     clippy::large_enum_variant,
     reason = "keep the public parser AST variants inline and source-compatible"
@@ -450,20 +450,20 @@ pub enum RoutineBody<'input> {
 
 /// Empty `BEGIN ATOMIC END` body. Non-empty bodies are not yet modelled —
 /// see `FuncOption::BeginAtomicEmpty` for the rationale.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum BeginAtomicEmpty {
     #[tok(BEGIN, ATOMIC, END)]
     Value,
 }
 
 /// `RETURN expr` option on CREATE FUNCTION (SQL-standard body form).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ReturnOption<'input> {
     #[tok(RETURN, this)]
     pub expr: Expr<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SecurityMode {
     #[tok(DEFINER)]
     Definer,
@@ -471,19 +471,19 @@ pub enum SecurityMode {
     Invoker,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SecurityOption {
     #[tok(SECURITY, this)]
     pub mode: SecurityMode,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ExternalSecurityOption {
     #[tok(EXTERNAL, this)]
     pub inner: SecurityOption,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum LeakproofOption {
     #[tok(NOT, LEAKPROOF)]
     NotLeakproof,
@@ -491,34 +491,34 @@ pub enum LeakproofOption {
     Leakproof,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CostOption<'input> {
     /// gram.y `common_func_opt_item: COST NumericOnly`.
     #[tok(COST, this)]
     pub value: crate::ast::shared::numbers::NumericOnly<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct RowsOption<'input> {
     /// gram.y `common_func_opt_item: ROWS NumericOnly`.
     #[tok(ROWS, this)]
     pub value: crate::ast::shared::numbers::NumericOnly<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SupportOption<'input> {
     #[tok(SUPPORT, this)]
     pub name: crate::ast::shared::names::QualifiedName<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(TRANSFORM, this)]
 pub struct TransformOption<'input> {
     #[sep(COMMA)]
-    pub items: recursa::Vec1<TransformForType<'input>>,
+    pub items: recursa::ArenaVec1<'input, TransformForType<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TransformForType<'input> {
     #[tok(FOR, TYPE, this)]
     pub type_name: CastType<'input>,
@@ -538,18 +538,18 @@ pub struct ExtractedFuncBody<'a> {
 ///
 /// The wrapper keeps the delimiters around the complete comma-separated list
 /// while dereferencing to the underlying vector for callers.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct FunctionParameters<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub Vec<FuncParam<'input>>,
+    pub recursa::ArenaVec<'input, FuncParam<'input>>,
 );
 
 /// CREATE [OR REPLACE] FUNCTION statement.
 ///
 /// Function options after the signature/RETURNS may appear in any order.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(CREATE, this)]
 pub struct CreateFunctionStmt<'input> {
     #[presence(OR, REPLACE)]
@@ -558,7 +558,7 @@ pub struct CreateFunctionStmt<'input> {
     pub name: crate::ast::shared::names::FuncDefName<'input>,
     pub args: FunctionParameters<'input>,
     pub returns: Option<FuncReturnsClause<'input>>,
-    pub options: Vec<FuncOption<'input>>,
+    pub options: recursa::ArenaVec<'input, FuncOption<'input>>,
     /// gram.y `opt_routine_body`, after `opt_createfunc_opt_list`.
     pub body: Option<RoutineBody<'input>>,
 }
@@ -615,7 +615,7 @@ fn strip_dollar_quotes(s: &str) -> &str {
 
 /// A single entry in a `DROP FUNCTION` target list: optional qualified name
 /// plus an optional parenthesized signature.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DropFunctionTarget<'input> {
     pub name: crate::ast::shared::names::FuncDefName<'input>,
     pub args: Option<FunctionParameters<'input>>,
@@ -625,27 +625,27 @@ pub struct DropFunctionTarget<'input> {
 ///
 /// The argument list on each target is optional: when the function name is
 /// unambiguous in the current schema, Postgres allows omitting the signature.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, FUNCTION, this)]
 pub struct DropFunctionStmt<'input> {
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
     #[sep(COMMA)]
     /// gram.y `function_with_argtypes_list`: one or more targets.
-    pub targets: recursa::Vec1<DropFunctionTarget<'input>>,
+    pub targets: recursa::ArenaVec1<'input, DropFunctionTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
 
 /// DROP ROUTINE statement — Postgres synonym for DROP FUNCTION/PROCEDURE
 /// that dispatches by name/signature at lookup time.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, ROUTINE, this)]
 pub struct DropRoutineStmt<'input> {
     #[presence(IF, EXISTS)]
     pub if_exists: bool,
     #[sep(COMMA)]
     /// gram.y `function_with_argtypes_list`: one or more targets.
-    pub targets: recursa::Vec1<DropFunctionTarget<'input>>,
+    pub targets: recursa::ArenaVec1<'input, DropFunctionTarget<'input>>,
     pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
 }
 
@@ -655,7 +655,7 @@ pub struct DropRoutineStmt<'input> {
 
 /// `PARALLEL { SAFE | RESTRICTED | UNSAFE }` mode keyword on a function
 /// option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterFuncParallelMode {
     #[tok(SAFE)]
     Safe,
@@ -666,14 +666,14 @@ pub enum AlterFuncParallelMode {
 }
 
 /// `PARALLEL { SAFE | RESTRICTED | UNSAFE }` function option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterFuncParallelItem {
     #[tok(PARALLEL, this)]
     pub mode: AlterFuncParallelMode,
 }
 
 /// `SECURITY { DEFINER | INVOKER }` mode keyword.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterFuncSecurityMode {
     #[tok(DEFINER)]
     Definer,
@@ -682,7 +682,7 @@ pub enum AlterFuncSecurityMode {
 }
 
 /// `SECURITY { DEFINER | INVOKER }` function option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterFuncSecurityItem {
     #[tok(SECURITY, this)]
     pub mode: AlterFuncSecurityMode,
@@ -690,28 +690,28 @@ pub struct AlterFuncSecurityItem {
 
 /// `EXTERNAL SECURITY { DEFINER | INVOKER }` function option — older
 /// SQL-standard spelling, still accepted by gram.y.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterFuncExternalSecurityItem {
     #[tok(EXTERNAL, this)]
     pub inner: AlterFuncSecurityItem,
 }
 
 /// `COST NumericOnly` function option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterFuncCostItem<'input> {
     #[tok(COST, this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `ROWS NumericOnly` function option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterFuncRowsItem<'input> {
     #[tok(ROWS, this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `SUPPORT any_name` function option — names a planner-support function.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterFuncSupportItem<'input> {
     #[tok(SUPPORT, this)]
     pub name: QualifiedName<'input>,
@@ -729,7 +729,7 @@ pub struct AlterFuncSupportItem<'input> {
 /// SECURITY ...` and `NOT LEAKPROOF` and `PARALLEL ...` and `SECURITY
 /// ...` are 2-3 tokens; the bare keyword variants are 1 token. All
 /// leading tokens are distinct so longest-match is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CommonFuncOptItem<'input> {
     // Multi-keyword forms first.
     #[tok(CALLED, ON, NULL, INPUT)]
@@ -767,9 +767,9 @@ pub enum CommonFuncOptItem<'input> {
 /// `common_func_opt_item` as the base case, not empty). The trailing
 /// `RESTRICT` is gram.y's deprecated `opt_restrict`, present for SQL
 /// compliance and ignored semantically.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterFuncOptions<'input> {
-    pub items: recursa::Vec1<CommonFuncOptItem<'input>>,
+    pub items: recursa::ArenaVec1<'input, CommonFuncOptItem<'input>>,
     #[presence(RESTRICT)]
     pub restrict: bool,
 }
@@ -786,7 +786,7 @@ pub struct AlterFuncOptions<'input> {
 /// - Other variants have distinct leading keywords (`RENAME`, `OWNER`,
 ///   `DEPENDS`, `NO`, plus all the `common_func_opt_item` first tokens),
 ///   so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterFuncAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -804,7 +804,7 @@ pub enum AlterFuncAction<'input> {
 /// The argument signature reuses [`DropFunctionTarget`] (gram.y's
 /// `function_with_argtypes`), which already covers both the `name(args)`
 /// and bare-`name` shapes.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterFunctionStmt<'input> {
     #[tok(ALTER, FUNCTION, this)]
     pub target: crate::ast::ddl::function::DropFunctionTarget<'input>,
@@ -814,7 +814,7 @@ pub struct AlterFunctionStmt<'input> {
 /// `ALTER ROUTINE function_with_argtypes action` — same action shape as
 /// [`AlterFunctionStmt`]. `ROUTINE` is gram.y's dispatch-at-lookup
 /// synonym that resolves to a function or procedure by name/signature.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterRoutineStmt<'input> {
     #[tok(ALTER, ROUTINE, this)]
     pub target: crate::ast::ddl::function::DropFunctionTarget<'input>,

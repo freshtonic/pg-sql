@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("DROP FOREIGN DATA WRAPPER fdw1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropForeignStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropForeignStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt.kind, ForeignObjectKind::DataWrapper));
         assert!(input.is_eof());
     }
@@ -20,7 +21,8 @@ mod tests {
         let lexed = crate::lex("DROP FOREIGN TABLE IF EXISTS ft1, ft2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropForeignStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropForeignStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt.kind, ForeignObjectKind::Table));
         assert_eq!(stmt.names.len(), 2);
         assert!(input.is_eof());
@@ -37,7 +39,8 @@ mod tests {
         let lexed = crate::lex("ALTER FOREIGN DATA WRAPPER foo");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterForeignStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterForeignStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -49,7 +52,8 @@ mod tests {
         let lexed = crate::lex("ALTER SERVER s0");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterServerStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterServerStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -77,7 +81,8 @@ mod tests {
 
     #[test]
     fn create_foreign_data_wrapper_bare_roundtrips() {
-        let stmt: CreateForeignStmt = parse_stmt("CREATE FOREIGN DATA WRAPPER foo");
+        let stmt = parse_stmt::<CreateForeignStmt>("CREATE FOREIGN DATA WRAPPER foo");
+        let stmt = stmt.ast();
         if let CreateForeignBody::Fdw(b) = &stmt.body {
             assert_eq!(b.name.text(), "foo");
             assert!(b.fdw_options.is_empty());
@@ -139,7 +144,8 @@ mod tests {
 
     #[test]
     fn create_server_minimal_roundtrips() {
-        let stmt: CreateServerStmt = parse_stmt("CREATE SERVER s1 FOREIGN DATA WRAPPER foo");
+        let stmt = parse_stmt::<CreateServerStmt>("CREATE SERVER s1 FOREIGN DATA WRAPPER foo");
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.text(), "s1");
         assert!(stmt.if_not_exists.is_none());
         assert!(stmt.server_type.is_none());

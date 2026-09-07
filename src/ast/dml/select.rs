@@ -9,14 +9,14 @@ use crate::ast::shared::names::QualifiedName;
 use crate::tokens::literal;
 
 /// A bare wildcard token used by target lists and inherited table names.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SelectStar {
     #[tok(STAR)]
     Value,
 }
 
 /// An expression target with its optional output alias.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SelectExprItem<'input> {
     pub expr: Expr<'input>,
     pub alias: Option<Alias<'input>>,
@@ -27,7 +27,7 @@ pub struct SelectExprItem<'input> {
 /// PostgreSQL gives bare `*` its own `target_el` production rather than
 /// admitting it as an expression. The enum also makes `* AS alias`
 /// unconstructible while preserving aliases for expression targets.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[allow(
     clippy::large_enum_variant,
     reason = "keep the public parser AST variants inline and source-compatible"
@@ -41,7 +41,7 @@ pub enum SelectItem<'input> {
 /// Uses AliasName so keywords are accepted (e.g., `SELECT 1 AS true`).
 /// The optional UESCAPE suffix applies when the alias is a unicode-quoted
 /// identifier (`U&"..."`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AsAlias<'input> {
     #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
@@ -52,7 +52,7 @@ pub struct AsAlias<'input> {
 ///
 /// Variant ordering: WithAs (`AS name`) has a longer first_pattern than
 /// Bare (`ident`), so longest-match-wins picks it when AS is present.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum Alias<'input> {
     WithAs(AsAlias<'input>),
     Bare(literal::SelectBareAliasName<'input>),
@@ -77,16 +77,16 @@ impl<'input> Alias<'input> {
 /// its own. A statement that breaks its target list keeps `FROM` attached to
 /// the last item while it still fits, and moves `FROM` onto its own line only
 /// when the clause itself is too wide.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(group = consistent)]
 #[tok(FROM, this)]
 pub struct FromClause<'input> {
     #[sep(COMMA)]
-    pub tables: recursa::Vec1<TableRef<'input>>,
+    pub tables: recursa::ArenaVec1<'input, TableRef<'input>>,
 }
 
 /// Table name with inheritance marker and optional alias: `person* p`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct InheritedTable<'input> {
     pub name: QualifiedName<'input>,
     #[tok(STAR, this)]
@@ -94,7 +94,7 @@ pub struct InheritedTable<'input> {
 }
 
 /// `AS name [(col1, col2)]` table alias form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TableAliasWithAs<'input> {
     /// gram.y `alias_clause: AS ColId ...`.
     #[tok(AS, this)]
@@ -105,7 +105,7 @@ pub struct TableAliasWithAs<'input> {
 /// Bare `name [(col1, col2)]` table alias form. PostgreSQL's `alias_clause`
 /// admits `ColId`; the narrower category keeps join and clause starters from
 /// being consumed as aliases.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TableAliasBare<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub columns: Option<TableAliasColumnList<'input>>,
@@ -116,29 +116,29 @@ pub struct TableAliasBare<'input> {
 /// The delimiters wrap the list as a whole. Attaching them to the repeated
 /// field would instead require a fresh pair of parentheses around every
 /// element after a comma.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct TableAliasColumnList<'input>(
     /// gram.y `name_list`.
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
 );
 
 /// Table alias: `AS name [(col1, col2)]` or bare `name [(col1, col2)]`.
 ///
 /// Variant ordering: `WithAs` (`AS`) before `Bare` (ident).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TableAlias<'input> {
     WithAs(TableAliasWithAs<'input>),
     Bare(TableAliasBare<'input>),
 }
 
 /// Subquery in FROM: `(SELECT ...) AS alias`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SubqueryRef<'input> {
     pub open: SelectLParen,
-    pub query: Box<Subquery<'input>>,
+    pub query: recursa::ArenaBox<'input, Subquery<'input>>,
     pub close: SelectRParen,
     pub alias: Option<TableAlias<'input>>,
 }
@@ -148,17 +148,17 @@ pub struct SubqueryRef<'input> {
 /// Distinguished from `SubqueryRef` by what the `(` contains: a subquery
 /// starts with `SELECT` / `VALUES` / `TABLE` / `WITH` (all keywords),
 /// whereas a parenthesized join tree starts with a table name (ident).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ParenJoinRef<'input> {
     pub open: SelectLParen,
-    pub table: Box<TableRef<'input>>,
+    pub table: recursa::ArenaBox<'input, TableRef<'input>>,
     pub close: SelectRParen,
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
 /// Parenthesized FROM source with the delimiters and trailing alias shared by
 /// query and join bodies.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ParenTableRef<'input> {
     pub open: SelectLParen,
     pub body: ParenTableBody<'input>,
@@ -166,7 +166,7 @@ pub struct ParenTableRef<'input> {
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ParenTableBody<'input> {
     #[parse(lr_conflict(
         action = reduce,
@@ -180,8 +180,8 @@ pub enum ParenTableBody<'input> {
         lookahead = { RPAREN_SELECT_LA },
         expect = 1
     ))]
-    Query(Box<Subquery<'input>>),
-    Table(Box<TableRef<'input>>),
+    Query(recursa::ArenaBox<'input, Subquery<'input>>),
+    Table(recursa::ArenaBox<'input, TableRef<'input>>),
 }
 
 pub type SelectLParen = ParenthesizedOpen;
@@ -189,10 +189,10 @@ pub type SelectLParen = ParenthesizedOpen;
 pub type SelectRParen = ParenthesizedClose;
 
 /// `LATERAL (subquery) [alias]` — the parenthesized-subquery LATERAL form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LateralSubquery<'input> {
     #[tok(LPAREN, this, RPAREN)]
-    pub query: Box<Subquery<'input>>,
+    pub query: recursa::ArenaBox<'input, Subquery<'input>>,
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
@@ -201,17 +201,17 @@ pub struct LateralSubquery<'input> {
 ///
 /// Variant ordering: `JsonTable` / `XmlTable` (soft keyword) before `Func`,
 /// which would otherwise reclaim them as ordinary function names.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum LateralBody<'input> {
     Subquery(LateralSubquery<'input>),
-    JsonTable(Box<JsonTableRef<'input>>),
-    XmlTable(Box<XmlTableRef<'input>>),
-    Func(Box<FuncTableRef<'input>>),
+    JsonTable(recursa::ArenaBox<'input, JsonTableRef<'input>>),
+    XmlTable(recursa::ArenaBox<'input, XmlTableRef<'input>>),
+    Func(recursa::ArenaBox<'input, FuncTableRef<'input>>),
 }
 
 /// `LATERAL` table reference in FROM: `LATERAL (VALUES(...)) v`,
 /// `LATERAL func(...)`, `LATERAL XMLTABLE(...)`, `LATERAL JSON_TABLE(...)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LateralRef<'input> {
     #[tok(LATERAL, this)]
     pub body: LateralBody<'input>,
@@ -221,7 +221,7 @@ pub struct LateralRef<'input> {
 ///
 /// `ONLY` means do not recurse into inheritance children (the opposite
 /// of the `table *` `InheritedTable` form).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PlainTable<'input> {
     #[presence(ONLY)]
     pub only: bool,
@@ -239,14 +239,14 @@ pub struct PlainTable<'input> {
 ///
 /// Variant ordering: `WithAs` (starts with `AS`) must be listed before `Bare`
 /// so longest-match-wins picks it when `AS` is present.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum PlainTableAlias<'input> {
     WithAs(PlainTableAliasWithAs<'input>),
     Bare(PlainTableAliasBare<'input>),
 }
 
 /// `AS name [(col, ...)]` form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PlainTableAliasWithAs<'input> {
     /// gram.y `alias_clause: AS ColId ...`.
     #[tok(AS, this)]
@@ -255,7 +255,7 @@ pub struct PlainTableAliasWithAs<'input> {
 }
 
 /// Bare `name [(col, ...)]` form using PostgreSQL's `ColId` alias category.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PlainTableAliasBare<'input> {
     pub name: crate::tokens::ColId<'input>,
     pub columns: Option<TableAliasColumnList<'input>>,
@@ -263,7 +263,7 @@ pub struct PlainTableAliasBare<'input> {
 
 /// A column definition inside a function-table column-def-list:
 /// `name type` (e.g., `a int`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncTableColumnDef<'input> {
     /// gram.y `TableFuncElement: ColId Typename ...`.
     pub name: crate::tokens::ColId<'input>,
@@ -272,14 +272,14 @@ pub struct FuncTableColumnDef<'input> {
 
 /// `[AS] alias (col type, ...)` or just `(col type, ...)` -- the
 /// column definition list form for table-returning functions.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ColumnDefList<'input> {
     /// gram.y `func_alias_clause: [AS] ColId '(' TableFuncElementList ')'`.
     #[tok(optional(AS), this)]
     pub name: Option<crate::tokens::ColId<'input>>,
     #[tok(LPAREN, this, RPAREN)]
     #[sep(COMMA)]
-    pub columns: Vec<FuncTableColumnDef<'input>>,
+    pub columns: recursa::ArenaVec<'input, FuncTableColumnDef<'input>>,
 }
 
 /// Alias of a function table reference.
@@ -288,39 +288,39 @@ pub struct ColumnDefList<'input> {
 /// type per item, representing both ordinary alias columns and a function
 /// column-definition list without two alternatives competing on the same
 /// `AS name (` or `name (` prefix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FuncTableAlias<'input> {
     WithAs(FuncTableAliasWithAs<'input>),
     Named(FuncTableAliasNamed<'input>),
     Columns(FuncTableAliasColumns<'input>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncTableAliasWithAs<'input> {
     pub as_keyword: SelectAsKeyword,
     pub body: FuncTableAliasAfterAs<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SelectAsKeyword {
     #[tok(AS)]
     Value,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FuncTableAliasAfterAs<'input> {
     Named(FuncTableAliasAsNamed<'input>),
     Columns(FuncTableAliasColumns<'input>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncTableAliasAsNamed<'input> {
     /// gram.y `alias_clause: AS ColId ...`.
     pub name: crate::tokens::ColId<'input>,
     pub columns: Option<FuncTableAliasColumns<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncTableAliasNamed<'input> {
     /// gram.y `alias_clause: ColId ...`; `Ident` (every non-reserved word)
     /// also admitted `left`, `join` and the other `type_func_name`
@@ -329,15 +329,15 @@ pub struct FuncTableAliasNamed<'input> {
     pub columns: Option<FuncTableAliasColumns<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncTableAliasColumns<'input> {
     pub open: SelectLParen,
     #[sep(COMMA)]
-    pub columns: recursa::Vec1<FuncTableAliasColumn<'input>>,
+    pub columns: recursa::ArenaVec1<'input, FuncTableAliasColumn<'input>>,
     pub close: SelectRParen,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncTableAliasColumn<'input> {
     /// gram.y `name_list` / `TableFuncElement`, both `ColId`.
     pub name: crate::tokens::ColId<'input>,
@@ -345,7 +345,7 @@ pub struct FuncTableAliasColumn<'input> {
 }
 
 /// Function call used as table reference with optional WITH ORDINALITY and alias.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FuncTableRef<'input> {
     pub func: FunctionApplicationExpr<'input>,
     #[presence(WITH, ORDINALITY)]
@@ -368,7 +368,7 @@ pub struct FuncTableRef<'input> {
 /// enum as new corpus statements demand additional special forms.
 ///
 /// Each keyword-led form has a distinct leading token.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SpecialFuncTableExpr<'input> {
     /// `CAST(expr AS type [COLLATE "c"])`.
     Cast(crate::ast::shared::expr::CastCall<'input>),
@@ -384,7 +384,7 @@ pub enum SpecialFuncTableExpr<'input> {
 }
 
 /// `FROM`-clause special-form function expression with optional alias.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SpecialFuncTableRef<'input> {
     pub func: SpecialFuncTableExpr<'input>,
     #[presence(WITH, ORDINALITY)]
@@ -401,21 +401,21 @@ pub struct SpecialFuncTableRef<'input> {
 
 /// `[AS] ‹name›` — a path-variable name (after the JSON_TABLE path, or on a
 /// `NESTED PATH`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonTablePathName<'input> {
     #[tok(AS, this)]
     pub name: literal::AliasName<'input>,
 }
 
 /// `PATH '‹jsonpath›'` clause on a JSON_TABLE column.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonTableColumnPath<'input> {
     #[tok(PATH, this)]
     pub path_str: literal::StringLit<'input>,
 }
 
 /// `FOR ORDINALITY` — the row-counter column kind.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JsonTableOrdinality {
     #[tok(FOR, ORDINALITY)]
     Value,
@@ -426,7 +426,7 @@ pub enum JsonTableOrdinality {
 ///
 /// `EXISTS` columns and regular columns are merged — `exists` is just an
 /// optional marker — and clauses are parsed permissively.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonTableTypedColumn<'input> {
     pub ty: CastType<'input>,
     #[presence(EXISTS)]
@@ -443,7 +443,7 @@ pub struct JsonTableTypedColumn<'input> {
 ///
 /// The required FORMAT/JSON pair wraps the complete optional-encoding body.
 /// This keeps the clause present even when ENCODING is absent.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(FORMAT, JSON, this)]
 pub struct JsonTableFormat<'input> {
     pub encoding: Option<JsonEncoding<'input>>,
@@ -453,7 +453,7 @@ pub struct JsonTableFormat<'input> {
 ///
 /// `Ordinality` leads with `FOR`, `Typed` with a type — distinct first
 /// tokens, so the enum dispatches cleanly.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum JsonTableColumnKind<'input> {
     Ordinality(JsonTableOrdinality),
@@ -461,7 +461,7 @@ pub enum JsonTableColumnKind<'input> {
 }
 
 /// A non-`NESTED` JSON_TABLE column: `‹name› {FOR ORDINALITY | ‹type› ...}`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonTableValuedColumn<'input> {
     pub name: literal::AliasName<'input>,
     pub kind: JsonTableColumnKind<'input>,
@@ -469,7 +469,7 @@ pub struct JsonTableValuedColumn<'input> {
 
 /// `NESTED [PATH] '‹jsonpath›' [AS ‹name›] COLUMNS ( ... )` — projects a
 /// nested jsonpath into additional columns.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonTableNestedColumn<'input> {
     #[tok(NESTED, optional(PATH), this)]
     pub path_str: literal::StringLit<'input>,
@@ -483,28 +483,28 @@ pub struct JsonTableNestedColumn<'input> {
 /// column literally named `nested` would also match `Valued`'s
 /// keyword-permissive `AliasName`, so `Nested` is tried first and falls
 /// through on non-NESTED syntax.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JsonTableColumn<'input> {
     Nested(JsonTableNestedColumn<'input>),
     Valued(JsonTableValuedColumn<'input>),
 }
 
 /// `COLUMNS ( ‹column› [, ...] )` — the JSON_TABLE column list (may be empty).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(COLUMNS, LPAREN, this, RPAREN)]
 pub struct JsonTableColumnList<'input> {
     #[sep(COMMA)]
-    pub list: Vec<JsonTableColumn<'input>>,
+    pub list: recursa::ArenaVec<'input, JsonTableColumn<'input>>,
 }
 
 /// Inner contents of `JSON_TABLE ( ‹ctx› , ‹path› [AS name] [PASSING ...]
 /// COLUMNS ( ... ) [behavior ON ERROR] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonTableInner<'input> {
-    pub context: Box<Expr<'input>>,
+    pub context: recursa::ArenaBox<'input, Expr<'input>>,
     pub context_format: Option<JsonTableFormat<'input>>,
     #[tok(COMMA, this)]
-    pub path: Box<Expr<'input>>,
+    pub path: recursa::ArenaBox<'input, Expr<'input>>,
     pub path_name: Option<JsonTablePathName<'input>>,
     pub passing: Option<JsonPassing<'input>>,
     pub column_list: JsonTableColumnList<'input>,
@@ -512,14 +512,14 @@ pub struct JsonTableInner<'input> {
 }
 
 /// The `JSON_TABLE ( ... )` construct.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonTable<'input> {
     #[tok(JSON_TABLE, LPAREN, this, RPAREN)]
     pub inner: JsonTableInner<'input>,
 }
 
 /// `JSON_TABLE(...)` as a table reference, with an optional table alias.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JsonTableRef<'input> {
     pub table: JsonTable<'input>,
     pub alias: Option<TableAlias<'input>>,
@@ -531,7 +531,7 @@ pub struct JsonTableRef<'input> {
 // function in FROM/JOIN, projecting an XPath match into rows and columns.
 
 /// One entry of an `XMLNAMESPACES(...)` list: `‹uri› AS ‹prefix›`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlNamespaceNamed<'input> {
     /// gram.y `xml_namespace_el: b_expr AS ColLabel` (exclusions as in
     /// `PositionInner`).
@@ -565,13 +565,13 @@ pub struct XmlNamespaceNamed<'input> {
         Or,
         And
     )))]
-    pub uri: Box<Expr<'input>>,
+    pub uri: recursa::ArenaBox<'input, Expr<'input>>,
     #[tok(AS, this)]
     pub prefix: literal::AliasName<'input>,
 }
 
 /// The `DEFAULT ‹uri›` entry of an `XMLNAMESPACES(...)` list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlNamespaceDefault<'input> {
     /// gram.y `xml_namespace_el: DEFAULT b_expr`.
     #[parse(pratt(exclude(
@@ -605,11 +605,11 @@ pub struct XmlNamespaceDefault<'input> {
         And
     )))]
     #[tok(DEFAULT, this)]
-    pub uri: Box<Expr<'input>>,
+    pub uri: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// One namespace declaration: a `DEFAULT ‹uri›` or a `‹uri› AS ‹prefix›`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum XmlNamespaceItem<'input> {
     Default(XmlNamespaceDefault<'input>),
     Named(XmlNamespaceNamed<'input>),
@@ -617,15 +617,15 @@ pub enum XmlNamespaceItem<'input> {
 
 /// `XMLNAMESPACES ( ‹item› [, ...] ) ,` — the optional namespace prefix of
 /// `XMLTABLE`. The trailing comma separates it from the row expression.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(XMLNAMESPACES, LPAREN, this, RPAREN, COMMA)]
 pub struct XmlTableNamespaces<'input> {
     #[sep(COMMA)]
-    pub items: recursa::Vec1<XmlNamespaceItem<'input>>,
+    pub items: recursa::ArenaVec1<'input, XmlNamespaceItem<'input>>,
 }
 
 /// `PATH '‹xpath›'` clause on an XMLTABLE column.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlTableColumnPath<'input> {
     /// gram.y `xmltable_column_option_el: PATH b_expr` (exclusions as in
     /// `PositionInner`), so the path ends before a following `NOT NULL`.
@@ -660,11 +660,11 @@ pub struct XmlTableColumnPath<'input> {
         And
     )))]
     #[tok(PATH, this)]
-    pub xpath: Box<Expr<'input>>,
+    pub xpath: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `DEFAULT ‹expr›` clause on an XMLTABLE column.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlTableColumnDefault<'input> {
     /// gram.y `xmltable_column_option_el: DEFAULT b_expr` (exclusions as in
     /// `PositionInner`), so the default ends before a following `NOT NULL`.
@@ -699,11 +699,11 @@ pub struct XmlTableColumnDefault<'input> {
         And
     )))]
     #[tok(DEFAULT, this)]
-    pub value: Box<Expr<'input>>,
+    pub value: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `NOT NULL` / `NULL` nullability marker on an XMLTABLE column.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum XmlTableColumnNull {
     #[tok(NOT, NULL)]
     NotNull,
@@ -712,7 +712,7 @@ pub enum XmlTableColumnNull {
 }
 
 /// `‹type› [PATH '...'] [DEFAULT expr] [NOT NULL|NULL]` — the typed-column tail.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlTableTypedColumn<'input> {
     pub ty: CastType<'input>,
     pub path: Option<XmlTableColumnPath<'input>>,
@@ -721,56 +721,56 @@ pub struct XmlTableTypedColumn<'input> {
 }
 
 /// The tail of an XMLTABLE column, after its name: `FOR ORDINALITY` or a type.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum XmlTableColumnKind<'input> {
     Ordinality(JsonTableOrdinality),
     Typed(XmlTableTypedColumn<'input>),
 }
 
 /// One column of an XMLTABLE `COLUMNS` list: `‹name› ‹kind›`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlTableColumn<'input> {
     pub name: literal::AliasName<'input>,
     pub kind: XmlTableColumnKind<'input>,
 }
 
 /// `COLUMNS ‹column› [, ...]` — the non-empty XMLTABLE column list.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(COLUMNS, this)]
 pub struct XmlTableColumnList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<XmlTableColumn<'input>>,
+    pub recursa::ArenaVec1<'input, XmlTableColumn<'input>>,
 );
 
 /// Inner contents of `XMLTABLE ( [XMLNAMESPACES(...),] ‹row_xpath›
 /// PASSING [BY {REF|VALUE}] ‹doc› [BY {REF|VALUE}] COLUMNS ‹col› [, ...] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlTableInner<'input> {
     pub namespaces: Option<XmlTableNamespaces<'input>>,
-    pub row_expr: Box<Expr<'input>>,
+    pub row_expr: recursa::ArenaBox<'input, Expr<'input>>,
     pub passing: XmlTablePassing<'input>,
     pub by_after: Option<XmlPassingBy>,
     pub column_list: XmlTableColumnList<'input>,
 }
 
 /// Mandatory `PASSING` clause with an optional `BY` mode.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(PASSING, this)]
 pub struct XmlTablePassing<'input> {
     pub by: Option<XmlPassingBy>,
-    pub doc: Box<Expr<'input>>,
+    pub doc: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// The `XMLTABLE ( ... )` construct.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlTable<'input> {
     #[tok(XMLTABLE, LPAREN, this, RPAREN)]
     pub inner: XmlTableInner<'input>,
 }
 
 /// `XMLTABLE(...)` as a table reference, with an optional table alias.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct XmlTableRef<'input> {
     pub table: XmlTable<'input>,
     pub alias: Option<TableAlias<'input>>,
@@ -779,16 +779,16 @@ pub struct XmlTableRef<'input> {
 // --- ROWS FROM (...) table reference ---
 
 /// `AS ( col type [, ...] )` column-definition list on a `ROWS FROM` item.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(AS, LPAREN, this, RPAREN)]
 pub struct RowsFromColDef<'input> {
     #[sep(COMMA)]
-    pub columns: Vec<FuncTableColumnDef<'input>>,
+    pub columns: recursa::ArenaVec<'input, FuncTableColumnDef<'input>>,
 }
 
 /// One function entry of a `ROWS FROM (...)` list: a function call with an
 /// optional `AS (coldef, ...)` column-definition list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct RowsFromItem<'input> {
     pub func: FunctionApplicationExpr<'input>,
     pub coldef: Option<RowsFromColDef<'input>>,
@@ -796,7 +796,7 @@ pub struct RowsFromItem<'input> {
 
 /// `ROWS FROM ( func [, ...] ) [WITH ORDINALITY] [alias]` — the multi-function
 /// table reference, evaluating several set-returning functions in parallel.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct RowsFromRef<'input> {
     pub items: RowsFromItemList<'input>,
     #[presence(WITH, ORDINALITY)]
@@ -805,12 +805,12 @@ pub struct RowsFromRef<'input> {
 }
 
 /// The parenthesized function list inside `ROWS FROM`.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(ROWS, FROM, LPAREN, this, RPAREN)]
 pub struct RowsFromItemList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<RowsFromItem<'input>>,
+    pub recursa::ArenaVec1<'input, RowsFromItem<'input>>,
 );
 
 /// Function/table name admission used in FROM.
@@ -819,7 +819,7 @@ pub struct RowsFromItemList<'input>(
 /// `COLLATION FOR (...)` special form can dispatch without competing with a
 /// generic named relation. Qualified names retain PostgreSQL's ordinary
 /// `ColId` admission.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TableFunctionName<'input> {
     Qualified(crate::ast::shared::expr::FuncCallQualifiedName<'input>),
     Name(crate::tokens::table_function_name<'input>),
@@ -829,21 +829,21 @@ pub enum TableFunctionName<'input> {
 /// ordinary identifiers and every qualified `ColId` name. Parsing that name
 /// once lets `(`, `*`, an alias, or the absence of a suffix select the source
 /// shape without comparing arbitrarily long dotted names.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct NamedTableRef<'input> {
     pub name: TableFunctionName<'input>,
     pub tail: Option<NamedTableRefTail<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum NamedTableRefTail<'input> {
-    Function(Box<NamedFunctionTableTail<'input>>),
+    Function(recursa::ArenaBox<'input, NamedFunctionTableTail<'input>>),
     Inherited(NamedInheritedTail<'input>),
     Alias(PlainTableAlias<'input>),
 }
 
 /// Function-call tail after the shared function/table name.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct NamedFunctionTableTail<'input> {
     pub application: FunctionCallApplication<'input>,
     #[presence(WITH, ORDINALITY)]
@@ -851,7 +851,7 @@ pub struct NamedFunctionTableTail<'input> {
     pub alias: Option<FuncTableAlias<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct NamedInheritedTail<'input> {
     pub star: SelectStar,
     pub alias: Option<PlainTableAlias<'input>>,
@@ -859,14 +859,14 @@ pub struct NamedInheritedTail<'input> {
 
 /// `ONLY name [alias]`, separated from identifier-led sources by its required
 /// keyword.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OnlyTableRef<'input> {
     pub only: SelectOnly,
     pub name: QualifiedName<'input>,
     pub alias: Option<PlainTableAlias<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SelectOnly {
     #[tok(ONLY)]
     Value,
@@ -876,7 +876,7 @@ pub enum SelectOnly {
 /// only valid table-name starters not covered by `TableFunctionName`; keeping them
 /// relation-only prevents XML/JSON special forms from re-entering the generic
 /// function-table grammar.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ColNameTableName {
     #[tok(VALUES)]
     Values,
@@ -972,13 +972,13 @@ pub enum ColNameTableName {
     XmlNamespaces,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ColNameTableRef<'input> {
     pub name: ColNameTableName,
     pub tail: Option<ColNameTableTail<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ColNameTableTail<'input> {
     Inherited(NamedInheritedTail<'input>),
     Alias(PlainTableAlias<'input>),
@@ -989,27 +989,27 @@ pub enum ColNameTableTail<'input> {
 /// Keyword-led special forms have distinct FIRST sets. Identifier-led table,
 /// inherited-table, alias, and function-application forms share one
 /// [`NamedTableRef`] prefix and select their continuation after the name.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SimpleTableRef<'input> {
     Lateral(LateralRef<'input>),
-    JsonTable(Box<JsonTableRef<'input>>),
-    XmlTable(Box<XmlTableRef<'input>>),
-    RowsFrom(Box<RowsFromRef<'input>>),
+    JsonTable(recursa::ArenaBox<'input, JsonTableRef<'input>>),
+    XmlTable(recursa::ArenaBox<'input, XmlTableRef<'input>>),
+    RowsFrom(recursa::ArenaBox<'input, RowsFromRef<'input>>),
     /// `CAST(expr AS type) [alias]`, `COLLATION FOR (expr) [alias]`. Each
     /// special form is keyword-led, giving it distinct LR actions from
     /// `Func` and `Table`.
-    SpecialFunc(Box<SpecialFuncTableRef<'input>>),
+    SpecialFunc(recursa::ArenaBox<'input, SpecialFuncTableRef<'input>>),
     Paren(ParenTableRef<'input>),
     Only(OnlyTableRef<'input>),
     ColName(ColNameTableRef<'input>),
-    Named(Box<NamedTableRef<'input>>),
+    Named(recursa::ArenaBox<'input, NamedTableRef<'input>>),
 }
 
 /// Join head, including the required JOIN keyword.
 ///
 /// Every alternative is non-nullable. This lets plain JOIN participate in the
 /// same deterministic prefix decision as its qualified forms.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JoinType {
     #[tok(LEFT, OUTER, JOIN)]
     LeftOuter,
@@ -1030,17 +1030,17 @@ pub enum JoinType {
 }
 
 /// JOIN condition: ON expr or USING (col, ...)
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum JoinCondition<'input> {
     On(JoinOn<'input>),
     Using(JoinUsing<'input>),
 }
 
 /// ON condition for JOIN
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct JoinOn<'input> {
     #[tok(ON, this)]
-    pub condition: Box<Expr<'input>>,
+    pub condition: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `AS alias` suffix on a JOIN ... USING column list.
@@ -1051,7 +1051,7 @@ pub struct JoinOn<'input> {
 /// `NATURAL`, ...) continue the join chain instead of being taken as the
 /// alias name — those words are `type_func_name` keywords, which a bare
 /// `Ident` would admit.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(AS, this)]
 pub struct JoinUsingAlias<'input> {
     /// gram.y `USING '(' name_list ')' opt_alias_clause`: `AS ColId`.
@@ -1059,17 +1059,17 @@ pub struct JoinUsingAlias<'input> {
 }
 
 /// Parenthesized comma-separated column list in a JOIN USING clause.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct JoinUsingColumns<'input>(
     /// gram.y `name_list`: one or more `ColId`.
     #[deref]
     #[sep(COMMA)]
-    pub recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
 );
 
 /// USING clause for JOIN: `USING (col, ...) [AS alias]`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(USING, this)]
 pub struct JoinUsing<'input> {
     pub columns: JoinUsingColumns<'input>,
@@ -1082,7 +1082,7 @@ pub struct JoinUsing<'input> {
 /// `OUTER` is optional after `LEFT`/`RIGHT`/`FULL`; the exact JoinType variants
 /// keep those longer spellings deterministic without admitting it after INNER
 /// or CROSS.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[allow(
     clippy::large_enum_variant,
     reason = "keep the public parser AST variants inline and source-compatible"
@@ -1100,7 +1100,7 @@ pub enum JoinSuffix<'input> {
 /// `(a CROSS JOIN b) CROSS JOIN c`), so the right operand is one table
 /// reference and never a join; a parenthesized join is a
 /// the parenthesized `SimpleTableRef` variants.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct UnqualifiedJoin<'input> {
     pub kind: UnqualifiedJoinKind,
     pub table: SimpleTableRef<'input>,
@@ -1108,7 +1108,7 @@ pub struct UnqualifiedJoin<'input> {
 }
 
 /// `CROSS JOIN` or `NATURAL [join_type] JOIN`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum UnqualifiedJoinKind {
     #[tok(CROSS, JOIN)]
     Cross,
@@ -1116,7 +1116,7 @@ pub enum UnqualifiedJoinKind {
 }
 
 /// `NATURAL [join_type] JOIN` — gram.y `NATURAL join_type JOIN | NATURAL JOIN`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct NaturalJoin {
     #[tok(NATURAL, this)]
     pub join_type: JoinType,
@@ -1129,16 +1129,16 @@ pub struct NaturalJoin {
 /// PostgreSQL assigns an unparenthesized joined table recursively to the
 /// right operand, preserving each condition at the grammar level that owns
 /// it.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct QualifiedJoin<'input> {
     pub join_type: JoinType,
-    pub table: Box<TableRef<'input>>,
+    pub table: recursa::ArenaBox<'input, TableRef<'input>>,
     pub condition: JoinCondition<'input>,
 }
 
 /// TABLESAMPLE clause: `TABLESAMPLE method (args) [REPEATABLE (seed)]`.
 /// Attached to a single table reference (not to joined results).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TableSampleClause<'input> {
     #[tok(TABLESAMPLE, this)]
     pub method: literal::AliasName<'input>,
@@ -1149,25 +1149,25 @@ pub struct TableSampleClause<'input> {
 }
 
 /// gram.y `expr_list`: one or more expressions.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 pub struct TableSampleArgs<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<Expr<'input>>,
+    pub recursa::ArenaVec1<'input, Expr<'input>>,
 );
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TableSampleRepeatable<'input> {
     #[tok(REPEATABLE, LPAREN, this, RPAREN)]
     pub seed: Expr<'input>,
 }
 
 /// A table reference that may have zero or more JOIN suffixes.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TableRef<'input> {
     pub base: SimpleTableRef<'input>,
     pub tablesample: Option<TableSampleClause<'input>>,
-    pub joins: Vec<JoinSuffix<'input>>,
+    pub joins: recursa::ArenaVec<'input, JoinSuffix<'input>>,
 }
 
 /// WHERE-clause body: either a normal expression or the cursor-current
@@ -1175,7 +1175,7 @@ pub struct TableRef<'input> {
 ///
 /// Variant ordering: `CurrentOf` must come before `Expr` since `CURRENT`
 /// is a specific keyword lead-in.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[allow(
     clippy::large_enum_variant,
     reason = "keep the public parser AST variants inline and source-compatible"
@@ -1186,14 +1186,14 @@ pub enum WhereCondition<'input> {
 }
 
 /// `CURRENT OF cursor_name` filter.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct WhereCurrentOf<'input> {
     #[tok(CURRENT, OF, this)]
     pub cursor: literal::AliasName<'input>,
 }
 
 /// WHERE clause: `WHERE expr` or `WHERE CURRENT OF cursor`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct WhereClause<'input> {
     #[tok(WHERE, this)]
     pub condition: WhereCondition<'input>,
@@ -1203,7 +1203,7 @@ pub struct WhereClause<'input> {
 ///
 /// Variant ordering: longer (4-char) locale operators before shorter (3-char),
 /// then single-char `>` / `<` last.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum UsingOp<'input> {
     #[tok(TILDELEQTILDE)]
     TildeLeqTilde,
@@ -1221,14 +1221,14 @@ pub enum UsingOp<'input> {
 }
 
 /// USING clause in ORDER BY: `USING op`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct UsingClause<'input> {
     #[tok(USING, this)]
     pub op: UsingOp<'input>,
 }
 
 /// Sort direction: ASC or DESC.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SortDir {
     #[tok(ASC)]
     Asc,
@@ -1237,7 +1237,7 @@ pub enum SortDir {
 }
 
 /// NULLS FIRST or NULLS LAST.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum NullsOrder {
     #[tok(NULLS, FIRST)]
     First,
@@ -1246,7 +1246,7 @@ pub enum NullsOrder {
 }
 
 /// A single ORDER BY item: `expr [ASC|DESC] [USING op] [NULLS FIRST|LAST]`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OrderByItem<'input> {
     pub expr: Expr<'input>,
     pub dir: Option<SortDir>,
@@ -1255,30 +1255,30 @@ pub struct OrderByItem<'input> {
 }
 
 /// ORDER BY clause: `ORDER BY item [, item ...]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ORDER, BY, this)]
 pub struct OrderByClause<'input> {
     /// gram.y `sortby_list`: one or more items.
     #[sep(COMMA)]
-    pub items: recursa::Vec1<OrderByItem<'input>>,
+    pub items: recursa::ArenaVec1<'input, OrderByItem<'input>>,
 }
 
 /// OFFSET clause: `OFFSET expr`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OffsetClause<'input> {
     #[tok(OFFSET, this)]
     pub count: Expr<'input>,
 }
 
 /// LIMIT clause: `LIMIT expr`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LimitClause<'input> {
     #[tok(LIMIT, this)]
     pub count: Expr<'input>,
 }
 
 /// `FIRST` or `NEXT` keyword in FETCH clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FetchFirstOrNext {
     #[tok(FIRST)]
     First,
@@ -1287,7 +1287,7 @@ pub enum FetchFirstOrNext {
 }
 
 /// `ROW` or `ROWS` keyword in FETCH clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FetchRowOrRows {
     #[tok(ROWS)]
     Rows,
@@ -1298,7 +1298,7 @@ pub enum FetchRowOrRows {
 /// `ONLY` or `WITH TIES` — FETCH clause termination mode.
 ///
 /// `WithTies` declared first since it's longer and both start after a keyword.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FetchMode {
     #[tok(WITH, TIES)]
     WithTies,
@@ -1307,16 +1307,16 @@ pub enum FetchMode {
 }
 
 /// FETCH without count: `{ ROW | ROWS } { ONLY | WITH TIES }`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FetchNoCount {
     pub row_or_rows: FetchRowOrRows,
     pub mode: FetchMode,
 }
 
 /// FETCH with count: `expr { ROW | ROWS } { ONLY | WITH TIES }`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FetchWithCount<'input> {
-    pub count: Box<Expr<'input>>,
+    pub count: recursa::ArenaBox<'input, Expr<'input>>,
     pub row_or_rows: FetchRowOrRows,
     pub mode: FetchMode,
 }
@@ -1326,14 +1326,14 @@ pub struct FetchWithCount<'input> {
 ///
 /// `NoCount` (peeks `ROW`/`ROWS`) must come first so it's tried before
 /// `WithCount` which would greedily consume `ROWS` as an identifier.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FetchFirstBody<'input> {
     NoCount(FetchNoCount),
     WithCount(FetchWithCount<'input>),
 }
 
 /// `FETCH { FIRST | NEXT } [count] { ROW | ROWS } { ONLY | WITH TIES }`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FetchFirstClause<'input> {
     #[tok(FETCH, this)]
     pub first_or_next: FetchFirstOrNext,
@@ -1345,7 +1345,7 @@ pub struct FetchFirstClause<'input> {
 /// so `Offset` is deliberately not part of this enum.
 ///
 /// `FetchFirst` and `Limit` start on distinct keywords (`FETCH` vs `LIMIT`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[allow(
     clippy::large_enum_variant,
     reason = "keep the public parser AST variants inline and source-compatible"
@@ -1356,19 +1356,19 @@ pub enum LimitingClause<'input> {
 }
 
 /// A limiting clause followed by an optional `OFFSET` clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LimitThenOffset<'input> {
     pub limit: LimitingClause<'input>,
     #[pretty(break_before = soft)]
-    pub offset: Option<Box<OffsetClause<'input>>>,
+    pub offset: Option<recursa::ArenaBox<'input, OffsetClause<'input>>>,
 }
 
 /// An `OFFSET` clause followed by an optional limiting clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OffsetThenLimit<'input> {
     pub offset: OffsetClause<'input>,
     #[pretty(break_before = soft)]
-    pub limit: Option<Box<LimitingClause<'input>>>,
+    pub limit: Option<recursa::ArenaBox<'input, LimitingClause<'input>>>,
 }
 
 /// The limit/offset tail of a query, restricted to the clause orders
@@ -1377,14 +1377,14 @@ pub struct OffsetThenLimit<'input> {
 /// limiting clause after it. Duplicate same-kind clauses and `LIMIT` mixed
 /// with `FETCH FIRST` are structurally unrepresentable, and rendering
 /// preserves the written order via the variant.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum LimitOffsetClause<'input> {
     LimitOffset(LimitThenOffset<'input>),
     OffsetLimit(OffsetThenLimit<'input>),
 }
 
 /// FOR UPDATE / FOR SHARE / FOR NO KEY UPDATE / FOR KEY SHARE locking clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ForUpdateClause<'input> {
     #[tok(FOR, this)]
     pub mode: LockingMode,
@@ -1396,18 +1396,18 @@ pub struct ForUpdateClause<'input> {
 }
 
 /// `OF name[, ...]` in a `FOR UPDATE` locking clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ForUpdateOf<'input> {
     /// gram.y `OF qualified_name_list`: one or more names.
     #[tok(OF, this)]
     #[sep(COMMA)]
-    pub names: recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub names: recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
 }
 
 /// `NOWAIT | SKIP LOCKED` suffix on a `FOR UPDATE` clause.
 ///
 /// Variant ordering: `SkipLocked` (two tokens) before `Nowait` (one token).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ForUpdateWait {
     #[tok(SKIP, LOCKED)]
     SkipLocked,
@@ -1419,7 +1419,7 @@ pub enum ForUpdateWait {
 ///
 /// Variant ordering: longer (`NO KEY UPDATE`, `KEY SHARE`) before shorter
 /// (`UPDATE`, `SHARE`) so longest-match wins.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum LockingMode {
     #[tok(NO, KEY, UPDATE)]
     NoKeyUpdate,
@@ -1433,18 +1433,18 @@ pub enum LockingMode {
 
 /// GROUP BY clause: `GROUP BY item, ...` where each item is an expression
 /// or one of the grouping primitives (GROUPING SETS, ROLLUP, CUBE).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(GROUP, BY, this)]
 pub struct GroupByClause<'input> {
     /// Optional `DISTINCT` / `ALL` modifier (Postgres 16+).
     pub modifier: Option<GroupByModifier>,
     /// gram.y `group_by_list`: one or more items.
     #[sep(COMMA)]
-    pub items: recursa::Vec1<GroupByItem<'input>>,
+    pub items: recursa::ArenaVec1<'input, GroupByItem<'input>>,
 }
 
 /// `GROUP BY [DISTINCT|ALL]` modifier.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum GroupByModifier {
     #[tok(DISTINCT)]
     Distinct,
@@ -1453,27 +1453,27 @@ pub enum GroupByModifier {
 }
 
 /// `GROUPING SETS ( item, ... )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(GROUPING, SETS, LPAREN, this, RPAREN)]
 pub struct GroupingSetsItem<'input> {
     #[sep(COMMA)]
-    pub groups: Vec<Box<GroupByItem<'input>>>,
+    pub groups: recursa::ArenaVec<'input, recursa::ArenaBox<'input, GroupByItem<'input>>>,
 }
 
 /// `ROLLUP ( item, ... )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ROLLUP, LPAREN, this, RPAREN)]
 pub struct RollupItem<'input> {
     #[sep(COMMA)]
-    pub items: Vec<Box<GroupByItem<'input>>>,
+    pub items: recursa::ArenaVec<'input, recursa::ArenaBox<'input, GroupByItem<'input>>>,
 }
 
 /// `CUBE ( item, ... )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(CUBE, LPAREN, this, RPAREN)]
 pub struct CubeItem<'input> {
     #[sep(COMMA)]
-    pub items: Vec<Box<GroupByItem<'input>>>,
+    pub items: recursa::ArenaVec<'input, recursa::ArenaBox<'input, GroupByItem<'input>>>,
 }
 
 /// A single element in a GROUP BY clause.
@@ -1481,30 +1481,30 @@ pub struct CubeItem<'input> {
 /// Variant ordering: two-keyword primitives first (`GROUPING SETS`), then
 /// single-keyword primitives (`ROLLUP`, `CUBE`), then the catch-all `Expr`
 /// which also handles `(a, b)` row-style groupings.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum GroupByItem<'input> {
     GroupingSets(GroupingSetsItem<'input>),
     Empty(EmptyGroupingSet),
-    Expr(Box<Expr<'input>>),
+    Expr(recursa::ArenaBox<'input, Expr<'input>>),
 }
 
 /// The empty grouping set `()`, used inside `GROUPING SETS` and also valid as
 /// a top-level grouping item.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum EmptyGroupingSet {
     #[tok(LPAREN, RPAREN)]
     Value,
 }
 
 /// HAVING clause: `HAVING expr`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct HavingClause<'input> {
     #[tok(HAVING, this)]
     pub condition: Expr<'input>,
 }
 
 /// A single named window definition: `name AS (inline_window_spec)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct WindowDef<'input> {
     pub name: crate::tokens::ColId<'input>,
     #[tok(AS, LPAREN, this, RPAREN)]
@@ -1512,16 +1512,16 @@ pub struct WindowDef<'input> {
 }
 
 /// `WINDOW name AS (...)[, name AS (...), ...]` clause in SELECT.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(WINDOW, this)]
 pub struct WindowClause<'input> {
     #[sep(COMMA)]
-    pub defs: recursa::Vec1<WindowDef<'input>>,
+    pub defs: recursa::ArenaVec1<'input, WindowDef<'input>>,
 }
 
 /// `INTO [TEMP|TEMPORARY|UNLOGGED] [TABLE] target` clause for the
 /// Postgres `SELECT ... INTO new_table` statement form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SelectIntoPersistence {
     #[tok(TEMP)]
     Temp,
@@ -1533,7 +1533,7 @@ pub enum SelectIntoPersistence {
 
 /// `INTO [TEMP|TEMPORARY|UNLOGGED] [TABLE] target` clause for the
 /// Postgres `SELECT ... INTO new_table` statement form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(INTO, this)]
 pub struct SelectIntoClause<'input> {
     pub persistence: Option<SelectIntoPersistence>,
@@ -1546,18 +1546,25 @@ pub struct SelectIntoClause<'input> {
 ///
 /// Variant ordering: `On` (longer, starts with `DISTINCT ON`) before `All`
 /// (just `DISTINCT`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SelectDistinct<'input> {
     On(SelectDistinctOn<'input>),
     #[tok(DISTINCT)]
     All,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+/// Borrowed projection of a SELECT's optional DISTINCT qualifier.
+#[derive(Debug)]
+pub enum SelectDistinctRef<'view, 'input> {
+    On(&'view SelectDistinctOn<'input>),
+    All,
+}
+
+#[derive(recursa::Node, Debug)]
 #[tok(DISTINCT, ON, LPAREN, this, RPAREN)]
 pub struct SelectDistinctOn<'input> {
     #[sep(COMMA)]
-    pub exprs: Vec<crate::ast::shared::expr::Expr<'input>>,
+    pub exprs: recursa::ArenaVec<'input, crate::ast::shared::expr::Expr<'input>>,
 }
 
 /// SELECT statement.
@@ -1565,7 +1572,7 @@ pub struct SelectDistinctOn<'input> {
 /// `indent` covers the whole clause body, so every break the statement is
 /// forced to take — after `SELECT`, between target items, and before the
 /// trailing clauses — lands one level in from column zero.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(group = consistent, indent)]
 #[tok(SELECT, this)]
 pub struct SelectStmt<'input> {
@@ -1576,20 +1583,20 @@ pub struct SelectStmt<'input> {
     #[pretty(break_before = soft)]
     pub head: Option<SelectHead<'input>>,
     #[pretty(break_before = soft)]
-    pub where_clause: Option<Box<WhereClause<'input>>>,
+    pub where_clause: Option<recursa::ArenaBox<'input, WhereClause<'input>>>,
     #[pretty(break_before = soft)]
-    pub group_by: Option<Box<GroupByClause<'input>>>,
+    pub group_by: Option<recursa::ArenaBox<'input, GroupByClause<'input>>>,
     #[pretty(break_before = soft)]
-    pub having: Option<Box<HavingClause<'input>>>,
+    pub having: Option<recursa::ArenaBox<'input, HavingClause<'input>>>,
     #[pretty(break_before = soft)]
-    pub window: Option<Box<WindowClause<'input>>>,
+    pub window: Option<recursa::ArenaBox<'input, WindowClause<'input>>>,
 }
 
 /// The DISTINCT ON, bare DISTINCT, or unqualified head of a SELECT statement.
 ///
 /// Each qualified alternative owns its fixed prefix directly. This keeps the
 /// prefix nonnullable while sharing the complete target grammar after it.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SelectHead<'input> {
     DistinctOn(SelectDistinctOnTargets<'input>),
     Distinct(SelectDistinctTargets<'input>),
@@ -1597,7 +1604,7 @@ pub enum SelectHead<'input> {
 }
 
 /// A required `DISTINCT ON (...)` qualifier followed by the SELECT targets.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SelectDistinctOnTargets<'input> {
     pub qualifier: SelectDistinctOn<'input>,
     #[pretty(break_before = soft)]
@@ -1605,7 +1612,7 @@ pub struct SelectDistinctOnTargets<'input> {
 }
 
 /// A required bare `DISTINCT` prefix followed by the SELECT targets.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DISTINCT, this)]
 pub struct SelectDistinctTargets<'input> {
     #[pretty(break_before = soft)]
@@ -1619,7 +1626,7 @@ pub struct SelectDistinctTargets<'input> {
 /// target list avoids a nullable expression-list decision on the same token:
 /// a target item can never start with either keyword, so the three
 /// alternatives stay disjoint on their first token.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SelectTargets<'input> {
     Into(SelectIntoTargets<'input>),
     Empty(FromClause<'input>),
@@ -1630,13 +1637,13 @@ pub enum SelectTargets<'input> {
 ///
 /// gram.y reaches this through the nullable `opt_target_list` followed by a
 /// present `into_clause`; `create_am.sql` exercises the spelling.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SelectIntoTargets<'input> {
-    pub into: Box<SelectIntoClause<'input>>,
+    pub into: recursa::ArenaBox<'input, SelectIntoClause<'input>>,
     /// No break hint here: `FromClause` owns the break before `FROM` inside
     /// its own group, so the boundary is measured with the clause it belongs
     /// to.
-    pub from_clause: Option<Box<FromClause<'input>>>,
+    pub from_clause: Option<recursa::ArenaBox<'input, FromClause<'input>>>,
 }
 
 /// A nonempty SELECT target list and the clauses that immediately follow it.
@@ -1644,25 +1651,25 @@ pub struct SelectIntoTargets<'input> {
 /// The group covers the target list together with the clauses that follow it,
 /// so the decision to put one target per line is made against the width of
 /// `<targets> FROM <tables>` rather than the targets alone.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(group = consistent)]
 pub struct SelectTargetList<'input> {
     #[sep(COMMA)]
-    pub items: recursa::Vec1<SelectItem<'input>>,
+    pub items: recursa::ArenaVec1<'input, SelectItem<'input>>,
     #[pretty(break_before = soft)]
-    pub into: Option<Box<SelectIntoClause<'input>>>,
+    pub into: Option<recursa::ArenaBox<'input, SelectIntoClause<'input>>>,
     /// No break hint here: `FromClause` owns the break before `FROM` inside
     /// its own group, so the boundary is measured with the clause it belongs
     /// to.
-    pub from_clause: Option<Box<FromClause<'input>>>,
+    pub from_clause: Option<recursa::ArenaBox<'input, FromClause<'input>>>,
 }
 
 impl<'input> SelectStmt<'input> {
     /// Return an owned semantic projection of the optional DISTINCT qualifier.
-    pub fn distinct(&self) -> Option<SelectDistinct<'input>> {
+    pub fn distinct(&self) -> Option<SelectDistinctRef<'_, 'input>> {
         match self.head.as_ref()? {
-            SelectHead::DistinctOn(head) => Some(SelectDistinct::On(head.qualifier.clone())),
-            SelectHead::Distinct(_) => Some(SelectDistinct::All),
+            SelectHead::DistinctOn(head) => Some(SelectDistinctRef::On(&head.qualifier)),
+            SelectHead::Distinct(_) => Some(SelectDistinctRef::All),
             SelectHead::Plain(_) => None,
         }
     }
@@ -1718,26 +1725,26 @@ impl<'input> SelectStmt<'input> {
 /// gram.y `simple_select`'s `SELECT` and `values_clause` forms. A `WITH`
 /// query is a `Subquery` with its own clause: gram.y attaches the
 /// `with_clause` to `select_no_parens`, never to a set-operation member.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SelectBody<'input> {
-    Select(Box<SelectStmt<'input>>),
+    Select(recursa::ArenaBox<'input, SelectStmt<'input>>),
     Values(ValuesBody<'input>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct ValuesRow<'input> {
     #[sep(COMMA)]
-    pub values: Vec<Expr<'input>>,
+    pub values: recursa::ArenaVec<'input, Expr<'input>>,
 }
 
 /// VALUES body: `VALUES (expr, ...), (expr, ...)` — gram.y `values_clause`,
 /// which has at least one row. Can appear standalone or inside subqueries;
 /// the expression-level subquery forms share it, so `(VALUES (1))` has one
 /// row grammar wherever it occurs.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(VALUES, this)]
 pub struct ValuesBody<'input> {
     #[sep(COMMA)]
-    pub rows: recursa::Vec1<ValuesRow<'input>>,
+    pub rows: recursa::ArenaVec1<'input, ValuesRow<'input>>,
 }

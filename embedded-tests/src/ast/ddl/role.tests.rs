@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("CREATE GROUP g1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateGroupStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateGroupStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -19,7 +20,8 @@ mod tests {
         let lexed = crate::lex("CREATE GROUP g1 WITH USER u1, u2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateGroupStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateGroupStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -28,7 +30,8 @@ mod tests {
         let lexed = crate::lex("ALTER GROUP g1 ADD USER u1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterGroupStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterGroupStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -37,7 +40,8 @@ mod tests {
         let lexed = crate::lex("ALTER GROUP g1 DROP USER u1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterGroupStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterGroupStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -46,7 +50,8 @@ mod tests {
         let lexed = crate::lex("CREATE ROLE alice");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.text(), "alice");
         assert!(stmt.options.is_empty());
         assert!(input.is_eof());
@@ -60,7 +65,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.options.len(), 7);
         assert!(input.is_eof());
     }
@@ -73,7 +79,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.options.len(), 6);
         assert!(input.is_eof());
     }
@@ -83,7 +90,8 @@ mod tests {
         let lexed = crate::lex("CREATE ROLE alice PASSWORD 'secret'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.options.len(), 1);
         assert!(matches!(
             stmt.options.first().unwrap(),
@@ -97,7 +105,8 @@ mod tests {
         let lexed = crate::lex("CREATE ROLE alice ENCRYPTED PASSWORD NULL");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.options.len(), 1);
         assert!(input.is_eof());
     }
@@ -107,7 +116,8 @@ mod tests {
         let lexed = crate::lex("CREATE ROLE alice CONNECTION LIMIT 5");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.options.len(), 1);
         assert!(matches!(
             stmt.options.first().unwrap(),
@@ -121,7 +131,8 @@ mod tests {
         let lexed = crate::lex("CREATE ROLE alice VALID UNTIL '2030-01-01'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::ValidUntil(_),
@@ -134,7 +145,8 @@ mod tests {
         let lexed = crate::lex("CREATE ROLE bob IN ROLE alice, charlie");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::InRole(_),
@@ -147,7 +159,8 @@ mod tests {
         let lexed = crate::lex("CREATE ROLE bob ADMIN alice, charlie");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::Admin(_),
@@ -160,7 +173,8 @@ mod tests {
         let lexed = crate::lex("CREATE ROLE bob SYSID 12345");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::SysId(_),
@@ -173,7 +187,8 @@ mod tests {
         let lexed = crate::lex("CREATE USER alice WITH NOLOGIN");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateUserStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateUserStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.text(), "alice");
         assert_eq!(stmt.options.len(), 1);
         assert!(input.is_eof());
@@ -184,7 +199,8 @@ mod tests {
         let lexed = crate::lex("CREATE GROUP g1 ROLE alice, bob");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateGroupStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateGroupStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::Role(_),
@@ -197,7 +213,8 @@ mod tests {
         let lexed = crate::lex("CREATE GROUP g1 WITH USER u1, u2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateGroupStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateGroupStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(
             stmt.options.first().unwrap(),
             CreateRoleOption::User(_),
@@ -210,7 +227,8 @@ mod tests {
         let lexed = crate::lex("DROP GROUP g1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropGroupStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropGroupStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.roles.len(), 1);
         assert!(input.is_eof());
     }
@@ -220,7 +238,8 @@ mod tests {
         let lexed = crate::lex("DROP ROLE IF EXISTS a, b, c");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropRoleStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropRoleStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists.is_some());
         assert_eq!(stmt.roles.len(), 3);
         assert!(input.is_eof());
@@ -233,7 +252,8 @@ mod tests {
         let lexed = crate::lex("===");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _arg = DefArg::parse(&mut input).unwrap().into_ast();
+        let _arg_parsed = DefArg::parse(&mut input).unwrap();
+        let _arg = _arg_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -242,7 +262,8 @@ mod tests {
         let lexed = crate::lex("@=");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _arg = DefArg::parse(&mut input).unwrap().into_ast();
+        let _arg_parsed = DefArg::parse(&mut input).unwrap();
+        let _arg = _arg_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -251,7 +272,8 @@ mod tests {
         let lexed = crate::lex("!==");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _arg = DefArg::parse(&mut input).unwrap().into_ast();
+        let _arg_parsed = DefArg::parse(&mut input).unwrap();
+        let _arg = _arg_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -264,7 +286,8 @@ mod tests {
         let lexed = crate::lex("+1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let arg = DefArg::parse(&mut input).unwrap().into_ast();
+        let arg_parsed = DefArg::parse(&mut input).unwrap();
+        let arg = arg_parsed.ast();
         assert!(
             matches!(arg, DefArg::Numeric(_)),
             "expected Numeric for `+1`, got {arg:?}"
@@ -274,7 +297,8 @@ mod tests {
         let lexed = crate::lex("-2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let arg = DefArg::parse(&mut input).unwrap().into_ast();
+        let arg_parsed = DefArg::parse(&mut input).unwrap();
+        let arg = arg_parsed.ast();
         assert!(
             matches!(arg, DefArg::Numeric(_)),
             "expected Numeric for `-2`, got {arg:?}"

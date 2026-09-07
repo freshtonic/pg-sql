@@ -9,7 +9,8 @@ mod tests {
         let lexed = crate::lex("CREATE FUNCTION f() RETURNS boolean RETURN false");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -20,7 +21,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "sillysrf");
         assert!(input.is_eof());
     }
@@ -30,7 +32,8 @@ mod tests {
         let lexed = crate::lex("drop function sillysrf(int)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropFunctionStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(
             stmt.targets.first().name.object(),
             "sillysrf"
@@ -43,7 +46,8 @@ mod tests {
         let lexed = crate::lex("drop function a(), b(), c()");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = DropFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -54,7 +58,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -63,7 +68,8 @@ mod tests {
         let lexed = crate::lex("DROP FUNCTION int4_casttesttype(int4) CASCADE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = DropFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -72,7 +78,8 @@ mod tests {
         let lexed = crate::lex("drop function polyf(x anyelement)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = DropFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = DropFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -83,7 +90,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -94,17 +102,18 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_function_options_reordered() {
-        let lexed =
-            crate::lex("create function f() returns int language sql strict as 'SELECT 1'");
+        let lexed = crate::lex("create function f() returns int language sql strict as 'SELECT 1'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -115,7 +124,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -126,7 +136,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -137,7 +148,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -148,7 +160,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -159,7 +172,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -170,7 +184,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -181,7 +196,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -192,7 +208,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -212,9 +229,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let _stmt = CreateFunctionStmt::parse(&mut input)
+            let _stmt_parsed = CreateFunctionStmt::parse(&mut input)
                 .unwrap_or_else(|error| panic!("parse {src:?}: {error:?}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
     }
@@ -226,7 +244,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -237,7 +256,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -248,7 +268,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -259,7 +280,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let body = stmt.func_body().expect("should extract body");
         assert_eq!(body.lang, "plpgsql");
         assert_eq!(body.body.trim(), "BEGIN PERFORM 1; END;");
@@ -271,7 +293,8 @@ mod tests {
             crate::lex("CREATE FUNCTION f() RETURNS int AS 'SELECT 1' LANGUAGE sql");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let body = stmt.func_body().expect("should extract body");
         assert_eq!(body.lang, "sql");
         assert_eq!(body.body, "SELECT 1");
@@ -284,7 +307,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let body = stmt.func_body().expect("should extract body");
         assert_eq!(body.lang, "plpgsql");
         assert_eq!(body.body.trim(), "DECLARE x int; BEGIN x := 1; END;");
@@ -297,7 +321,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -308,7 +333,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -323,7 +349,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -341,13 +368,14 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateFunctionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateFunctionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
     #[test]
     fn alter_function_rename_to() {
-        let stmt: AlterFunctionStmt =
-            parse_stmt("ALTER FUNCTION alt_func1(int) RENAME TO alt_func2");
+        let stmt = parse_stmt::<AlterFunctionStmt>("ALTER FUNCTION alt_func1(int) RENAME TO alt_func2");
+        let stmt = stmt.ast();
         assert_eq!(stmt.target.name.object(), "alt_func1");
         assert!(matches!(stmt.action, AlterFuncAction::Rename(_)));
         reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION alt_func1(int) RENAME TO alt_func2");
@@ -355,8 +383,8 @@ mod tests {
 
     #[test]
     fn alter_function_owner_to() {
-        let stmt: AlterFunctionStmt =
-            parse_stmt("ALTER FUNCTION alt_func2(int) OWNER TO regress_alter_generic_user2");
+        let stmt = parse_stmt::<AlterFunctionStmt>("ALTER FUNCTION alt_func2(int) OWNER TO regress_alter_generic_user2");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.action, AlterFuncAction::Owner(_)));
         reparse_stable::<AlterFunctionStmt>(
             "ALTER FUNCTION alt_func2(int) OWNER TO regress_alter_generic_user2",
@@ -365,8 +393,8 @@ mod tests {
 
     #[test]
     fn alter_function_set_schema() {
-        let stmt: AlterFunctionStmt =
-            parse_stmt("ALTER FUNCTION alt_func2(int) SET SCHEMA alt_nsp2");
+        let stmt = parse_stmt::<AlterFunctionStmt>("ALTER FUNCTION alt_func2(int) SET SCHEMA alt_nsp2");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.action, AlterFuncAction::SetSchema(_)));
         reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION alt_func2(int) SET SCHEMA alt_nsp2");
     }
@@ -387,7 +415,8 @@ mod tests {
 
     #[test]
     fn alter_function_immutable() {
-        let stmt: AlterFunctionStmt = parse_stmt("ALTER FUNCTION functest_C_1(int) IMMUTABLE");
+        let stmt = parse_stmt::<AlterFunctionStmt>("ALTER FUNCTION functest_C_1(int) IMMUTABLE");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.action, AlterFuncAction::Options(_)));
         reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION functest_C_1(int) IMMUTABLE");
     }

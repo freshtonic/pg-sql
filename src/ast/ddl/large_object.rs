@@ -11,7 +11,7 @@ use crate::tokens::{literal, punct};
 /// `AlterOwnerStmt` branch for large objects. The only modifiable
 /// attribute is owner; large objects have no rename / set-schema /
 /// other actions.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterLargeObjectStmt<'input> {
     #[tok(ALTER, LARGE, OBJECT, this)]
     pub oid: NumericOnly<'input>,

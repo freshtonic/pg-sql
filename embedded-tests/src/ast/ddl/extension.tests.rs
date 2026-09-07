@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("CREATE EXTENSION hstore");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateExtensionStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateExtensionStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.text(), "hstore");
         assert!(stmt.if_not_exists.is_none());
         assert!(stmt.options.is_empty());
@@ -22,7 +23,8 @@ mod tests {
         let lexed = crate::lex("CREATE EXTENSION IF NOT EXISTS hstore WITH SCHEMA public VERSION '1.6' CASCADE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateExtensionStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateExtensionStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_not_exists.is_some());
         assert_eq!(stmt.options.len(), 3);
         assert!(input.is_eof());
@@ -33,7 +35,8 @@ mod tests {
         let lexed = crate::lex("ALTER EXTENSION my_ext UPDATE TO '1.1'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterExtensionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -42,7 +45,8 @@ mod tests {
         let lexed = crate::lex("ALTER EXTENSION my_ext UPDATE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterExtensionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -51,7 +55,8 @@ mod tests {
         let lexed = crate::lex("ALTER EXTENSION my_ext SET SCHEMA new_schema");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterExtensionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -60,7 +65,8 @@ mod tests {
         let lexed = crate::lex("ALTER EXTENSION my_ext ADD TABLE my_table");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterExtensionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterExtensionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 }

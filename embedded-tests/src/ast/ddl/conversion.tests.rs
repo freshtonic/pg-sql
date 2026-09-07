@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("ALTER CONVERSION alt_conv2 SET SCHEMA alt_nsp2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterConversionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterConversionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -21,7 +22,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateConversionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateConversionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -32,7 +34,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateConversionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateConversionStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -43,7 +46,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateConversionStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateConversionStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(!stmt.default);
         assert_eq!(stmt.name.object(), "myconv");
         assert!(input.is_eof());
@@ -56,7 +60,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateConversionStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateConversionStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.default);
         assert!(input.is_eof());
     }

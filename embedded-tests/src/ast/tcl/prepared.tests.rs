@@ -5,7 +5,8 @@ mod tests {
 
     #[test]
     fn prepare_plain_is_modelled() {
-        let stmt: PrepareStmt = parse_stmt("PREPARE q1 AS SELECT 1 AS a");
+        let stmt = parse_stmt::<PrepareStmt>("PREPARE q1 AS SELECT 1 AS a");
+        let stmt = stmt.ast();
         let body = match &stmt.body {
             PrepareStmtBody::Standard(s) => s,
             PrepareStmtBody::Transaction(_) => panic!("expected standard PREPARE body"),
@@ -20,7 +21,8 @@ mod tests {
 
     #[test]
     fn prepare_with_types_keeps_type_list() {
-        let stmt: PrepareStmt = parse_stmt("PREPARE q2(text) AS SELECT $1");
+        let stmt = parse_stmt::<PrepareStmt>("PREPARE q2(text) AS SELECT $1");
+        let stmt = stmt.ast();
         let body = match &stmt.body {
             PrepareStmtBody::Standard(s) => s,
             PrepareStmtBody::Transaction(_) => panic!("expected standard PREPARE body"),
@@ -31,7 +33,8 @@ mod tests {
 
     #[test]
     fn prepare_multiple_types_roundtrips() {
-        let stmt: PrepareStmt = parse_stmt("PREPARE q3(text, int, boolean) AS SELECT $1");
+        let stmt = parse_stmt::<PrepareStmt>("PREPARE q3(text, int, boolean) AS SELECT $1");
+        let stmt = stmt.ast();
         let body = match &stmt.body {
             PrepareStmtBody::Standard(s) => s,
             PrepareStmtBody::Transaction(_) => panic!("expected standard PREPARE body"),
@@ -42,7 +45,8 @@ mod tests {
 
     #[test]
     fn prepare_insert_is_modelled() {
-        let stmt: PrepareStmt = parse_stmt("PREPARE p AS INSERT INTO t VALUES (1)");
+        let stmt = parse_stmt::<PrepareStmt>("PREPARE p AS INSERT INTO t VALUES (1)");
+        let stmt = stmt.ast();
         assert!(matches!(
             stmt.body,
             PrepareStmtBody::Standard(ref s) if matches!(s.body, PreparableStmt::Insert(_))
@@ -55,7 +59,8 @@ mod tests {
     /// is the `TRANSACTION` keyword vs an identifier name after `PREPARE`.
     #[test]
     fn prepare_transaction_is_modelled() {
-        let stmt: PrepareStmt = parse_stmt("PREPARE TRANSACTION 'regress_foo1'");
+        let stmt = parse_stmt::<PrepareStmt>("PREPARE TRANSACTION 'regress_foo1'");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.body, PrepareStmtBody::Transaction(_)));
         assert_eq!(
             roundtrip::<PrepareStmt>("PREPARE TRANSACTION 'regress_foo1'"),
@@ -65,7 +70,8 @@ mod tests {
 
     #[test]
     fn execute_plain_is_modelled() {
-        let stmt: ExecuteStmt = parse_stmt("EXECUTE q1");
+        let stmt = parse_stmt::<ExecuteStmt>("EXECUTE q1");
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.text(), "q1");
         assert!(stmt.params.is_none());
         assert_eq!(roundtrip::<ExecuteStmt>("EXECUTE q1"), "EXECUTE q1");
@@ -73,14 +79,16 @@ mod tests {
 
     #[test]
     fn execute_with_params_keeps_params() {
-        let stmt: ExecuteStmt = parse_stmt("EXECUTE q2('postgres')");
+        let stmt = parse_stmt::<ExecuteStmt>("EXECUTE q2('postgres')");
+        let stmt = stmt.ast();
         assert!(stmt.params.is_some());
         reparse_stable::<ExecuteStmt>("EXECUTE q2('postgres')");
     }
 
     #[test]
     fn deallocate_name_is_modelled() {
-        let stmt: DeallocateStmt = parse_stmt("DEALLOCATE q1");
+        let stmt = parse_stmt::<DeallocateStmt>("DEALLOCATE q1");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.target, DeallocateTarget::Name(_)));
         assert_eq!(
             roundtrip::<DeallocateStmt>("DEALLOCATE q1"),
@@ -98,7 +106,8 @@ mod tests {
 
     #[test]
     fn deallocate_all_is_modelled() {
-        let stmt: DeallocateStmt = parse_stmt("DEALLOCATE ALL");
+        let stmt = parse_stmt::<DeallocateStmt>("DEALLOCATE ALL");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.target, DeallocateTarget::All));
         assert_eq!(
             roundtrip::<DeallocateStmt>("DEALLOCATE ALL"),

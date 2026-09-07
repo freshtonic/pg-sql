@@ -25,13 +25,14 @@
 
 use std::fmt;
 
-use recursa::{NodeView, Parsed, Span};
+use recursa::{ArenaParsed, Span};
 
 use crate::ast::Statement;
 use crate::ast::file::SqlDocumentItem;
-use crate::{
-    CompleteFrame, CompletePart, FrameDiagnostic, FrameError, FrameFailure, FrameRejection,
-};
+use crate::{CompletePart, FrameDiagnostic, FrameError, FrameFailure, FrameRejection};
+
+type SqlDocumentItemFamily =
+    <SqlDocumentItem<'static> as recursa::__private::ArenaGeneratedParse<'static>>::Family;
 
 /// Parses one strict PostgreSQL document.
 ///
@@ -49,17 +50,7 @@ pub fn parse_sql(source: &str) -> Result<SqlDocument<'_>, SqlParseError<'_>> {
         Err(FrameFailure::Rejected(rejection)) => {
             Err(SqlParseError::Rejected(SqlRejection(rejection)))
         }
-        Ok(frame) => {
-            // The generated view accessors do not declare precise `use<..>`
-            // capture, so under edition 2024 a borrowed statement view
-            // cannot be returned across a closure boundary; the semantic
-            // list is cloned once instead.
-            let statements = frame
-                .typed_islands()
-                .filter_map(|item| item.root().value().statement.clone())
-                .collect();
-            Ok(SqlDocument { frame, statements })
-        }
+        Ok(frame) => Ok(SqlDocument { frame }),
     }
 }
 
@@ -72,15 +63,13 @@ pub fn parse_sql(source: &str) -> Result<SqlDocument<'_>, SqlParseError<'_>> {
 pub struct SqlDocument<'input> {
     /// Exact-source strict partition; [`std::ops::Deref`] target.
     #[deref]
-    frame: CompleteFrame<'input, SqlDocumentItem<'input>>,
-    /// Semantic statement list projected once from the strict islands.
-    statements: Vec<Statement<'input>>,
+    frame: recursa::framing::ArenaCompleteFrame<'input, SqlDocumentItemFamily>,
 }
 
 impl<'input> SqlDocument<'input> {
     /// Iterates every statement item in source order, including empty
     /// statements, with island-bounded occurrence provenance.
-    pub fn items(&self) -> impl Iterator<Item = &Parsed<'input, SqlDocumentItem<'input>>> {
+    pub fn items(&self) -> impl Iterator<Item = &ArenaParsed<'input, SqlDocumentItemFamily>> {
         self.frame.typed_islands()
     }
 
@@ -88,13 +77,16 @@ impl<'input> SqlDocument<'input> {
     ///
     /// Empty statements stay out of this list; use [`SqlDocument::items`]
     /// for their source and provenance occurrences.
-    pub fn statements(&self) -> &[Statement<'input>] {
-        &self.statements
+    pub fn statements(&self) -> Vec<&Statement<'_>> {
+        self.frame
+            .typed_islands()
+            .filter_map(|item| item.ast().statement.as_ref())
+            .collect()
     }
 
     /// Iterates the exact source-ownership partition spans in order.
     pub fn part_spans(&self) -> impl Iterator<Item = Span> + '_ {
-        self.frame.parts().map(CompletePart::span)
+        self.frame.parts().map(|part| part.span())
     }
 
     /// Returns end-of-file trivia owned by the document root, if any.
@@ -117,7 +109,7 @@ impl fmt::Debug for SqlDocument<'_> {
         formatter
             .debug_struct("SqlDocument")
             .field("source", &self.frame.source())
-            .field("statements", &self.statements)
+            .field("statements", &self.statements())
             .finish_non_exhaustive()
     }
 }

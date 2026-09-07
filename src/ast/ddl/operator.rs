@@ -25,7 +25,7 @@ use crate::tokens::{literal, punct};
 /// the modelled form rejects them, and any input that uses them surfaces
 /// as a file-level parse error (also rejected by Postgres,
 /// so the differential oracle stays valid).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateOperatorStmt<'input> {
     #[tok(CREATE, OPERATOR, this)]
     pub name: QualifiedOperatorName<'input>,
@@ -38,17 +38,17 @@ pub type DropOperatorTarget<'input> = OperatorWithArgtypes<'input>;
 
 /// `DROP OPERATOR [IF EXISTS] op(args) [, ...] [CASCADE | RESTRICT]` —
 /// Postgres' `RemoveOperStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, OPERATOR, this)]
 pub struct DropOperatorStmt<'input> {
     pub if_exists: Option<IfExists>,
     #[sep(COMMA)]
-    pub targets: recursa::Vec1<DropOperatorTarget<'input>>,
+    pub targets: recursa::ArenaVec1<'input, DropOperatorTarget<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 
 /// `FOR SEARCH` — the opclass-purpose marker for search support operators.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum OpclassPurposeSearch {
     #[tok(FOR, SEARCH)]
     Value,
@@ -56,7 +56,7 @@ pub enum OpclassPurposeSearch {
 
 /// `FOR ORDER BY family_name` — the opclass-purpose marker on ordering
 /// operators, naming the operator family that owns the order semantics.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OpclassPurposeOrderBy<'input> {
     #[tok(FOR, ORDER, BY, this)]
     pub family_name: QualifiedName<'input>,
@@ -67,7 +67,7 @@ pub struct OpclassPurposeOrderBy<'input> {
 ///
 /// Variant ordering: each variant has a distinct two-token prefix (`FOR
 /// SEARCH` vs `FOR ORDER`), so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum OpclassPurpose<'input> {
     OrderBy(OpclassPurposeOrderBy<'input>),
     Search(OpclassPurposeSearch),
@@ -82,7 +82,7 @@ pub enum OpclassPurpose<'input> {
 /// (`OPERATOR Iconst operator_with_argtypes opclass_purpose opt_recheck`)
 /// requires it. `RECHECK` is the legacy no-op modifier — still accepted by
 /// PG for old-dump portability and round-tripped here.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OpclassItemOperator<'input> {
     #[tok(OPERATOR, this)]
     pub number: literal::IntegerLit<'input>,
@@ -96,7 +96,7 @@ pub struct OpclassItemOperator<'input> {
 /// `'(' type_list ')' function_with_argtypes` — the class-args + function
 /// pair on `FUNCTION n (type_list) function_with_argtypes`. Used by the
 /// rarer four-arg form of FUNCTION opclass items.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OpclassItemFunctionClassArgs<'input> {
     #[tok(LPAREN, this, RPAREN)]
     pub class_args: crate::ast::shared::names::TypeNameList<'input>,
@@ -109,7 +109,7 @@ pub struct OpclassItemFunctionClassArgs<'input> {
 ///
 /// Variant ordering: `WithClassArgs` (starts with `(`) before `Plain` (starts
 /// with an ident from `func_name`). Their first-token sets are disjoint.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum OpclassItemFunctionBody<'input> {
     WithClassArgs(OpclassItemFunctionClassArgs<'input>),
     Plain(crate::ast::ddl::function::DropFunctionTarget<'input>),
@@ -117,7 +117,7 @@ pub enum OpclassItemFunctionBody<'input> {
 
 /// `FUNCTION Iconst [(type_list)] function_with_argtypes` — the function
 /// support-procedure entry in an opclass_item list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OpclassItemFunction<'input> {
     #[tok(FUNCTION, this)]
     pub number: literal::IntegerLit<'input>,
@@ -125,7 +125,7 @@ pub struct OpclassItemFunction<'input> {
 }
 
 /// `STORAGE Typename` — the storage-type entry in an opclass_item list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OpclassItemStorage<'input> {
     #[tok(STORAGE, this)]
     pub r#type: crate::ast::shared::names::TypeName<'input>,
@@ -137,7 +137,7 @@ pub struct OpclassItemStorage<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`OPERATOR` / `FUNCTION` / `STORAGE`), so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum OpclassItem<'input> {
     Operator(OpclassItemOperator<'input>),
     Function(OpclassItemFunction<'input>),
@@ -145,17 +145,17 @@ pub enum OpclassItem<'input> {
 }
 
 /// `AS opclass_item [, ...]` body of `CREATE OPERATOR CLASS`.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(AS, this)]
 pub struct CreateOpclassItemList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<OpclassItem<'input>>,
+    pub recursa::ArenaVec1<'input, OpclassItem<'input>>,
 );
 
 /// `OPERATOR Iconst '(' type_list ')'` — the operator-drop entry in an
 /// ALTER OPERATOR FAMILY ... DROP list. (`opclass_drop` in gram.y.)
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OpclassDropOperator<'input> {
     #[tok(OPERATOR, this)]
     pub number: literal::IntegerLit<'input>,
@@ -165,7 +165,7 @@ pub struct OpclassDropOperator<'input> {
 
 /// `FUNCTION Iconst '(' type_list ')'` — the function-drop entry in an
 /// ALTER OPERATOR FAMILY ... DROP list. (`opclass_drop` in gram.y.)
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OpclassDropFunction<'input> {
     #[tok(FUNCTION, this)]
     pub number: literal::IntegerLit<'input>,
@@ -178,7 +178,7 @@ pub struct OpclassDropFunction<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword, so order
 /// is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum OpclassDrop<'input> {
     Operator(OpclassDropOperator<'input>),
     Function(OpclassDropFunction<'input>),
@@ -186,7 +186,7 @@ pub enum OpclassDrop<'input> {
 
 /// `FAMILY family_name` — the optional clause naming an enclosing operator
 /// family on `CREATE OPERATOR CLASS ... USING method [FAMILY family]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateOpClassFamilyClause<'input> {
     #[tok(FAMILY, this)]
     pub name: QualifiedName<'input>,
@@ -195,7 +195,7 @@ pub struct CreateOpClassFamilyClause<'input> {
 /// `CREATE OPERATOR CLASS any_name [DEFAULT] FOR TYPE Typename USING access_method
 /// [FAMILY family_name] AS opclass_item [, ...]` — Postgres'
 /// `CreateOpClassStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateOperatorClassStmt<'input> {
     #[tok(CREATE, OPERATOR, CLASS, this)]
     pub name: QualifiedName<'input>,
@@ -211,7 +211,7 @@ pub struct CreateOperatorClassStmt<'input> {
 
 /// `CREATE OPERATOR FAMILY any_name USING access_method` — Postgres'
 /// `CreateOpFamilyStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateOperatorFamilyStmt<'input> {
     #[tok(CREATE, OPERATOR, FAMILY, this)]
     pub name: QualifiedName<'input>,
@@ -220,19 +220,19 @@ pub struct CreateOperatorFamilyStmt<'input> {
 }
 
 /// `ADD opclass_item [, ...]` — the add arm of ALTER OPERATOR FAMILY.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ADD, this)]
 pub struct AlterOperatorFamilyAdd<'input> {
     #[sep(COMMA)]
-    pub items: recursa::Vec1<OpclassItem<'input>>,
+    pub items: recursa::ArenaVec1<'input, OpclassItem<'input>>,
 }
 
 /// `DROP opclass_drop [, ...]` — the drop arm of ALTER OPERATOR FAMILY.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, this)]
 pub struct AlterOperatorFamilyDrop<'input> {
     #[sep(COMMA)]
-    pub items: recursa::Vec1<OpclassDrop<'input>>,
+    pub items: recursa::ArenaVec1<'input, OpclassDrop<'input>>,
 }
 
 /// One action on `ALTER OPERATOR FAMILY name USING method action` — covers
@@ -241,7 +241,7 @@ pub struct AlterOperatorFamilyDrop<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword (`ADD`,
 /// `DROP`, `RENAME`, `OWNER`, `SET`), so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterOperatorFamilyAction<'input> {
     Add(AlterOperatorFamilyAdd<'input>),
     Drop(AlterOperatorFamilyDrop<'input>),
@@ -253,7 +253,7 @@ pub enum AlterOperatorFamilyAction<'input> {
 /// `ALTER OPERATOR FAMILY any_name USING access_method action` — Postgres'
 /// `AlterOpFamilyStmt` plus the operator-family branches of `RenameStmt` /
 /// `AlterOwnerStmt` / `AlterObjectSchemaStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterOperatorFamilyStmt<'input> {
     #[tok(ALTER, OPERATOR, FAMILY, this)]
     pub name: QualifiedName<'input>,
@@ -270,7 +270,7 @@ pub struct AlterOperatorFamilyStmt<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`RENAME`, `OWNER`, `SET`), so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterOperatorClassAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -281,7 +281,7 @@ pub enum AlterOperatorClassAction<'input> {
 /// Postgres' operator-class branches of `RenameStmt` / `AlterOwnerStmt`
 /// / `AlterObjectSchemaStmt`. The ADD/DROP body lives only on the
 /// `AlterOpFamilyStmt` (FAMILY) production.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterOperatorClassStmt<'input> {
     #[tok(ALTER, OPERATOR, CLASS, this)]
     pub name: QualifiedName<'input>,
@@ -292,7 +292,7 @@ pub struct AlterOperatorClassStmt<'input> {
 
 /// `DROP OPERATOR CLASS [IF EXISTS] any_name USING access_method
 /// [CASCADE | RESTRICT]` — Postgres' `DropOpClassStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, OPERATOR, CLASS, this)]
 pub struct DropOperatorClassStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -304,7 +304,7 @@ pub struct DropOperatorClassStmt<'input> {
 
 /// `DROP OPERATOR FAMILY [IF EXISTS] any_name USING access_method
 /// [CASCADE | RESTRICT]` — Postgres' `DropOpFamilyStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, OPERATOR, FAMILY, this)]
 pub struct DropOperatorFamilyStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -319,7 +319,7 @@ pub struct DropOperatorFamilyStmt<'input> {
 ///
 /// The def-list inside the parens is the same `def_list` body shared with
 /// CREATE OPERATOR / CREATE AGGREGATE / etc. and is captured by [`DefList`].
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterOperatorSetOptions<'input> {
     #[tok(SET, this)]
     pub options: DefList<'input>,
@@ -335,7 +335,7 @@ pub struct AlterOperatorSetOptions<'input> {
 /// Variant ordering: `SetSchema` (multi-token `SET SCHEMA`) must precede
 /// `SetOptions` (single-token `SET` then a `(`), since both begin with
 /// `SET` and longest-match-wins picks the more specific path first.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterOperatorAction<'input> {
     SetSchema(SetSchemaClause<'input>),
     SetOptions(AlterOperatorSetOptions<'input>),
@@ -343,7 +343,7 @@ pub enum AlterOperatorAction<'input> {
 }
 
 /// `ALTER OPERATOR op(args) { SET (...) | SET SCHEMA name | OWNER TO role }`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterOperatorStmt<'input> {
     #[tok(ALTER, OPERATOR, this)]
     pub target: OperatorWithArgtypes<'input>,

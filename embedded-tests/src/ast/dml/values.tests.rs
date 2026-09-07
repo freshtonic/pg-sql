@@ -7,7 +7,8 @@ mod tests {
         let lexed = crate::lex("TABLE int8_tbl");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = TableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = TableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.table_name.object(), "int8_tbl");
         assert!(input.is_eof());
     }
@@ -17,7 +18,8 @@ mod tests {
         let lexed = crate::lex("VALUES (1,2), (3,4), (7,8)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let body = CompoundBody::parse(&mut input).unwrap().into_ast();
+        let body_parsed = CompoundBody::parse(&mut input).unwrap();
+        let body = body_parsed.ast();
         assert!(body.set_op.is_none());
         assert!(input.is_eof());
     }
@@ -27,7 +29,8 @@ mod tests {
         let lexed = crate::lex("VALUES (1,2) UNION ALL SELECT 3, 4");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let body = CompoundBody::parse(&mut input).unwrap().into_ast();
+        let body_parsed = CompoundBody::parse(&mut input).unwrap();
+        let body = body_parsed.ast();
         assert!(body.set_op.is_some());
         assert!(input.is_eof());
     }
@@ -37,7 +40,8 @@ mod tests {
         let lexed = crate::lex("VALUES (1,2) UNION ALL TABLE t");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let body = CompoundBody::parse(&mut input).unwrap().into_ast();
+        let body_parsed = CompoundBody::parse(&mut input).unwrap();
+        let body = body_parsed.ast();
         assert!(body.set_op.is_some());
         assert!(input.is_eof());
     }
@@ -49,7 +53,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.order_by.is_some());
         assert!(input.is_eof());
     }
@@ -59,8 +64,9 @@ mod tests {
         let lexed = crate::lex("TABLE t ORDER BY a, b DESC");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.order_by.unwrap().items.len(), 2);
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
+        assert_eq!(stmt.order_by.as_ref().unwrap().items.len(), 2);
         assert!(input.is_eof());
     }
 

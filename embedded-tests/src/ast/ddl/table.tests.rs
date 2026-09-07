@@ -9,7 +9,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -23,7 +24,8 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+            let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+            let _stmt = _stmt_parsed.ast();
             assert!(input.is_eof(), "leftover for {src:?}");
         }
     }
@@ -33,7 +35,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE BOOLTBL1 (f1 bool)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "BOOLTBL1");
         assert_eq!(stmt.items().unwrap().len(), 1);
         assert!(input.is_eof());
@@ -44,7 +47,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE BOOLTBL3 (d text, b bool, o int)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "BOOLTBL3");
         assert_eq!(stmt.items().unwrap().len(), 3);
         assert!(input.is_eof());
@@ -56,7 +60,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE mvtest_foo(a, b) AS VALUES(1, 10)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(
             stmt.body,
             super::CreateTableBody::ColumnsAsQuery(_)
@@ -73,18 +78,19 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.items().unwrap().len(), 7);
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_array_column_types() {
-        let lexed =
-            crate::lex("CREATE TABLE t (a int2[], b int4[][][], c varchar(5)[], d text[])");
+        let lexed = crate::lex("CREATE TABLE t (a int2[], b int4[][][], c varchar(5)[], d text[])");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.items().unwrap().len(), 4);
         assert!(input.is_eof());
     }
@@ -94,7 +100,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (f1 boolean)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.items().unwrap().len(), 1);
     }
 
@@ -103,7 +110,8 @@ mod tests {
         let lexed = crate::lex("CREATE TEMP TABLE foo (f1 int)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.temp.is_some());
         assert_eq!(stmt.name.object(), "foo");
         assert!(input.is_eof());
@@ -111,11 +119,11 @@ mod tests {
 
     #[test]
     fn parse_create_partitioned_table() {
-        let lexed =
-            crate::lex("create table list_parted_tbl (a int,b int) partition by list (a)");
+        let lexed = crate::lex("create table list_parted_tbl (a int,b int) partition by list (a)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "list_parted_tbl");
         assert!(input.is_eof());
     }
@@ -127,7 +135,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "list_parted_tbl1");
         assert!(input.is_eof());
     }
@@ -137,7 +146,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int CHECK (a > 0))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -148,7 +158,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -157,7 +168,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int CONSTRAINT pos CHECK (a > 0))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -166,7 +178,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int DEFAULT 0)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -175,7 +188,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int, b int, PRIMARY KEY (a, b))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -184,7 +198,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int, UNIQUE (a))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -195,7 +210,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -206,7 +222,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -217,7 +234,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -226,7 +244,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int, CHECK (a > 0))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -237,7 +256,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -246,7 +266,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int, CHECK (a > 0) NO INHERIT)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -255,7 +276,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE foo (LIKE bar)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -264,7 +286,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE foo (LIKE bar INCLUDING ALL)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -275,7 +298,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -284,17 +308,18 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE foo (a int, LIKE bar INCLUDING ALL, b text)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_table_check_no_inherit_not_valid() {
-        let lexed =
-            crate::lex("CREATE TABLE t (d date, CHECK (false) NO INHERIT NOT VALID)");
+        let lexed = crate::lex("CREATE TABLE t (d date, CHECK (false) NO INHERIT NOT VALID)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -303,17 +328,18 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int, CHECK (a > 0) NOT VALID)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_table_with_storage_params() {
-        let lexed =
-            crate::lex("CREATE TABLE t (a int) WITH (fillfactor = 70, autovacuum_enabled = off)");
+        let lexed = crate::lex("CREATE TABLE t (a int) WITH (fillfactor = 70, autovacuum_enabled = off)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let super::CreateTableBody::Columns(body) = &stmt.body else {
             panic!("expected columns body");
         };
@@ -336,7 +362,8 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+            let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+            let stmt = stmt_parsed.ast();
             let super::CreateTableBody::Columns(body) = &stmt.body else {
                 panic!("expected columns body for {src:?}");
             };
@@ -350,7 +377,8 @@ mod tests {
         let lexed = crate::lex("CREATE TEMP TABLE nocols()");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.items().unwrap().len(), 0);
         assert!(input.is_eof());
     }
@@ -360,7 +388,8 @@ mod tests {
         let lexed = crate::lex("CREATE UNLOGGED TABLE t (a int)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.unlogged);
         assert!(input.is_eof());
     }
@@ -379,17 +408,18 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE foo (a text COLLATE \"C\")");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_partition_of_range_from_to() {
-        let lexed =
-            crate::lex("CREATE TABLE p1 PARTITION OF p FOR VALUES FROM (0) TO (10)");
+        let lexed = crate::lex("CREATE TABLE p1 PARTITION OF p FOR VALUES FROM (0) TO (10)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -398,7 +428,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE p2 PARTITION OF p FOR VALUES IN (1, 2, 3)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -409,7 +440,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -418,7 +450,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE p4 PARTITION OF p DEFAULT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -429,7 +462,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -440,7 +474,8 @@ mod tests {
         let lexed = crate::lex("ALTER TABLE t ADD PRIMARY KEY (a)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -452,7 +487,8 @@ mod tests {
         let lexed = crate::lex("ALTER TABLE t ADD PRIMARY KEY USING INDEX my_idx");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -463,7 +499,8 @@ mod tests {
         let lexed = crate::lex("ALTER TABLE t ADD UNIQUE USING INDEX my_idx");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -476,27 +513,28 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_ctas_on_commit_delete_rows() {
-        let lexed =
-            crate::lex("CREATE TEMP TABLE temptest(col) ON COMMIT DELETE ROWS AS SELECT 1");
+        let lexed = crate::lex("CREATE TEMP TABLE temptest(col) ON COMMIT DELETE ROWS AS SELECT 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_ctas_on_commit_drop() {
-        let lexed =
-            crate::lex("CREATE TEMP TABLE temptest(col) ON COMMIT DROP AS SELECT 1");
+        let lexed = crate::lex("CREATE TEMP TABLE temptest(col) ON COMMIT DROP AS SELECT 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -510,7 +548,8 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+            let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+            let _stmt = _stmt_parsed.ast();
             assert!(input.is_eof(), "leftover for {src:?}");
         }
     }
@@ -522,7 +561,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -531,7 +571,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE persons OF person_type");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt.body, super::CreateTableBody::OfType(_)));
         assert!(input.is_eof());
     }
@@ -543,7 +584,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -554,7 +596,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -565,7 +608,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -576,7 +620,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -586,18 +631,19 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE deferred_excl (f1 int, EXCLUDE (f1 WITH =))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     /// EXCLUDE table constraint with explicit access method: `EXCLUDE USING gist (col WITH op)`.
     #[test]
     fn parse_table_exclude_using_gist() {
-        let lexed =
-            crate::lex("CREATE TABLE t (a int4range, EXCLUDE USING GIST (a WITH =))");
+        let lexed = crate::lex("CREATE TABLE t (a int4range, EXCLUDE USING GIST (a WITH =))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -609,18 +655,19 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     /// EXCLUDE constraint with a custom operator like `&&` or `-|-`.
     #[test]
     fn parse_table_exclude_custom_op() {
-        let lexed =
-            crate::lex("CREATE TABLE t (a int4range, EXCLUDE USING GIST (a WITH -|-))");
+        let lexed = crate::lex("CREATE TABLE t (a int4range, EXCLUDE USING GIST (a WITH -|-))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -632,7 +679,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -643,13 +691,13 @@ mod tests {
     #[test]
     fn parse_partitioned_table_standalone() {
         use crate::ast::ddl::table::CreatePartitionedTableStmt;
-        let lexed =
-            crate::lex("create table list_parted_tbl (a int,b int) partition by list (a)");
+        let lexed = crate::lex("create table list_parted_tbl (a int,b int) partition by list (a)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreatePartitionedTableStmt::parse(&mut input)
+        let stmt_parsed = CreatePartitionedTableStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.text(), "list_parted_tbl");
         assert!(input.is_eof());
     }
@@ -662,7 +710,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreatePartitionOfStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreatePartitionOfStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.text(), "list_parted_tbl1");
         assert_eq!(stmt.parent.text(), "list_parted_tbl");
         assert!(stmt.partition_by.is_some());
@@ -679,7 +728,8 @@ mod tests {
         let lexed = crate::lex("DROP TABLE BOOLTBL1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.names.len(), 1);
         assert!(input.is_eof());
     }
@@ -690,7 +740,8 @@ mod tests {
         let lexed = crate::lex("drop table my_table");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.names.len(), 1);
     }
 
@@ -700,7 +751,8 @@ mod tests {
         let lexed = crate::lex("DROP TABLE IF EXISTS foo");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists);
     }
 
@@ -710,7 +762,8 @@ mod tests {
         let lexed = crate::lex("DROP TABLE IF EXISTS a, b, c CASCADE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists);
         assert_eq!(stmt.names.len(), 3);
         assert!(stmt.behavior.is_some());
@@ -723,7 +776,8 @@ mod tests {
         let lexed = crate::lex("DROP TABLE schema1.foo RESTRICT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.behavior.is_some());
         assert!(input.is_eof());
     }
@@ -738,7 +792,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -747,7 +802,8 @@ mod tests {
         let lexed = crate::lex("ALTER TABLE t ALTER COLUMN c SET GENERATED ALWAYS");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -756,7 +812,8 @@ mod tests {
         let lexed = crate::lex("ALTER TABLE t ALTER COLUMN c SET INCREMENT BY 2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -765,7 +822,8 @@ mod tests {
         let lexed = crate::lex("ALTER TABLE t ALTER COLUMN c RESTART");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -780,7 +838,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -792,7 +851,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE num_typemod_test (millions numeric(3, -6))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
     #[test]
@@ -802,7 +862,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE as_select1 AS EXECUTE select1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let super::CreateTableBody::AsQuery(body) = &stmt.body else {
             panic!("expected an AS-query body");
         };
@@ -822,7 +883,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let super::CreateTableBody::AsQuery(body) = &stmt.body else {
             panic!("expected an AS-query body");
         };
@@ -841,7 +903,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let super::CreateTableBody::ColumnsAsQuery(body) = &stmt.body else {
             panic!("expected a columns AS-query body");
         };
@@ -858,7 +921,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let super::CreateTableBody::AsQuery(body) = &stmt.body else {
             panic!("expected an AS-query body");
         };
@@ -872,7 +936,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t AS SELECT 1 WITH NO DATA");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let super::CreateTableBody::AsQuery(body) = &stmt.body else {
             panic!("expected an AS-query body");
         };

@@ -8,7 +8,8 @@ mod tests {
         let lexed = crate::lex("DROP OWNED BY r1, r2 CASCADE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropOwnedStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropOwnedStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.roles.len(), 2);
         assert!(stmt.behavior.is_some());
         assert!(input.is_eof());
@@ -16,7 +17,8 @@ mod tests {
 
     #[test]
     fn reassign_owned_is_modelled() {
-        let stmt: ReassignStmt = parse_stmt("REASSIGN OWNED BY a TO b");
+        let stmt = parse_stmt::<ReassignStmt>("REASSIGN OWNED BY a TO b");
+        let stmt = stmt.ast();
         assert_eq!(stmt.roles.len(), 1);
         assert_eq!(
             roundtrip::<ReassignStmt>("REASSIGN OWNED BY a TO b"),
@@ -26,7 +28,8 @@ mod tests {
 
     #[test]
     fn reassign_owned_multiple_roles_roundtrips() {
-        let stmt: ReassignStmt = parse_stmt("REASSIGN OWNED BY a, b TO c");
+        let stmt = parse_stmt::<ReassignStmt>("REASSIGN OWNED BY a, b TO c");
+        let stmt = stmt.ast();
         assert_eq!(stmt.roles.len(), 2);
         assert_eq!(
             roundtrip::<ReassignStmt>("REASSIGN OWNED BY a, b TO c"),

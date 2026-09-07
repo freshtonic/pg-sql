@@ -27,7 +27,7 @@ use crate::tokens::literal;
 /// object id), `CAST` and `TRANSFORM`. A `COMMENT ON` / `SECURITY LABEL ON`
 /// of a deferred kind fails this enum and the whole statement surfaces as a
 /// a file-level parse error.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CommentObject<'input> {
     // CONSTRAINT and object_type_name_on_any_name `name ON any_name` forms —
     // listed first since their leading keyword is unambiguous.
@@ -84,224 +84,224 @@ pub enum CommentObject<'input> {
 /// `LARGE OBJECT NumericOnly` comment object (gram.y `COMMENT ON LARGE_P
 /// OBJECT_P NumericOnly`). The OID is a numeric literal — corpus uses only
 /// positive `IntegerLit`s.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentLargeObjectObject<'input> {
     #[tok(LARGE, OBJECT, this)]
     pub oid: literal::IntegerLit<'input>,
 }
 
 /// `OPERATOR op(args)` comment object — Postgres' `operator_with_argtypes`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentOperatorObject<'input> {
     #[tok(OPERATOR, this)]
     pub target: crate::ast::shared::names::OperatorWithArgtypes<'input>,
 }
 
 /// `TABLE name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentTableObject<'input> {
     #[tok(TABLE, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `SEQUENCE name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentSequenceObject<'input> {
     #[tok(SEQUENCE, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `VIEW name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentViewObject<'input> {
     #[tok(VIEW, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `INDEX name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentIndexObject<'input> {
     #[tok(INDEX, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `COLLATION name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentCollationObject<'input> {
     #[tok(COLLATION, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `CONVERSION name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentConversionObject<'input> {
     #[tok(CONVERSION, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `STATISTICS name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentStatisticsObject<'input> {
     #[tok(STATISTICS, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `COLUMN any_name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentColumnObject<'input> {
     #[tok(COLUMN, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `MATERIALIZED VIEW name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentMatViewObject<'input> {
     #[tok(MATERIALIZED, VIEW, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `FOREIGN TABLE name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentForeignTableObject<'input> {
     #[tok(FOREIGN, TABLE, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `TEXT SEARCH PARSER name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentTsParserObject<'input> {
     #[tok(TEXT, SEARCH, PARSER, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `TEXT SEARCH DICTIONARY name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentTsDictionaryObject<'input> {
     #[tok(TEXT, SEARCH, DICTIONARY, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `TEXT SEARCH TEMPLATE name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentTsTemplateObject<'input> {
     #[tok(TEXT, SEARCH, TEMPLATE, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `TEXT SEARCH CONFIGURATION name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentTsConfigObject<'input> {
     #[tok(TEXT, SEARCH, CONFIGURATION, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `DATABASE name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentDatabaseObject<'input> {
     #[tok(DATABASE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `ROLE name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentRoleObject<'input> {
     #[tok(ROLE, this)]
     pub name: crate::tokens::NonReservedWord<'input>,
 }
 
 /// `SUBSCRIPTION name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentSubscriptionObject<'input> {
     #[tok(SUBSCRIPTION, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `TABLESPACE name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentTablespaceObject<'input> {
     #[tok(TABLESPACE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `EXTENSION name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentExtensionObject<'input> {
     #[tok(EXTENSION, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `PUBLICATION name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentPublicationObject<'input> {
     #[tok(PUBLICATION, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `SCHEMA name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentSchemaObject<'input> {
     #[tok(SCHEMA, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `SERVER name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentServerObject<'input> {
     #[tok(SERVER, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `LANGUAGE name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentLanguageObject<'input> {
     #[tok(LANGUAGE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `PROCEDURAL LANGUAGE name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentProceduralLanguageObject<'input> {
     #[tok(PROCEDURAL, LANGUAGE, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `ACCESS METHOD name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentAccessMethodObject<'input> {
     #[tok(ACCESS, METHOD, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `EVENT TRIGGER name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentEventTriggerObject<'input> {
     #[tok(EVENT, TRIGGER, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `FOREIGN DATA WRAPPER name` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentForeignDataWrapperObject<'input> {
     #[tok(FOREIGN, DATA, WRAPPER, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `TYPE Typename` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentTypeObject<'input> {
     #[tok(TYPE, this)]
     pub type_name: crate::ast::shared::names::TypeName<'input>,
 }
 
 /// `DOMAIN Typename` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentDomainObject<'input> {
     #[tok(DOMAIN, this)]
     pub type_name: crate::ast::shared::names::TypeName<'input>,
 }
 
 /// `POLICY name ON table` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentPolicyObject<'input> {
     #[tok(POLICY, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -310,7 +310,7 @@ pub struct CommentPolicyObject<'input> {
 }
 
 /// `RULE name ON table` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentRuleObject<'input> {
     #[tok(RULE, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -319,7 +319,7 @@ pub struct CommentRuleObject<'input> {
 }
 
 /// `TRIGGER name ON table` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentTriggerObject<'input> {
     #[tok(TRIGGER, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -328,7 +328,7 @@ pub struct CommentTriggerObject<'input> {
 }
 
 /// `CONSTRAINT name ON [DOMAIN] any_name` — the constraint object forms.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentConstraintObject<'input> {
     #[tok(CONSTRAINT, this, ON)]
     pub name: crate::tokens::ColId<'input>,
@@ -342,7 +342,7 @@ pub struct CommentConstraintObject<'input> {
 /// Only the parenthesized-signature form is modelled; every corpus example
 /// carries an explicit argument list. The bare-name (`args_unspecified`) form
 /// is not exercised by any corpus statement.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentFunctionObject<'input> {
     #[tok(FUNCTION, this)]
     pub name: QualifiedName<'input>,
@@ -350,7 +350,7 @@ pub struct CommentFunctionObject<'input> {
 }
 
 /// `PROCEDURE name(args)` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentProcedureObject<'input> {
     #[tok(PROCEDURE, this)]
     pub name: QualifiedName<'input>,
@@ -358,7 +358,7 @@ pub struct CommentProcedureObject<'input> {
 }
 
 /// `ROUTINE name(args)` comment object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentRoutineObject<'input> {
     #[tok(ROUTINE, this)]
     pub name: QualifiedName<'input>,
@@ -366,7 +366,7 @@ pub struct CommentRoutineObject<'input> {
 }
 
 /// `AGGREGATE name(args)` — Postgres' `aggregate_with_argtypes`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentAggregateObject<'input> {
     #[tok(AGGREGATE, this)]
     pub name: QualifiedName<'input>,
@@ -375,7 +375,7 @@ pub struct CommentAggregateObject<'input> {
 
 /// The comment/label text — Postgres' `comment_text` / `security_label`: a
 /// string literal or the keyword `NULL` (drop the comment/label).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CommentText<'input> {
     #[tok(NULL)]
     Null,
@@ -385,7 +385,7 @@ pub enum CommentText<'input> {
 // --- COMMENT ---
 
 /// `COMMENT ON object IS { 'text' | NULL }`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommentStmt<'input> {
     #[tok(COMMENT, ON, this)]
     pub object: CommentObject<'input>,
@@ -404,7 +404,7 @@ pub struct CommentStmt<'input> {
 /// Variant ordering: `String` before `Word` is irrelevant (disjoint
 /// first-sets — a quoted string vs an identifier), but the string form is the
 /// one the corpus exercises (`FOR 'dummy'`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SecurityLabelProviderName<'input> {
     String(literal::StringLit<'input>),
     Word(literal::Ident<'input>),
@@ -412,7 +412,7 @@ pub enum SecurityLabelProviderName<'input> {
 
 /// The `FOR provider` clause on a `SECURITY LABEL` statement — Postgres'
 /// `opt_provider`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SecurityLabelProvider<'input> {
     #[tok(FOR, this)]
     pub name: SecurityLabelProviderName<'input>,
@@ -424,7 +424,7 @@ pub struct SecurityLabelProvider<'input> {
 /// Postgres' `SecLabelStmt` accepts a subset of object kinds; the wider
 /// `CommentObject` enum is reused since SECURITY LABEL of an unsupported kind
 /// is rejected by PostgreSQL anyway and never appears in the corpus.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(SECURITY, LABEL, this)]
 pub struct SecurityLabelStmt<'input> {
     pub provider: Option<SecurityLabelProvider<'input>>,

@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("ALTER STATISTICS IF EXISTS ab1_a_b_stats SET STATISTICS 0");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterStatisticsStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterStatisticsStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -19,7 +20,8 @@ mod tests {
         let lexed = crate::lex("ALTER STATISTICS ab1_a_b_stats SET STATISTICS -1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterStatisticsStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterStatisticsStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -28,7 +30,8 @@ mod tests {
         let lexed = crate::lex("CREATE STATISTICS s ON a, b FROM ext_stats_test");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateStatisticsStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateStatisticsStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_not_exists.is_none());
         assert!(stmt.name.is_some());
         assert!(stmt.on.is_some());
@@ -41,7 +44,8 @@ mod tests {
         let lexed = crate::lex("CREATE STATISTICS IF NOT EXISTS s (ndistinct, dependencies) ON a, b FROM tab");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateStatisticsStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateStatisticsStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_not_exists.is_some());
         assert!(stmt.stat_types.is_some());
         assert!(input.is_eof());
@@ -52,7 +56,8 @@ mod tests {
         let lexed = crate::lex("CREATE STATISTICS s ON (a + b), c FROM ext_stats_test");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateStatisticsStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateStatisticsStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.on.is_some());
         assert!(input.is_eof());
     }

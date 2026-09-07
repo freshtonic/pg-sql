@@ -8,7 +8,7 @@ use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
 /// `INLINE name` — optional inline handler in `CREATE LANGUAGE`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LanguageInlineHandler<'input> {
     #[tok(INLINE, this)]
     pub name: QualifiedName<'input>,
@@ -18,7 +18,7 @@ pub struct LanguageInlineHandler<'input> {
 ///
 /// Variant ordering: the two-token `NO VALIDATOR` before the
 /// `VALIDATOR name` so the longer match wins on a leading `NO`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum LanguageValidatorClause<'input> {
     #[tok(NO, VALIDATOR)]
     None,
@@ -26,7 +26,7 @@ pub enum LanguageValidatorClause<'input> {
 }
 
 /// `VALIDATOR name` — the populated validator branch.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LanguageValidator<'input> {
     #[tok(VALIDATOR, this)]
     pub name: QualifiedName<'input>,
@@ -34,7 +34,7 @@ pub struct LanguageValidator<'input> {
 
 /// `HANDLER name [INLINE name] [VALIDATOR name | NO VALIDATOR]` — the
 /// populated CREATE LANGUAGE handler clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LanguageHandlerClause<'input> {
     #[tok(HANDLER, this)]
     pub name: QualifiedName<'input>,
@@ -46,7 +46,7 @@ pub struct LanguageHandlerClause<'input> {
 /// [HANDLER name [INLINE name] [VALIDATOR name | NO VALIDATOR]]` —
 /// Postgres' `CreatePLangStmt`. The handler-less form is silently treated as
 /// `CREATE EXTENSION` by PG; structurally it is still a CREATE LANGUAGE.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateLanguageStmt<'input> {
     #[tok(CREATE, this)]
     #[presence(OR, REPLACE)]
@@ -59,7 +59,7 @@ pub struct CreateLanguageStmt<'input> {
 }
 
 /// `DROP [PROCEDURAL] LANGUAGE [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, optional(PROCEDURAL), LANGUAGE, this)]
 pub struct DropLanguageStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -73,7 +73,7 @@ pub struct DropLanguageStmt<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`RENAME`, `OWNER`), so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterLanguageAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -81,7 +81,7 @@ pub enum AlterLanguageAction<'input> {
 
 /// `ALTER [PROCEDURAL] LANGUAGE name action` — Postgres' `RenameStmt`
 /// and `AlterOwnerStmt` branches for procedural languages.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterLanguageStmt<'input> {
     #[tok(ALTER, optional(PROCEDURAL), LANGUAGE, this)]
     pub name: crate::tokens::ColId<'input>,

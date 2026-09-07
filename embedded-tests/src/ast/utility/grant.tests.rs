@@ -5,7 +5,8 @@ mod tests {
 
     #[test]
     fn grant_single_privilege_on_bare_table_to_role() {
-        let stmt: GrantStmt = parse_stmt("GRANT SELECT ON tbl1 TO u1");
+        let stmt = parse_stmt::<GrantStmt>("GRANT SELECT ON tbl1 TO u1");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.privileges, Privileges::List(_)));
         assert!(matches!(stmt.body, GrantBody::Privilege(_)));
         reparse_stable::<GrantStmt>("GRANT SELECT ON tbl1 TO u1");
@@ -18,28 +19,32 @@ mod tests {
 
     #[test]
     fn grant_all_on_table_to_role() {
-        let stmt: GrantStmt = parse_stmt("GRANT ALL ON tbl1 TO u1");
+        let stmt = parse_stmt::<GrantStmt>("GRANT ALL ON tbl1 TO u1");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.privileges, Privileges::All(_)));
         reparse_stable::<GrantStmt>("GRANT ALL ON tbl1 TO u1");
     }
 
     #[test]
     fn grant_all_privileges_on_table_to_role() {
-        let stmt: GrantStmt = parse_stmt("GRANT ALL PRIVILEGES ON tbl1 TO u1");
+        let stmt = parse_stmt::<GrantStmt>("GRANT ALL PRIVILEGES ON tbl1 TO u1");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.privileges, Privileges::AllPrivileges(_)));
         reparse_stable::<GrantStmt>("GRANT ALL PRIVILEGES ON tbl1 TO u1");
     }
 
     #[test]
     fn grant_all_with_column_list() {
-        let stmt: GrantStmt = parse_stmt("GRANT ALL (a) ON tbl1 TO u1");
+        let stmt = parse_stmt::<GrantStmt>("GRANT ALL (a) ON tbl1 TO u1");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.privileges, Privileges::AllCols(_)));
         reparse_stable::<GrantStmt>("GRANT ALL (a) ON tbl1 TO u1");
     }
 
     #[test]
     fn grant_all_privileges_with_column_list() {
-        let stmt: GrantStmt = parse_stmt("GRANT ALL PRIVILEGES (a, b) ON tbl1 TO u1");
+        let stmt = parse_stmt::<GrantStmt>("GRANT ALL PRIVILEGES (a, b) ON tbl1 TO u1");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.privileges, Privileges::AllPrivilegesCols(_)));
         reparse_stable::<GrantStmt>("GRANT ALL PRIVILEGES (a, b) ON tbl1 TO u1");
     }
@@ -66,7 +71,8 @@ mod tests {
 
     #[test]
     fn grant_with_grant_option() {
-        let stmt: GrantStmt = parse_stmt("GRANT CREATE ON DATABASE d TO u1 WITH GRANT OPTION");
+        let stmt = parse_stmt::<GrantStmt>("GRANT CREATE ON DATABASE d TO u1 WITH GRANT OPTION");
+        let stmt = stmt.ast();
         if let GrantBody::Privilege(body) = &stmt.body {
             assert!(body.grant_option.is_some());
         } else {
@@ -97,7 +103,8 @@ mod tests {
 
     #[test]
     fn grant_role_membership_simple() {
-        let stmt: GrantStmt = parse_stmt("GRANT role1 TO role2");
+        let stmt = parse_stmt::<GrantStmt>("GRANT role1 TO role2");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.body, GrantBody::Role(_)));
         reparse_stable::<GrantStmt>("GRANT role1 TO role2");
     }
@@ -124,7 +131,8 @@ mod tests {
 
     #[test]
     fn revoke_simple_privilege() {
-        let stmt: RevokeStmt = parse_stmt("REVOKE SELECT ON tbl1 FROM u1");
+        let stmt = parse_stmt::<RevokeStmt>("REVOKE SELECT ON tbl1 FROM u1");
+        let stmt = stmt.ast();
         assert!(stmt.option_for.is_none());
         assert!(matches!(stmt.body, RevokeBody::Privilege(_)));
         reparse_stable::<RevokeStmt>("REVOKE SELECT ON tbl1 FROM u1");
@@ -132,7 +140,8 @@ mod tests {
 
     #[test]
     fn revoke_grant_option_for_cascade() {
-        let stmt: RevokeStmt = parse_stmt("REVOKE GRANT OPTION FOR SELECT ON tbl1 FROM u1 CASCADE");
+        let stmt = parse_stmt::<RevokeStmt>("REVOKE GRANT OPTION FOR SELECT ON tbl1 FROM u1 CASCADE");
+        let stmt = stmt.ast();
         assert!(matches!(
             stmt.option_for,
             Some(RevokeOptionFor::GrantOption(_))
@@ -142,14 +151,16 @@ mod tests {
 
     #[test]
     fn revoke_role_membership_cascade() {
-        let stmt: RevokeStmt = parse_stmt("REVOKE role1 FROM u1 CASCADE");
+        let stmt = parse_stmt::<RevokeStmt>("REVOKE role1 FROM u1 CASCADE");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.body, RevokeBody::Role(_)));
         reparse_stable::<RevokeStmt>("REVOKE role1 FROM u1 CASCADE");
     }
 
     #[test]
     fn revoke_admin_option_for_role() {
-        let stmt: RevokeStmt = parse_stmt("REVOKE ADMIN OPTION FOR role1 FROM u1");
+        let stmt = parse_stmt::<RevokeStmt>("REVOKE ADMIN OPTION FOR role1 FROM u1");
+        let stmt = stmt.ast();
         assert!(matches!(
             stmt.option_for,
             Some(RevokeOptionFor::AdminOption(_))

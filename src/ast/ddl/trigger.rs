@@ -11,7 +11,7 @@ use crate::tokens::{literal, punct};
 ///
 /// Variant ordering: multi-word `InsteadOf` first so the longer match wins
 /// when `INSTEAD` is followed by `OF`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TriggerActionTime {
     #[tok(INSTEAD, OF)]
     InsteadOf,
@@ -22,15 +22,15 @@ pub enum TriggerActionTime {
 }
 
 /// `UPDATE OF col[, col …]` — column list following an UPDATE trigger event.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(OF, this)]
 pub struct TriggerUpdateOfColumns<'input> {
     #[sep(COMMA)]
-    pub columns: recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub columns: recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
 }
 
 /// `UPDATE [OF cols]` — UPDATE trigger event with optional column list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(UPDATE, this)]
 pub struct TriggerUpdateEvent<'input> {
     pub of: Option<TriggerUpdateOfColumns<'input>>,
@@ -38,7 +38,7 @@ pub struct TriggerUpdateEvent<'input> {
 
 /// One trigger event — Postgres' `TriggerOneEvent`:
 /// `INSERT | DELETE | UPDATE [OF cols] | TRUNCATE`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TriggerOneEvent<'input> {
     #[tok(INSERT)]
     Insert,
@@ -55,14 +55,14 @@ pub enum TriggerOneEvent<'input> {
 /// repeated field directly on each statement can make generated formatting
 /// concatenate a unit event and its following separator (for example,
 /// `INSERTOR`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TriggerEventList<'input> {
     #[sep(OR)]
-    pub events: recursa::Vec1<TriggerOneEvent<'input>>,
+    pub events: recursa::ArenaVec1<'input, TriggerOneEvent<'input>>,
 }
 
 /// `ROW | STATEMENT` — granularity selector after `FOR [EACH]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TriggerForType {
     #[tok(ROW)]
     Row,
@@ -73,21 +73,21 @@ pub enum TriggerForType {
 /// `FOR [EACH] {ROW | STATEMENT}` — Postgres' `TriggerForSpec`. When omitted
 /// PG defaults to `STATEMENT`, but we preserve absence in the AST so the
 /// formatter round-trips source verbatim.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TriggerForSpec {
     #[tok(FOR, optional(EACH), this)]
     pub kind: TriggerForType,
 }
 
 /// `WHEN (expr)` — Postgres' `TriggerWhen` clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TriggerWhenClause<'input> {
     #[tok(WHEN, LPAREN, this, RPAREN)]
-    pub expr: Box<Expr<'input>>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `NEW | OLD` — Postgres' `TransitionOldOrNew`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TransitionOldOrNew {
     #[tok(OLD)]
     Old,
@@ -97,7 +97,7 @@ pub enum TransitionOldOrNew {
 
 /// `ROW | TABLE` — Postgres' `TransitionRowOrTable`. ROW is permitted by
 /// gram.y though semantically only TABLE makes sense for transition tables.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TransitionRowOrTable {
     #[tok(TABLE)]
     Table,
@@ -106,7 +106,7 @@ pub enum TransitionRowOrTable {
 }
 
 /// A single `REFERENCING` transition: `{OLD|NEW} {TABLE|ROW} [AS] name`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TriggerTransition<'input> {
     pub old_or_new: TransitionOldOrNew,
     pub row_or_table: TransitionRowOrTable,
@@ -115,14 +115,14 @@ pub struct TriggerTransition<'input> {
 }
 
 /// `REFERENCING transition+` — one or more transition-table clauses.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(REFERENCING, this)]
 pub struct TriggerReferencing<'input> {
-    pub transitions: Vec<TriggerTransition<'input>>,
+    pub transitions: recursa::ArenaVec<'input, TriggerTransition<'input>>,
 }
 
 /// `FUNCTION | PROCEDURE` — Postgres' `FUNCTION_or_PROCEDURE`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FunctionOrProcedure {
     #[tok(FUNCTION)]
     Function,
@@ -135,7 +135,7 @@ pub enum FunctionOrProcedure {
 ///
 /// Variant ordering: numeric forms before integer (NumericLit longest-match
 /// wins on `.` / `e`); literal `StringLit` before identifier `AliasName`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TriggerFuncArg<'input> {
     Numeric(literal::NumericLit<'input>),
     Integer(literal::IntegerLit<'input>),
@@ -144,16 +144,16 @@ pub enum TriggerFuncArg<'input> {
 }
 
 /// `(arg, …)` argument list passed to the trigger's EXECUTE FUNCTION/PROCEDURE.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct TriggerExecArgs<'input> {
     #[sep(COMMA)]
-    pub args: Vec<TriggerFuncArg<'input>>,
+    pub args: recursa::ArenaVec<'input, TriggerFuncArg<'input>>,
 }
 
 /// `EXECUTE {FUNCTION | PROCEDURE} func_name(args)` — Postgres' trigger
 /// action clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TriggerExecuteClause<'input> {
     #[tok(EXECUTE, this)]
     pub kind: FunctionOrProcedure,
@@ -165,7 +165,7 @@ pub struct TriggerExecuteClause<'input> {
 /// qualified_name [REFERENCING …] [FOR [EACH] {ROW|STATEMENT}] [WHEN (expr)]
 /// EXECUTE {FUNCTION|PROCEDURE} func_name(args)` — Postgres' `CreateTrigStmt`
 /// (non-constraint form).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateTriggerStmt<'input> {
     #[tok(CREATE, this, TRIGGER)]
     #[presence(OR, REPLACE)]
@@ -185,7 +185,7 @@ pub struct CreateTriggerStmt<'input> {
 /// action shared by ALTER TRIGGER / ALTER MATERIALIZED VIEW / ALTER INDEX
 /// (and several others). The optional `NO` toggles whether the extension
 /// dependency is added (`DEPENDS ...`) or removed (`NO DEPENDS ...`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DependsOnExtension<'input> {
     #[tok(this, DEPENDS, ON, EXTENSION)]
     #[presence(NO)]
@@ -198,7 +198,7 @@ pub struct DependsOnExtension<'input> {
 ///
 /// Variant ordering: variants begin with distinct leading keywords
 /// (`RENAME` / `NO` / `DEPENDS`), so order is for clarity only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterTriggerAction<'input> {
     Rename(RenameTo<'input>),
     Depends(DependsOnExtension<'input>),
@@ -208,7 +208,7 @@ pub enum AlterTriggerAction<'input> {
 /// [NO] DEPENDS ON EXTENSION name }` — Postgres' `RenameStmt` and
 /// `AlterObjectDependsStmt` branches for triggers. There is no OWNER /
 /// SET SCHEMA / ENABLE branch on triggers in gram.y.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterTriggerStmt<'input> {
     #[tok(ALTER, TRIGGER, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -219,7 +219,7 @@ pub struct AlterTriggerStmt<'input> {
 
 /// `FROM qualified_name` — Postgres' `OptConstrFromTable` (the referenced
 /// table on a constraint trigger).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ConstrFromTable<'input> {
     #[tok(FROM, this)]
     pub table: QualifiedName<'input>,
@@ -234,7 +234,7 @@ pub struct ConstrFromTable<'input> {
 ///
 /// Variant ordering: longer/multi-keyword forms first
 /// (`NOT DEFERRABLE`/`NOT VALID`/`INITIALLY …`/`NO INHERIT`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ConstraintAttributeElem {
     #[tok(NOT, DEFERRABLE)]
     NotDeferrable,
@@ -257,7 +257,7 @@ pub enum ConstraintAttributeElem {
 ///
 /// PG rejects `OR REPLACE` semantically here, but gram.y accepts it; we
 /// mirror the grammar.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateConstraintTriggerStmt<'input> {
     #[tok(CREATE, this, CONSTRAINT, TRIGGER)]
     #[presence(OR, REPLACE)]
@@ -268,21 +268,21 @@ pub struct CreateConstraintTriggerStmt<'input> {
     #[tok(ON, this)]
     pub table: QualifiedName<'input>,
     pub from_table: Option<ConstrFromTable<'input>>,
-    pub constraint_attrs: Vec<ConstraintAttributeElem>,
+    pub constraint_attrs: recursa::ArenaVec<'input, ConstraintAttributeElem>,
     pub for_each_row: ForEachRow,
     pub when_clause: Option<TriggerWhenClause<'input>>,
     pub execute_clause: TriggerExecuteClause<'input>,
 }
 
 /// Mandatory row-level marker on a constraint trigger.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ForEachRow {
     #[tok(FOR, EACH, ROW)]
     Value,
 }
 
 /// `DROP TRIGGER [IF EXISTS] name ON table [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, TRIGGER, this)]
 pub struct DropTriggerStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -293,17 +293,17 @@ pub struct DropTriggerStmt<'input> {
 }
 
 /// One or more event-trigger filter values enclosed in parentheses.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct EventTriggerValueList<'input> {
     #[sep(COMMA)]
-    pub values: recursa::Vec1<literal::StringLit<'input>>,
+    pub values: recursa::ArenaVec1<'input, literal::StringLit<'input>>,
 }
 
 /// A single `event_trigger_when_item`: `tag IN ('a', 'b', …)`. The
 /// filter-tag name is a `ColId` (identifier or unreserved keyword); the
 /// values are `Sconst` (single-quoted strings).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct EventTriggerWhenItem<'input> {
     #[tok(this, IN)]
     pub tag: literal::AliasName<'input>,
@@ -311,16 +311,16 @@ pub struct EventTriggerWhenItem<'input> {
 }
 
 /// `WHEN item AND item AND …` — Postgres' `event_trigger_when_list`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(WHEN, this)]
 pub struct EventTriggerWhenClause<'input> {
     #[sep(AND)]
-    pub items: recursa::Vec1<EventTriggerWhenItem<'input>>,
+    pub items: recursa::ArenaVec1<'input, EventTriggerWhenItem<'input>>,
 }
 
 /// `CREATE EVENT TRIGGER name ON event_name [WHEN filters]
 /// EXECUTE {FUNCTION|PROCEDURE} func_name()` — Postgres' `CreateEventTrigStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(this, RPAREN)]
 pub struct CreateEventTriggerStmt<'input> {
     #[tok(CREATE, EVENT, TRIGGER, this)]
@@ -337,11 +337,11 @@ pub struct CreateEventTriggerStmt<'input> {
     #[sep(COMMA)]
     /// `()` — event triggers never take arguments; the list is empty for
     /// PostgreSQL-valid inputs.
-    pub args: Vec<TriggerFuncArg<'input>>,
+    pub args: recursa::ArenaVec<'input, TriggerFuncArg<'input>>,
 }
 
 /// `DROP EVENT TRIGGER [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, EVENT, TRIGGER, this)]
 pub struct DropEventTriggerStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -355,7 +355,7 @@ pub struct DropEventTriggerStmt<'input> {
 /// Variant ordering: the two-token `ENABLE REPLICA` / `ENABLE ALWAYS` forms
 /// come before bare `ENABLE` so longest-match-wins picks the longer spelling
 /// first. `DISABLE` is keyword-disjoint, so its position is for clarity only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum EnableTrigger {
     #[tok(ENABLE, REPLICA)]
     EnableReplica,
@@ -373,7 +373,7 @@ pub enum EnableTrigger {
 ///
 /// Variant ordering: variants begin with distinct leading keywords
 /// (`ENABLE`/`DISABLE`/`RENAME`/`OWNER`), so order is for clarity only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterEventTriggerAction<'input> {
     Enable(EnableTrigger),
     Rename(RenameTo<'input>),
@@ -382,7 +382,7 @@ pub enum AlterEventTriggerAction<'input> {
 
 /// `ALTER EVENT TRIGGER name action` — Postgres' `AlterEventTrigStmt` plus
 /// the event-trigger branches of `RenameStmt` / `AlterOwnerStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterEventTriggerStmt<'input> {
     #[tok(ALTER, EVENT, TRIGGER, this)]
     pub name: crate::tokens::ColId<'input>,

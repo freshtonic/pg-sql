@@ -12,18 +12,18 @@ use crate::tokens::literal;
 /// i.e. `ON`, `OFF`, `TRUE`, `FALSE`, `DEFAULT`, a numeric (signed or not),
 /// a string literal, or an identifier. We model that with `SetValue`, which
 /// is the same vocabulary `SET` accepts.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct VacuumOption<'input> {
     pub name: literal::AliasName<'input>,
     pub value: Option<crate::ast::session::set_reset::SetValue<'input>>,
 }
 
 /// Parenthesized options list: `( opt [= val] [, ...] )`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct VacuumOptions<'input> {
     #[sep(COMMA)]
-    pub list: Vec<VacuumOption<'input>>,
+    pub list: recursa::ArenaVec<'input, VacuumOption<'input>>,
 }
 
 // -----------------------------------------------------------------------
@@ -36,15 +36,15 @@ pub struct VacuumOptions<'input> {
 ///
 /// `qualified_name [(column [, ...])]`. The optional column list applies to
 /// `VACUUM ANALYZE` to scope the analyze to specific columns.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct VacuumColumnList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
 );
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct VacuumRelation<'input> {
     pub name: QualifiedName<'input>,
     pub columns: Option<VacuumColumnList<'input>>,
@@ -62,7 +62,7 @@ pub struct VacuumRelation<'input> {
 /// and any combination of `FULL` / `FREEZE` / `VERBOSE` / `ANALYZE` is
 /// permitted in that fixed declaration order. Both forms share the optional
 /// trailing relation list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(VACUUM, this)]
 pub struct VacuumStmt<'input> {
     pub options: Option<VacuumOptions<'input>>,
@@ -75,5 +75,5 @@ pub struct VacuumStmt<'input> {
     #[presence(ANALYZE)]
     pub analyze: bool,
     #[sep(COMMA)]
-    pub relations: Option<recursa::Vec1<VacuumRelation<'input>>>,
+    pub relations: Option<recursa::ArenaVec1<'input, VacuumRelation<'input>>>,
 }

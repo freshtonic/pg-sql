@@ -15,7 +15,7 @@ use crate::tokens::{literal, punct};
 ///
 /// Variant ordering: variants begin with distinct leading keywords
 /// (`LIMIT` / `EXCEPT`), so order is for clarity only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ImportQualification<'input> {
     LimitTo(ImportLimitTo<'input>),
     Except(ImportExcept<'input>),
@@ -25,24 +25,24 @@ pub enum ImportQualification<'input> {
 /// set. The table list is `relation_expr_list` in gram.y; corpus
 /// statements use plain qualified names only, so we model the list as
 /// `Seq1` of `QualifiedName` separated by commas.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LIMIT, TO, LPAREN, this, RPAREN)]
 pub struct ImportLimitTo<'input> {
     #[sep(COMMA)]
-    pub names: recursa::Vec1<QualifiedName<'input>>,
+    pub names: recursa::ArenaVec1<'input, QualifiedName<'input>>,
 }
 
 /// `EXCEPT (table[, ...])` — exclude the named tables from the import.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(EXCEPT, LPAREN, this, RPAREN)]
 pub struct ImportExcept<'input> {
     #[sep(COMMA)]
-    pub names: recursa::Vec1<QualifiedName<'input>>,
+    pub names: recursa::ArenaVec1<'input, QualifiedName<'input>>,
 }
 
 /// `IMPORT FOREIGN SCHEMA remote [LIMIT TO ... | EXCEPT ...] FROM SERVER
 /// server INTO local [OPTIONS (...)]` — Postgres' `ImportForeignSchemaStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ImportForeignSchemaStmt<'input> {
     #[tok(IMPORT, FOREIGN, SCHEMA, this)]
     pub remote: crate::tokens::ColId<'input>,
@@ -55,14 +55,14 @@ pub struct ImportForeignSchemaStmt<'input> {
 }
 
 /// `TYPE sconst` clause on CREATE SERVER — Postgres' `opt_type`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ServerTypeClause<'input> {
     #[tok(TYPE, this)]
     pub value: CopySconst<'input>,
 }
 
 /// `VERSION { sconst | NULL }` — Postgres' `foreign_server_version`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ServerVersionValue<'input> {
     #[tok(NULL)]
     Null,
@@ -70,7 +70,7 @@ pub enum ServerVersionValue<'input> {
 }
 
 /// `VERSION value` clause on CREATE/ALTER SERVER.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ServerVersionClause<'input> {
     #[tok(VERSION, this)]
     pub value: ServerVersionValue<'input>,
@@ -78,7 +78,7 @@ pub struct ServerVersionClause<'input> {
 
 /// `FOREIGN DATA WRAPPER name` — the FDW reference on CREATE SERVER and
 /// CREATE FOREIGN DATA WRAPPER's own header.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ForeignDataWrapperRef<'input> {
     #[tok(FOREIGN, DATA, WRAPPER, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -87,7 +87,7 @@ pub struct ForeignDataWrapperRef<'input> {
 /// `CREATE SERVER [IF NOT EXISTS] name [TYPE sconst]
 /// [VERSION { sconst | NULL }] FOREIGN DATA WRAPPER fdw
 /// [OPTIONS (...)]` — Postgres' `CreateForeignServerStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(CREATE, SERVER, this)]
 pub struct CreateServerStmt<'input> {
     pub if_not_exists: Option<IfNotExists>,
@@ -99,7 +99,7 @@ pub struct CreateServerStmt<'input> {
 }
 
 /// `DROP SERVER [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, SERVER, this)]
 pub struct DropServerStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -127,7 +127,7 @@ pub struct DropServerStmt<'input> {
 /// [`GenericOption`](crate::ast::ddl::table::GenericOption) (which starts with
 /// a `ColLabel` identifier). The three prefixed variants have disjoint
 /// first tokens, so order among them is for clarity only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterGenericOption<'input> {
     Set(AlterGenericOptionSet<'input>),
     Add(AlterGenericOptionAdd<'input>),
@@ -137,7 +137,7 @@ pub enum AlterGenericOption<'input> {
 
 /// `SET name 'value'` — the `SET`-prefixed variant of
 /// `alter_generic_option_elem`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterGenericOptionSet<'input> {
     #[tok(SET, this)]
     pub option: crate::ast::ddl::table::GenericOption<'input>,
@@ -145,7 +145,7 @@ pub struct AlterGenericOptionSet<'input> {
 
 /// `ADD name 'value'` — the `ADD`-prefixed variant of
 /// `alter_generic_option_elem`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterGenericOptionAdd<'input> {
     #[tok(ADD, this)]
     pub option: crate::ast::ddl::table::GenericOption<'input>,
@@ -154,7 +154,7 @@ pub struct AlterGenericOptionAdd<'input> {
 /// `DROP name` — the `DROP`-prefixed variant of
 /// `alter_generic_option_elem`. Unlike `SET` / `ADD` it takes only the
 /// option name (a `ColLabel`), with no value.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterGenericOptionDrop<'input> {
     #[tok(DROP, this)]
     pub name: literal::AliasName<'input>,
@@ -164,11 +164,11 @@ pub struct AlterGenericOptionDrop<'input> {
 /// `alter_generic_options`. The `ALTER`-side counterpart of
 /// [`CreateGenericOptions`]; differs only in that each element may
 /// carry an `ADD` / `SET` / `DROP` prefix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(OPTIONS, LPAREN, this, RPAREN)]
 pub struct AlterGenericOptions<'input> {
     #[sep(COMMA)]
-    pub list: recursa::Vec1<AlterGenericOption<'input>>,
+    pub list: recursa::ArenaVec1<'input, AlterGenericOption<'input>>,
 }
 
 /// One action on `ALTER SERVER name action` — covers Postgres'
@@ -183,7 +183,7 @@ pub struct AlterGenericOptions<'input> {
 /// an `Option<AlterGenericOptions>` tail keeps the shared `VERSION sconst`
 /// prefix in one production and leaves the LR parser to decide whether the
 /// `OPTIONS` tail is present.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterServerAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -193,7 +193,7 @@ pub enum AlterServerAction<'input> {
 
 /// `VERSION value [OPTIONS (...)]` — Postgres' `AlterForeignServerStmt`
 /// VERSION branch, with optional trailing generic-options clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterServerVersionAction<'input> {
     pub version: ServerVersionClause<'input>,
     pub options: Option<AlterGenericOptions<'input>>,
@@ -208,7 +208,7 @@ pub struct AlterServerVersionAction<'input> {
 /// the parser accepts it to avoid a
 /// file-level parse error (the differential oracle stays
 /// valid because both sides round-trip rejected).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterServerStmt<'input> {
     #[tok(ALTER, SERVER, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -232,10 +232,10 @@ pub struct AlterServerStmt<'input> {
 /// leading fdw_options) is modelled by the sibling
 /// [`AlterFdwAction::GenericOpts`] variant. Splitting these two gives the LR
 /// grammar one non-nullable option-led production and one `OPTIONS` production.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterFdwOptsAction<'input> {
     pub head: FdwOption<'input>,
-    pub rest: Vec<FdwOption<'input>>,
+    pub rest: recursa::ArenaVec<'input, FdwOption<'input>>,
     pub generic: Option<AlterGenericOptions<'input>>,
 }
 
@@ -252,9 +252,9 @@ pub struct AlterFdwOptsAction<'input> {
 ///   leading fdw_options)
 ///
 /// The `alter_generic_options` and `fdw_options` clauses are split into two
-/// variants instead of one struct with a nullable leading `Vec<FdwOption>`,
+/// variants instead of one struct with a nullable leading `recursa::ArenaVec<'input, FdwOption>`,
 /// so the LR grammar has an explicit `OPTIONS`-only production.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterFdwAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -273,7 +273,7 @@ pub enum AlterFdwAction<'input> {
 /// structured AST rather than surfacing as a
 /// file-level parse error; the differential oracle still
 /// passes because the round-tripped output is also PG-rejected.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterFdwBody<'input> {
     #[tok(DATA, WRAPPER, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -304,7 +304,7 @@ pub struct AlterFdwBody<'input> {
 /// - `SetSchema` (`SET SCHEMA …`) — disjoint from every `SET …` action
 ///   inside `alter_table_cmd` (which all use different 2nd tokens).
 /// - `Cmds` last — the comma-separated `alter_table_cmds` catch-all.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterForeignTableAction<'input> {
     RenameColumn(RenameColumnClause<'input>),
     Rename(RenameTo<'input>),
@@ -322,7 +322,7 @@ pub enum AlterForeignTableAction<'input> {
 /// forms on ALTER FOREIGN TABLE, but we still accept `ONLY`/`*` for
 /// grammar fidelity — the same shape used by `AlterTableSingle` for
 /// regular tables.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(TABLE, this)]
 pub struct AlterForeignTableBody<'input> {
     pub if_exists: Option<IfExists>,
@@ -338,7 +338,7 @@ pub struct AlterForeignTableBody<'input> {
 /// (`AlterFdwStmt`) or `TABLE ...` (`AlterForeignTableStmt`).
 /// Discriminated by the first post-`FOREIGN` token (`DATA` vs `TABLE`);
 /// the two first-tokens are disjoint so peek order is for clarity only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterForeignBody<'input> {
     Fdw(AlterFdwBody<'input>),
     Table(AlterForeignTableBody<'input>),
@@ -347,7 +347,7 @@ pub enum AlterForeignBody<'input> {
 /// `ALTER FOREIGN ...` umbrella statement covering
 /// `ALTER FOREIGN DATA WRAPPER ...` (Postgres' `AlterFdwStmt`) and
 /// `ALTER FOREIGN TABLE ...` (Postgres' `AlterForeignTableStmt`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterForeignStmt<'input> {
     #[tok(ALTER, FOREIGN, this)]
     pub body: AlterForeignBody<'input>,
@@ -358,7 +358,7 @@ pub struct AlterForeignStmt<'input> {
 /// Variant ordering: the two-token `NO HANDLER` / `NO VALIDATOR` forms
 /// come before their single-token counterparts so longest-match-wins
 /// picks the `NO`-prefixed spelling first.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum FdwOption<'input> {
     #[tok(NO, HANDLER)]
     NoHandler,
@@ -369,14 +369,14 @@ pub enum FdwOption<'input> {
 }
 
 /// `HANDLER handler_name` — Postgres' `fdw_option` HANDLER branch.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FdwHandlerOption<'input> {
     #[tok(HANDLER, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `VALIDATOR handler_name` — Postgres' `fdw_option` VALIDATOR branch.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct FdwValidatorOption<'input> {
     #[tok(VALIDATOR, this)]
     pub name: QualifiedName<'input>,
@@ -387,18 +387,18 @@ pub struct FdwValidatorOption<'input> {
 /// `CREATE FOREIGN DATA WRAPPER ...` after the `CREATE FOREIGN` head.
 ///
 /// The fdw_options list is order-free and separator-free; we model it
-/// with `Vec<FdwOption>` so it stops at the first non-option token
+/// with `recursa::ArenaVec<'input, FdwOption>` so it stops at the first non-option token
 /// (OPTIONS or end-of-statement).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateFdwBody<'input> {
     #[tok(DATA, WRAPPER, this)]
     pub name: crate::tokens::ColId<'input>,
-    pub fdw_options: Vec<FdwOption<'input>>,
+    pub fdw_options: recursa::ArenaVec<'input, FdwOption<'input>>,
     pub options: Option<CreateGenericOptions<'input>>,
 }
 
 /// `SERVER name` reference on CREATE FOREIGN TABLE.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ForeignTableServerClause<'input> {
     #[tok(SERVER, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -406,7 +406,7 @@ pub struct ForeignTableServerClause<'input> {
 
 /// Body of `CREATE FOREIGN TABLE name (cols) [INHERITS (...)] SERVER name
 /// [OPTIONS (...)]` — Postgres' columns form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ForeignTableColumnsBody<'input> {
     pub columns: ForeignTableColumnList<'input>,
     pub inherits: Option<crate::ast::ddl::table::InheritsClause<'input>>,
@@ -417,12 +417,12 @@ pub struct ForeignTableColumnsBody<'input> {
 /// Parenthesized, comma-separated column and constraint list on a foreign
 /// table. The legacy grammar used `Seq0`, so the empty `()` form remains
 /// accepted (notably before an `INHERITS` clause).
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct ForeignTableColumnList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub Vec<crate::ast::ddl::table::ColumnOrConstraint<'input>>,
+    pub recursa::ArenaVec<'input, crate::ast::ddl::table::ColumnOrConstraint<'input>>,
 );
 
 /// Body of `CREATE FOREIGN TABLE name PARTITION OF parent [(opts)]
@@ -430,7 +430,7 @@ pub struct ForeignTableColumnList<'input>(
 /// partition form. The bound is `for_values: Option` of `ForValuesClause`
 /// OR `default: Option` of `DEFAULT` (exactly one of the two should be
 /// `Some` for a syntactically valid statement).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ForeignTablePartitionBody<'input> {
     #[tok(PARTITION, OF, this)]
     pub parent: QualifiedName<'input>,
@@ -444,12 +444,12 @@ pub struct ForeignTablePartitionBody<'input> {
 
 /// Optional parenthesized partition-column option list on a foreign table.
 /// This is a zero-or-more list to preserve the legacy `Seq0` cardinality.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct ForeignTablePartitionColumnOptions<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub Vec<crate::ast::ddl::table::PartitionColumnOption<'input>>,
+    pub recursa::ArenaVec<'input, crate::ast::ddl::table::PartitionColumnOption<'input>>,
 );
 
 /// The body of `CREATE FOREIGN TABLE name ...` — either the columns
@@ -458,7 +458,7 @@ pub struct ForeignTablePartitionColumnOptions<'input>(
 ///
 /// Variant ordering: `Partition` (`PARTITION` keyword) is listed before
 /// `Columns` (which starts with `(`); the two have disjoint first tokens.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CreateForeignTableBody<'input> {
     Partition(ForeignTablePartitionBody<'input>),
     Columns(ForeignTableColumnsBody<'input>),
@@ -466,7 +466,7 @@ pub enum CreateForeignTableBody<'input> {
 
 /// `TABLE [IF NOT EXISTS] name body` — the body of
 /// `CREATE FOREIGN TABLE ...` after the `CREATE FOREIGN` head.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(TABLE, this)]
 pub struct CreateForeignTableBodyStmt<'input> {
     pub if_not_exists: Option<IfNotExists>,
@@ -478,22 +478,22 @@ pub struct CreateForeignTableBodyStmt<'input> {
 /// or `TABLE ...` (CreateForeignTableStmt). Discriminated by the first
 /// post-`FOREIGN` token (`DATA` vs `TABLE`); both first tokens are
 /// disjoint so peek order is for clarity only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CreateForeignBody<'input> {
     Fdw(CreateFdwBody<'input>),
-    Table(CreateForeignTableBodyStmt<'input>),
+    Table(recursa::ArenaBox<'input, CreateForeignTableBodyStmt<'input>>),
 }
 
 /// `CREATE FOREIGN ...` umbrella statement covering both
 /// `CREATE FOREIGN DATA WRAPPER ...` and `CREATE FOREIGN TABLE ...`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateForeignStmt<'input> {
     #[tok(CREATE, FOREIGN, this)]
     pub body: CreateForeignBody<'input>,
 }
 
 /// The object kind after `DROP FOREIGN`: `DATA WRAPPER` or `TABLE`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ForeignObjectKind {
     #[tok(DATA, WRAPPER)]
     DataWrapper,
@@ -503,7 +503,7 @@ pub enum ForeignObjectKind {
 
 /// `DROP FOREIGN {DATA WRAPPER | TABLE} [IF EXISTS] name [, ...]
 /// [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DropForeignStmt<'input> {
     #[tok(DROP, FOREIGN, this)]
     pub kind: ForeignObjectKind,

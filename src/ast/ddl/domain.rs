@@ -9,35 +9,35 @@ use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
 /// `COLLATE name` clause on a domain.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DomainCollate<'input> {
     #[tok(COLLATE, this)]
     pub name: QualifiedName<'input>,
 }
 
 /// `[CONSTRAINT name]` prefix on a domain constraint.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DomainConstraintName<'input> {
     #[tok(CONSTRAINT, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `NOT NULL` domain constraint body.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum DomainNotNull {
     #[tok(NOT, NULL)]
     Value,
 }
 
 /// `CHECK (expr)` domain constraint body.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DomainCheckBody<'input> {
     #[tok(CHECK, LPAREN, this, RPAREN)]
-    pub expr: Box<Expr<'input>>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `DEFAULT expr` clause — domain default value.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DomainDefault<'input> {
     /// gram.y `ColConstraintElem: DEFAULT b_expr` (the restricted expression
     /// grammar; exclusions as in `PositionInner`), so `DEFAULT 1 NOT NULL`
@@ -73,7 +73,7 @@ pub struct DomainDefault<'input> {
         And
     )))]
     #[tok(DEFAULT, this)]
-    pub expr: Box<Expr<'input>>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// Body of a domain constraint — Postgres' `DomainConstraintElem` plus the
@@ -82,7 +82,7 @@ pub struct DomainDefault<'input> {
 ///
 /// Variant ordering: `NotNull` (`NOT NULL`, 2 tokens) before `Null`; `Check`
 /// and `Default` are keyword-led and unambiguous.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum DomainConstraintBody<'input> {
     NotNull(DomainNotNull),
     #[tok(NULL)]
@@ -92,25 +92,25 @@ pub enum DomainConstraintBody<'input> {
 }
 
 /// A single domain constraint — `[CONSTRAINT name] body`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DomainConstraint<'input> {
     pub name: Option<DomainConstraintName<'input>>,
     pub body: DomainConstraintBody<'input>,
 }
 
 /// `CREATE DOMAIN name [AS] Typename [COLLATE name] [constraint_list]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateDomainStmt<'input> {
     #[tok(CREATE, DOMAIN, this)]
     pub name: QualifiedName<'input>,
     #[tok(optional(AS), this)]
     pub type_name: CastType<'input>,
     pub collate: Option<DomainCollate<'input>>,
-    pub constraints: Vec<DomainConstraint<'input>>,
+    pub constraints: recursa::ArenaVec<'input, DomainConstraint<'input>>,
 }
 
 /// `DROP DOMAIN [IF EXISTS] type [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, DOMAIN, this)]
 pub struct DropDomainStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -122,11 +122,11 @@ pub struct DropDomainStmt<'input> {
 /// `DomainConstraintElem` (the ALTER DOMAIN-specific form). Differs from
 /// CREATE DOMAIN's `DomainCheckBody` by carrying the optional trailing
 /// `ConstraintAttributeSpec` (e.g. `NOT VALID`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterDomainCheckConstraint<'input> {
     #[tok(CHECK, LPAREN, this, RPAREN)]
-    pub expr: Box<Expr<'input>>,
-    pub attrs: Vec<ConstraintAttributeElem>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
+    pub attrs: recursa::ArenaVec<'input, ConstraintAttributeElem>,
 }
 
 /// `NOT NULL ConstraintAttributeSpec` — Postgres' NOT NULL arm of
@@ -138,10 +138,10 @@ pub struct AlterDomainCheckConstraint<'input> {
 /// field-level `#[tok(...)]` on a repeated field binds to each element, so
 /// it would demand one `NOT NULL` per attribute and reject the bare form
 /// (which has no attributes at all).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(NOT, NULL, this)]
-pub struct AlterDomainNotNullConstraint {
-    pub attrs: Vec<ConstraintAttributeElem>,
+pub struct AlterDomainNotNullConstraint<'input> {
+    pub attrs: recursa::ArenaVec<'input, ConstraintAttributeElem>,
 }
 
 /// One body of an ALTER DOMAIN ADD constraint — Postgres'
@@ -149,22 +149,22 @@ pub struct AlterDomainNotNullConstraint {
 ///
 /// Variant ordering: variants begin with distinct keywords (`CHECK` /
 /// `NOT`), so order is for clarity only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterDomainConstraintElem<'input> {
     Check(AlterDomainCheckConstraint<'input>),
-    NotNull(AlterDomainNotNullConstraint),
+    NotNull(AlterDomainNotNullConstraint<'input>),
 }
 
 /// `[CONSTRAINT name] DomainConstraintElem` on ALTER DOMAIN ADD —
 /// reuses the shared `DomainConstraintName` prefix from CREATE DOMAIN.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterDomainConstraint<'input> {
     pub name: Option<DomainConstraintName<'input>>,
     pub elem: AlterDomainConstraintElem<'input>,
 }
 
 /// `ADD [CONSTRAINT name] DomainConstraintElem` — ADD action on ALTER DOMAIN.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterDomainAdd<'input> {
     #[tok(ADD, this)]
     pub constraint: AlterDomainConstraint<'input>,
@@ -172,7 +172,7 @@ pub struct AlterDomainAdd<'input> {
 
 /// `DROP CONSTRAINT [IF EXISTS] name [CASCADE | RESTRICT]` — DROP CONSTRAINT
 /// action on ALTER DOMAIN.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, CONSTRAINT, this)]
 pub struct AlterDomainDropConstraint<'input> {
     pub if_exists: Option<IfExists>,
@@ -181,14 +181,14 @@ pub struct AlterDomainDropConstraint<'input> {
 }
 
 /// `VALIDATE CONSTRAINT name` — VALIDATE action on ALTER DOMAIN.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterDomainValidate<'input> {
     #[tok(VALIDATE, CONSTRAINT, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// `RENAME CONSTRAINT old TO new` — RenameStmt branch for domain constraints.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterDomainRenameConstraint<'input> {
     #[tok(RENAME, CONSTRAINT, this)]
     pub old_name: crate::tokens::ColId<'input>,
@@ -197,28 +197,28 @@ pub struct AlterDomainRenameConstraint<'input> {
 }
 
 /// `SET DEFAULT expr` — SET DEFAULT action on ALTER DOMAIN.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterDomainSetDefault<'input> {
     #[tok(SET, DEFAULT, this)]
-    pub expr: Box<Expr<'input>>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `DROP DEFAULT` — DROP DEFAULT action on ALTER DOMAIN.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterDomainDropDefault {
     #[tok(DROP, DEFAULT)]
     Value,
 }
 
 /// `SET NOT NULL` — SET NOT NULL action on ALTER DOMAIN.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterDomainSetNotNull {
     #[tok(SET, NOT, NULL)]
     Value,
 }
 
 /// `DROP NOT NULL` — DROP NOT NULL action on ALTER DOMAIN.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterDomainDropNotNull {
     #[tok(DROP, NOT, NULL)]
     Value,
@@ -237,7 +237,7 @@ pub enum AlterDomainDropNotNull {
 ///   distinct.
 /// - `RenameConstraint` (two-token `RENAME CONSTRAINT`) must precede the
 ///   single-keyword `Rename` (`RENAME TO`) since both start with `RENAME`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterDomainAction<'input> {
     Add(AlterDomainAdd<'input>),
     DropConstraint(AlterDomainDropConstraint<'input>),
@@ -254,7 +254,7 @@ pub enum AlterDomainAction<'input> {
 
 /// `ALTER DOMAIN any_name action` — Postgres' `AlterDomainStmt`,
 /// `RenameStmt`, `AlterOwnerStmt`, and `AlterObjectSchemaStmt` branches.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterDomainStmt<'input> {
     #[tok(ALTER, DOMAIN, this)]
     pub name: QualifiedName<'input>,

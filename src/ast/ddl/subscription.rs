@@ -11,7 +11,7 @@ use crate::ast::utility::copy::CopySconst;
 use crate::tokens::{literal, punct};
 
 /// `CONNECTION sconst` clause on CREATE SUBSCRIPTION.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SubscriptionConnectionClause<'input> {
     #[tok(CONNECTION, this)]
     pub conninfo: CopySconst<'input>,
@@ -20,16 +20,16 @@ pub struct SubscriptionConnectionClause<'input> {
 /// `PUBLICATION name_list` clause on CREATE SUBSCRIPTION — Postgres'
 /// `PUBLICATION name_list`. Each name is an identifier (publication
 /// names are not qualified).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(PUBLICATION, this)]
 pub struct SubscriptionPublicationClause<'input> {
     #[sep(COMMA)]
-    pub names: recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub names: recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
 }
 
 /// `CREATE SUBSCRIPTION name CONNECTION sconst PUBLICATION name_list
 /// [WITH (def_list)]` — Postgres' `CreateSubscriptionStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateSubscriptionStmt<'input> {
     #[tok(CREATE, SUBSCRIPTION, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -41,7 +41,7 @@ pub struct CreateSubscriptionStmt<'input> {
 /// `DROP SUBSCRIPTION [IF EXISTS] name [CASCADE | RESTRICT]`.
 ///
 /// Postgres' `DropSubscriptionStmt` rule takes a single `name`, not a list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, SUBSCRIPTION, this)]
 pub struct DropSubscriptionStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -54,7 +54,7 @@ pub struct DropSubscriptionStmt<'input> {
 /// `CREATE SUBSCRIPTION ... CONNECTION ...` form.
 ///
 /// pg-sql reuses [`SubscriptionConnectionClause`] for this branch.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(REFRESH, PUBLICATION, this)]
 pub struct AlterSubscriptionRefresh<'input> {
     pub with: Option<WithDefinition<'input>>,
@@ -62,21 +62,21 @@ pub struct AlterSubscriptionRefresh<'input> {
 
 /// `ADD PUBLICATION name_list [WITH (def_list)]` — Postgres'
 /// `ALTER SUBSCRIPTION ... ADD PUBLICATION ...` form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ADD, PUBLICATION, this)]
 pub struct AlterSubscriptionAddPublication<'input> {
     #[sep(COMMA)]
-    pub names: recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub names: recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
     pub with: Option<WithDefinition<'input>>,
 }
 
 /// `DROP PUBLICATION name_list [WITH (def_list)]` — Postgres'
 /// `ALTER SUBSCRIPTION ... DROP PUBLICATION ...` form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, PUBLICATION, this)]
 pub struct AlterSubscriptionDropPublication<'input> {
     #[sep(COMMA)]
-    pub names: recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub names: recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
     pub with: Option<WithDefinition<'input>>,
 }
 
@@ -84,20 +84,20 @@ pub struct AlterSubscriptionDropPublication<'input> {
 /// `ALTER SUBSCRIPTION ... SET PUBLICATION ...` form. Distinct from
 /// `SET CONNECTION sconst` (kept separate variant) and from
 /// `SET (def_list)` (modelled via [`SetDefinitionClause`]).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(SET, PUBLICATION, this)]
 pub struct AlterSubscriptionSetPublication<'input> {
     #[sep(COMMA)]
-    pub names: recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub names: recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
     pub with: Option<WithDefinition<'input>>,
 }
 
 /// `SKIP (def_list)` — Postgres' `ALTER SUBSCRIPTION ... SKIP definition`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(SKIP, LPAREN, this, RPAREN)]
 pub struct AlterSubscriptionSkip<'input> {
     #[sep(COMMA)]
-    pub items: recursa::Vec1<DefElem<'input>>,
+    pub items: recursa::ArenaVec1<'input, DefElem<'input>>,
 }
 
 /// One action on `ALTER SUBSCRIPTION name action` — covers Postgres'
@@ -111,7 +111,7 @@ pub struct AlterSubscriptionSkip<'input> {
 /// The two `SET ...` variants share the `SET` token; lists
 /// `SetPublication` (`SET PUBLICATION`, two tokens) before `SetDef`
 /// (`SET (`, two tokens). Each disambiguates on the second token.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterSubscriptionAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -130,7 +130,7 @@ pub enum AlterSubscriptionAction<'input> {
 
 /// `ALTER SUBSCRIPTION name action` — Postgres' `AlterSubscriptionStmt`
 /// plus the subscription branches of `RenameStmt` / `AlterOwnerStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterSubscriptionStmt<'input> {
     #[tok(ALTER, SUBSCRIPTION, this)]
     pub name: crate::tokens::ColId<'input>,

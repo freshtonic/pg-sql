@@ -5,7 +5,8 @@ mod tests {
 
     #[test]
     fn refresh_materialized_view_is_modelled() {
-        let stmt: RefreshStmt = parse_stmt("REFRESH MATERIALIZED VIEW mvtest_tm");
+        let stmt = parse_stmt::<RefreshStmt>("REFRESH MATERIALIZED VIEW mvtest_tm");
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.object(), "mvtest_tm");
         assert!(!stmt.concurrently);
         assert!(stmt.with_data.is_none());
@@ -14,15 +15,16 @@ mod tests {
 
     #[test]
     fn refresh_materialized_view_concurrently_roundtrips() {
-        let stmt: RefreshStmt = parse_stmt("REFRESH MATERIALIZED VIEW CONCURRENTLY mvtest_tm");
+        let stmt = parse_stmt::<RefreshStmt>("REFRESH MATERIALIZED VIEW CONCURRENTLY mvtest_tm");
+        let stmt = stmt.ast();
         assert!(stmt.concurrently);
         reparse_stable::<RefreshStmt>("REFRESH MATERIALIZED VIEW CONCURRENTLY mvtest_tm");
     }
 
     #[test]
     fn refresh_materialized_view_with_no_data_roundtrips() {
-        let stmt: RefreshStmt =
-            parse_stmt("REFRESH MATERIALIZED VIEW CONCURRENTLY mvtest_tvmm WITH NO DATA");
+        let stmt = parse_stmt::<RefreshStmt>("REFRESH MATERIALIZED VIEW CONCURRENTLY mvtest_tvmm WITH NO DATA");
+        let stmt = stmt.ast();
         assert!(stmt.with_data.is_some());
         reparse_stable::<RefreshStmt>(
             "REFRESH MATERIALIZED VIEW CONCURRENTLY mvtest_tvmm WITH NO DATA",
@@ -36,7 +38,8 @@ mod tests {
 
     #[test]
     fn refresh_materialized_view_qualified_name_roundtrips() {
-        let stmt: RefreshStmt = parse_stmt("REFRESH MATERIALIZED VIEW matview_schema.mv_withdata2");
+        let stmt = parse_stmt::<RefreshStmt>("REFRESH MATERIALIZED VIEW matview_schema.mv_withdata2");
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.object(), "mv_withdata2");
         reparse_stable::<RefreshStmt>("REFRESH MATERIALIZED VIEW matview_schema.mv_withdata2");
     }

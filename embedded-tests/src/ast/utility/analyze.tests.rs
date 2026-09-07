@@ -7,8 +7,9 @@ mod tests {
         let lexed = crate::lex("ANALYZE onek2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = AnalyzeStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.targets.unwrap().first().table_name.object(), "onek2");
+        let stmt_parsed = AnalyzeStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
+        assert_eq!(stmt.targets.as_ref().unwrap().first().table_name.object(), "onek2");
         assert!(input.is_eof());
     }
 
@@ -17,7 +18,8 @@ mod tests {
         let lexed = crate::lex("ANALYZE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AnalyzeStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AnalyzeStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -26,7 +28,8 @@ mod tests {
         let lexed = crate::lex("ANALYZE atacc1(a, b)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AnalyzeStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AnalyzeStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 }

@@ -10,7 +10,7 @@ use crate::tokens::literal;
 /// Isolation level following `ISOLATION LEVEL`.
 ///
 /// Variant ordering: multi-word forms before single-word `Serializable`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum IsolationLevelKind {
     #[tok(REPEATABLE, READ)]
     RepeatableRead,
@@ -23,7 +23,7 @@ pub enum IsolationLevelKind {
 }
 
 /// `ISOLATION LEVEL level` transaction mode.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct IsolationLevelMode {
     #[tok(ISOLATION, LEVEL, this)]
     pub level: IsolationLevelKind,
@@ -33,7 +33,7 @@ pub struct IsolationLevelMode {
 ///
 /// Variant ordering: multi-word before single, and `NotDeferrable` (NOT
 /// DEFERRABLE) before bare `Deferrable`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TransactionMode<'input> {
     IsolationLevel(IsolationLevelMode),
     #[tok(READ, ONLY)]
@@ -48,14 +48,14 @@ pub enum TransactionMode<'input> {
 }
 
 /// `SNAPSHOT 'snapshot_id'` — import a serializable transaction snapshot.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SnapshotMode<'input> {
     #[tok(SNAPSHOT, this)]
     pub id: literal::StringLit<'input>,
 }
 
 /// Optional `WORK | TRANSACTION` suffix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum WorkOrTransaction {
     #[tok(WORK)]
     Work,
@@ -64,39 +64,39 @@ pub enum WorkOrTransaction {
 }
 
 /// BEGIN [WORK | TRANSACTION] [transaction_mode [, ...]]
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(BEGIN, this)]
 pub struct BeginStmt<'input> {
     pub work: Option<WorkOrTransaction>,
     #[sep(COMMA)]
-    pub modes: Option<recursa::Vec1<TransactionMode<'input>>>,
+    pub modes: Option<recursa::ArenaVec1<'input, TransactionMode<'input>>>,
 }
 
 /// END [WORK | TRANSACTION] — alias for COMMIT.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(END, this)]
 pub struct EndStmt {
     pub work: Option<WorkOrTransaction>,
 }
 
 /// ABORT [WORK | TRANSACTION] — alias for ROLLBACK.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ABORT, this)]
 pub struct AbortStmt {
     pub work: Option<WorkOrTransaction>,
 }
 
 /// START TRANSACTION [transaction_mode [, ...]]
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(START, TRANSACTION, this)]
 pub struct StartTransactionStmt<'input> {
     #[sep(COMMA)]
-    pub modes: Option<recursa::Vec1<TransactionMode<'input>>>,
+    pub modes: Option<recursa::ArenaVec1<'input, TransactionMode<'input>>>,
 }
 
 /// `TRANSACTION transaction_mode [, ...]`, the transaction branch of
 /// PostgreSQL's `set_rest`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetTransactionRest<'input> {
     #[tok(TRANSACTION, this)]
     pub modes: TransactionModeList<'input>,
@@ -104,7 +104,7 @@ pub struct SetTransactionRest<'input> {
 
 /// `SESSION CHARACTERISTICS AS TRANSACTION transaction_mode [, ...]`, the
 /// other transaction branch of PostgreSQL's `set_rest`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetSessionCharacteristicsRest<'input> {
     #[tok(SESSION, CHARACTERISTICS, AS, TRANSACTION, this)]
     pub modes: TransactionModeList<'input>,
@@ -115,31 +115,31 @@ pub struct SetSessionCharacteristicsRest<'input> {
 /// This owns the repetition so the prefixes attached by the two `set_rest`
 /// forms above are consumed once. A direct attachment on `Vec1` would make
 /// the generated table expect that prefix again after every comma.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 pub struct TransactionModeList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<TransactionMode<'input>>,
+    pub recursa::ArenaVec1<'input, TransactionMode<'input>>,
 );
 
 /// `SET CONSTRAINTS { ALL | name [, …] } { DEFERRED | IMMEDIATE }`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetConstraintsStmt<'input> {
     #[tok(SET, CONSTRAINTS, this)]
     pub target: SetConstraintsTarget<'input>,
     pub mode: DeferredMode,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetConstraintsTarget<'input> {
     #[tok(ALL)]
     All,
     /// Per gram.y `constraints_set_list: qualified_name_list`. Schema-qualified
     /// names are required for cross-schema constraints (`fkpart3.fkey`).
-    Names(#[sep(COMMA)] recursa::Vec1<QualifiedName<'input>>),
+    Names(#[sep(COMMA)] recursa::ArenaVec1<'input, QualifiedName<'input>>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum DeferredMode {
     #[tok(DEFERRED)]
     Deferred,
@@ -151,7 +151,7 @@ pub enum DeferredMode {
 ///
 /// Variant ordering: `AND NO CHAIN` (3 tokens) before `AND CHAIN` (2 tokens)
 /// so the longer form wins longest-match disambiguation.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TransactionChain {
     #[tok(AND, NO, CHAIN)]
     NoChain,
@@ -161,14 +161,14 @@ pub enum TransactionChain {
 
 /// `WORK | TRANSACTION` followed by an optional `AND [NO] CHAIN` chain clause —
 /// the `opt_transaction opt_transaction_chain` form of `COMMIT` / `ROLLBACK`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CommitWithWork {
     pub work: WorkOrTransaction,
     pub chain: Option<TransactionChain>,
 }
 
 /// `PREPARED 'gid'` — the two-phase-commit form of `COMMIT` / `ROLLBACK`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PreparedGid<'input> {
     #[tok(PREPARED, this)]
     pub gid: literal::StringLit<'input>,
@@ -178,7 +178,7 @@ pub struct PreparedGid<'input> {
 ///
 /// Variant ordering: first-sets are disjoint (`PREPARED`, `WORK`/`TRANSACTION`,
 /// `AND`), so order does not affect disambiguation.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CommitBody<'input> {
     Prepared(PreparedGid<'input>),
     WithWork(CommitWithWork),
@@ -187,14 +187,14 @@ pub enum CommitBody<'input> {
 
 /// COMMIT \[WORK | TRANSACTION\] \[AND \[NO\] CHAIN\]
 /// COMMIT PREPARED 'gid'
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(COMMIT, this)]
 pub struct CommitStmt<'input> {
     pub body: Option<CommitBody<'input>>,
 }
 
 /// `TO [SAVEPOINT] name` — the savepoint target of `ROLLBACK TO`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(TO, this)]
 pub struct RollbackToClause<'input> {
     #[presence(SAVEPOINT)]
@@ -205,7 +205,7 @@ pub struct RollbackToClause<'input> {
 /// What follows `WORK`/`TRANSACTION` in a `ROLLBACK`: either a `TO` savepoint
 /// clause or an `AND [NO] CHAIN` clause. First-sets (`TO` vs `AND`) are
 /// disjoint.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum RollbackAfterWork<'input> {
     To(RollbackToClause<'input>),
     Chain(TransactionChain),
@@ -213,7 +213,7 @@ pub enum RollbackAfterWork<'input> {
 
 /// `WORK | TRANSACTION` followed by an optional `TO`/`AND CHAIN` clause —
 /// the `opt_transaction (opt_transaction_chain | TO ...)` form of `ROLLBACK`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct RollbackWithWork<'input> {
     pub work: WorkOrTransaction,
     pub after: Option<RollbackAfterWork<'input>>,
@@ -223,7 +223,7 @@ pub struct RollbackWithWork<'input> {
 ///
 /// Variant ordering: first-sets are disjoint (`PREPARED`, `WORK`/`TRANSACTION`,
 /// `TO`, `AND`), so order does not affect disambiguation.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum RollbackBody<'input> {
     Prepared(PreparedGid<'input>),
     WithWork(RollbackWithWork<'input>),
@@ -234,7 +234,7 @@ pub enum RollbackBody<'input> {
 /// ROLLBACK \[WORK | TRANSACTION\] \[AND \[NO\] CHAIN\]
 /// ROLLBACK \[WORK | TRANSACTION\] TO \[SAVEPOINT\] name
 /// ROLLBACK PREPARED 'gid'
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ROLLBACK, this)]
 pub struct RollbackStmt<'input> {
     pub body: Option<RollbackBody<'input>>,

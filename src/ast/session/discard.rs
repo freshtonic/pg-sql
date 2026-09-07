@@ -6,7 +6,7 @@
 ///
 /// Variant ordering: `TEMPORARY` (longer) before `TEMP` so the longer keyword
 /// wins longest-match disambiguation; the rest have disjoint first-sets.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum DiscardTarget {
     #[tok(ALL)]
     All,
@@ -21,7 +21,7 @@ pub enum DiscardTarget {
 }
 
 /// DISCARD { ALL | PLANS | SEQUENCES | TEMP | TEMPORARY }
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DiscardStmt {
     #[tok(DISCARD, this)]
     pub target: DiscardTarget,

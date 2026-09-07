@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("CREATE DATABASE mydb");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateDatabaseStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateDatabaseStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.text(), "mydb");
         assert!(stmt.options.is_empty());
         assert!(input.is_eof());
@@ -23,7 +24,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateDatabaseStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateDatabaseStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.options.len(), 4);
         assert!(input.is_eof());
     }
@@ -35,7 +37,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateDatabaseStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateDatabaseStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.options.len(), 3);
         assert!(input.is_eof());
     }
@@ -45,7 +48,8 @@ mod tests {
         let lexed = crate::lex("DROP DATABASE IF EXISTS db1 WITH (FORCE)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropDatabaseStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropDatabaseStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists.is_some());
         assert!(stmt.options.is_some());
         assert!(input.is_eof());

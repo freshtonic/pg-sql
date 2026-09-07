@@ -5,7 +5,7 @@ use crate::tokens::literal;
 ///
 /// Variant ordering: NumericLit before IntegerLit so `77.7` is consumed as a
 /// numeric literal (longest-match-wins).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetValue<'input> {
     #[tok(ON)]
     On,
@@ -26,14 +26,14 @@ pub enum SetValue<'input> {
 ///
 /// Used in positions like `SET extra_float_digits = -1` where a full `Expr`
 /// is overkill and would admit keywords that shouldn't be legal values.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SignedNumericLit<'input> {
     pub sign: NumericSign,
     pub value: UnsignedNumericLit<'input>,
 }
 
 /// Leading `-` or `+` sign of a signed numeric literal.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum NumericSign {
     #[tok(MINUS)]
     Neg,
@@ -42,14 +42,14 @@ pub enum NumericSign {
 }
 
 /// Either a numeric (with decimal point / exponent) or an integer literal.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum UnsignedNumericLit<'input> {
     Numeric(literal::NumericLit<'input>),
     Integer(literal::IntegerLit<'input>),
 }
 
 /// The separator between param and value: TO or =.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetSep {
     #[tok(TO)]
     To,
@@ -65,26 +65,26 @@ pub enum SetSep {
 /// `set_rest`; keeping the same boundary prevents `SET SESSION
 /// CHARACTERISTICS` from reducing `SESSION` as a scope before
 /// `CHARACTERISTICS` can decide the rest.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct GenericSetRest<'input> {
     pub param: crate::ast::shared::names::QualifiedName<'input>,
     pub sep: SetSep,
     #[sep(COMMA)]
-    pub values: recursa::Vec1<SetValue<'input>>,
+    pub values: recursa::ArenaVec1<'input, SetValue<'input>>,
 }
 
 /// Generic nested `SET`: `SET param TO|= value [, value ...]`.
 ///
 /// `FunctionSetResetClause` and `SetResetClause` use PostgreSQL's
 /// `set_rest_more`, which does not permit `LOCAL` or `SESSION`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(SET, this)]
 pub struct SetStmt<'input> {
     pub rest: GenericSetRest<'input>,
 }
 
 /// Role target in `SET ROLE`: role name, `NONE`, or `DEFAULT`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetRoleTarget<'input> {
     #[tok(DEFAULT)]
     Default,
@@ -97,14 +97,14 @@ pub enum SetRoleTarget<'input> {
 /// The `SET ROLE TO ...` spelling is accepted through [`SetStmt`], matching
 /// PostgreSQL's `generic_set` route. Keeping `TO` out of this dedicated form
 /// prevents the two AST alternatives from recognizing the same token stream.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetRoleStmt<'input> {
     #[tok(ROLE, this)]
     pub target: SetRoleTarget<'input>,
 }
 
 /// Role target in `SET SESSION AUTHORIZATION`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetSessionAuthTarget<'input> {
     #[tok(DEFAULT)]
     Default,
@@ -118,7 +118,7 @@ pub enum SetSessionAuthTarget<'input> {
 /// The enclosing [`VariableSetStmt`] supplies any `LOCAL` or `SESSION`
 /// prefix. This also retains PostgreSQL's `SET SESSION SESSION
 /// AUTHORIZATION` spelling.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetSessionAuthStmt<'input> {
     #[tok(SESSION, AUTHORIZATION, this)]
     pub target: SetSessionAuthTarget<'input>,
@@ -127,20 +127,20 @@ pub struct SetSessionAuthStmt<'input> {
 /// A signed numeric literal: `[-]numeric | [-]integer`.
 ///
 /// Variant ordering: Numeric before Integer (longest-match-wins for `7.5`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SignedNumber<'input> {
     Numeric(SignedNumeric<'input>),
     Integer(SignedInteger<'input>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SignedNumeric<'input> {
     #[presence(MINUS)]
     pub negative: bool,
     pub value: literal::NumericLit<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SignedInteger<'input> {
     #[presence(MINUS)]
     pub negative: bool,
@@ -151,7 +151,7 @@ pub struct SignedInteger<'input> {
 ///
 /// Variant ordering: `LOCAL` and `DEFAULT` (keywords) before `Number` and
 /// `String`. INTERVAL form is deliberately skipped.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetTimeZoneTarget<'input> {
     #[tok(LOCAL)]
     Local,
@@ -163,14 +163,14 @@ pub enum SetTimeZoneTarget<'input> {
 
 /// `TIME ZONE { signed_number | string | LOCAL | DEFAULT }`, the
 /// `set_rest_more` time-zone form.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetTimeZoneStmt<'input> {
     #[tok(TIME, ZONE, this)]
     pub target: SetTimeZoneTarget<'input>,
 }
 
 /// Value of `SET XML OPTION`: `DOCUMENT` or `CONTENT`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetXmlOptionValue {
     #[tok(DOCUMENT)]
     Document,
@@ -181,7 +181,7 @@ pub enum SetXmlOptionValue {
 /// `SET XML OPTION { DOCUMENT | CONTENT }` — sets the
 /// `xmloption` GUC. Special-cased in PG's gram.y (`VariableSetStmt:
 /// SET set_rest_more`'s `XML OPTION document_or_content` form).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetXmlOptionStmt {
     #[tok(XML, OPTION, this)]
     pub value: SetXmlOptionValue,
@@ -189,7 +189,7 @@ pub struct SetXmlOptionStmt {
 
 /// PostgreSQL's `set_rest`: the statements allowed after each literal
 /// `SET`, `SET LOCAL`, or `SET SESSION` prefix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum VariableSetRest<'input> {
     Transaction(crate::ast::tcl::transaction::SetTransactionRest<'input>),
     SessionCharacteristics(crate::ast::tcl::transaction::SetSessionCharacteristicsRest<'input>),
@@ -208,26 +208,26 @@ pub enum VariableSetRest<'input> {
 /// than reducing through a `SetScope` nonterminal. This is gram.y's shape:
 /// after `SET SESSION`, `CHARACTERISTICS` can continue the unscoped
 /// `set_rest`, while every other following token enters the scoped one.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum VariableSetStmt<'input> {
     Unscoped(SetUnscoped<'input>),
     Local(SetLocal<'input>),
     Session(SetSession<'input>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetUnscoped<'input> {
     #[tok(SET, this)]
     pub rest: VariableSetRest<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetLocal<'input> {
     #[tok(SET, LOCAL, this)]
     pub rest: VariableSetRest<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetSession<'input> {
     #[tok(SET, SESSION, this)]
     pub rest: VariableSetRest<'input>,
@@ -236,7 +236,7 @@ pub struct SetSession<'input> {
 /// Target of a RESET statement.
 ///
 /// Variant ordering: multi-token variants before single-token variants.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ResetTarget<'input> {
     #[tok(SESSION, AUTHORIZATION)]
     SessionAuth,
@@ -248,7 +248,7 @@ pub enum ResetTarget<'input> {
 }
 
 /// RESET statement: `RESET { param | ALL | ROLE | SESSION AUTHORIZATION | TIME ZONE }`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ResetStmt<'input> {
     #[tok(RESET, this)]
     pub target: ResetTarget<'input>,
@@ -260,7 +260,7 @@ pub struct ResetStmt<'input> {
 ///
 /// Variant ordering: multi-token targets before single-token `Param`
 /// fallback so the specific forms are matched first.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ShowTarget<'input> {
     #[tok(TRANSACTION, ISOLATION, LEVEL)]
     TransactionIsolationLevel,
@@ -274,14 +274,14 @@ pub enum ShowTarget<'input> {
 }
 
 /// SHOW statement: `SHOW { name | ALL | TIME ZONE | SESSION AUTHORIZATION | TRANSACTION ISOLATION LEVEL }`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ShowStmt<'input> {
     #[tok(SHOW, this)]
     pub target: ShowTarget<'input>,
 }
 
 /// LOAD statement: `LOAD 'filename'` — forces loading of a shared library.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct LoadStmt<'input> {
     #[tok(LOAD, this)]
     pub filename: literal::StringLit<'input>,

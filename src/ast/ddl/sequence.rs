@@ -8,42 +8,42 @@ use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
 /// `AS TypeName` sequence option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SeqAsOption<'input> {
     #[tok(AS, this)]
     pub type_name: CastType<'input>,
 }
 
 /// `INCREMENT [BY] N` sequence option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SeqIncrementOption<'input> {
     #[tok(INCREMENT, optional(BY), this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `MINVALUE N` sequence option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SeqMinValueOption<'input> {
     #[tok(MINVALUE, this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `MAXVALUE N` sequence option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SeqMaxValueOption<'input> {
     #[tok(MAXVALUE, this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `START [WITH] N` sequence option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SeqStartOption<'input> {
     #[tok(START, optional(WITH), this)]
     pub value: NumericOnly<'input>,
 }
 
 /// `CACHE N` sequence option.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SeqCacheOption<'input> {
     #[tok(CACHE, this)]
     pub value: NumericOnly<'input>,
@@ -55,12 +55,12 @@ pub struct SeqCacheOption<'input> {
 /// [`QualifiedName`] already accepts both grammar branches. Keeping a
 /// separate fixed-token `None` arm would describe the same token stream
 /// twice and create two LR derivations for the same input.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum OwnedByTarget<'input> {
     Name(QualifiedName<'input>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SeqOwnedByOption<'input> {
     #[tok(OWNED, BY, this)]
     pub target: OwnedByTarget<'input>,
@@ -69,7 +69,7 @@ pub struct SeqOwnedByOption<'input> {
 /// `RESTART [[WITH] N]` sequence option (used by ALTER SEQUENCE). The
 /// `RESTART` keyword is a soft keyword so it remains reclaimable as an
 /// identifier in non-sequence positions.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(RESTART, this)]
 pub struct SeqRestartOption<'input> {
     #[tok(optional(WITH), this)]
@@ -78,7 +78,7 @@ pub struct SeqRestartOption<'input> {
 
 /// `SEQUENCE NAME qualified_name` sequence option — used to set the
 /// underlying sequence relation's `relname` during pg_dump restores.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SeqSequenceNameOption<'input> {
     #[tok(SEQUENCE, NAME, this)]
     pub name: QualifiedName<'input>,
@@ -89,7 +89,7 @@ pub struct SeqSequenceNameOption<'input> {
 /// Variant ordering: multi-token forms (`NoCycle`, `NoMinvalue`, `NoMaxvalue`,
 /// `OwnedBy`, `SequenceName`) before any single-token form they share a first
 /// token with so longest-match-wins picks the longer spelling.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SeqOption<'input> {
     #[tok(NO, CYCLE)]
     NoCycle,
@@ -115,7 +115,7 @@ pub enum SeqOption<'input> {
     // pg-sql. Add when first needed.
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(CREATE, this)]
 pub struct CreateSequenceStmt<'input> {
     /// Optional temporary persistence modifier: `TEMP`, `TEMPORARY`, or
@@ -125,11 +125,11 @@ pub struct CreateSequenceStmt<'input> {
     pub sequence: SequenceKeyword,
     pub if_not_exists: Option<IfNotExists>,
     pub name: QualifiedName<'input>,
-    pub options: Vec<SeqOption<'input>>,
+    pub options: recursa::ArenaVec<'input, SeqOption<'input>>,
 }
 
 /// Required `SEQUENCE` keyword after the optional persistence modifier.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SequenceKeyword {
     #[tok(SEQUENCE)]
     Sequence,
@@ -143,7 +143,7 @@ pub enum SequenceKeyword {
 /// `LOCAL TEMP[ORARY]`) — none of which are exercised by the sequence corpus
 /// but kept for forward-compat — would come first; today only `Temporary`,
 /// `Temp`, `Unlogged` are modelled.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CreatePersistence {
     #[tok(TEMPORARY)]
     Temporary,
@@ -154,7 +154,7 @@ pub enum CreatePersistence {
 }
 
 /// `DROP SEQUENCE [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, SEQUENCE, this)]
 pub struct DropSequenceStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -164,7 +164,7 @@ pub struct DropSequenceStmt<'input> {
 
 /// `SET LOGGED` — Postgres' `alter_table_cmd` SET LOGGED branch. Used by
 /// ALTER SEQUENCE in the corpus (and by ALTER TABLE, modelled separately).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetLoggedClause {
     #[tok(SET, LOGGED)]
     Value,
@@ -172,7 +172,7 @@ pub enum SetLoggedClause {
 
 /// `SET UNLOGGED` — Postgres' `alter_table_cmd` SET UNLOGGED branch.
 /// `UNLOGGED` is the existing hard keyword token; `SET` precedes it here.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetUnloggedClause {
     #[tok(SET, UNLOGGED)]
     Value,
@@ -193,7 +193,7 @@ pub enum SetUnloggedClause {
 ///   `AS`, `CACHE`, `CYCLE`, `INCREMENT`, `MAXVALUE`, `MINVALUE`,
 ///   `NO …`, `OWNED`, `RESTART`, `SEQUENCE`, `START`, `UNLOGGED` — none
 ///   of which conflict with the keyword-led variants above.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterSequenceAction<'input> {
     SetLogged(SetLoggedClause),
     SetUnlogged(SetUnloggedClause),
@@ -210,16 +210,16 @@ pub enum AlterSequenceAction<'input> {
 /// on a non-empty SeqOpt and commit. The leading `UNLOGGED` SeqOption is
 /// the bare `UNLOGGED` keyword form — distinct from the `SET UNLOGGED`
 /// branch above (which has the leading `SET`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SeqOptList<'input> {
     pub head: SeqOption<'input>,
-    pub rest: Vec<SeqOption<'input>>,
+    pub rest: recursa::ArenaVec<'input, SeqOption<'input>>,
 }
 
 /// `ALTER SEQUENCE [IF EXISTS] name action` — Postgres' `AlterSeqStmt`,
 /// the sequence-applicable subset of ALTER TABLE's `alter_table_cmds`,
 /// and `RenameStmt` / `AlterObjectSchemaStmt` branches for sequences.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ALTER, SEQUENCE, this)]
 pub struct AlterSequenceStmt<'input> {
     pub if_exists: Option<IfExists>,

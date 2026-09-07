@@ -13,10 +13,10 @@ use crate::tokens::literal;
 /// (Postgres `set_target: ColId opt_indirection`). The `.field` form of
 /// indirection also covers the `alias.col` left-hand side that
 /// `ON CONFLICT DO UPDATE` permits inside `INSERT ... AS alias`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SingleAssignment<'input> {
     pub column: literal::Ident<'input>,
-    pub indirection: Vec<crate::ast::shared::expr::IndirectionEl<'input>>,
+    pub indirection: recursa::ArenaVec<'input, crate::ast::shared::expr::IndirectionEl<'input>>,
     #[tok(EQ, this)]
     pub value: Expr<'input>,
 }
@@ -25,17 +25,17 @@ pub struct SingleAssignment<'input> {
 /// `set_target: ColId opt_indirection`. The indirection chain admits the
 /// same `[idx]`, `[lo:hi]`, and `.field` elements as `SingleAssignment`,
 /// so `SET (f2[1], f1, tag) = (...)` (rules.sql) parses cleanly.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SetTarget<'input> {
     pub column: literal::Ident<'input>,
-    pub indirection: Vec<crate::ast::shared::expr::IndirectionEl<'input>>,
+    pub indirection: recursa::ArenaVec<'input, crate::ast::shared::expr::IndirectionEl<'input>>,
 }
 
 /// Tuple SET assignment: `(col, ...) = expr` — Postgres
 /// `'(' set_target_list ')' '=' a_expr`. Each item in the list is a
 /// `set_target` (`ColId opt_indirection`), so subscripts and field
 /// accessors are admitted on individual columns.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TupleAssignment<'input> {
     pub columns: SetTargetList<'input>,
     #[tok(EQ, this)]
@@ -46,34 +46,34 @@ pub struct TupleAssignment<'input> {
 ///
 /// The delimiters wrap the list as a whole. Attaching them to the repeated
 /// field would require a fresh pair of parentheses around every target.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct SetTargetList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub Vec<SetTarget<'input>>,
+    pub recursa::ArenaVec<'input, SetTarget<'input>>,
 );
 
 /// A single SET assignment: `col = expr` or `(col, ...) = (expr, ...)`
 ///
 /// Variant ordering: Tuple starts with `(` which is longer than a bare
 /// identifier, so longest-match-wins picks it when parens are present.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetAssignment<'input> {
     Tuple(TupleAssignment<'input>),
     Single(SingleAssignment<'input>),
 }
 
 /// RETURNING clause: `RETURNING expr, ...`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(RETURNING, this)]
 pub struct ReturningClause<'input> {
     #[sep(COMMA)]
-    pub items: Vec<crate::ast::dml::select::SelectItem<'input>>,
+    pub items: recursa::ArenaVec<'input, crate::ast::dml::select::SelectItem<'input>>,
 }
 
 /// `AS alias` on an UPDATE target table.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct UpdateTableAliasWithAs<'input> {
     #[tok(AS, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -82,13 +82,13 @@ pub struct UpdateTableAliasWithAs<'input> {
 /// Required `SET` plus its comma-separated assignments.
 ///
 /// Keeping `SET` on this wrapper makes it occur once for the whole list.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(SET, this)]
 pub struct SetClause<'input>(
     #[sep(COMMA)]
     #[pretty(indent)]
     #[deref]
-    pub Vec<SetAssignment<'input>>,
+    pub recursa::ArenaVec<'input, SetAssignment<'input>>,
 );
 
 /// Optional target-table alias before the required SET clause.
@@ -96,7 +96,7 @@ pub struct SetClause<'input>(
 /// PostgreSQL admits `SET` as a `ColId`, but gives it precedence as the UPDATE
 /// clause keyword in this position. The bare-alias admission excludes exactly
 /// that keyword; the explicit `AS` form continues to accept it.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum UpdateTableAlias<'input> {
     WithAs(UpdateTableAliasWithAs<'input>),
     Bare(literal::UpdateAliasName<'input>),
@@ -118,7 +118,7 @@ impl UpdateTableAlias<'_> {
 /// `relation_expr` in `gram.y`. The legacy `ONLY (name)` parenthesised form is
 /// not exercised by any UPDATE corpus statement, so it is not modelled (matches
 /// the `TruncateRelation` / `LockRelation` shape).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(group = consistent)]
 pub struct UpdateStmt<'input> {
     #[tok(UPDATE, this)]
@@ -129,9 +129,9 @@ pub struct UpdateStmt<'input> {
     #[pretty(break_before = soft)]
     pub assignments: SetClause<'input>,
     #[pretty(break_before = soft)]
-    pub from_clause: Option<Box<FromClause<'input>>>,
+    pub from_clause: Option<recursa::ArenaBox<'input, FromClause<'input>>>,
     #[pretty(break_before = soft)]
-    pub where_clause: Option<Box<WhereClause<'input>>>,
+    pub where_clause: Option<recursa::ArenaBox<'input, WhereClause<'input>>>,
     #[pretty(break_before = soft)]
-    pub returning: Option<Box<ReturningClause<'input>>>,
+    pub returning: Option<recursa::ArenaBox<'input, ReturningClause<'input>>>,
 }

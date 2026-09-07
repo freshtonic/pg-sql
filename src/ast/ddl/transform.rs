@@ -10,7 +10,7 @@ use crate::tokens::{literal, punct};
 /// `function_with_argtypes` reference inside a `CREATE TRANSFORM` element.
 /// Always parenthesised in this position (`prsd_lextype(internal)`) — the
 /// bare-name form is not exercised by the transform grammar.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TransformFunctionRef<'input> {
     pub name: QualifiedName<'input>,
     pub args: crate::ast::ddl::function::FunctionParameters<'input>,
@@ -23,31 +23,31 @@ pub struct TransformFunctionRef<'input> {
 ///
 /// Variant ordering: disjoint first tokens (`FROM` vs `TO`), so order doesn't
 /// matter for disambiguation.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum TransformElement<'input> {
     From(TransformFromElement<'input>),
     To(TransformToElement<'input>),
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TransformFromElement<'input> {
     #[tok(FROM, SQL, WITH, FUNCTION, this)]
     pub func: TransformFunctionRef<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TransformToElement<'input> {
     #[tok(TO, SQL, WITH, FUNCTION, this)]
     pub func: TransformFunctionRef<'input>,
 }
 
 /// Parenthesized `CREATE TRANSFORM` element list.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct TransformElementList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<TransformElement<'input>>,
+    pub recursa::ArenaVec1<'input, TransformElement<'input>>,
 );
 
 /// `CREATE [OR REPLACE] TRANSFORM FOR Typename LANGUAGE name (elements)`
@@ -55,7 +55,7 @@ pub struct TransformElementList<'input>(
 /// `{FROM|TO} SQL WITH FUNCTION ...` entries; pg-sql models the list as
 /// `Seq1` of `TransformElement` separated by `Comma`, and relies on PG to reject duplicates and
 /// empty lists at semantic-analysis time.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateTransformStmt<'input> {
     #[tok(CREATE, this, TRANSFORM, FOR)]
     #[presence(OR, REPLACE)]
@@ -67,7 +67,7 @@ pub struct CreateTransformStmt<'input> {
 }
 
 /// `DROP TRANSFORM [IF EXISTS] FOR Typename LANGUAGE name [CASCADE|RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, TRANSFORM, this)]
 pub struct DropTransformStmt<'input> {
     pub if_exists: Option<IfExists>,

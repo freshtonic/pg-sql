@@ -7,14 +7,14 @@ use crate::ast::utility::vacuum::VacuumOptions;
 // --- CLUSTER ---
 
 /// `USING index_name` — Postgres' `cluster_index_specification`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ClusterUsingIndex<'input> {
     #[tok(USING, this)]
     pub index: crate::tokens::ColId<'input>,
 }
 
 /// Modern target: `qualified_name [USING index]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ClusterModernTarget<'input> {
     pub table: QualifiedName<'input>,
     pub using_index: Option<ClusterUsingIndex<'input>>,
@@ -24,7 +24,7 @@ pub struct ClusterModernTarget<'input> {
 ///
 /// `ON` after the first identifier disambiguates this from the modern form
 /// (which would have `USING` there, or nothing).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct ClusterLegacyTarget<'input> {
     pub index: crate::tokens::ColId<'input>,
     #[tok(ON, this)]
@@ -40,7 +40,7 @@ pub struct ClusterLegacyTarget<'input> {
 /// identifier (no `USING`). Declaration-order tiebreak prefers the legacy
 /// form when both could parse a prefix, but the modern form is selected
 /// once the parser sees no `ON` after the leading identifier.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum ClusterTarget<'input> {
     Legacy(ClusterLegacyTarget<'input>),
     Modern(ClusterModernTarget<'input>),
@@ -55,7 +55,7 @@ pub enum ClusterTarget<'input> {
 /// In the parenthesised form, `options` is `Some` and `verbose` is `None`
 /// (the option list expresses `VERBOSE` instead). In any legacy form,
 /// `options` is `None` and `verbose` may be `Some` or `None`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(CLUSTER, this)]
 pub struct ClusterStmt<'input> {
     pub options: Option<VacuumOptions<'input>>,

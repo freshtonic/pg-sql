@@ -13,20 +13,20 @@ use crate::tokens::{literal, punct};
 ///
 /// Variant ordering: `From` (keyword-led) before `Options` (paren-led) — they
 /// begin with different tokens so peek disambiguation is unambiguous.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CreateCollationBody<'input> {
     From(CollationFromClause<'input>),
     Options(DefList<'input>),
 }
 
 /// `FROM existing_collation_name` — copy an existing collation.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CollationFromClause<'input> {
     #[tok(FROM, this)]
     pub name: QualifiedName<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(CREATE, COLLATION, this)]
 pub struct CreateCollationStmt<'input> {
     pub if_not_exists: Option<IfNotExists>,
@@ -35,7 +35,7 @@ pub struct CreateCollationStmt<'input> {
 }
 
 /// `DROP COLLATION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, COLLATION, this)]
 pub struct DropCollationStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -44,7 +44,7 @@ pub struct DropCollationStmt<'input> {
 }
 
 /// `REFRESH VERSION` — Postgres' `AlterCollationStmt` action.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CollationRefreshVersion {
     #[tok(REFRESH, VERSION)]
     Value,
@@ -56,7 +56,7 @@ pub enum CollationRefreshVersion {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`RENAME`, `OWNER`, `SET`, `REFRESH`), so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterCollationAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -67,7 +67,7 @@ pub enum AlterCollationAction<'input> {
 /// `ALTER COLLATION any_name action` — Postgres' `AlterCollationStmt`
 /// (REFRESH VERSION) plus the collation branches of `RenameStmt` /
 /// `AlterOwnerStmt` / `AlterObjectSchemaStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterCollationStmt<'input> {
     #[tok(ALTER, COLLATION, this)]
     pub name: QualifiedName<'input>,

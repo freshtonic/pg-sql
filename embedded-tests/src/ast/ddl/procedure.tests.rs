@@ -10,7 +10,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateProcedureStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateProcedureStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -19,7 +20,8 @@ mod tests {
         let lexed = crate::lex("CALL ptest1('a')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CallStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CallStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -28,7 +30,8 @@ mod tests {
         let lexed = crate::lex("CALL ptest1('xy' || 'zzy')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CallStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CallStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -37,7 +40,8 @@ mod tests {
         let lexed = crate::lex("CALL nonexistent()");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CallStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CallStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -46,7 +50,8 @@ mod tests {
         let lexed = crate::lex("DROP PROCEDURE ptest1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = DropProcedureStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = DropProcedureStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -59,13 +64,15 @@ mod tests {
         let lexed = crate::lex("CREATE PROCEDURE testns.bar() AS 'select 1' LANGUAGE sql");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateProcedureStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateProcedureStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "bar");
         assert!(input.is_eof());
     }
     #[test]
     fn alter_procedure_strict() {
-        let stmt: AlterProcedureStmt = parse_stmt("ALTER PROCEDURE ptest1(text) STRICT");
+        let stmt = parse_stmt::<AlterProcedureStmt>("ALTER PROCEDURE ptest1(text) STRICT");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.action, AlterFuncAction::Options(_)));
         reparse_stable::<AlterProcedureStmt>("ALTER PROCEDURE ptest1(text) STRICT");
     }

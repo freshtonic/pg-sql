@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("DROP TRIGGER IF EXISTS trg ON my_table CASCADE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropTriggerStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropTriggerStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists.is_some());
         assert_eq!(stmt.name.text(), "trg");
         assert_eq!(stmt.table.object(), "my_table");
@@ -23,7 +24,8 @@ mod tests {
         let lexed = crate::lex("DROP EVENT TRIGGER et1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropEventTriggerStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropEventTriggerStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.names.len(), 1);
         assert!(input.is_eof());
     }
@@ -35,14 +37,15 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTriggerStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTriggerStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_trigger_minimal() {
-        let stmt: CreateTriggerStmt =
-            parse_stmt("CREATE TRIGGER t BEFORE INSERT ON tbl FOR EACH ROW EXECUTE PROCEDURE f()");
+        let stmt = parse_stmt::<CreateTriggerStmt>("CREATE TRIGGER t BEFORE INSERT ON tbl FOR EACH ROW EXECUTE PROCEDURE f()");
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.text(), "t");
         assert!(matches!(stmt.timing, TriggerActionTime::Before));
         assert_eq!(stmt.table.object(), "tbl");
@@ -53,9 +56,10 @@ mod tests {
 
     #[test]
     fn parse_create_or_replace_trigger_modelled() {
-        let stmt: CreateTriggerStmt = parse_stmt(
+        let stmt = parse_stmt::<CreateTriggerStmt>(
             "CREATE OR REPLACE TRIGGER my_trig BEFORE INSERT ON my_table FOR EACH ROW EXECUTE PROCEDURE funcB()",
         );
+        let stmt = stmt.ast();
         assert!(stmt.or_replace);
         assert_eq!(stmt.name.text(), "my_trig");
     }
@@ -120,9 +124,10 @@ mod tests {
 
     #[test]
     fn parse_create_constraint_trigger_minimal() {
-        let stmt: CreateConstraintTriggerStmt = parse_stmt(
+        let stmt = parse_stmt::<CreateConstraintTriggerStmt>(
             "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl FOR EACH ROW EXECUTE PROCEDURE f()",
         );
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.text(), "t");
         assert_eq!(stmt.table.object(), "tbl");
         assert!(stmt.constraint_attrs.is_empty());
@@ -158,9 +163,10 @@ mod tests {
 
     #[test]
     fn parse_create_event_trigger_minimal() {
-        let stmt: CreateEventTriggerStmt = parse_stmt(
+        let stmt = parse_stmt::<CreateEventTriggerStmt>(
             "CREATE EVENT TRIGGER undroppable ON sql_drop EXECUTE PROCEDURE undroppable()",
         );
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.text(), "undroppable");
         assert!(stmt.when_filters.is_none());
     }

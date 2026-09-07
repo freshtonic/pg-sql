@@ -13,7 +13,7 @@ use crate::tokens::{literal, punct};
 /// are soft.
 ///
 /// Variant ordering: all distinct first tokens, so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum RowSecurityCmd {
     #[tok(ALL)]
     All,
@@ -34,14 +34,14 @@ pub enum RowSecurityCmd {
 /// `"restrictive"` via `strcmp`; the bogus `AS UGLY` form in the corpus
 /// is intentionally syntactically valid but semantically rejected.
 /// Modelling the identifier as `literal::Ident` preserves both cases.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PolicyPermissiveClause<'input> {
     #[tok(AS, this)]
     pub kind: crate::tokens::NonReservedWord<'input>,
 }
 
 /// `FOR row_security_cmd` clause on CREATE/ALTER POLICY.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PolicyForClause {
     #[tok(FOR, this)]
     pub cmd: RowSecurityCmd,
@@ -50,30 +50,30 @@ pub struct PolicyForClause {
 /// `TO role_list` clause on CREATE/ALTER POLICY — Postgres'
 /// `RowSecurityDefaultToRole`. `PUBLIC`/`CURRENT_USER`/etc. are not
 /// keywords in pg-sql; they pass through as `RoleSpec` identifiers.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PolicyToClause<'input> {
     #[tok(TO, this)]
     pub roles: RoleList<'input>,
 }
 
 /// `USING (a_expr)` clause on CREATE/ALTER POLICY.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PolicyUsingClause<'input> {
     #[tok(USING, LPAREN, this, RPAREN)]
-    pub expr: Box<Expr<'input>>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `WITH CHECK (a_expr)` clause on CREATE/ALTER POLICY.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PolicyWithCheckClause<'input> {
     #[tok(WITH, CHECK, LPAREN, this, RPAREN)]
-    pub expr: Box<Expr<'input>>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `CREATE POLICY name ON table [AS PERMISSIVE|RESTRICTIVE]
 /// [FOR cmd] [TO role_list] [USING (expr)] [WITH CHECK (expr)]` —
 /// Postgres' `CreatePolicyStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreatePolicyStmt<'input> {
     #[tok(CREATE, POLICY, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -87,7 +87,7 @@ pub struct CreatePolicyStmt<'input> {
 }
 
 /// `DROP POLICY [IF EXISTS] name ON table [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, POLICY, this)]
 pub struct DropPolicyStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -106,7 +106,7 @@ pub struct DropPolicyStmt<'input> {
 /// Variant ordering: `Rename` (single-keyword `RENAME`) is listed before
 /// `Modify` (which can start with `TO`, `USING`, `WITH`, or be empty);
 /// the two have disjoint first-token sets.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterPolicyAction<'input> {
     Rename(RenameTo<'input>),
     Modify(AlterPolicyModify<'input>),
@@ -116,7 +116,7 @@ pub enum AlterPolicyAction<'input> {
 /// action on `ALTER POLICY`. All three clauses are optional but at least
 /// one must be present at the semantic level; pg-sql accepts the
 /// all-empty form too because gram.y's `AlterPolicyStmt` does.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterPolicyModify<'input> {
     pub to_roles: Option<PolicyToClause<'input>>,
     pub using: Option<PolicyUsingClause<'input>>,
@@ -127,7 +127,7 @@ pub struct AlterPolicyModify<'input> {
 /// `AlterPolicyStmt` plus the `ALTER POLICY ... RENAME TO ...` branch
 /// from `RenameStmt`. Both share the same prefix; the action enum
 /// dispatches.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterPolicyStmt<'input> {
     #[tok(ALTER, POLICY, this)]
     pub name: crate::tokens::ColId<'input>,

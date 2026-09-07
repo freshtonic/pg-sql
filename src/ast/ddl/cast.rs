@@ -12,7 +12,7 @@ use crate::tokens::{literal, punct};
 /// further down (used by DROP CAST): the CREATE form uses `Typename`
 /// (PG allows array/precision modifiers), so each type field is `CastType`,
 /// not the bare `common::TypeName` used by DROP CAST today.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateCastSignature<'input> {
     pub source: CastType<'input>,
     #[tok(AS, this)]
@@ -23,7 +23,7 @@ pub struct CreateCastSignature<'input> {
 /// (the parenthesised form). The cast function is mandatory: bare-name
 /// (`args_unspecified`) forms are not exercised by the corpus and are not
 /// modelled here.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CastFunctionRef<'input> {
     pub name: QualifiedName<'input>,
     pub args: CastFunctionArgs<'input>,
@@ -34,17 +34,17 @@ pub struct CastFunctionRef<'input> {
 ///
 /// The parentheses belong to the whole list: a field-level attachment would
 /// bind to each element and declare `(int), (text)`.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct CastFunctionArgs<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub Vec<crate::ast::ddl::function::FuncParam<'input>>,
+    pub recursa::ArenaVec<'input, crate::ast::ddl::function::FuncParam<'input>>,
 );
 
 /// `WITH FUNCTION function_with_argtypes` — the function-coercion branch of
 /// `CREATE CAST`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CastWithFunction<'input> {
     #[tok(WITH, FUNCTION, this)]
     pub func: CastFunctionRef<'input>,
@@ -60,7 +60,7 @@ pub struct CastWithFunction<'input> {
 /// here is `WithFunction` then `WithInout` because `WithFunction` has the
 /// longer specific match; the actual second-token disambiguation is handled
 /// by the combined peek regex.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CastImpl<'input> {
     WithFunction(CastWithFunction<'input>),
     #[tok(WITH, INOUT)]
@@ -71,7 +71,7 @@ pub enum CastImpl<'input> {
 
 /// `AS { IMPLICIT | ASSIGNMENT }` — the trailing `cast_context` keyword on
 /// `CREATE CAST`. Absent ⇒ `EXPLICIT` (the default).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CastContextKind {
     #[tok(IMPLICIT)]
     Implicit,
@@ -79,13 +79,13 @@ pub enum CastContextKind {
     Assignment,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CastContext {
     #[tok(AS, this)]
     pub kind: CastContextKind,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateCastStmt<'input> {
     #[tok(CREATE, CAST, LPAREN, this, RPAREN)]
     pub signature: CreateCastSignature<'input>,
@@ -94,7 +94,7 @@ pub struct CreateCastStmt<'input> {
 }
 
 /// The `(source AS target)` type pair inside a `DROP CAST` statement.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CastSignature<'input> {
     pub source: crate::ast::shared::names::TypeName<'input>,
     #[tok(AS, this)]
@@ -102,7 +102,7 @@ pub struct CastSignature<'input> {
 }
 
 /// `DROP CAST [IF EXISTS] (source AS target) [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, CAST, this)]
 pub struct DropCastStmt<'input> {
     pub if_exists: Option<IfExists>,

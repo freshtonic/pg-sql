@@ -6,7 +6,7 @@ use crate::ast::shared::names::QualifiedName;
 // --- TRUNCATE ---
 
 /// `{ RESTART | CONTINUE } IDENTITY` — Postgres' `opt_restart_seqs`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum RestartSeqs {
     #[tok(RESTART, IDENTITY)]
     Restart,
@@ -21,7 +21,7 @@ pub enum RestartSeqs {
 /// (default) inheritance behaviour explicit. The `ONLY (name)` parenthesised
 /// form is not exercised by any TRUNCATE corpus statement, so it is not
 /// modelled (matches the `LockRelation` shape).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct TruncateRelation<'input> {
     #[presence(ONLY)]
     pub only: bool,
@@ -35,11 +35,11 @@ pub struct TruncateRelation<'input> {
 ///     [ { RESTART | CONTINUE } IDENTITY ]
 ///     [ CASCADE | RESTRICT ]
 /// ```
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(TRUNCATE, optional(TABLE), this)]
 pub struct TruncateStmt<'input> {
     #[sep(COMMA)]
-    pub relations: recursa::Vec1<TruncateRelation<'input>>,
+    pub relations: recursa::ArenaVec1<'input, TruncateRelation<'input>>,
     pub restart_seqs: Option<RestartSeqs>,
     pub behavior: Option<DropBehavior>,
 }

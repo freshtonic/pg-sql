@@ -7,8 +7,8 @@ mod tests {
 
     #[test]
     fn parse_create_materialized_view_minimal() {
-        let stmt: CreateMaterializedViewStmt =
-            parse_stmt("CREATE MATERIALIZED VIEW mv AS SELECT 1");
+        let stmt = parse_stmt::<CreateMaterializedViewStmt>("CREATE MATERIALIZED VIEW mv AS SELECT 1");
+        let stmt = stmt.ast();
         assert_eq!(stmt.target.name.object(), "mv");
         assert!(!stmt.unlogged);
         assert!(stmt.if_not_exists.is_none());

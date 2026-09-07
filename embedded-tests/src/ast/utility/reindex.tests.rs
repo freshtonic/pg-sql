@@ -8,7 +8,8 @@ mod tests {
         let lexed = crate::lex("REINDEX (TABLESPACE ts) TABLE tbl");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = ReindexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = ReindexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -17,13 +18,15 @@ mod tests {
         let lexed = crate::lex("REINDEX (VERBOSE) INDEX i");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = ReindexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = ReindexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn reindex_table_is_modelled() {
-        let stmt: ReindexStmt = parse_stmt("REINDEX TABLE concur_heap");
+        let stmt = parse_stmt::<ReindexStmt>("REINDEX TABLE concur_heap");
+        let stmt = stmt.ast();
         assert!(stmt.options.is_none());
         reparse_stable::<ReindexStmt>("REINDEX TABLE concur_heap");
     }
@@ -62,7 +65,8 @@ mod tests {
 
     #[test]
     fn reindex_options_table_roundtrips() {
-        let stmt: ReindexStmt = parse_stmt("REINDEX (TABLESPACE ts) TABLE tbl");
+        let stmt = parse_stmt::<ReindexStmt>("REINDEX (TABLESPACE ts) TABLE tbl");
+        let stmt = stmt.ast();
         assert!(stmt.options.is_some());
         reparse_stable::<ReindexStmt>("REINDEX (TABLESPACE ts) TABLE tbl");
     }

@@ -7,7 +7,8 @@ mod tests {
         let lexed = crate::lex("INSERT INTO pg_catalog.foo VALUES (1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = InsertStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.table_name.object(), "foo");
         assert!(input.is_eof());
     }
@@ -17,7 +18,8 @@ mod tests {
         let lexed = crate::lex("INSERT INTO BOOLTBL1 (f1) VALUES (bool 't')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = InsertStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.table_name.object(), "BOOLTBL1");
         assert!(stmt.rest.columns().is_some());
         assert_eq!(stmt.rest.columns().unwrap().len(), 1);
@@ -38,7 +40,7 @@ mod tests {
             let mut input = lexed.input();
             InsertStmt::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -52,7 +54,8 @@ mod tests {
         let lexed = crate::lex("INSERT INTO BOOLTBL3 (d, b, o) VALUES ('true', true, 1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = InsertStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.rest.columns().unwrap().len(), 3);
     }
 
@@ -61,7 +64,8 @@ mod tests {
         let lexed = crate::lex("INSERT INTO booltbl4 VALUES (false, true, null)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = InsertStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.rest.columns().is_none());
         assert!(matches!(*stmt.rest.source(), super::InsertSource::Select(_)));
         assert!(input.is_eof());
@@ -72,7 +76,8 @@ mod tests {
         let lexed = crate::lex("INSERT INTO t DEFAULT VALUES RETURNING *");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = InsertStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(*stmt.rest.source(), super::InsertSource::Default));
         assert!(stmt.returning.is_some());
         assert!(input.is_eof());
@@ -83,7 +88,8 @@ mod tests {
         let lexed = crate::lex("INSERT INTO y SELECT generate_series(1, 10)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = InsertStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(*stmt.rest.source(), super::InsertSource::Select(_)));
         assert!(input.is_eof());
     }
@@ -93,7 +99,8 @@ mod tests {
         let lexed = crate::lex("INSERT INTO t VALUES (1) ON CONFLICT (k) DO NOTHING");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = InsertStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.on_conflict.is_some());
         assert!(input.is_eof());
     }
@@ -105,7 +112,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = InsertStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.on_conflict.is_some());
         assert!(input.is_eof());
     }
@@ -120,7 +128,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = InsertStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.on_conflict.is_some());
         assert!(input.is_eof());
     }
@@ -132,7 +141,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = InsertStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = InsertStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.on_conflict.is_some());
         assert!(input.is_eof());
     }

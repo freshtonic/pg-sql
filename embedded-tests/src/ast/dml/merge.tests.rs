@@ -8,7 +8,8 @@ mod tests {
         let lexed = crate::lex(sql);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = MergeStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.when_clauses.len(), 2);
         assert!(input.is_eof());
 
@@ -28,18 +29,19 @@ mod tests {
         let lexed = crate::lex(sql);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = MergeStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_merge_when_matched_and() {
-        let sql =
-            "MERGE INTO t USING s ON t.a = s.a WHEN MATCHED AND t.a = 2 THEN UPDATE SET b = s.b";
+        let sql = "MERGE INTO t USING s ON t.a = s.a WHEN MATCHED AND t.a = 2 THEN UPDATE SET b = s.b";
         let lexed = crate::lex(sql);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = MergeStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -49,7 +51,8 @@ mod tests {
         let lexed = crate::lex(sql);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = MergeStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -70,7 +73,7 @@ mod tests {
             let mut input = lexed.input();
             MergeStmt::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -85,18 +88,19 @@ mod tests {
         let lexed = crate::lex(sql);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = MergeStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_merge_insert_multi_values() {
-        let sql =
-            "MERGE INTO t USING s ON t.a = s.a WHEN NOT MATCHED THEN INSERT VALUES (1,1), (2,2)";
+        let sql = "MERGE INTO t USING s ON t.a = s.a WHEN NOT MATCHED THEN INSERT VALUES (1,1), (2,2)";
         let lexed = crate::lex(sql);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = MergeStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -106,7 +110,8 @@ mod tests {
         let lexed = crate::lex(sql);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = MergeStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = MergeStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 }

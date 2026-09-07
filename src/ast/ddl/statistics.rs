@@ -23,9 +23,9 @@ use crate::tokens::{literal, punct};
 /// `(`. We
 /// model `func_expr_windowless` by re-using `Expr` and letting any
 /// expression that begins like a function call lex into the `Func` arm.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum StatsParam<'input> {
-    Paren(#[tok(LPAREN, this, RPAREN)] Box<Expr<'input>>),
+    Paren(#[tok(LPAREN, this, RPAREN)] recursa::ArenaBox<'input, Expr<'input>>),
     Func(StatsFuncParam<'input>),
     Bare(crate::tokens::NonReservedWord<'input>),
 }
@@ -33,7 +33,7 @@ pub enum StatsParam<'input> {
 /// A bare function call as a `stats_param` — `ident '(' args ')'`. The
 /// argument list is captured as a raw `Expr` so any of PG's `func_expr_*`
 /// shapes round-trip.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct StatsFuncParam<'input> {
     pub name: QualifiedName<'input>,
     pub args: StatsFuncArgs<'input>,
@@ -42,19 +42,19 @@ pub struct StatsFuncParam<'input> {
 /// Required parentheses around a possibly empty statistics function argument
 /// list. Keeping the delimiters on this owning node prevents the nullable
 /// vector from making the whole suffix disappear.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct StatsFuncArgs<'input> {
     #[sep(COMMA)]
-    pub args: Vec<Box<Expr<'input>>>,
+    pub args: recursa::ArenaVec<'input, recursa::ArenaBox<'input, Expr<'input>>>,
 }
 
 /// `ON stats_param (, stats_param)*` clause on `CREATE STATISTICS`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ON, this)]
 pub struct StatisticsOnClause<'input> {
     #[sep(COMMA)]
-    pub params: recursa::Vec1<StatsParam<'input>>,
+    pub params: recursa::ArenaVec1<'input, StatsParam<'input>>,
 }
 
 /// `FROM table_ref (, table_ref)*` clause on `CREATE STATISTICS`. Re-uses
@@ -62,20 +62,20 @@ pub struct StatisticsOnClause<'input> {
 /// TABLESAMPLE, function table, XMLTABLE, JSON_TABLE) is accepted — gram.y's
 /// CreateStatsStmt rule explicitly uses `from_list`, even though PG
 /// semantically rejects most of these.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(FROM, this)]
 pub struct StatisticsFromClause<'input> {
     #[sep(COMMA)]
-    pub tables: recursa::Vec1<crate::ast::dml::select::TableRef<'input>>,
+    pub tables: recursa::ArenaVec1<'input, crate::ast::dml::select::TableRef<'input>>,
 }
 
 /// Optional parenthesized extended-statistics kind list.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct StatisticsTypeList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<literal::AliasName<'input>>,
+    pub recursa::ArenaVec1<'input, literal::AliasName<'input>>,
 );
 
 /// `CREATE STATISTICS [IF NOT EXISTS] [name] [(stat_type, ...)]
@@ -86,7 +86,7 @@ pub struct StatisticsTypeList<'input>(
 /// trailers optional so the partial forms round-trip without pg-sql claiming
 /// to fix PG-rejected SQL — the differential test verifies PG still rejects
 /// the formatted output.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(CREATE, STATISTICS, this)]
 pub struct CreateStatisticsStmt<'input> {
     pub if_not_exists: Option<IfNotExists>,
@@ -97,7 +97,7 @@ pub struct CreateStatisticsStmt<'input> {
 }
 
 /// `DROP STATISTICS [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, STATISTICS, this)]
 pub struct DropStatisticsStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -110,7 +110,7 @@ pub struct DropStatisticsStmt<'input> {
 ///
 /// Variant ordering: `DEFAULT` is a hard keyword (distinct first token
 /// from a numeric literal), so order is for clarity.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum SetStatisticsValue<'input> {
     #[tok(DEFAULT)]
     Default,
@@ -118,7 +118,7 @@ pub enum SetStatisticsValue<'input> {
 }
 
 /// `SET STATISTICS value` clause on `ALTER STATISTICS`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterStatisticsSetStatisticsClause<'input> {
     #[tok(SET, STATISTICS, this)]
     pub value: SetStatisticsValue<'input>,
@@ -134,7 +134,7 @@ pub struct AlterStatisticsSetStatisticsClause<'input> {
 /// STATISTICS` (followed by a keyword) disambiguate on the second
 /// token. `SET STATISTICS` is listed before `SET SCHEMA` only for
 /// readability — both have a unique two-token prefix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterStatisticsAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -151,7 +151,7 @@ pub enum AlterStatisticsAction<'input> {
 /// only exercises the SET STATISTICS form) — a strict per-action gate
 /// would require either a sub-grammar dispatcher or two separate
 /// statement types. The corpus oracle catches any regression here.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ALTER, STATISTICS, this)]
 pub struct AlterStatisticsStmt<'input> {
     pub if_exists: Option<IfExists>,

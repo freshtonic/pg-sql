@@ -16,7 +16,8 @@ mod tests {
              TO SQL WITH FUNCTION int4recv(internal))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTransformStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTransformStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -26,7 +27,8 @@ mod tests {
              (TO SQL WITH FUNCTION textrecv(internal))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTransformStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTransformStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -35,7 +37,8 @@ mod tests {
         let lexed = crate::lex("DROP TRANSFORM IF EXISTS FOR int LANGUAGE SQL CASCADE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropTransformStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropTransformStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists.is_some());
         assert!(stmt.behavior.is_some());
         assert!(input.is_eof());

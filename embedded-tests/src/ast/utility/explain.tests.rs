@@ -7,7 +7,8 @@ mod tests {
         let lexed = crate::lex("explain (costs off) select * from t");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = ExplainStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = ExplainStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.options().is_some());
         assert!(input.is_eof());
     }
@@ -19,7 +20,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = ExplainStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = ExplainStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.options().is_some());
         assert!(input.is_eof());
     }
@@ -38,9 +40,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let stmt = ExplainStmt::parse(&mut input)
+            let stmt_parsed = ExplainStmt::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let stmt = stmt_parsed.ast();
             assert!(stmt.options().is_some());
             assert!(
                 input.is_eof(),

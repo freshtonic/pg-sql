@@ -27,7 +27,7 @@ use crate::tokens::{literal, punct};
 /// regex disambiguates `OrderBy` from `BothArgs`/`Args` by the leading
 /// `ORDER` keyword; `BothArgs` and `Args` are disambiguated at parse time
 /// by the presence of a trailing `ORDER BY`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum CreateAggregateArgs<'input> {
     #[tok(LPAREN, STAR, RPAREN)]
     Star,
@@ -40,15 +40,15 @@ pub enum CreateAggregateArgs<'input> {
 }
 
 /// gram.y `old_aggr_definition: '(' old_aggr_list ')'`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct OldAggregateDefinition<'input> {
     #[sep(COMMA)]
-    pub elems: recursa::Vec1<OldAggregateElem<'input>>,
+    pub elems: recursa::ArenaVec1<'input, OldAggregateElem<'input>>,
 }
 
 /// gram.y `old_aggr_elem: IDENT '=' def_arg`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct OldAggregateElem<'input> {
     pub name: crate::tokens::literal::IdentOnly<'input>,
     #[tok(EQ, this)]
@@ -56,7 +56,7 @@ pub struct OldAggregateElem<'input> {
 }
 
 /// `(ORDER BY aggr_args_list)` — ordered-set aggregate with no plain args.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateAggregateOrderBy<'input> {
     #[tok(LPAREN, this, RPAREN)]
     pub args: CreateAggregateOrderByInner<'input>,
@@ -64,11 +64,11 @@ pub struct CreateAggregateOrderBy<'input> {
 
 /// `ORDER BY aggr_args_list` — the `ORDER BY` leads the whole list, so it is
 /// declared on the struct rather than on the repeated field.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ORDER, BY, this)]
 pub struct CreateAggregateOrderByInner<'input> {
     #[sep(COMMA)]
-    pub args: recursa::Vec1<crate::ast::ddl::function::FunctionArg<'input>>,
+    pub args: recursa::ArenaVec1<'input, crate::ast::ddl::function::FunctionArg<'input>>,
 }
 
 /// One entry of `CREATE AGGREGATE`'s first parenthesized group — an
@@ -81,7 +81,7 @@ pub struct CreateAggregateOrderByInner<'input> {
 /// the `=` that follows the first name. Parse the shared `[mode] [name]
 /// type` prefix once and let the optional tail decide, avoiding two LR
 /// productions with an arbitrarily long shared prefix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateAggregateArg<'input> {
     /// gram.y `aggr_arg: func_arg`.
     pub arg: crate::ast::ddl::function::FunctionArg<'input>,
@@ -90,22 +90,22 @@ pub struct CreateAggregateArg<'input> {
 /// `(aggr_args_list [ORDER BY aggr_args_list])` — regular arguments with an
 /// optional ordered-set tail, or the old-style `(name = value, ...)`
 /// definition list, which occupies the same position.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct CreateAggregateArgLists<'input> {
     #[sep(COMMA)]
-    pub direct: recursa::Vec1<CreateAggregateArg<'input>>,
+    pub direct: recursa::ArenaVec1<'input, CreateAggregateArg<'input>>,
     pub ordered: Option<CreateAggregateOrderedTail<'input>>,
 }
 
 /// `ORDER BY aggr_args_list` tail of an ordered-set aggregate signature.
 ///
 /// `ORDER BY` leads the whole list, so it is declared on the struct.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ORDER, BY, this)]
 pub struct CreateAggregateOrderedTail<'input> {
     #[sep(COMMA)]
-    pub ordered: recursa::Vec1<crate::ast::ddl::function::FunctionArg<'input>>,
+    pub ordered: recursa::ArenaVec1<'input, crate::ast::ddl::function::FunctionArg<'input>>,
 }
 
 /// `CREATE [OR REPLACE] AGGREGATE func_name { aggr_args (def_list) | (def_list) }`.
@@ -116,14 +116,14 @@ pub struct CreateAggregateOrderedTail<'input> {
 /// Parse that shared first parenthesized group once as aggregate arguments;
 /// the presence of a second definition list records the modern form. This
 /// lets the LR parser decide on the `(` after the completed first group.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AggregateSig<'input> {
     pub name: QualifiedName<'input>,
     pub args: CreateAggregateArgs<'input>,
     pub definition: Option<DefList<'input>>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreateAggregateStmt<'input> {
     #[tok(CREATE, this, AGGREGATE)]
     #[presence(OR, REPLACE)]
@@ -133,19 +133,19 @@ pub struct CreateAggregateStmt<'input> {
 
 /// A single `DROP AGGREGATE` target: a qualified name plus its `(...)`
 /// argument signature — Postgres' `aggregate_with_argtypes`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DropAggregateTarget<'input> {
     pub name: QualifiedName<'input>,
     pub args: AggregateArgs<'input>,
 }
 
 /// `DROP AGGREGATE [IF EXISTS] name(args) [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, AGGREGATE, this)]
 pub struct DropAggregateStmt<'input> {
     pub if_exists: Option<IfExists>,
     #[sep(COMMA)]
-    pub targets: Vec<DropAggregateTarget<'input>>,
+    pub targets: recursa::ArenaVec<'input, DropAggregateTarget<'input>>,
     pub behavior: Option<DropBehavior>,
 }
 
@@ -156,7 +156,7 @@ pub struct DropAggregateStmt<'input> {
 ///
 /// Variant ordering: each variant has a distinct leading keyword
 /// (`RENAME`, `OWNER`, `SET`), so order is for clarity only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterAggregateAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -171,7 +171,7 @@ pub enum AlterAggregateAction<'input> {
 /// `(*)`, plain type lists, and the ordered-set `(... ORDER BY ...)`
 /// forms) — reuses [`CreateAggregateArgs`] from the CREATE AGGREGATE
 /// path.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterAggregateStmt<'input> {
     #[tok(ALTER, AGGREGATE, this)]
     pub name: QualifiedName<'input>,

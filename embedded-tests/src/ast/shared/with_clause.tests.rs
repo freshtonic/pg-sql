@@ -7,7 +7,8 @@ mod tests {
         let lexed = crate::lex("WITH q1(x,y) AS (SELECT 1,2) SELECT * FROM q1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = WithStatement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(!stmt.with_clause.is_recursive());
         assert_eq!(stmt.with_clause.ctes.len(), 1);
         assert!(input.is_eof());
@@ -20,18 +21,19 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = WithStatement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.with_clause.is_recursive());
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_with_recursive_cte_named_recursive() {
-        let lexed =
-            crate::lex("WITH RECURSIVE recursive AS (SELECT 1) SELECT * FROM recursive");
+        let lexed = crate::lex("WITH RECURSIVE recursive AS (SELECT 1) SELECT * FROM recursive");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = WithStatement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.with_clause.is_recursive());
         assert_eq!(stmt.with_clause.ctes.len(), 1);
         assert!(input.is_eof());
@@ -44,7 +46,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = WithStatement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(!stmt.with_clause.is_recursive());
         assert_eq!(stmt.with_clause.ctes.len(), 2);
         assert!(input.is_eof());
@@ -65,7 +68,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = WithStatement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(
             stmt.with_clause.ctes.first().materialized,
             Some(MaterializedOption::Materialized)
@@ -80,7 +84,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = WithStatement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.with_clause.ctes.len(), 2);
         assert!(input.is_eof());
     }
@@ -91,7 +96,8 @@ mod tests {
         let lexed = crate::lex(sql);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = WithStatement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.with_clause.ctes.first().search.is_some());
         assert!(input.is_eof());
     }
@@ -102,7 +108,8 @@ mod tests {
         let lexed = crate::lex(sql);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = WithStatement::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.with_clause.ctes.first().cycle.is_some());
         assert!(input.is_eof());
     }

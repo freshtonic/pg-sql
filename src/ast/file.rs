@@ -17,7 +17,7 @@ use crate::ast::Statement;
 /// parser accepts empty statements (`;`, `;;`, leading and interior
 /// semicolons): an empty item remains a source and provenance occurrence in
 /// the framed document without entering the semantic statement list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct SqlDocumentItem<'input> {
     pub statement: Option<Statement<'input>>,
 }

@@ -7,7 +7,8 @@ mod tests {
         let lexed = crate::lex("CREATE VIEW v AS SELECT 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateViewStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "v");
         assert!(!stmt.or_replace);
         assert!(stmt.temp.is_none());
@@ -20,7 +21,8 @@ mod tests {
         let lexed = crate::lex("CREATE TEMPORARY VIEW v AS SELECT 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateViewStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.temp.is_some());
         assert!(input.is_eof());
     }
@@ -32,7 +34,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateViewStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.recursive);
         assert!(stmt.columns.is_some());
         assert!(input.is_eof());
@@ -45,7 +48,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateViewStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateViewStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.or_replace);
         assert!(stmt.recursive);
         assert!(input.is_eof());
@@ -56,7 +60,8 @@ mod tests {
         let lexed = crate::lex("DROP VIEW v");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropViewStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropViewStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.names.len(), 1);
         assert!(!stmt.if_exists);
         assert!(input.is_eof());
@@ -67,7 +72,8 @@ mod tests {
         let lexed = crate::lex("DROP VIEW IF EXISTS a, b CASCADE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropViewStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropViewStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists);
         assert_eq!(stmt.names.len(), 2);
         assert!(stmt.behavior.is_some());

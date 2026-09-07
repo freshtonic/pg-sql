@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("DROP POLICY p1 ON document");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropPolicyStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropPolicyStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.text(), "p1");
         assert_eq!(stmt.table.object(), "document");
         assert!(input.is_eof());
@@ -18,7 +19,8 @@ mod tests {
 
     #[test]
     fn create_policy_minimal_roundtrips() {
-        let stmt: CreatePolicyStmt = parse_stmt("CREATE POLICY p1 ON document");
+        let stmt = parse_stmt::<CreatePolicyStmt>("CREATE POLICY p1 ON document");
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.text(), "p1");
         assert_eq!(stmt.table.object(), "document");
         assert!(stmt.permissive.is_none());

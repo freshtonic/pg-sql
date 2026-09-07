@@ -1,26 +1,31 @@
 #[cfg(test)]
 mod tests {
     use crate::ast::dml::select::{
-        GroupByItem, JoinSuffix, SelectDistinct, SelectItem, SelectStmt, UnqualifiedJoin,
+        GroupByItem, JoinSuffix, SelectDistinctRef, SelectItem, SelectStmt, UnqualifiedJoin,
         UnqualifiedJoinKind,
     };
     use crate::ast::dml::values::QueryBody;
     use crate::ast::shared::expr::Expr;
 
     /// Parse `src` as a complete `SELECT` through the logos lex pass.
-    fn parse_select_classified(src: &'static str) -> SelectStmt<'static> {
+    type SelectFamily =
+        <SelectStmt<'static> as recursa::ArenaParse<crate::Input<'static>>>::Family;
+
+    fn parse_select_classified(
+        src: &'static str,
+    ) -> recursa::ArenaParsed<'static, SelectFamily> {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input)
+        let stmt_parsed = SelectStmt::parse(&mut input)
             .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-            .into_ast();
+            ;
         assert!(
             input.is_eof(),
             "parser cursor after {src:?}: {}",
             input.cursor()
         );
-        stmt
+        stmt_parsed
     }
 
     /// A JOIN's `ON`/`USING` may be deferred: `a JOIN b JOIN c ON x ON y`
@@ -32,7 +37,8 @@ mod tests {
         use recursa::PrettyConfig;
 
         let right_recursive_src = "SELECT * FROM a JOIN b JOIN c ON x ON y";
-        let right_recursive = parse_select_classified(right_recursive_src);
+        let right_recursive_parsed = parse_select_classified(right_recursive_src);
+        let right_recursive = right_recursive_parsed.ast();
         let [table] = right_recursive
             .from_clause()
             .expect("FROM clause")
@@ -56,12 +62,13 @@ mod tests {
             "ON y",
         );
         assert_eq!(
-            format_tokens_sql(&right_recursive, PrettyConfig::default()).trim(),
+            format_tokens_sql(right_recursive, PrettyConfig::default()).trim(),
             right_recursive_src,
         );
 
         let left_deep_src = "SELECT * FROM a JOIN b ON x JOIN c ON y";
-        let left_deep = parse_select_classified(left_deep_src);
+        let left_deep_parsed = parse_select_classified(left_deep_src);
+        let left_deep = left_deep_parsed.ast();
         let [table] = left_deep
             .from_clause()
             .expect("FROM clause")
@@ -86,7 +93,7 @@ mod tests {
             "ON y",
         );
         assert_eq!(
-            format_tokens_sql(&left_deep, PrettyConfig::default()).trim(),
+            format_tokens_sql(left_deep, PrettyConfig::default()).trim(),
             left_deep_src,
         );
 
@@ -96,7 +103,7 @@ mod tests {
              LEFT JOIN t5 ON r ON s", // parenthesised
             "SELECT * FROM a CROSS JOIN b JOIN c ON x", // unqualified mixed in
         ] {
-            parse_select_classified(src);
+            parse_select_classified(src).ast();
         }
     }
 
@@ -106,7 +113,7 @@ mod tests {
             "SELECT * FROM ROWS FROM(f(1), g(2)) WITH ORDINALITY AS z(a, b, c, ord)",
             "SELECT * FROM ROWS FROM(getf(1) AS (id int, nm text)) AS z(a, b)",
         ] {
-            parse_select_classified(src);
+            parse_select_classified(src).ast();
         }
     }
 
@@ -123,7 +130,7 @@ mod tests {
             "SELECT * FROM t, LATERAL generate_series(1, t.n) g",
             "SELECT * FROM t, LATERAL (SELECT 1) s",
         ] {
-            parse_select_classified(src);
+            parse_select_classified(src).ast();
         }
     }
 
@@ -142,7 +149,7 @@ mod tests {
             "SELECT * FROM JSON_TABLE(js, '$' AS root PASSING 1 AS a \
              COLUMNS (a int, NESTED PATH '$.b' AS nb COLUMNS (c int PATH '$'))) AS jt (x, y)",
         ] {
-            parse_select_classified(src);
+            parse_select_classified(src).ast();
         }
     }
 
@@ -151,7 +158,8 @@ mod tests {
         let lexed = crate::lex("SELECT 1 AS one");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.item_count(), 1);
         assert!(input.is_eof());
     }
@@ -165,12 +173,14 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let stmt = SelectStmt::parse(&mut input)
+            let stmt_parsed = SelectStmt::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let stmt = stmt_parsed.ast();
 
             match (stmt.distinct(), expect_on) {
-                (Some(SelectDistinct::On(_)), true) | (Some(SelectDistinct::All), false) => {}
+                (Some(SelectDistinctRef::On(_)), true)
+                | (Some(SelectDistinctRef::All), false) => {}
                 (actual, _) => panic!("unexpected DISTINCT form for {src:?}: {actual:?}"),
             }
             assert_eq!(stmt.item_count(), if expect_on { 2 } else { 1 });
@@ -183,7 +193,8 @@ mod tests {
         let lexed = crate::lex("SELECT distinct_column FROM t");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
 
         assert!(stmt.distinct().is_none());
         assert_eq!(stmt.item_count(), 1);
@@ -195,7 +206,8 @@ mod tests {
         let lexed = crate::lex("SELECT FROM emp");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.item_count(), 0);
         assert!(stmt.from_clause().is_some());
         assert!(input.is_eof());
@@ -209,7 +221,8 @@ mod tests {
         let lexed = crate::lex("SELECT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.item_count(), 0);
         assert!(stmt.from_clause().is_none());
         assert!(stmt.into_clause().is_none());
@@ -244,9 +257,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let _query = Subquery::parse(&mut input)
+            let _query_parsed = Subquery::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _query = _query_parsed.ast();
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
     }
@@ -264,9 +278,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let stmt = SelectStmt::parse(&mut input)
+            let stmt_parsed = SelectStmt::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let stmt = stmt_parsed.ast();
             assert_eq!(stmt.item_count(), 0, "{src:?}");
             assert!(stmt.into_clause().is_some(), "{src:?}");
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
@@ -288,9 +303,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let _stmt = SelectStmt::parse(&mut input)
+            let _stmt_parsed = SelectStmt::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
     }
@@ -301,7 +317,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM (a CROSS JOIN b) AS tx");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -310,17 +327,18 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM (a JOIN b USING (i)) AS x");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_paren_join_with_col_aliases() {
-        let lexed =
-            crate::lex("SELECT * FROM (a t1 (x, y) CROSS JOIN b t2 (p, q)) AS tx (a, b, c, d)");
+        let lexed = crate::lex("SELECT * FROM (a t1 (x, y) CROSS JOIN b t2 (p, q)) AS tx (a, b, c, d)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -342,9 +360,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = SelectStmt::parse(&mut input)
+            let _stmt_parsed = SelectStmt::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -358,7 +377,8 @@ mod tests {
         let lexed = crate::lex("SELECT f1 FROM BOOLTBL1 WHERE f1 = true");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.item_count(), 1);
         assert!(stmt.from_clause().is_some());
         assert!(stmt.where_clause.is_some());
@@ -369,7 +389,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.item_count(), 1);
         assert!(matches!(stmt.items().next(), Some(SelectItem::Star(_))));
         assert!(input.is_eof());
@@ -389,7 +410,8 @@ mod tests {
         let lexed = crate::lex("SELECT 1 AS true");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         let first = stmt.items().next().unwrap();
         let SelectItem::Expr(first) = first else {
             panic!("expected an expression SELECT item");
@@ -398,7 +420,8 @@ mod tests {
         assert_eq!(alias.name(), "true");
 
         for (src, expected_alias) in [("SELECT 1 TABLE", "TABLE"), ("SELECT 1 TRUE", "TRUE")] {
-            let stmt = parse_select_classified(src);
+            let stmt_parsed = parse_select_classified(src);
+            let stmt = stmt_parsed.ast();
             let SelectItem::Expr(item) = stmt.items().next().expect("SELECT item") else {
                 panic!("expected expression target for {src:?}");
             };
@@ -409,7 +432,8 @@ mod tests {
             );
         }
 
-        let stmt = parse_select_classified("SELECT value IS NULL");
+        let stmt_parsed = parse_select_classified("SELECT value IS NULL");
+        let stmt = stmt_parsed.ast();
         let SelectItem::Expr(item) = stmt.items().next().expect("SELECT item") else {
             panic!("expected expression target");
         };
@@ -422,7 +446,8 @@ mod tests {
         let lexed = crate::lex("SELECT f1 FROM t ORDER BY f1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.order_by.is_some());
     }
 
@@ -435,7 +460,8 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+            let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+            let stmt = stmt_parsed.ast();
             assert!(stmt.from_clause().is_some());
             assert!(input.is_eof());
         }
@@ -448,7 +474,8 @@ mod tests {
         let lexed = crate::lex("SELECT f1 FROM t ORDER BY f1 using >");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.order_by.is_some());
         assert!(input.is_eof());
     }
@@ -458,7 +485,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY f1 ASC");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.order_by.is_some());
         assert!(input.is_eof());
     }
@@ -468,7 +496,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY f1 DESC");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.order_by.is_some());
         assert!(input.is_eof());
     }
@@ -478,7 +507,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY f1 NULLS FIRST");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.order_by.is_some());
         assert!(input.is_eof());
     }
@@ -488,7 +518,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY f1 DESC NULLS LAST");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.order_by.is_some());
         assert!(input.is_eof());
     }
@@ -500,7 +531,8 @@ mod tests {
         let lexed = crate::lex("SELECT 1 OFFSET 0");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.limit_offset.is_some());
         assert!(input.is_eof());
     }
@@ -510,7 +542,8 @@ mod tests {
         let lexed = crate::lex("SELECT 1 LIMIT 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.limit_offset.is_some());
         assert!(input.is_eof());
     }
@@ -585,7 +618,8 @@ mod tests {
         let lexed = crate::lex("SELECT f1 FROM ONLY t");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.from_clause().is_some());
         assert!(input.is_eof());
     }
@@ -595,7 +629,8 @@ mod tests {
         let lexed = crate::lex("SELECT f1 FROM ONLY t AS x");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.from_clause().is_some());
         assert!(input.is_eof());
     }
@@ -605,7 +640,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM myschema.mytable");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.from_clause().is_some());
         assert!(input.is_eof());
     }
@@ -616,18 +652,19 @@ mod tests {
         let lexed = crate::lex("WINDOW w AS (PARTITION BY y ORDER BY z)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let wc = WindowClause::parse(&mut input).unwrap().into_ast();
+        let wc_parsed = WindowClause::parse(&mut input).unwrap();
+        let wc = wc_parsed.ast();
         assert_eq!(wc.defs.len(), 1);
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_select_window_clause() {
-        let lexed =
-            crate::lex("SELECT sum(x) OVER w FROM t WINDOW w AS (PARTITION BY y ORDER BY z)");
+        let lexed = crate::lex("SELECT sum(x) OVER w FROM t WINDOW w AS (PARTITION BY y ORDER BY z)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.window.is_some());
         assert!(input.is_eof());
     }
@@ -639,7 +676,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -648,7 +686,8 @@ mod tests {
         let lexed = crate::lex("SELECT sum(x) OVER w FROM t");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -657,7 +696,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM tbl AS t (a, b, c)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.from_clause().is_some());
         assert!(input.is_eof());
     }
@@ -667,7 +707,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM s.t AS x");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.from_clause().is_some());
         assert!(input.is_eof());
     }
@@ -677,7 +718,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM a JOIN b USING (i) AS x");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -686,7 +728,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM a JOIN b USING (i) AS x WHERE x.i = 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -695,7 +738,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM rngfunct(1) WITH ORDINALITY AS z(a, b, ord)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -704,7 +748,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM test_ret_set_rec_dyn(1500) AS (a int, b int, c int)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -725,7 +770,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -734,7 +780,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM unnest(array['a','b']) WITH ORDINALITY AS z(a, ord)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -743,7 +790,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM a NATURAL JOIN b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(input.is_eof());
         let [table] = stmt
             .from_clause()
@@ -777,7 +825,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM a NATURAL LEFT JOIN b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -786,7 +835,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM a LEFT OUTER JOIN b USING (i)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -795,7 +845,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM a FULL OUTER JOIN b USING (i)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -804,7 +855,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -813,7 +865,7 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM a LEFT JOIN (b JOIN c ON b.x = c.x) ON a.y = b.y");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        SelectStmt::parse(&mut input).unwrap().into_ast();
+        SelectStmt::parse(&mut input).unwrap();
         assert!(input.is_eof());
     }
 
@@ -824,7 +876,7 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        SelectStmt::parse(&mut input).unwrap().into_ast();
+        SelectStmt::parse(&mut input).unwrap();
         assert!(input.is_eof());
     }
 
@@ -841,7 +893,7 @@ mod tests {
             let mut input = lexed.input();
             SelectStmt::parse(&mut input)
                 .unwrap_or_else(|error| panic!("parse {src:?}: {error}"))
-                .into_ast();
+                ;
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -855,8 +907,9 @@ mod tests {
         let lexed = crate::lex("SELECT sum(c) FROM t GROUP BY GROUPING SETS ((), (a), (a,b))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
-        let group_by = stmt.group_by.expect("GROUP BY clause");
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
+        let group_by = stmt.group_by.as_ref().expect("GROUP BY clause");
         assert!(matches!(
             group_by.items.as_slice(),
             [GroupByItem::GroupingSets(_)]
@@ -869,8 +922,9 @@ mod tests {
         let lexed = crate::lex("SELECT sum(c) FROM t GROUP BY ROLLUP (a, b)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
-        let group_by = stmt.group_by.expect("GROUP BY clause");
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
+        let group_by = stmt.group_by.as_ref().expect("GROUP BY clause");
         assert!(matches!(group_by.items.as_slice(), [GroupByItem::Expr(_)]));
         assert!(input.is_eof());
     }
@@ -880,8 +934,9 @@ mod tests {
         let lexed = crate::lex("SELECT sum(c) FROM t GROUP BY CUBE (a, b)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
-        let group_by = stmt.group_by.expect("GROUP BY clause");
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
+        let group_by = stmt.group_by.as_ref().expect("GROUP BY clause");
         assert!(matches!(group_by.items.as_slice(), [GroupByItem::Expr(_)]));
         assert!(input.is_eof());
     }
@@ -891,8 +946,9 @@ mod tests {
         let lexed = crate::lex("SELECT sum(c) FROM t GROUP BY GROUPING SETS (ROLLUP(a), CUBE(b))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
-        let group_by = stmt.group_by.expect("GROUP BY clause");
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
+        let group_by = stmt.group_by.as_ref().expect("GROUP BY clause");
         let [GroupByItem::GroupingSets(grouping_sets)] = group_by.items.as_slice() else {
             panic!("expected one GROUPING SETS item");
         };
@@ -910,8 +966,9 @@ mod tests {
         let lexed = crate::lex("SELECT sum(c) FROM t GROUP BY a, ROLLUP(b), CUBE(c)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
-        let group_by = stmt.group_by.expect("GROUP BY clause");
+        let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
+        let group_by = stmt.group_by.as_ref().expect("GROUP BY clause");
         assert!(matches!(
             group_by.items.as_slice(),
             [
@@ -934,7 +991,7 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            SelectStmt::parse(&mut input).unwrap().into_ast();
+            SelectStmt::parse(&mut input).unwrap();
             assert!(input.is_eof(), "leftover for {src:?}");
         }
     }
@@ -944,7 +1001,8 @@ mod tests {
         let lexed = crate::lex("SELECT f1 FROM t FOR UPDATE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.for_update.is_some());
         assert!(input.is_eof());
     }
@@ -961,7 +1019,8 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+            let stmt_parsed = QueryBody::parse(&mut input).unwrap();
+            let stmt = stmt_parsed.ast();
             assert!(stmt.for_update.is_some(), "no locking clause: {src:?}");
             assert!(input.is_eof(), "leftover for {src:?}");
         }
@@ -980,9 +1039,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = QueryBody::parse(&mut input)
+            let _stmt_parsed = QueryBody::parse(&mut input)
                 .unwrap_or_else(|e| panic!("{src}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(input.is_eof(), "leftover for {src:?}");
         }
     }
@@ -992,7 +1052,8 @@ mod tests {
         let lexed = crate::lex(r#"SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061""#);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1003,7 +1064,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1015,7 +1077,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY x OFFSET 10 LIMIT 5");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -1025,7 +1088,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY x LIMIT 5 OFFSET 10");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -1034,7 +1098,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY x FETCH FIRST 5 ROWS ONLY");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -1043,7 +1108,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY x FETCH FIRST 2 ROW WITH TIES");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -1053,7 +1119,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY x FETCH FIRST ROWS WITH TIES");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -1062,7 +1129,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY x FETCH NEXT 1 ROW ONLY");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -1071,7 +1139,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY x OFFSET 10 FETCH FIRST 5 ROWS ONLY");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -1080,7 +1149,8 @@ mod tests {
         let lexed = crate::lex("SELECT * FROM t ORDER BY x FETCH FIRST 5 ROWS WITH TIES OFFSET 10");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = QueryBody::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = QueryBody::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -1100,9 +1170,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = SelectStmt::parse(&mut input)
+            let _stmt_parsed = SelectStmt::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",

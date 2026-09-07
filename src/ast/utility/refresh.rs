@@ -10,7 +10,7 @@ use crate::ast::shared::names::QualifiedName;
 ///
 /// Reuses the `WithDataClause` from `create_table.rs` (also used by
 /// `CREATE TABLE AS … WITH [NO] DATA`).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(REFRESH, MATERIALIZED, VIEW, this)]
 pub struct RefreshStmt<'input> {
     #[presence(CONCURRENTLY)]

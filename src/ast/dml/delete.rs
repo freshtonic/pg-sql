@@ -4,7 +4,7 @@ use crate::ast::dml::update::ReturningClause;
 use crate::ast::shared::names::QualifiedName;
 
 /// Table alias with explicit AS keyword: `AS alias`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct DeleteAsAlias<'input> {
     #[tok(AS, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -18,7 +18,7 @@ pub struct DeleteAsAlias<'input> {
 ///
 /// Variant ordering: WithAs (`AS ident`) has a longer first_pattern than
 /// Bare (`ident`), so longest-match-wins picks it when AS is present.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum DeleteTableAlias<'input> {
     WithAs(DeleteAsAlias<'input>),
     Bare(crate::tokens::ColId<'input>),
@@ -39,11 +39,11 @@ impl<'input> DeleteTableAlias<'input> {
 ///
 /// `USING` leads the whole from-list, so it is declared on the struct;
 /// gram.y's `using_clause: USING from_list` makes the list non-empty.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(USING, this)]
 pub struct DeleteUsingClause<'input> {
     #[sep(COMMA)]
-    pub tables: recursa::Vec1<crate::ast::dml::select::TableRef<'input>>,
+    pub tables: recursa::ArenaVec1<'input, crate::ast::dml::select::TableRef<'input>>,
 }
 
 /// DELETE FROM statement: `DELETE FROM [ONLY] table [alias] [USING ...] [WHERE expr] [RETURNING ...]`.
@@ -52,18 +52,18 @@ pub struct DeleteUsingClause<'input> {
 /// `relation_expr` in `gram.y`. The legacy `ONLY (name)` parenthesised form is
 /// not exercised by any DELETE corpus statement, so it is not modelled (matches
 /// the `TruncateRelation` / `LockRelation` shape).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[pretty(group = consistent)]
 pub struct DeleteStmt<'input> {
     #[tok(DELETE, FROM, this)]
     #[presence(ONLY)]
     pub only: bool,
     pub table_name: QualifiedName<'input>,
-    pub alias: Option<Box<DeleteTableAlias<'input>>>,
+    pub alias: Option<recursa::ArenaBox<'input, DeleteTableAlias<'input>>>,
     #[pretty(break_before = soft)]
-    pub using_clause: Option<Box<DeleteUsingClause<'input>>>,
+    pub using_clause: Option<recursa::ArenaBox<'input, DeleteUsingClause<'input>>>,
     #[pretty(break_before = soft)]
-    pub where_clause: Option<Box<WhereClause<'input>>>,
+    pub where_clause: Option<recursa::ArenaBox<'input, WhereClause<'input>>>,
     #[pretty(break_before = soft)]
-    pub returning: Option<Box<ReturningClause<'input>>>,
+    pub returning: Option<recursa::ArenaBox<'input, ReturningClause<'input>>>,
 }

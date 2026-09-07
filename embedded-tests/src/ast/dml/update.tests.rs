@@ -7,7 +7,8 @@ mod tests {
         let lexed = crate::lex("UPDATE pg_catalog.pg_class SET relname = '123'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.table_name.object(), "pg_class");
         assert!(input.is_eof());
     }
@@ -26,7 +27,7 @@ mod tests {
             let mut input = lexed.input();
             UpdateStmt::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -40,7 +41,8 @@ mod tests {
         let lexed = crate::lex("UPDATE y SET a = a + 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.table_name.object(), "y");
         assert!(input.is_eof());
     }
@@ -57,9 +59,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let stmt = UpdateStmt::parse(&mut input)
+            let stmt_parsed = UpdateStmt::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let stmt = stmt_parsed.ast();
             assert_eq!(stmt.alias.as_ref().unwrap().name(), expected_alias);
             assert_eq!(stmt.assignments.len(), 1);
             assert!(input.is_eof());
@@ -72,7 +75,8 @@ mod tests {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.alias.is_none());
         assert_eq!(stmt.assignments.len(), 1);
         assert!(input.is_eof());
@@ -93,7 +97,8 @@ mod tests {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.alias.is_none());
         assert_eq!(stmt.assignments.len(), 2);
         assert_eq!(stmt.returning.as_ref().unwrap().items.len(), 2);
@@ -105,7 +110,8 @@ mod tests {
         let lexed = crate::lex("UPDATE y SET a = a + 1 RETURNING *");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.returning.is_some());
         assert!(input.is_eof());
     }
@@ -117,7 +123,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.from_clause.is_some());
         assert!(stmt.where_clause.is_some());
         assert!(stmt.returning.is_some());
@@ -143,7 +150,8 @@ mod tests {
         let lexed = crate::lex("UPDATE t SET e[0] = '1.1'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -152,7 +160,8 @@ mod tests {
         let lexed = crate::lex("UPDATE t SET e[1] = '2.2'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -161,7 +170,8 @@ mod tests {
         let lexed = crate::lex("UPDATE t SET col = 'x'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -172,7 +182,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -182,11 +193,11 @@ mod tests {
     /// regression has `SET (f2[1], f1, tag) = (...)`.
     #[test]
     fn parse_update_tuple_set_with_indirection() {
-        let lexed =
-            crate::lex("UPDATE trgt SET (f2[1], f1, tag) = (SELECT 1, 2, 'updated'::varchar)");
+        let lexed = crate::lex("UPDATE trgt SET (f2[1], f1, tag) = (SELECT 1, 2, 'updated'::varchar)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -198,7 +209,8 @@ mod tests {
         let lexed = crate::lex("UPDATE ONLY a SET aa = 'zzzzz' WHERE aa = 'aaaaa'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = UpdateStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.only, "ONLY qualifier should be parsed");
         assert_eq!(stmt.table_name.object(), "a");
         assert!(input.is_eof());

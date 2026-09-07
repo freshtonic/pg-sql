@@ -1110,3 +1110,62 @@ pg-sql's full feature-enabled test targets including the 234-file differential
 suite and 1,121 embedded tests, the complete Recursa code-generation test
 suite, fixture-lock policy, hidden-ABI documentation policy, and the canonical
 warnings/private-documentation Clippy gate all pass.
+
+## Benchmark: 2026-09-08 — provenance folding, LR lookup, and arena AST
+
+Three runtime changes were applied and measured in order against the clean
+15-second flame harness. First, provenance folding stopped scanning children
+when a reduction already carried a span, and stopped revalidating token spans
+that the lexer had already proved. This improved `corpus` by 6.3%,
+`select_list_10000` by 9.6%, and `bool_chain` by 9.1%.
+
+Second, decoded LR tables gained an index of filtered lookahead rows. The parse
+loop now asks for a second token only for source kinds that actually have a
+lookahead filter. The combined result after these first two changes was:
+
+| Canonical workload | Arena-provenance baseline | After provenance + LR lookup | Combined change |
+| --- | --: | --: | --: |
+| `corpus` | 175,134.4 stmt/s | 190,308.0 stmt/s | +8.7% |
+| `select_list_10000` | 149.1 stmt/s | 170.3 stmt/s | +14.2% |
+| `bool_chain` | 1,431.1 stmt/s | 1,642.4 stmt/s | +14.8% |
+
+Third, the authored pg-sql AST moved to `bumpalo` boxes and vectors behind a
+`self_cell` owner, so the arena lifetime does not escape the parsed wrapper.
+Recursa keeps this as an opt-in `arena_ast` grammar mode; ordinary generated
+grammars retain their existing owned representation. The first complete AST
+arena implementation measured:
+
+| Canonical workload | Before AST arena | AST arena | Change |
+| --- | --: | --: | --: |
+| `corpus` | 190,308.0 stmt/s | 184,239.1 stmt/s | -3.2% |
+| `select_list_10000` | 170.3 stmt/s | 136.3 stmt/s | -20.0% |
+| `bool_chain` | 1,642.4 stmt/s | 1,759.1 stmt/s | +7.1% |
+
+The AST arena reduces corpus parse allocation count from 22.2 to 14.7 per
+statement, but raises allocated parse bytes from 7,592 to 9,359 per statement.
+The wide select makes the cause especially visible: parsing allocates only 25
+global blocks, but requests 16,778,264 bytes, versus 6.56 MiB before the AST
+arena. A growing `bumpalo::collections::Vec` cannot reclaim its superseded
+buffers until the whole arena is dropped. Interleaved AST allocations prevent
+many grows from extending in place, so very wide semantic lists retain their
+geometric growth history. This representation is a win for deeply boxed trees
+and allocation count, but it does not yet meet the runtime objective for wide
+lists or the representative corpus.
+
+A follow-up staged repeated values in reclaimable standard vectors and moved
+them once into exactly-sized arena vectors. It removed the retained-growth
+mechanism but did not improve the wide case in the back-to-back run (140.9 to
+140.5 stmt/s), while corpus fell further to 179,663.0 stmt/s and `bool_chain`
+measured 1,765.4 stmt/s. The temporary allocation and final copy cost
+outweighed the saved arena bytes. That experiment was rejected; the table uses
+the retained final tree. Three final-tree wide runs had a 136.3 stmt/s median
+and a 136.3–137.7 stmt/s range, illustrating this single-statement workload's
+run-to-run sensitivity.
+
+The initial release benchmark rebuild took 3m04s; the final confirmation rebuild
+took 2m14s. Correctness evidence comprises the
+full pg-sql suite, Recursa's exhaustive workspace and downstream-generation
+suites, the hidden-ABI documentation policy, and all workspace doc tests. The
+Recursa workspace `-D warnings` gate passes. pg-sql's package gate passes; the
+workspace-wide command remains independently blocked by pg-psql's 21 existing
+LR conflicts.

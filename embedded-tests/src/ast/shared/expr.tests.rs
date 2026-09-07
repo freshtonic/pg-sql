@@ -12,55 +12,65 @@ mod tests {
     ///
     /// Takes `&'static str` because the returned `Expr` borrows lexical text
     /// from the source for that `'static` lifetime.
-    fn parse_expr_classified(src: &'static str) -> Expr<'static> {
+    type ExprFamily = <Expr<'static> as recursa::ArenaParse<crate::Input<'static>>>::Family;
+    type TypeNameFamily =
+        <TypeName<'static> as recursa::ArenaParse<crate::Input<'static>>>::Family;
+    type CastTypeFamily =
+        <CastType<'static> as recursa::ArenaParse<crate::Input<'static>>>::Family;
+
+    fn parse_expr_classified(src: &'static str) -> recursa::ArenaParsed<'static, ExprFamily> {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input)
+        let expr_parsed = Expr::parse(&mut input)
             .unwrap_or_else(|error| panic!("parse {src:?}: {error:?}"))
-            .into_ast();
+            ;
         assert!(
             input.is_eof(),
             "parser cursor after {src:?}: {}",
             input.cursor()
         );
-        expr
+        expr_parsed
     }
 
-    fn parse_type_name_classified(src: &'static str) -> TypeName<'static> {
+    fn parse_type_name_classified(
+        src: &'static str,
+    ) -> recursa::ArenaParsed<'static, TypeNameFamily> {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
         let mut input = lexed.input();
-        let ty = TypeName::parse(&mut input)
+        let ty_parsed = TypeName::parse(&mut input)
             .unwrap_or_else(|error| panic!("parse type name {src:?}: {error}"))
-            .into_ast();
+            ;
         assert!(
             input.is_eof(),
             "parser cursor after {src:?}: {}",
             input.cursor()
         );
-        ty
+        ty_parsed
     }
 
-    fn parse_cast_type_classified(src: &'static str) -> CastType<'static> {
+    fn parse_cast_type_classified(
+        src: &'static str,
+    ) -> recursa::ArenaParsed<'static, CastTypeFamily> {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
         let mut input = lexed.input();
-        let ty = CastType::parse(&mut input)
+        let ty_parsed = CastType::parse(&mut input)
             .unwrap_or_else(|error| panic!("parse cast type {src:?}: {error}"))
-            .into_ast();
+            ;
         assert!(
             input.is_eof(),
             "parser cursor after {src:?}: {}",
             input.cursor()
         );
-        ty
+        ty_parsed
     }
 
     #[test]
     fn parse_json_timestamp_cast_before_unique_keys() {
         assert!(matches!(
-            parse_expr_classified("JSON('2000-01-01'::timestamp WITH UNIQUE KEYS)"),
+            parse_expr_classified("JSON('2000-01-01'::timestamp WITH UNIQUE KEYS)").ast(),
             Expr::JsonCtor(_)
         ));
     }
@@ -69,21 +79,21 @@ mod tests {
     fn parse_json_constructors() {
         // JSON()
         assert!(matches!(
-            parse_expr_classified("JSON('{}' FORMAT JSON)"),
+            parse_expr_classified("JSON('{}' FORMAT JSON)").ast(),
             Expr::JsonCtor(_)
         ));
         assert!(matches!(
-            parse_expr_classified("JSON('1'::json WITH UNIQUE KEYS)"),
+            parse_expr_classified("JSON('1'::json WITH UNIQUE KEYS)").ast(),
             Expr::JsonCtor(_)
         ));
         // JSON_SCALAR()
         assert!(matches!(
-            parse_expr_classified("JSON_SCALAR('123')"),
+            parse_expr_classified("JSON_SCALAR('123')").ast(),
             Expr::JsonScalar(_)
         ));
         // JSON_SERIALIZE()
         assert!(matches!(
-            parse_expr_classified("JSON_SERIALIZE('{}' RETURNING bytea)"),
+            parse_expr_classified("JSON_SERIALIZE('{}' RETURNING bytea)").ast(),
             Expr::JsonSerialize(_)
         ));
         // JSON_OBJECT() — entries, KEY/VALUE, all clauses, empty, returning-only
@@ -95,7 +105,7 @@ mod tests {
             "JSON_OBJECT(RETURNING jsonb)",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::JsonObject(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::JsonObject(_)),
                 "{src}"
             );
         }
@@ -112,7 +122,7 @@ mod tests {
             "JSON_ARRAY(RETURNING jsonb)",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::JsonArray(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::JsonArray(_)),
                 "{src}"
             );
         }
@@ -125,7 +135,7 @@ mod tests {
     #[test]
     fn legacy_json_object_call_is_ordinary_func() {
         assert!(matches!(
-            parse_expr_classified("json_build_array(1, 2)"),
+            parse_expr_classified("json_build_array(1, 2)").ast(),
             Expr::Func(_)
         ));
     }
@@ -139,7 +149,7 @@ mod tests {
             "JSON_EXISTS(js, '$ ? (@ > $x)' PASSING 1 AS x, 2 AS y)",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::JsonExists(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::JsonExists(_)),
                 "{src}"
             );
         }
@@ -151,7 +161,7 @@ mod tests {
             "JSON_VALUE(js, '$' ERROR ON EMPTY NULL ON ERROR)",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::JsonValue(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::JsonValue(_)),
                 "{src}"
             );
         }
@@ -165,13 +175,13 @@ mod tests {
             "JSON_QUERY(js, '$' RETURNING bytea FORMAT JSON EMPTY OBJECT ON ERROR)",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::JsonQuery(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::JsonQuery(_)),
                 "{src}"
             );
         }
         // The result is an ordinary expression operand.
         assert!(matches!(
-            parse_expr_classified("JSON_VALUE(js, '$' RETURNING int) + 234"),
+            parse_expr_classified("JSON_VALUE(js, '$' RETURNING int) + 234").ast(),
             Expr::Add(..)
         ));
     }
@@ -183,7 +193,7 @@ mod tests {
             "JSON_OBJECTAGG(k VALUE v ABSENT ON NULL WITH UNIQUE)",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::JsonObjectAgg(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::JsonObjectAgg(_)),
                 "{src}"
             );
         }
@@ -193,7 +203,7 @@ mod tests {
             "JSON_ARRAYAGG(bar) FILTER (WHERE bar > 2) OVER (PARTITION BY x)",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::JsonArrayAgg(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::JsonArrayAgg(_)),
                 "{src}"
             );
         }
@@ -207,7 +217,7 @@ mod tests {
             "ARRAY[[[1],[2]],[[3],[4]]]",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::Array(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::Array(_)),
                 "{src}"
             );
         }
@@ -219,7 +229,7 @@ mod tests {
             parse_expr_classified(
                 "(timestamp '2000-11-27', interval '12 hours') \
                  OVERLAPS (timestamp '2000-11-27', interval '12 hours')"
-            ),
+            ).ast(),
             Expr::Overlaps(..)
         ));
     }
@@ -227,27 +237,27 @@ mod tests {
     #[test]
     fn parse_xml_functions() {
         assert!(matches!(
-            parse_expr_classified("xmlserialize(CONTENT x AS text NO INDENT)"),
+            parse_expr_classified("xmlserialize(CONTENT x AS text NO INDENT)").ast(),
             Expr::XmlSerialize(_)
         ));
         assert!(matches!(
-            parse_expr_classified("xmlparse(DOCUMENT '<foo/>')"),
+            parse_expr_classified("xmlparse(DOCUMENT '<foo/>')").ast(),
             Expr::XmlParse(_)
         ));
         assert!(matches!(
-            parse_expr_classified("xmlroot(x, VERSION NO VALUE, STANDALONE YES)"),
+            parse_expr_classified("xmlroot(x, VERSION NO VALUE, STANDALONE YES)").ast(),
             Expr::XmlRoot(_)
         ));
         assert!(matches!(
-            parse_expr_classified("xmlexists('/a' PASSING BY REF doc BY REF)"),
+            parse_expr_classified("xmlexists('/a' PASSING BY REF doc BY REF)").ast(),
             Expr::XmlExists(_)
         ));
         assert!(matches!(
-            parse_expr_classified("x IS DOCUMENT"),
+            parse_expr_classified("x IS DOCUMENT").ast(),
             Expr::IsDocument(..)
         ));
         assert!(matches!(
-            parse_expr_classified("x IS NOT DOCUMENT"),
+            parse_expr_classified("x IS NOT DOCUMENT").ast(),
             Expr::IsDocument(..)
         ));
     }
@@ -263,13 +273,13 @@ mod tests {
             "js IS JSON VALUE WITHOUT UNIQUE",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::IsJson(..)),
+                matches!(parse_expr_classified(src).ast(), Expr::IsJson(..)),
                 "{src}"
             );
         }
         // `IS NULL` still resolves to the boolean test, not `IS JSON`.
         assert!(matches!(
-            parse_expr_classified("js IS NULL"),
+            parse_expr_classified("js IS NULL").ast(),
             Expr::BoolTest(..)
         ));
     }
@@ -281,7 +291,8 @@ mod tests {
         let lexed = crate::lex("42");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::IntegerLit(_)));
         assert!(input.is_eof());
     }
@@ -321,7 +332,7 @@ mod tests {
     #[test]
     fn parse_starts_with_operator_classified() {
         assert!(matches!(
-            parse_expr_classified("a ^@ b"),
+            parse_expr_classified("a ^@ b").ast(),
             Expr::StartsWith(..)
         ));
     }
@@ -331,7 +342,7 @@ mod tests {
     #[test]
     fn parse_json_delete_path_operator_classified() {
         assert!(matches!(
-            parse_expr_classified("a #- b"),
+            parse_expr_classified("a #- b").ast(),
             Expr::JsonDeletePath(..)
         ));
     }
@@ -342,7 +353,8 @@ mod tests {
         let lexed = crate::lex("$$''$$");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::DollarStringLit(_)));
         assert!(input.is_eof());
     }
@@ -352,7 +364,8 @@ mod tests {
         let lexed = crate::lex("'hello'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::StringLit(_)));
         assert!(input.is_eof());
     }
@@ -381,7 +394,8 @@ mod tests {
     /// `strings.sql`'s "Three lines to one" fixture.
     #[test]
     fn parse_three_part_string_continuation_classified() {
-        let expr = parse_expr_classified("'first line'\n' - next line'\n\t' - third line'");
+        let expr_parsed = parse_expr_classified("'first line'\n' - next line'\n\t' - third line'");
+        let expr = expr_parsed.ast();
         if let Expr::StringLit(seq) = &expr {
             assert!(matches!(seq, StringLitSeq0::Sequence(_)));
         } else {
@@ -396,7 +410,8 @@ mod tests {
         let lexed = crate::lex("'first line'\n' - next line'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         if let Expr::StringLit(seq) = &expr {
             assert!(matches!(seq, StringLitSeq0::Sequence(_)));
         } else {
@@ -412,7 +427,8 @@ mod tests {
         let lexed = crate::lex("'first'\n'second'\n'third'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         if let Expr::StringLit(seq) = &expr {
             assert!(matches!(seq, StringLitSeq0::Sequence(_)));
         } else {
@@ -426,7 +442,8 @@ mod tests {
         let lexed = crate::lex("'a'\n'b'\n'c'\n'd'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         if let Expr::StringLit(seq) = &expr {
             assert!(matches!(seq, StringLitSeq0::Sequence(_)));
         } else {
@@ -442,7 +459,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -453,7 +471,8 @@ mod tests {
         let lexed = crate::lex("SELECT 'first line'\n' - next line' AS foo");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -462,7 +481,8 @@ mod tests {
         let lexed = crate::lex("xmlelement(name foo, 'content')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::XmlElement(_)));
         assert!(input.is_eof());
     }
@@ -472,7 +492,8 @@ mod tests {
         let lexed = crate::lex("xmlelement(name foo, xmlattributes(1 as a, 2 as b), 'content')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::XmlElement(_)));
         assert!(input.is_eof());
     }
@@ -482,7 +503,8 @@ mod tests {
         let lexed = crate::lex("xmlpi(name foo)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::XmlPi(_)));
         assert!(input.is_eof());
     }
@@ -492,7 +514,8 @@ mod tests {
         let lexed = crate::lex("xmlpi(name foo, 'bar')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::XmlPi(_)));
         assert!(input.is_eof());
     }
@@ -502,7 +525,8 @@ mod tests {
         let lexed = crate::lex(r"U&'d\0061t\+000061'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::UnicodeStringLit(_)));
         assert!(input.is_eof());
     }
@@ -512,7 +536,8 @@ mod tests {
         let lexed = crate::lex(r"U&'d!0061t\+000061' UESCAPE '!'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::UnicodeStringLit(_)));
         assert!(input.is_eof());
     }
@@ -527,9 +552,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let expr = Expr::parse(&mut input)
+            let expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|error| panic!("parse {src:?}: {error}"))
-                .into_ast();
+                ;
+            let expr = expr_parsed.ast();
             match expr {
                 Expr::Func(call) if identifier_led => assert!(
                     matches!(&call.tail, FunctionCallTail::TypedLiteral(_)),
@@ -548,32 +574,35 @@ mod tests {
 
     #[test]
     fn type_name_preserves_legacy_fixed_variants_and_json_ident() {
-        assert!(matches!(parse_type_name_classified("bool"), TypeName::Bool));
-        assert!(matches!(parse_type_name_classified("text"), TypeName::Text));
+        assert!(matches!(parse_type_name_classified("bool").ast(), TypeName::Bool));
+        assert!(matches!(parse_type_name_classified("text").ast(), TypeName::Text));
         assert!(matches!(
-            parse_type_name_classified("serial"),
+            parse_type_name_classified("serial").ast(),
             TypeName::Serial
         ));
         assert!(matches!(
-            parse_type_name_classified("double precision"),
+            parse_type_name_classified("double precision").ast(),
             TypeName::DoublePrecision
         ));
         assert!(matches!(
-            parse_type_name_classified("unknown"),
+            parse_type_name_classified("unknown").ast(),
             TypeName::Unknown
         ));
 
-        let TypeName::Ident(double) = parse_type_name_classified("double") else {
+        let double_parsed = parse_type_name_classified("double");
+        let TypeName::Ident(double) = double_parsed.ast() else {
             panic!("bare double must remain an identifier type name")
         };
         assert_eq!(double.object(), "double");
 
-        let TypeName::Ident(json) = parse_type_name_classified("json") else {
+        let json_parsed = parse_type_name_classified("json");
+        let TypeName::Ident(json) = json_parsed.ast() else {
             panic!("json must preserve the legacy identifier variant")
         };
         assert_eq!(json.object(), "json");
 
-        let TypeName::Ident(qualified) = parse_type_name_classified("pg_catalog.json") else {
+        let qualified_parsed = parse_type_name_classified("pg_catalog.json");
+        let TypeName::Ident(qualified) = qualified_parsed.ast() else {
             panic!("qualified json must remain an identifier type name")
         };
         assert_eq!(qualified.parts.len(), 2);
@@ -625,15 +654,17 @@ mod tests {
             ("json", "json"),
             ("pg_catalog.custom_type", "pg_catalog.custom_type"),
         ] {
-            let name = parse_type_name_classified(src);
-            let ty = parse_cast_type_classified(src);
+            let name_parsed = parse_type_name_classified(src);
+            let name = name_parsed.ast();
+            let ty_parsed = parse_cast_type_classified(src);
+            let ty = ty_parsed.ast();
             assert_eq!(
                 matches!(&ty.head, CastTypeHead::General(_)),
-                expects_general_head(&name),
+                expects_general_head(name),
                 "cast family for {src:?}",
             );
             assert_eq!(
-                format_tokens_sql(&ty, PrettyConfig::default()).trim(),
+                format_tokens_sql(ty, PrettyConfig::default()).trim(),
                 canonical,
                 "cast type did not render canonically for {src:?}",
             );
@@ -657,7 +688,8 @@ mod tests {
                 "INTERVAL DAY TO MINUTE",
             ),
         ] {
-            let ty = parse_cast_type_classified(src);
+            let ty_parsed = parse_cast_type_classified(src);
+            let ty = ty_parsed.ast();
             let actual_family = match &ty.head {
                 CastTypeHead::General(_) => "general",
                 CastTypeHead::DateTime(_) => "datetime",
@@ -665,7 +697,7 @@ mod tests {
             };
             assert_eq!(actual_family, expected_family, "cast family for {src:?}");
             assert_eq!(
-                format_tokens_sql(&ty, PrettyConfig::default()).trim(),
+                format_tokens_sql(ty, PrettyConfig::default()).trim(),
                 canonical,
                 "cast type did not render canonically for {src:?}",
             );
@@ -677,7 +709,8 @@ mod tests {
         // source-preserving output (`::timestamp`) is deferred to the
         // provenance-aware formatting milestone.
         let src = "JSON('2000-01-01'::timestamp WITH UNIQUE KEYS)";
-        let expr = parse_expr_classified(src);
+        let expr_parsed = parse_expr_classified(src);
+        let expr = expr_parsed.ast();
         let Expr::JsonCtor(ctor) = &expr else {
             panic!("JSON constructor must own the WITH UNIQUE KEYS clause")
         };
@@ -698,7 +731,7 @@ mod tests {
             "the cast must not consume WITH toward a time-zone qualifier",
         );
         assert_eq!(
-            format_tokens_sql(&expr, PrettyConfig::default()).trim(),
+            format_tokens_sql(expr, PrettyConfig::default()).trim(),
             "JSON('2000-01-01':: TIMESTAMP WITH UNIQUE KEYS)",
         );
     }
@@ -738,7 +771,8 @@ mod tests {
             ("f(1, 2, 3, 4, 5, 6) 'x'", "typed", "typed-literal"),
             (r#""normalize"()"#, "empty", "plain"),
         ] {
-            let expr = parse_expr_classified(src);
+            let expr_parsed = parse_expr_classified(src);
+            let expr = expr_parsed.ast();
             let Expr::Func(call) = &expr else {
                 panic!("expected an ordinary function call for {src:?}");
             };
@@ -765,7 +799,7 @@ mod tests {
             };
             assert_eq!(actual_body, expected_body, "application body for {src:?}");
             assert_eq!(actual_tail, expected_tail, "call tail for {src:?}");
-            let formatted = format_tokens_sql(&expr, PrettyConfig::default());
+            let formatted = format_tokens_sql(expr, PrettyConfig::default());
             assert_eq!(
                 formatted.trim(),
                 src,
@@ -776,7 +810,8 @@ mod tests {
         // With no standalone ALL expression atom, the token-identical compact
         // spelling has exactly the PostgreSQL interpretation: ALL qualifies
         // the parenthesized first argument.
-        let Expr::Func(call) = parse_expr_classified("f(ALL(1))") else {
+        let parsed = parse_expr_classified("f(ALL(1))");
+        let Expr::Func(call) = parsed.ast() else {
             panic!("expected compact ALL-qualified function call");
         };
         assert!(matches!(
@@ -869,7 +904,8 @@ mod tests {
         let lexed = crate::lex(r"U&' \' UESCAPE '!'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::UnicodeStringLit(_)));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -879,7 +915,8 @@ mod tests {
         let lexed = crate::lex("xmlforest(a, b AS bee, c)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::XmlForest(_)));
         assert!(input.is_eof());
     }
@@ -898,7 +935,8 @@ mod tests {
             let lexed = crate::lex(sql);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
+            let _stmt_parsed = SelectStmt::parse(&mut input).unwrap();
+            let _stmt = _stmt_parsed.ast();
             assert!(input.is_eof(), "leftover for {sql}");
         }
     }
@@ -908,7 +946,8 @@ mod tests {
         let lexed = crate::lex(r"E'r_\_view%'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::EscapeStringLit(_)));
         assert!(input.is_eof());
     }
@@ -918,7 +957,8 @@ mod tests {
         let lexed = crate::lex("jsonb_agg(q ORDER BY x, y)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Func(_)));
         assert!(input.is_eof());
     }
@@ -928,7 +968,8 @@ mod tests {
         let lexed = crate::lex("TRIM(BOTH FROM '  hi  ')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -937,7 +978,8 @@ mod tests {
         let lexed = crate::lex("TRIM(LEADING FROM '  hi  ')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -946,7 +988,8 @@ mod tests {
         let lexed = crate::lex("TRIM(TRAILING FROM '  hi  ')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -955,7 +998,8 @@ mod tests {
         let lexed = crate::lex("TRIM(BOTH 'x' FROM 'xxhixx')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -973,9 +1017,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _expr = Expr::parse(&mut input)
+            let _expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _expr = _expr_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -994,9 +1039,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = crate::ast::Statement::parse(&mut input)
+            let _stmt_parsed = crate::ast::Statement::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -1010,7 +1056,8 @@ mod tests {
         let lexed = crate::lex("SUBSTRING('1234567890' FROM 3)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1019,7 +1066,8 @@ mod tests {
         let lexed = crate::lex("SUBSTRING('1234567890' FROM 4 FOR 3)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1028,13 +1076,15 @@ mod tests {
         let lexed = crate::lex("x.c NOTNULL");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Notnull(..)));
         assert!(input.is_eof());
         let lexed = crate::lex("x.c ISNULL");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Isnull(..)));
         assert!(input.is_eof());
     }
@@ -1044,12 +1094,14 @@ mod tests {
         let lexed = crate::lex("collation for ('foo')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
         let lexed = crate::lex("collation for ((SELECT a FROM t LIMIT 1))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1058,12 +1110,14 @@ mod tests {
         let lexed = crate::lex("CAST('42' AS text COLLATE \"C\")");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
         let lexed = crate::lex("CAST(b AS varchar)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1072,7 +1126,8 @@ mod tests {
         let lexed = crate::lex("substring(d FOR 30)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1081,7 +1136,8 @@ mod tests {
         let lexed = crate::lex("SUBSTRING('abcdefg' SIMILAR 'a#\"%#\"g' ESCAPE '#')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1090,7 +1146,8 @@ mod tests {
         let lexed = crate::lex("POSITION('4' IN '1234567890')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1107,13 +1164,13 @@ mod tests {
             "POSITION(1 IS DOCUMENT IN 2)",
             "POSITION(1 || 2 IN 3)",
         ] {
-            parse_expr_classified(src);
+            parse_expr_classified(src).ast();
         }
 
         // PostgreSQL deliberately admits a full `a_expr` inside parentheses
         // as a `b_expr` atom.
-        parse_expr_classified("POSITION((1 IN (1)) IN 2)");
-        parse_expr_classified("POSITION((1 AND 2) IN 3)");
+        parse_expr_classified("POSITION((1 IN (1)) IN 2)").ast();
+        parse_expr_classified("POSITION((1 AND 2) IN 3)").ast();
     }
 
     #[test]
@@ -1146,7 +1203,8 @@ mod tests {
         let lexed = crate::lex("OVERLAY('abcdef' PLACING '45' FROM 4)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1155,7 +1213,8 @@ mod tests {
         let lexed = crate::lex("OVERLAY('abcdef' PLACING '45' FROM 4 FOR 2)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1164,7 +1223,8 @@ mod tests {
         let lexed = crate::lex("EXTRACT(EPOCH FROM DATE '1970-01-01')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Extract(_)));
         assert!(input.is_eof());
     }
@@ -1174,7 +1234,8 @@ mod tests {
         let lexed = crate::lex("EXTRACT(CENTURY FROM d)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1183,7 +1244,8 @@ mod tests {
         let lexed = crate::lex("EXTRACT('year' FROM t)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1192,7 +1254,8 @@ mod tests {
         let lexed = crate::lex("f(a, b => 1, c)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1201,7 +1264,8 @@ mod tests {
         let lexed = crate::lex("jsonb_path_query('[1]', 'strict $[1]', silent => true)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1210,7 +1274,8 @@ mod tests {
         let lexed = crate::lex("f(silent => false, verbose => true)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1219,7 +1284,8 @@ mod tests {
         let lexed = crate::lex("EXTRACT(year FROM now())");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1228,7 +1294,8 @@ mod tests {
         let lexed = crate::lex("a IS DISTINCT FROM b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1237,7 +1304,8 @@ mod tests {
         let lexed = crate::lex("a IS NOT DISTINCT FROM b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1246,7 +1314,8 @@ mod tests {
         let lexed = crate::lex("2^1000");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1255,7 +1324,8 @@ mod tests {
         let lexed = crate::lex("3.14::double precision");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1264,7 +1334,8 @@ mod tests {
         let lexed = crate::lex("CASE WHEN 1 < 2 THEN 3 END");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Case(_)));
         assert!(input.is_eof());
     }
@@ -1274,7 +1345,8 @@ mod tests {
         let lexed = crate::lex("CASE WHEN 1 < 2 THEN 3 WHEN 4 < 5 THEN 6 ELSE 7 END");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1283,7 +1355,8 @@ mod tests {
         let lexed = crate::lex("CASE x WHEN 1 THEN 'a' WHEN 2 THEN 'b' ELSE 'c' END");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1292,7 +1365,8 @@ mod tests {
         let lexed = crate::lex("CASE WHEN (CASE WHEN 1=1 THEN 1 END) > 0 THEN 'y' END");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1301,7 +1375,8 @@ mod tests {
         let lexed = crate::lex("percentile_disc(0.5) WITHIN GROUP (ORDER BY v)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Func(_)));
         assert!(input.is_eof());
     }
@@ -1311,7 +1386,8 @@ mod tests {
         let lexed = crate::lex("rank(1, 2) WITHIN GROUP (ORDER BY a, b)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1320,7 +1396,8 @@ mod tests {
         let lexed = crate::lex("sum(x) FILTER (WHERE y > 0)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Func(_)));
         assert!(input.is_eof());
     }
@@ -1330,7 +1407,8 @@ mod tests {
         let lexed = crate::lex("sum(x) FILTER (WHERE y > 0) OVER (PARTITION BY z)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1339,7 +1417,8 @@ mod tests {
         let lexed = crate::lex("jsonb_agg(q ORDER BY x NULLS FIRST, y)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1348,7 +1427,8 @@ mod tests {
         let lexed = crate::lex("jsonb_build_array(VARIADIC a)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _expr = Expr::parse(&mut input).unwrap().into_ast();
+        let _expr_parsed = Expr::parse(&mut input).unwrap();
+        let _expr = _expr_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -1357,7 +1437,8 @@ mod tests {
         let lexed = crate::lex("timestamp with time zone '2001-12-27 04:05:06+08'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TimestampLit(_)));
         assert!(input.is_eof());
     }
@@ -1368,7 +1449,8 @@ mod tests {
         let lexed = crate::lex("timestamp(2) without time zone 'now'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TimestampLit(_)));
         assert!(input.is_eof());
     }
@@ -1378,7 +1460,8 @@ mod tests {
         let lexed = crate::lex("f1 AT TIME ZONE 'UTC+10'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::AtTimeZone(..)));
         assert!(input.is_eof());
     }
@@ -1388,7 +1471,8 @@ mod tests {
         let lexed = crate::lex("f1 AT TIME ZONE INTERVAL '-10:00'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::AtTimeZone(..)));
         assert!(input.is_eof());
     }
@@ -1398,7 +1482,8 @@ mod tests {
         let lexed = crate::lex("f1 AT LOCAL");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::AtLocal(..)));
         assert!(input.is_eof());
     }
@@ -1408,7 +1493,8 @@ mod tests {
         let lexed = crate::lex("time '12:34'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TimeLit(_)));
         assert!(input.is_eof());
     }
@@ -1418,7 +1504,8 @@ mod tests {
         let lexed = crate::lex("date '2024-01-01'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         // `date` is an Ident-based TypeName, so this parses as CastFunc.
         assert!(matches!(expr, Expr::CastFunc(_)));
         assert!(input.is_eof());
@@ -1429,7 +1516,8 @@ mod tests {
         let lexed = crate::lex("interval '1 hour'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
         assert!(input.is_eof());
     }
@@ -1439,7 +1527,8 @@ mod tests {
         let lexed = crate::lex("INTERVAL '1' YEAR");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
         assert!(input.is_eof());
     }
@@ -1449,7 +1538,8 @@ mod tests {
         let lexed = crate::lex("INTERVAL '1-2' YEAR TO MONTH");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
         assert!(input.is_eof());
     }
@@ -1459,7 +1549,8 @@ mod tests {
         let lexed = crate::lex("make_interval(years := 1, months := 2)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Func(_)));
         assert!(input.is_eof());
     }
@@ -1469,7 +1560,8 @@ mod tests {
         let lexed = crate::lex("+42");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Pos(..)));
         assert!(input.is_eof());
     }
@@ -1479,7 +1571,8 @@ mod tests {
         let lexed = crate::lex("$1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::PositionalParam(_)));
         assert!(input.is_eof());
     }
@@ -1489,7 +1582,8 @@ mod tests {
         let lexed = crate::lex("$1 + $2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Add(..)));
         assert!(input.is_eof());
     }
@@ -1502,8 +1596,9 @@ mod tests {
         let lexed = crate::lex("$2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
-        let formatted = crate::formatter::format_tokens_sql(&expr, PrettyConfig::default());
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
+        let formatted = crate::formatter::format_tokens_sql(expr, PrettyConfig::default());
         assert_eq!(formatted.trim(), "$2");
     }
 
@@ -1516,7 +1611,8 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let expr = Expr::parse(&mut input).unwrap().into_ast();
+            let expr_parsed = Expr::parse(&mut input).unwrap();
+            let expr = expr_parsed.ast();
             assert!(matches!(expr, Expr::IntervalLit(_)), "failed for {src:?}");
             assert!(input.is_eof(), "leftover for {src:?}");
         }
@@ -1527,7 +1623,8 @@ mod tests {
         let lexed = crate::lex("INTERVAL '1.234' second(2)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
         assert!(input.is_eof());
     }
@@ -1537,7 +1634,8 @@ mod tests {
         let lexed = crate::lex("INTERVAL '1 2:03:04.5678' day to second(2)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
         assert!(input.is_eof());
     }
@@ -1547,7 +1645,8 @@ mod tests {
         let lexed = crate::lex("f1::INTERVAL DAY TO MINUTE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Cast(..)));
         assert!(input.is_eof());
     }
@@ -1557,7 +1656,8 @@ mod tests {
         let lexed = crate::lex("INTERVAL '12:34.5678' minute to second(2)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
         assert!(input.is_eof());
     }
@@ -1567,7 +1667,8 @@ mod tests {
         let lexed = crate::lex("INTERVAL '1 2:03' DAY TO HOUR");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
         assert!(input.is_eof());
     }
@@ -1577,7 +1678,8 @@ mod tests {
         let lexed = crate::lex("INTERVAL '1' HOUR TO SECOND");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::IntervalLit(_)));
         assert!(input.is_eof());
     }
@@ -1587,7 +1689,8 @@ mod tests {
         let lexed = crate::lex("e'foo'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::EscapeStringLit(_)));
         assert!(input.is_eof());
     }
@@ -1597,7 +1700,8 @@ mod tests {
         let lexed = crate::lex("true");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BoolTrue));
         assert!(input.is_eof());
     }
@@ -1607,7 +1711,8 @@ mod tests {
         let lexed = crate::lex("false");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BoolFalse));
         assert!(input.is_eof());
     }
@@ -1617,7 +1722,8 @@ mod tests {
         let lexed = crate::lex("null");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Null));
         assert!(input.is_eof());
     }
@@ -1627,7 +1733,8 @@ mod tests {
         let lexed = crate::lex("f1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::ColumnRef(_)));
     }
 
@@ -1636,7 +1743,8 @@ mod tests {
         let lexed = crate::lex("BOOLTBL1.f1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::QualRef(_)));
     }
 
@@ -1645,7 +1753,8 @@ mod tests {
         let lexed = crate::lex("BOOLTBL1.*");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::QualRef(_)));
     }
 
@@ -1655,9 +1764,10 @@ mod tests {
             let lexed = crate::lex(source);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {source:?}");
             let mut input = lexed.input();
-            let expr = Expr::parse(&mut input)
+            let expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|error| panic!("parse {source:?}: {error}"))
-                .into_ast();
+                ;
+            let expr = expr_parsed.ast();
             assert!(matches!(expr, Expr::QualRef(_)), "{source:?}");
             assert!(input.is_eof(), "trailing input in {source:?}");
         }
@@ -1676,9 +1786,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let expr = Expr::parse(&mut input)
+            let expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let expr = expr_parsed.ast();
             assert!(
                 matches!(expr, Expr::QualRef(_)),
                 "{src:?} must qualify",
@@ -1705,7 +1816,8 @@ mod tests {
 
         let lexed = crate::lex("*");
         let mut input = lexed.input();
-        let item = SelectItem::parse(&mut input).unwrap().into_ast();
+        let item_parsed = SelectItem::parse(&mut input).unwrap();
+        let item = item_parsed.ast();
         assert!(matches!(item, SelectItem::Star(_)));
         assert!(input.is_eof());
     }
@@ -1715,7 +1827,8 @@ mod tests {
         let lexed = crate::lex("foo()");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Func(_)));
     }
 
@@ -1724,7 +1837,8 @@ mod tests {
         let lexed = crate::lex("pg_input_is_valid('true', 'bool')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Func(_)));
     }
 
@@ -1733,7 +1847,8 @@ mod tests {
         let lexed = crate::lex("booleq(bool 'false', f1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Func(_)));
     }
 
@@ -1742,12 +1857,13 @@ mod tests {
         let lexed = crate::lex("(1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(
             expr,
             Expr::Parenthesized(ParenthesizedExpr {
-                content: ParenContent::Exprs(ref expressions),
-                ref indirection,
+                content: ParenContent::Exprs(expressions),
+                indirection,
                 ..
             }) if expressions.len() == 1 && indirection.is_empty()
         ));
@@ -1759,12 +1875,13 @@ mod tests {
         let lexed = crate::lex("(a,b)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(
             expr,
             Expr::Parenthesized(ParenthesizedExpr {
-                content: ParenContent::Exprs(ref expressions),
-                ref indirection,
+                content: ParenContent::Exprs(expressions),
+                indirection,
                 ..
             }) if expressions.len() == 2 && indirection.is_empty()
         ));
@@ -1776,7 +1893,8 @@ mod tests {
         let lexed = crate::lex("(row_value).*");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(
             expr,
             Expr::Parenthesized(ParenthesizedExpr {
@@ -1795,7 +1913,8 @@ mod tests {
         let lexed = crate::lex("(row_value).field");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(
             expr,
             Expr::Parenthesized(ParenthesizedExpr {
@@ -1814,7 +1933,8 @@ mod tests {
         let lexed = crate::lex("(row_value).field.nested.*");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(
             expr,
             Expr::Parenthesized(ParenthesizedExpr {
@@ -1838,7 +1958,8 @@ mod tests {
         let lexed = crate::lex("(row_value).a[1].b[2:3].*");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(
             expr,
             Expr::Parenthesized(ParenthesizedExpr {
@@ -1863,7 +1984,8 @@ mod tests {
         let lexed = crate::lex("(row_value).*::text");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Cast(..)));
         assert!(input.is_eof());
     }
@@ -1873,7 +1995,8 @@ mod tests {
         let lexed = crate::lex("((row_value)::record_type).field");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(
             expr,
             Expr::Parenthesized(ParenthesizedExpr {
@@ -1892,12 +2015,13 @@ mod tests {
         let lexed = crate::lex("((SELECT 1) UNION SELECT 2)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(
             expr,
             Expr::Parenthesized(ParenthesizedExpr {
-                content: ParenContent::Subquery(ref subquery),
-                ref indirection,
+                content: ParenContent::Subquery(subquery),
+                indirection,
                 ..
             }) if matches!(subquery.body.clause, SelectClause::Simple(SimpleSelect::ParenthesizedSet(_)))
                 && indirection.is_empty()
@@ -1955,7 +2079,8 @@ mod tests {
         let lexed = crate::lex("bool 't'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::CastFunc(_)));
     }
 
@@ -1964,7 +2089,8 @@ mod tests {
         let lexed = crate::lex("boolean 'false'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::CastFunc(_)));
     }
 
@@ -1975,7 +2101,8 @@ mod tests {
         let lexed = crate::lex("not false");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Not(_)));
     }
 
@@ -1986,7 +2113,8 @@ mod tests {
         let lexed = crate::lex("true AND false");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::And(..)));
     }
 
@@ -1995,7 +2123,8 @@ mod tests {
         let lexed = crate::lex("true OR false");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Or(..)));
     }
 
@@ -2004,7 +2133,8 @@ mod tests {
         let lexed = crate::lex("f1 = true");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Eq(..)));
     }
 
@@ -2013,7 +2143,8 @@ mod tests {
         let lexed = crate::lex("f1 <> false");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Neq(..)));
     }
 
@@ -2024,7 +2155,8 @@ mod tests {
         let lexed = crate::lex("0::boolean");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Cast(..)));
     }
 
@@ -2033,7 +2165,8 @@ mod tests {
         let lexed = crate::lex("'TrUe'::text::boolean");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         // Outer should be Cast
         assert!(matches!(expr, Expr::Cast(..)));
     }
@@ -2045,7 +2178,8 @@ mod tests {
         let lexed = crate::lex("f1 IS TRUE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BoolTest(..)));
     }
 
@@ -2054,7 +2188,8 @@ mod tests {
         let lexed = crate::lex("f1 IS NOT FALSE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BoolTest(..)));
     }
 
@@ -2063,7 +2198,8 @@ mod tests {
         let lexed = crate::lex("b IS UNKNOWN");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BoolTest(..)));
     }
 
@@ -2072,7 +2208,8 @@ mod tests {
         let lexed = crate::lex("b IS NOT UNKNOWN");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BoolTest(..)));
     }
 
@@ -2083,7 +2220,8 @@ mod tests {
         let lexed = crate::lex("a BETWEEN 12 AND 17");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BetweenExpr(..)));
     }
 
@@ -2092,7 +2230,8 @@ mod tests {
         let lexed = crate::lex("a NOT BETWEEN 1 AND 5");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NotBetweenExpr(..)));
     }
 
@@ -2102,7 +2241,8 @@ mod tests {
         let lexed = crate::lex("x BETWEEN a AND b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BetweenExpr(..)));
     }
 
@@ -2113,7 +2253,8 @@ mod tests {
         let lexed = crate::lex("a AND b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::And(..)));
     }
 
@@ -2125,7 +2266,8 @@ mod tests {
         let lexed = crate::lex("true OR false AND true");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         // Top-level should be OR
         match &expr {
             Expr::Or(..) => {}
@@ -2139,7 +2281,8 @@ mod tests {
         let lexed = crate::lex("true AND f1 = false");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         match &expr {
             Expr::And(..) => {}
             other => panic!("expected AND at top level, got {other:?}"),
@@ -2152,7 +2295,8 @@ mod tests {
         let lexed = crate::lex("bool 't' or bool 'f'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Or(..)));
     }
 
@@ -2162,7 +2306,8 @@ mod tests {
         let lexed = crate::lex("b IS TRUE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BoolTest(..)));
         assert!(input.is_eof());
     }
@@ -2173,7 +2318,8 @@ mod tests {
         let lexed = crate::lex("true::boolean::text");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Cast(..)));
     }
 
@@ -2184,7 +2330,8 @@ mod tests {
         let lexed = crate::lex("4+4");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Add(..)));
         assert!(input.is_eof());
     }
@@ -2194,14 +2341,15 @@ mod tests {
         let lexed = crate::lex("a || b + c");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(input.is_eof());
 
         let Expr::Concat(_, right) = expr else {
             panic!("expected concatenation at the root")
         };
         assert!(
-            matches!(*right, Expr::Add(..)),
+            matches!(**right, Expr::Add(..)),
             "addition must bind inside the concatenation right operand"
         );
     }
@@ -2211,7 +2359,8 @@ mod tests {
         let lexed = crate::lex("10-3");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Sub(..)));
         assert!(input.is_eof());
     }
@@ -2221,7 +2370,8 @@ mod tests {
         let lexed = crate::lex("-1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Neg(..)));
         assert!(input.is_eof());
     }
@@ -2233,7 +2383,8 @@ mod tests {
         let lexed = crate::lex("77.7");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NumericLit(_)));
         assert!(input.is_eof());
     }
@@ -2245,7 +2396,8 @@ mod tests {
         let lexed = crate::lex("f1 IN (1, 2, 3)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::InExpr(..)));
         assert!(input.is_eof());
     }
@@ -2257,7 +2409,8 @@ mod tests {
         let lexed = crate::lex("data -> 'key'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::JsonField(..)));
         assert!(input.is_eof());
     }
@@ -2267,7 +2420,8 @@ mod tests {
         let lexed = crate::lex("data ->> 'key'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::JsonFieldText(..)));
         assert!(input.is_eof());
     }
@@ -2277,7 +2431,8 @@ mod tests {
         let lexed = crate::lex("data #> '{a,b}'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::JsonPath(..)));
         assert!(input.is_eof());
     }
@@ -2287,7 +2442,8 @@ mod tests {
         let lexed = crate::lex("data #>> '{a,b}'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::JsonPathText(..)));
         assert!(input.is_eof());
     }
@@ -2297,7 +2453,8 @@ mod tests {
         let lexed = crate::lex("a @> b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::JsonContains(..)));
         assert!(input.is_eof());
     }
@@ -2307,7 +2464,8 @@ mod tests {
         let lexed = crate::lex("a <@ b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::JsonContainedBy(..)));
         assert!(input.is_eof());
     }
@@ -2317,7 +2475,8 @@ mod tests {
         let lexed = crate::lex("a ? 'k'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::JsonKey(..)));
         assert!(input.is_eof());
     }
@@ -2327,7 +2486,8 @@ mod tests {
         let lexed = crate::lex("a ?| b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::JsonAnyKey(..)));
         assert!(input.is_eof());
     }
@@ -2337,7 +2497,8 @@ mod tests {
         let lexed = crate::lex("a ?& b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::JsonAllKeys(..)));
         assert!(input.is_eof());
     }
@@ -2349,7 +2510,8 @@ mod tests {
         let lexed = crate::lex("a @@ 'foo|bar'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TsMatch(..)));
         assert!(input.is_eof());
     }
@@ -2359,7 +2521,8 @@ mod tests {
         let lexed = crate::lex("a @@@ b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TsMatch3(..)));
         assert!(input.is_eof());
     }
@@ -2369,7 +2532,8 @@ mod tests {
         let lexed = crate::lex("j @? '$.a'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::JsonPathExists(..)));
         assert!(input.is_eof());
     }
@@ -2379,7 +2543,8 @@ mod tests {
         let lexed = crate::lex("r && s");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Overlap(..)));
         assert!(input.is_eof());
     }
@@ -2389,7 +2554,8 @@ mod tests {
         let lexed = crate::lex("a << b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::StrictlyLeft(..)));
         assert!(input.is_eof());
     }
@@ -2399,7 +2565,8 @@ mod tests {
         let lexed = crate::lex("a >> b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::StrictlyRight(..)));
         assert!(input.is_eof());
     }
@@ -2409,7 +2576,8 @@ mod tests {
         let lexed = crate::lex("a <<= b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::SubsetEq(..)));
         assert!(input.is_eof());
     }
@@ -2419,7 +2587,8 @@ mod tests {
         let lexed = crate::lex("a >>= b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::SupersetEq(..)));
         assert!(input.is_eof());
     }
@@ -2429,7 +2598,8 @@ mod tests {
         let lexed = crate::lex("a -|- b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Adjacent(..)));
         assert!(input.is_eof());
     }
@@ -2439,7 +2609,8 @@ mod tests {
         let lexed = crate::lex("p1 <-> p2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Distance(..)));
         assert!(input.is_eof());
     }
@@ -2449,7 +2620,8 @@ mod tests {
         let lexed = crate::lex("a &< b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NoExtendRight(..)));
         assert!(input.is_eof());
     }
@@ -2459,7 +2631,8 @@ mod tests {
         let lexed = crate::lex("a &> b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NoExtendLeft(..)));
         assert!(input.is_eof());
     }
@@ -2469,7 +2642,8 @@ mod tests {
         let lexed = crate::lex("a |>> b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::StrictlyAbove(..)));
         assert!(input.is_eof());
     }
@@ -2479,7 +2653,8 @@ mod tests {
         let lexed = crate::lex("a <<| b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::StrictlyBelow(..)));
         assert!(input.is_eof());
     }
@@ -2489,7 +2664,8 @@ mod tests {
         let lexed = crate::lex("a &<| b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NoExtendAbove(..)));
         assert!(input.is_eof());
     }
@@ -2499,7 +2675,8 @@ mod tests {
         let lexed = crate::lex("a |&> b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NoExtendBelow(..)));
         assert!(input.is_eof());
     }
@@ -2509,7 +2686,8 @@ mod tests {
         let lexed = crate::lex("a ?# b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Intersect(..)));
         assert!(input.is_eof());
     }
@@ -2519,7 +2697,8 @@ mod tests {
         let lexed = crate::lex("a ?- b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Horizontal(..)));
         assert!(input.is_eof());
     }
@@ -2531,7 +2710,8 @@ mod tests {
         let lexed = crate::lex("table_name LIKE 'foo%'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Like(..)));
         assert!(input.is_eof());
     }
@@ -2541,7 +2721,8 @@ mod tests {
         let lexed = crate::lex(r"table_name LIKE E'r_\_view%'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Like(..)));
         assert!(input.is_eof());
     }
@@ -2551,7 +2732,8 @@ mod tests {
         let lexed = crate::lex("table_name NOT LIKE 'bar%'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NotLike(..)));
         assert!(input.is_eof());
     }
@@ -2561,7 +2743,8 @@ mod tests {
         let lexed = crate::lex("x SIMILAR TO 'a%'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::SimilarTo(..)));
         assert!(input.is_eof());
     }
@@ -2571,7 +2754,8 @@ mod tests {
         let lexed = crate::lex("x NOT SIMILAR TO 'a%'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NotSimilarTo(..)));
         assert!(input.is_eof());
     }
@@ -2581,7 +2765,8 @@ mod tests {
         let lexed = crate::lex("name ILIKE '%FOO%'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Ilike(..)));
         assert!(input.is_eof());
     }
@@ -2591,7 +2776,8 @@ mod tests {
         let lexed = crate::lex("name NOT ILIKE '%bar%'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NotIlike(..)));
         assert!(input.is_eof());
     }
@@ -2601,7 +2787,8 @@ mod tests {
         let lexed = crate::lex("'hawkeye' LIKE 'h%' ESCAPE '#'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Like(..)));
         assert!(input.is_eof());
     }
@@ -2611,7 +2798,8 @@ mod tests {
         let lexed = crate::lex("'hawkeye' NOT LIKE 'h%' ESCAPE '#'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NotLike(..)));
         assert!(input.is_eof());
     }
@@ -2621,7 +2809,8 @@ mod tests {
         let lexed = crate::lex("'abcdefg' SIMILAR TO '_bcd#%' ESCAPE '#'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::SimilarTo(..)));
         assert!(input.is_eof());
     }
@@ -2631,7 +2820,8 @@ mod tests {
         let lexed = crate::lex("'abc' NOT SIMILAR TO 'a%' ESCAPE '#'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NotSimilarTo(..)));
         assert!(input.is_eof());
     }
@@ -2641,7 +2831,8 @@ mod tests {
         let lexed = crate::lex("name ILIKE '%FOO%' ESCAPE '#'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Ilike(..)));
         assert!(input.is_eof());
     }
@@ -2651,7 +2842,8 @@ mod tests {
         let lexed = crate::lex("name NOT ILIKE '%bar%' ESCAPE '#'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::NotIlike(..)));
         assert!(input.is_eof());
     }
@@ -2661,7 +2853,8 @@ mod tests {
         let lexed = crate::lex("'abcdefg' SIMILAR TO '_bcd%' ESCAPE NULL");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::SimilarTo(..)));
         assert!(input.is_eof());
     }
@@ -2673,7 +2866,8 @@ mod tests {
         let lexed = crate::lex("relname ~ '^foo'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::RegexMatch(..)));
         assert!(input.is_eof());
     }
@@ -2683,7 +2877,8 @@ mod tests {
         let lexed = crate::lex("name !~ 'bar'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::RegexNotMatch(..)));
         assert!(input.is_eof());
     }
@@ -2693,7 +2888,8 @@ mod tests {
         let lexed = crate::lex("name ~* 'FOO'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::RegexIMatch(..)));
         assert!(input.is_eof());
     }
@@ -2703,7 +2899,8 @@ mod tests {
         let lexed = crate::lex("name !~* '.*'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::RegexNotIMatch(..)));
         assert!(input.is_eof());
     }
@@ -2715,7 +2912,8 @@ mod tests {
         let lexed = crate::lex("a COLLATE \"C\"");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Collate(..)));
         assert!(input.is_eof());
     }
@@ -2727,7 +2925,8 @@ mod tests {
         let lexed = crate::lex("DEFAULT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Default));
         assert!(input.is_eof());
     }
@@ -2739,12 +2938,13 @@ mod tests {
         let lexed = crate::lex("(SELECT 1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(
             expr,
             Expr::Parenthesized(ParenthesizedExpr {
                 content: ParenContent::Subquery(_),
-                ref indirection,
+                indirection,
                 ..
             }) if indirection.is_empty()
         ));
@@ -2758,7 +2958,8 @@ mod tests {
         let lexed = crate::lex("f1 ~<~ 'YX'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TildeLtTilde(..)));
         assert!(input.is_eof());
     }
@@ -2768,7 +2969,8 @@ mod tests {
         let lexed = crate::lex("t ~<=~ 'Aztec'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TildeLeqTilde(..)));
         assert!(input.is_eof());
     }
@@ -2778,7 +2980,8 @@ mod tests {
         let lexed = crate::lex("t ~>=~ 'Worth'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TildeGeqTilde(..)));
         assert!(input.is_eof());
     }
@@ -2788,7 +2991,8 @@ mod tests {
         let lexed = crate::lex("t ~>~ 'Worth'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TildeGtTilde(..)));
         assert!(input.is_eof());
     }
@@ -2800,7 +3004,8 @@ mod tests {
         let lexed = crate::lex("a === 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TripleEq(..)));
         assert!(input.is_eof());
     }
@@ -2810,7 +3015,8 @@ mod tests {
         let lexed = crate::lex("a !== 1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BangEqEq(..)));
         assert!(input.is_eof());
     }
@@ -2822,7 +3028,8 @@ mod tests {
         let lexed = crate::lex("p.f1 ## l.s");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::GeomClosest(..)));
         assert!(input.is_eof());
     }
@@ -2834,7 +3041,8 @@ mod tests {
         let lexed = crate::lex("@-@ s");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::PathLength(..)));
         assert!(input.is_eof());
     }
@@ -2846,7 +3054,8 @@ mod tests {
         let lexed = crate::lex("@#@ 24");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::AtHashAtPrefix(..)));
         assert!(input.is_eof());
     }
@@ -2858,7 +3067,8 @@ mod tests {
         let lexed = crate::lex("!=- 10");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::BangEqMinusPrefix(..)));
         assert!(input.is_eof());
     }
@@ -2870,7 +3080,8 @@ mod tests {
         let lexed = crate::lex("#thepath");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::PointCount(..)));
         assert!(input.is_eof());
     }
@@ -2882,7 +3093,8 @@ mod tests {
         let lexed = crate::lex("a ?|| b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Parallel(..)));
         assert!(input.is_eof());
     }
@@ -2892,7 +3104,8 @@ mod tests {
         let lexed = crate::lex("a ?-| b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Perpendicular(..)));
         assert!(input.is_eof());
     }
@@ -2904,7 +3117,8 @@ mod tests {
         let lexed = crate::lex("a <^ b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Below(..)));
         assert!(input.is_eof());
     }
@@ -2914,7 +3128,8 @@ mod tests {
         let lexed = crate::lex("a >^ b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::Above(..)));
         assert!(input.is_eof());
     }
@@ -2926,7 +3141,8 @@ mod tests {
         let lexed = crate::lex("a <<< 5");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TripleLt(..)));
         assert!(input.is_eof());
     }
@@ -2936,7 +3152,8 @@ mod tests {
         let lexed = crate::lex("a >>> 0");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::TripleGt(..)));
         assert!(input.is_eof());
     }
@@ -2948,7 +3165,8 @@ mod tests {
         let lexed = crate::lex("a <% b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::CustomInfix(..)));
         assert!(input.is_eof());
     }
@@ -2958,14 +3176,15 @@ mod tests {
         let lexed = crate::lex("a <% b <% c");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(input.is_eof());
 
         let Expr::CustomInfix(left, _, _) = expr else {
             panic!("expected custom operator at the root")
         };
         assert!(
-            matches!(*left, Expr::CustomInfix(..)),
+            matches!(**left, Expr::CustomInfix(..)),
             "equal-precedence custom operators must associate to the left"
         );
     }
@@ -2975,14 +3194,15 @@ mod tests {
         let lexed = crate::lex("a <% b = c");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(input.is_eof());
 
         let Expr::Eq(left, _) = expr else {
             panic!("expected comparison at the root")
         };
         assert!(
-            matches!(*left, Expr::CustomInfix(..)),
+            matches!(**left, Expr::CustomInfix(..)),
             "the custom operator must finish before the lower-precedence comparison"
         );
     }
@@ -2999,11 +3219,12 @@ mod tests {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::QuantifiedComparisonCmp(..)));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
         assert_eq!(
-            format_tokens_sql(&expr, PrettyConfig::default()).trim(),
+            format_tokens_sql(expr, PrettyConfig::default()).trim(),
             src,
         );
     }
@@ -3014,7 +3235,8 @@ mod tests {
         let lexed = crate::lex("a = ALL('{ab}')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::QuantifiedComparisonCmp(..)));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -3025,7 +3247,8 @@ mod tests {
         let lexed = crate::lex("a !~ ALL('{ab}')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::QuantifiedComparisonCmp(..)));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -3038,7 +3261,8 @@ mod tests {
         let lexed = crate::lex("a = SOME((SELECT 1) UNION SELECT 2)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
         assert!(matches!(expr, Expr::QuantifiedComparisonCmp(..)));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -3051,8 +3275,9 @@ mod tests {
         let lexed = crate::lex("a[1:2]");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3075,7 +3300,7 @@ mod tests {
         }
         // The spelling gram.y does have is untouched.
         assert!(matches!(
-            parse_expr_classified("numeric '1'"),
+            parse_expr_classified("numeric '1'").ast(),
             Expr::CastFunc(_)
         ));
     }
@@ -3092,8 +3317,9 @@ mod tests {
         let lexed = crate::lex("j['a':'b']");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3118,9 +3344,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _expr = Expr::parse(&mut input)
+            let _expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _expr = _expr_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -3135,8 +3362,9 @@ mod tests {
         let lexed = crate::lex("a[1:]");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3146,8 +3374,9 @@ mod tests {
         let lexed = crate::lex("a[:2]");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3157,8 +3386,9 @@ mod tests {
         let lexed = crate::lex("a[:]");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3168,8 +3398,9 @@ mod tests {
         let lexed = crate::lex("a[1]");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { ref subscripts, .. }) if !subscripts.is_empty()));
+        let expr_parsed = Expr::parse(&mut input).unwrap();
+        let expr = expr_parsed.ast();
+        assert!(matches!(expr, Expr::ColumnRef(ColumnRef { subscripts, .. }) if !subscripts.is_empty()));
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -3221,9 +3452,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = crate::ast::Statement::parse(&mut input)
+            let _stmt_parsed = crate::ast::Statement::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -3252,9 +3484,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = crate::ast::Statement::parse(&mut input)
+            let _stmt_parsed = crate::ast::Statement::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _stmt = _stmt_parsed.ast();
             assert!(
                 input.is_eof(),
                 "parser cursor for {src:?}: {}",
@@ -3276,15 +3509,16 @@ mod tests {
         use recursa::PrettyConfig;
 
         for src in ["B'10'", "X'1FF'", "b'001'", "x'42f'", "B''"] {
-            let expr = parse_expr_classified(src);
+            let expr_parsed = parse_expr_classified(src);
+            let expr = expr_parsed.ast();
             // Confirm the atom is the dedicated bit/hex variant, not a
             // StringLit / ColumnRef pair.
             assert!(
                 matches!(expr, Expr::BitStringLit(_) | Expr::HexStringLit(_)),
                 "expected BitStringLit/HexStringLit atom for {src:?}, got {:?}",
-                std::mem::discriminant(&expr),
+                std::mem::discriminant(expr),
             );
-            let formatted = format_tokens_sql(&expr, PrettyConfig::default());
+            let formatted = format_tokens_sql(expr, PrettyConfig::default());
             assert_eq!(
                 formatted.trim(),
                 src,
@@ -3305,13 +3539,13 @@ mod tests {
             r#"jsonb 'null'"#,
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::CastFunc(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::CastFunc(_)),
                 "expected a typed literal for {src:?}",
             );
         }
         for src in ["JSON('{}' FORMAT JSON)", "JSON('1'::json WITH UNIQUE KEYS)"] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::JsonCtor(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::JsonCtor(_)),
                 "expected the JSON value constructor for {src:?}",
             );
         }
@@ -3324,9 +3558,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let _expr = Expr::parse(&mut input)
+            let _expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _expr = _expr_parsed.ast();
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
     }
@@ -3348,23 +3583,24 @@ mod tests {
             "JSON_OBJECTAGG(i: ('111' || i)::bytea FORMAT JSON WITH UNIQUE RETURNING text)",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::JsonObjectAgg(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::JsonObjectAgg(_)),
                 "expected JsonObjectAgg for {src:?}",
             );
         }
         // The constructor form must read `k: v` as an entry, not as one
         // legacy `json_object(text[])` argument.
-        let Expr::JsonObject(object) = parse_expr_classified("JSON_OBJECT(k: v)") else {
+        let parsed = parse_expr_classified("JSON_OBJECT(k: v)");
+        let Expr::JsonObject(object) = parsed.ast() else {
             panic!("expected the SQL/JSON constructor");
         };
-        let JsonObject::Entries(args) = *object else {
+        let JsonObject::Entries(args) = object.as_ref() else {
             panic!("expected the entry form");
         };
         assert!(args.entries.first().value.is_some(), "expected a key/value entry");
         // The typed literal keeps its keyword-named spelling, which is
         // gram.y's `ConstTypename Sconst` and takes a string, never a colon.
         assert!(matches!(
-            parse_expr_classified("bigint 'txid'"),
+            parse_expr_classified("bigint 'txid'").ast(),
             Expr::CastFunc(_)
         ));
     }
@@ -3379,13 +3615,14 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let expr = Expr::parse(&mut input)
+            let expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let expr = expr_parsed.ast();
             assert!(matches!(expr, Expr::Grouping(_)), "expected Grouping for {src:?}");
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
-        assert!(matches!(parse_expr_classified("grouping"), Expr::ColumnRef(_)));
+        assert!(matches!(parse_expr_classified("grouping").ast(), Expr::ColumnRef(_)));
     }
 
     /// `substring(x, 3, 1)` — the ordinary function-call spelling that
@@ -3404,9 +3641,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let expr = Expr::parse(&mut input)
+            let expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let expr = expr_parsed.ast();
             assert!(matches!(expr, Expr::Substring(_)), "expected Substring for {src:?}");
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
@@ -3426,9 +3664,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let _expr = Expr::parse(&mut input)
+            let _expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _expr = _expr_parsed.ast();
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
         for src in [
@@ -3438,7 +3677,7 @@ mod tests {
             "JSON_OBJECT(RETURNING jsonb)",
         ] {
             assert!(
-                matches!(parse_expr_classified(src), Expr::JsonObject(_)),
+                matches!(parse_expr_classified(src).ast(), Expr::JsonObject(_)),
                 "expected the SQL/JSON constructor for {src:?}",
             );
         }
@@ -3463,9 +3702,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let _expr = Expr::parse(&mut input)
+            let _expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _expr = _expr_parsed.ast();
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
     }
@@ -3485,9 +3725,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let _expr = Expr::parse(&mut input)
+            let _expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let _expr = _expr_parsed.ast();
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
     }
@@ -3500,9 +3741,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let expr = Expr::parse(&mut input)
+            let expr_parsed = Expr::parse(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let expr = expr_parsed.ast();
             assert!(matches!(expr, Expr::RowExpr(_)), "expected RowExpr for {src:?}");
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }

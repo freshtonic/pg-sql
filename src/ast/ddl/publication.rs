@@ -10,24 +10,24 @@ use crate::tokens::{literal, punct};
 
 /// Optional `(col, ...)` column-list on a publication table object —
 /// Postgres' `opt_column_list`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct PublicationColumnList<'input> {
     #[sep(COMMA)]
-    pub cols: recursa::Vec1<crate::tokens::ColId<'input>>,
+    pub cols: recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
 }
 
 /// `WHERE (a_expr)` row-filter on a publication table object —
 /// Postgres' `OptWhereClause`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PublicationWhereClause<'input> {
     #[tok(WHERE, LPAREN, this, RPAREN)]
-    pub expr: Box<Expr<'input>>,
+    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
 }
 
 /// `TABLE [ONLY] name [*] [(cols)] [WHERE (expr)]` — the `TABLE`-prefixed
 /// publication object.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PublicationObjTable<'input> {
     #[tok(TABLE, this)]
     #[presence(ONLY)]
@@ -51,7 +51,7 @@ pub struct PublicationObjTable<'input> {
 /// statement is modelled instead of surfacing as a
 /// a file-level parse error. The round-tripped output is still
 /// PG-rejected, so the differential oracle stays valid.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PublicationObjTablesInSchema<'input> {
     #[tok(TABLES, IN, SCHEMA, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -62,7 +62,7 @@ pub struct PublicationObjTablesInSchema<'input> {
 /// `extended_relation_expr`-with-ONLY branch). Used after a `TABLE` or
 /// `TABLES IN SCHEMA` prefix; PG's `preprocess_pubobj_list` infers the
 /// object kind from the previous prefixed item at semantic time.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PublicationObjOnly<'input> {
     #[tok(ONLY, this)]
     pub name: QualifiedName<'input>,
@@ -77,7 +77,7 @@ pub struct PublicationObjOnly<'input> {
 /// `TABLE` / `TABLES IN SCHEMA` prefix; PG's `preprocess_pubobj_list`
 /// infers the object kind from the previous prefixed item at semantic
 /// time.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct PublicationObjBare<'input> {
     pub name: QualifiedName<'input>,
     #[presence(STAR)]
@@ -91,7 +91,7 @@ pub struct PublicationObjBare<'input> {
 /// Variant ordering: keyword-prefixed forms first (`Table` reserved,
 /// `TablesInSchema` soft, `Only` reserved), then the catch-all `Bare`
 /// (starts with an ident) so the keyword-prefixed forms win on peek.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum PublicationObjSpec<'input> {
     Table(PublicationObjTable<'input>),
     TablesInSchema(PublicationObjTablesInSchema<'input>),
@@ -100,18 +100,18 @@ pub enum PublicationObjSpec<'input> {
 }
 
 /// `FOR ALL TABLES` — Postgres' `CREATE PUBLICATION ... FOR ALL TABLES`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum PublicationForAllTables {
     #[tok(FOR, ALL, TABLES)]
     Value,
 }
 
 /// `FOR pub_obj_list` — Postgres' `CREATE PUBLICATION ... FOR pub_obj_list`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(FOR, this)]
 pub struct PublicationForObjects<'input> {
     #[sep(COMMA)]
-    pub objects: recursa::Vec1<PublicationObjSpec<'input>>,
+    pub objects: recursa::ArenaVec1<'input, PublicationObjSpec<'input>>,
 }
 
 /// The `FOR ...` clause on CREATE PUBLICATION.
@@ -119,7 +119,7 @@ pub struct PublicationForObjects<'input> {
 /// Variant ordering: `AllTables` (`FOR ALL TABLES`, 3 tokens) before
 /// `Objects` (`FOR pub_obj_list`, starts with `TABLE`/`TABLES`/ident)
 /// — longest match wins on the `FOR ALL TABLES` prefix.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum PublicationForClause<'input> {
     AllTables(PublicationForAllTables),
     Objects(PublicationForObjects<'input>),
@@ -127,7 +127,7 @@ pub enum PublicationForClause<'input> {
 
 /// `WITH (def_list)` — Postgres' `opt_definition`. Reuses the shared
 /// `DefList` and prefixes it with the `WITH` keyword.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct WithDefinition<'input> {
     #[tok(WITH, this)]
     pub list: DefList<'input>,
@@ -135,7 +135,7 @@ pub struct WithDefinition<'input> {
 
 /// `CREATE PUBLICATION name [FOR ALL TABLES | FOR pub_obj_list]
 /// [WITH (def_list)]` — Postgres' `CreatePublicationStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct CreatePublicationStmt<'input> {
     #[tok(CREATE, PUBLICATION, this)]
     pub name: crate::tokens::ColId<'input>,
@@ -144,7 +144,7 @@ pub struct CreatePublicationStmt<'input> {
 }
 
 /// `DROP PUBLICATION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, PUBLICATION, this)]
 pub struct DropPublicationStmt<'input> {
     pub if_exists: Option<IfExists>,
@@ -157,37 +157,37 @@ pub struct DropPublicationStmt<'input> {
 /// { SET | SKIP } ...`. Distinct from `WithDefinition` (which carries a
 /// leading `WITH` keyword) and from `SetSchemaClause` (which carries a
 /// `SCHEMA` keyword).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(SET, LPAREN, this, RPAREN)]
 pub struct SetDefinitionClause<'input> {
     #[sep(COMMA)]
-    pub items: recursa::Vec1<DefElem<'input>>,
+    pub items: recursa::ArenaVec1<'input, DefElem<'input>>,
 }
 
 /// `SET pub_obj_list` — Postgres' `ALTER PUBLICATION ... SET pub_obj_list`.
 /// Distinct from `SetDefinitionClause` because the body is a publication
 /// object list (TABLE / TABLES IN SCHEMA / bare name), not a def_list.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(SET, this)]
 pub struct AlterPublicationSetObjects<'input> {
     #[sep(COMMA)]
-    pub objects: recursa::Vec1<PublicationObjSpec<'input>>,
+    pub objects: recursa::ArenaVec1<'input, PublicationObjSpec<'input>>,
 }
 
 /// `ADD pub_obj_list` — Postgres' `ALTER PUBLICATION ... ADD pub_obj_list`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(ADD, this)]
 pub struct AlterPublicationAddObjects<'input> {
     #[sep(COMMA)]
-    pub objects: recursa::Vec1<PublicationObjSpec<'input>>,
+    pub objects: recursa::ArenaVec1<'input, PublicationObjSpec<'input>>,
 }
 
 /// `DROP pub_obj_list` — Postgres' `ALTER PUBLICATION ... DROP pub_obj_list`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(DROP, this)]
 pub struct AlterPublicationDropObjects<'input> {
     #[sep(COMMA)]
-    pub objects: recursa::Vec1<PublicationObjSpec<'input>>,
+    pub objects: recursa::ArenaVec1<'input, PublicationObjSpec<'input>>,
 }
 
 /// One action on `ALTER PUBLICATION name action` — covers Postgres'
@@ -201,7 +201,7 @@ pub struct AlterPublicationDropObjects<'input> {
 /// both start with `SET` and disambiguate by the next token (`(` →
 /// def_list, anything else → pub_obj_list). Lists `SetDef` before
 /// `SetObjs` so the `SET (` longer-prefix peek wins.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum AlterPublicationAction<'input> {
     Rename(RenameTo<'input>),
     Owner(OwnerTo<'input>),
@@ -213,7 +213,7 @@ pub enum AlterPublicationAction<'input> {
 
 /// `ALTER PUBLICATION name action` — Postgres' `AlterPublicationStmt`
 /// plus the publication branches of `RenameStmt` / `AlterOwnerStmt`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AlterPublicationStmt<'input> {
     #[tok(ALTER, PUBLICATION, this)]
     pub name: crate::tokens::ColId<'input>,

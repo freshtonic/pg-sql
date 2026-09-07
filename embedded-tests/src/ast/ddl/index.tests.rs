@@ -7,12 +7,14 @@ mod tests {
         let lexed = crate::lex("CREATE UNIQUE INDEX i ON t (i) NULLS NOT DISTINCT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
         let lexed = crate::lex("CREATE UNIQUE INDEX i ON t (i) NULLS DISTINCT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -21,7 +23,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX fooi ON foo (f1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.as_ref().unwrap().text(), "fooi");
         assert_eq!(stmt.table_name.object(), "foo");
         assert!(input.is_eof());
@@ -38,7 +41,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX i ON t (f(a + b))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -47,7 +51,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX fooi ON foo (f1 DESC)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -56,7 +61,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX fooi ON foo (f1 DESC NULLS LAST)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -65,7 +71,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX IF NOT EXISTS fooi ON foo (f1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_not_exists.is_some());
         assert!(input.is_eof());
     }
@@ -75,7 +82,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX CONCURRENTLY fooi ON foo (f1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.concurrently);
         assert!(input.is_eof());
     }
@@ -85,7 +93,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX idx ON ONLY ptif_test (a)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -94,7 +103,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX ON foo (f1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.name.is_none());
         assert!(input.is_eof());
     }
@@ -104,7 +114,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX fooi ON foo USING btree (f1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.using.is_some());
         assert!(input.is_eof());
     }
@@ -114,7 +125,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX fooi ON foo USING gin (f1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -123,7 +135,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX fooi ON foo (f1 int4_ops)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(input.is_eof());
         let _ = stmt;
     }
@@ -133,7 +146,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX fooi ON foo (f1 text_pattern_ops DESC)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -144,7 +158,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -153,7 +168,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX i ON t ((lower(name)))");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -165,9 +181,10 @@ mod tests {
         let lexed = crate::lex(sql);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input)
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input)
             .unwrap_or_else(|e| panic!("parse {sql:?}: {e}"))
-            .into_ast();
+            ;
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
@@ -176,7 +193,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX i ON t (a) INCLUDE (b, c)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.include.is_some());
         assert!(input.is_eof());
     }
@@ -186,7 +204,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX i ON t (a) WHERE a > 0");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.where_clause.is_some());
         assert!(input.is_eof());
     }
@@ -196,7 +215,8 @@ mod tests {
         let lexed = crate::lex("CREATE INDEX i ON t (a) WITH (fillfactor = 70)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.with_storage.is_some());
         assert!(input.is_eof());
     }
@@ -209,7 +229,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -219,7 +240,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int) WITH (foo = 'bar')");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -229,7 +251,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int) WITH (fillfactor = -30.1)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -239,7 +262,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLE t (a int) WITH (fillfactor = +30)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -257,7 +281,8 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let _stmt = CreateTableStmt::parse(&mut input).unwrap().into_ast();
+            let _stmt_parsed = CreateTableStmt::parse(&mut input).unwrap();
+            let _stmt = _stmt_parsed.ast();
             assert!(input.is_eof(), "{src:?}: parser cursor {}", input.cursor());
         }
     }
@@ -267,7 +292,8 @@ mod tests {
         let lexed = crate::lex("CREATE UNIQUE INDEX i ON t (a)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.unique);
         assert!(input.is_eof());
     }
@@ -279,7 +305,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.unique);
         assert!(stmt.concurrently);
         assert!(stmt.if_not_exists.is_some());
@@ -297,7 +324,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -308,7 +336,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -319,7 +348,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -330,7 +360,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateIndexStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -339,7 +370,8 @@ mod tests {
         let lexed = crate::lex("DROP INDEX fooi");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.names.len(), 1);
         assert!(input.is_eof());
     }
@@ -349,7 +381,8 @@ mod tests {
         let lexed = crate::lex("DROP INDEX IF EXISTS fooi");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists.is_some());
         assert!(input.is_eof());
     }
@@ -359,7 +392,8 @@ mod tests {
         let lexed = crate::lex("DROP INDEX CONCURRENTLY fooi");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.concurrently);
         assert!(input.is_eof());
     }
@@ -369,7 +403,8 @@ mod tests {
         let lexed = crate::lex("DROP INDEX a, b, c");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.names.len(), 3);
         assert!(input.is_eof());
     }
@@ -379,7 +414,8 @@ mod tests {
         let lexed = crate::lex("DROP INDEX fooi CASCADE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropIndexStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropIndexStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.behavior.is_some());
         assert!(input.is_eof());
     }

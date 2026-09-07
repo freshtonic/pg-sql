@@ -12,7 +12,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateOperatorStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateOperatorStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -21,7 +22,8 @@ mod tests {
         let lexed = crate::lex("DROP OPERATOR ===(bigint, bigint)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = DropOperatorStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = DropOperatorStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -32,7 +34,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterOperatorStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterOperatorStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -51,7 +54,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateOperatorStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateOperatorStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -59,11 +63,11 @@ mod tests {
     fn parse_alter_operator_set_commutator_custom_op() {
         // From `alter_operator.sql`: `SET (COMMUTATOR = ====)` — the RHS is
         // a 4-char custom op (`====`) which lexes as `CustomOp`.
-        let lexed =
-            crate::lex("ALTER OPERATOR === (boolean, real) SET (COMMUTATOR = ====)");
+        let lexed = crate::lex("ALTER OPERATOR === (boolean, real) SET (COMMUTATOR = ====)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterOperatorStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterOperatorStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -73,7 +77,8 @@ mod tests {
         let lexed = crate::lex("ALTER OPERATOR === (boolean, real) SET (COMMUTATOR = @=)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterOperatorStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterOperatorStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -84,7 +89,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateOperatorStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateOperatorStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -93,7 +99,8 @@ mod tests {
         let lexed = crate::lex("DROP OPERATOR <|(bigint, bigint)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = DropOperatorStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = DropOperatorStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -102,9 +109,10 @@ mod tests {
         let lexed = crate::lex("CREATE OPERATOR FAMILY my_family USING hash");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateOperatorFamilyStmt::parse(&mut input)
+        let stmt_parsed = CreateOperatorFamilyStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "my_family");
         assert_eq!(stmt.access_method.text(), "hash");
         assert!(input.is_eof());
@@ -117,9 +125,10 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateOperatorClassStmt::parse(&mut input)
+        let stmt_parsed = CreateOperatorClassStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "alt_opc1");
         assert!(!stmt.default);
         assert!(stmt.family.is_none());
@@ -135,9 +144,10 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateOperatorClassStmt::parse(&mut input)
+        let stmt_parsed = CreateOperatorClassStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let stmt = stmt_parsed.ast();
         assert!(stmt.default);
         assert!(stmt.family.is_some());
         assert_eq!(stmt.items.iter().count(), 3);
@@ -152,9 +162,10 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input)
+        let _stmt_parsed = AlterOperatorFamilyStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -165,21 +176,22 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input)
+        let _stmt_parsed = AlterOperatorFamilyStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_family_rename() {
-        let lexed =
-            crate::lex("ALTER OPERATOR FAMILY alt_opf1 USING hash RENAME TO alt_opf3");
+        let lexed = crate::lex("ALTER OPERATOR FAMILY alt_opf1 USING hash RENAME TO alt_opf3");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input)
+        let _stmt_parsed = AlterOperatorFamilyStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -190,21 +202,22 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input)
+        let _stmt_parsed = AlterOperatorFamilyStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_alter_operator_family_set_schema() {
-        let lexed =
-            crate::lex("ALTER OPERATOR FAMILY alt_opf2 USING hash SET SCHEMA alt_nsp2");
+        let lexed = crate::lex("ALTER OPERATOR FAMILY alt_opf2 USING hash SET SCHEMA alt_nsp2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input)
+        let _stmt_parsed = AlterOperatorFamilyStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -218,9 +231,10 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterOperatorFamilyStmt::parse(&mut input)
+        let _stmt_parsed = AlterOperatorFamilyStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -229,7 +243,8 @@ mod tests {
         let lexed = crate::lex("DROP OPERATOR CLASS my_ops USING btree CASCADE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropOperatorClassStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropOperatorClassStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "my_ops");
         assert_eq!(stmt.access_method.text(), "btree");
         assert!(stmt.if_exists.is_none());
@@ -239,13 +254,13 @@ mod tests {
 
     #[test]
     fn parse_drop_operator_family_if_exists() {
-        let lexed =
-            crate::lex("DROP OPERATOR FAMILY IF EXISTS my_family USING hash RESTRICT");
+        let lexed = crate::lex("DROP OPERATOR FAMILY IF EXISTS my_family USING hash RESTRICT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropOperatorFamilyStmt::parse(&mut input)
+        let stmt_parsed = DropOperatorFamilyStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists.is_some());
         assert!(stmt.behavior.is_some());
         assert!(input.is_eof());
@@ -261,9 +276,10 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateOperatorClassStmt::parse(&mut input)
+        let stmt_parsed = CreateOperatorClassStmt::parse(&mut input)
             .unwrap()
-            .into_ast();
+            ;
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.items.iter().count(), 2);
         assert!(input.is_eof());
     }

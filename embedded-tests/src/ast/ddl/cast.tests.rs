@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("DROP CAST IF EXISTS (text AS text) RESTRICT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = DropCastStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = DropCastStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_exists.is_some());
         assert!(stmt.behavior.is_some());
         assert!(input.is_eof());
@@ -21,7 +22,8 @@ mod tests {
         let lexed = crate::lex("CREATE CAST (text AS casttesttype) WITHOUT FUNCTION");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateCastStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateCastStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt.r#impl, CastImpl::WithoutFunction));
         assert!(stmt.context.is_none());
         assert!(input.is_eof());
@@ -32,7 +34,8 @@ mod tests {
         let lexed = crate::lex("CREATE CAST (int4 AS casttesttype) WITH INOUT AS IMPLICIT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateCastStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateCastStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt.r#impl, CastImpl::WithInout));
         assert!(matches!(
             stmt.context.as_ref().unwrap().kind,
@@ -48,7 +51,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateCastStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateCastStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt.r#impl, CastImpl::WithFunction(_)));
         assert!(matches!(
             stmt.context.as_ref().unwrap().kind,

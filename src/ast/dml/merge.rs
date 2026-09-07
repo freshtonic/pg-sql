@@ -14,14 +14,14 @@ use crate::ast::shared::expr::Expr;
 use crate::tokens::literal;
 
 /// `AND cond` qualifier on a WHEN clause.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct AndCondition<'input> {
     #[tok(AND, this)]
     pub condition: Expr<'input>,
 }
 
 /// `BY SOURCE` or `BY TARGET`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum NotMatchedBy {
     #[tok(BY, SOURCE)]
     Source,
@@ -30,11 +30,11 @@ pub enum NotMatchedBy {
 }
 
 /// `UPDATE SET col = expr, ...` action body (the part after THEN).
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(UPDATE, SET, this)]
 pub struct UpdateAction<'input> {
     #[sep(COMMA)]
-    pub assignments: recursa::Vec1<SetAssignment<'input>>,
+    pub assignments: recursa::ArenaVec1<'input, SetAssignment<'input>>,
 }
 
 /// Action allowed after `WHEN MATCHED ... THEN`.
@@ -42,7 +42,7 @@ pub struct UpdateAction<'input> {
 /// Variant ordering: `DoNothing` (`DO NOTHING`) and `Update` (`UPDATE`) and
 /// `Delete` (`DELETE`) all start with distinct keywords, so order is by
 /// declaration only.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum MatchedAction<'input> {
     Update(UpdateAction<'input>),
     #[tok(DELETE)]
@@ -52,23 +52,23 @@ pub enum MatchedAction<'input> {
 }
 
 /// A single row of values: `(expr, ...)`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(LPAREN, this, RPAREN)]
-pub struct ValueRow<'input>(#[sep(COMMA)] pub Vec<Expr<'input>>);
+pub struct ValueRow<'input>(#[sep(COMMA)] pub recursa::ArenaVec<'input, Expr<'input>>);
 
 /// `VALUES (row), (row), ...` body.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(VALUES, this)]
 pub struct InsertValuesBody<'input> {
     #[sep(COMMA)]
-    pub rows: Vec<ValueRow<'input>>,
+    pub rows: recursa::ArenaVec<'input, ValueRow<'input>>,
 }
 
 /// Body of an INSERT inside MERGE: `VALUES ...` or `DEFAULT VALUES`.
 ///
 /// Variant ordering: `Default` (`DEFAULT VALUES`) is matched before
 /// `Values` (`VALUES`) since they begin with different keywords.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum InsertBody<'input> {
     #[tok(DEFAULT, VALUES)]
     Default,
@@ -76,23 +76,23 @@ pub enum InsertBody<'input> {
 }
 
 /// Optional `INTO target_name` after `INSERT`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct InsertInto<'input> {
     #[tok(INTO, this)]
     pub name: crate::tokens::ColId<'input>,
 }
 
 /// Parenthesized `insert_column_list` on a MERGE `INSERT` action.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[derive(recursa::Node, Debug, derive_more::Deref)]
 #[tok(LPAREN, this, RPAREN)]
 pub struct MergeInsertColumnList<'input>(
     #[sep(COMMA)]
     #[deref]
-    pub recursa::Vec1<literal::AliasName<'input>>,
+    pub recursa::ArenaVec1<'input, literal::AliasName<'input>>,
 );
 
 /// `INSERT [INTO target] [(cols)] { VALUES ... | DEFAULT VALUES }`
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(INSERT, this)]
 pub struct InsertAction<'input> {
     pub into: Option<InsertInto<'input>>,
@@ -109,7 +109,7 @@ pub struct InsertAction<'input> {
 /// (the target row exists, the source row does not). Which `by` form
 /// permits which action is a semantic rule, so all four are accepted
 /// grammatically.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum NotMatchedAction<'input> {
     Insert(InsertAction<'input>),
     Update(UpdateAction<'input>),
@@ -120,7 +120,7 @@ pub enum NotMatchedAction<'input> {
 }
 
 /// `WHEN NOT MATCHED [BY {SOURCE|TARGET}] [AND cond] THEN action`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(WHEN, NOT, MATCHED, this)]
 pub struct WhenNotMatched<'input> {
     pub by: Option<NotMatchedBy>,
@@ -130,7 +130,7 @@ pub struct WhenNotMatched<'input> {
 }
 
 /// `WHEN MATCHED [AND cond] THEN action`.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 #[tok(WHEN, MATCHED, this)]
 pub struct WhenMatched<'input> {
     pub and: Option<AndCondition<'input>>,
@@ -142,22 +142,22 @@ pub struct WhenMatched<'input> {
 ///
 /// Variant ordering: `NotMatched` (`WHEN NOT MATCHED`) is longer than
 /// `Matched` (`WHEN MATCHED`); list it first.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub enum WhenClause<'input> {
     NotMatched(WhenNotMatched<'input>),
     Matched(WhenMatched<'input>),
 }
 
 /// MERGE statement.
-#[derive(recursa::Node, Debug, Clone)]
+#[derive(recursa::Node, Debug)]
 pub struct MergeStmt<'input> {
     #[tok(MERGE, INTO, this)]
-    pub target: Box<PlainTable<'input>>,
+    pub target: recursa::ArenaBox<'input, PlainTable<'input>>,
     #[tok(USING, this)]
-    pub source: Box<TableRef<'input>>,
+    pub source: recursa::ArenaBox<'input, TableRef<'input>>,
     #[tok(ON, this)]
-    pub condition: Box<Expr<'input>>,
+    pub condition: recursa::ArenaBox<'input, Expr<'input>>,
     /// PostgreSQL's `merge_when_list` is one-or-more.
-    pub when_clauses: recursa::Vec1<WhenClause<'input>>,
-    pub returning: Option<Box<ReturningClause<'input>>>,
+    pub when_clauses: recursa::ArenaVec1<'input, WhenClause<'input>>,
+    pub returning: Option<recursa::ArenaBox<'input, ReturningClause<'input>>>,
 }

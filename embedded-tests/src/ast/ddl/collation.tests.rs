@@ -10,7 +10,8 @@ mod tests {
         let lexed = crate::lex("ALTER COLLATION test1 RENAME TO test11");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterCollationStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterCollationStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -19,7 +20,8 @@ mod tests {
         let lexed = crate::lex("ALTER COLLATION en_us REFRESH VERSION");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterCollationStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterCollationStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -28,7 +30,8 @@ mod tests {
         let lexed = crate::lex("CREATE COLLATION mycoll (LC_COLLATE = \"POSIX\", LC_CTYPE = \"POSIX\")");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateCollationStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateCollationStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "mycoll");
         assert!(matches!(stmt.body, CreateCollationBody::Options(_)));
         assert!(input.is_eof());
@@ -39,7 +42,8 @@ mod tests {
         let lexed = crate::lex("CREATE COLLATION mycoll FROM \"C\"");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateCollationStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateCollationStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(matches!(stmt.body, CreateCollationBody::From(_)));
         assert!(input.is_eof());
     }
@@ -49,7 +53,8 @@ mod tests {
         let lexed = crate::lex("CREATE COLLATION IF NOT EXISTS mycoll FROM \"C\"");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = CreateCollationStmt::parse(&mut input).unwrap().into_ast();
+        let stmt_parsed = CreateCollationStmt::parse(&mut input).unwrap();
+        let stmt = stmt_parsed.ast();
         assert!(stmt.if_not_exists.is_some());
         assert!(input.is_eof());
     }

@@ -128,9 +128,9 @@ pub(crate) fn pgsql_format(source: &str) -> Result<String, StrictStatementFailur
             ),
         });
     }
-    let ast = parsed.into_ast();
+    let ast = parsed.ast();
     Ok(pg_sql::formatter::format_tokens_sql(
-        &ast,
+        ast,
         recursa::PrettyConfig::default(),
     ))
 }

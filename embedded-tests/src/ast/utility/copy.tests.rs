@@ -5,7 +5,8 @@ mod tests {
 
     #[test]
     fn copy_table_from_stdin_bare() {
-        let stmt: CopyStmt = parse_stmt("COPY t FROM STDIN");
+        let stmt = parse_stmt::<CopyStmt>("COPY t FROM STDIN");
+        let stmt = stmt.ast();
         let CopyBody::Table(table) = &stmt.body else {
             panic!("expected table body");
         };
@@ -22,7 +23,8 @@ mod tests {
 
     #[test]
     fn copy_table_to_stdout() {
-        let stmt: CopyStmt = parse_stmt("COPY t TO STDOUT");
+        let stmt = parse_stmt::<CopyStmt>("COPY t TO STDOUT");
+        let stmt = stmt.ast();
         let CopyBody::Table(table) = &stmt.body else {
             panic!("expected table body");
         };
@@ -33,7 +35,8 @@ mod tests {
 
     #[test]
     fn copy_table_with_columns_from_stdin() {
-        let stmt: CopyStmt = parse_stmt("COPY t (a, b, c) FROM STDIN");
+        let stmt = parse_stmt::<CopyStmt>("COPY t (a, b, c) FROM STDIN");
+        let stmt = stmt.ast();
         let CopyBody::Table(table) = &stmt.body else {
             panic!("expected table body");
         };
@@ -48,7 +51,8 @@ mod tests {
 
     #[test]
     fn copy_table_from_file() {
-        let stmt: CopyStmt = parse_stmt("COPY t FROM 'foo.csv'");
+        let stmt = parse_stmt::<CopyStmt>("COPY t FROM 'foo.csv'");
+        let stmt = stmt.ast();
         let CopyBody::Table(table) = &stmt.body else {
             panic!("expected table body");
         };
@@ -88,7 +92,8 @@ mod tests {
     #[test]
     fn copy_table_binary_legacy() {
         // `COPY BINARY t TO file` legacy binary option — `CopyBody::BinaryTable`.
-        let stmt: CopyStmt = parse_stmt("COPY BINARY t TO 'f'");
+        let stmt = parse_stmt::<CopyStmt>("COPY BINARY t TO 'f'");
+        let stmt = stmt.ast();
         let CopyBody::BinaryTable(body) = &stmt.body else {
             panic!("expected binary-table body");
         };
@@ -131,7 +136,8 @@ mod tests {
 
     #[test]
     fn copy_query_to_stdout() {
-        let stmt: CopyStmt = parse_stmt("COPY (SELECT * FROM t) TO STDOUT");
+        let stmt = parse_stmt::<CopyStmt>("COPY (SELECT * FROM t) TO STDOUT");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.body, CopyBody::Query(_)));
         reparse_stable::<CopyStmt>("COPY (SELECT * FROM t) TO STDOUT");
     }

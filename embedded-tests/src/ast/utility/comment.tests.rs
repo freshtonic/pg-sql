@@ -8,14 +8,15 @@ mod tests {
         // Regression: `COMMENT ON OPERATOR === (a, b)` shares the
         // `operator_with_argtypes` grammar with DROP/ALTER OPERATOR and must
         // accept non-standard operator names.
-        let stmt: CommentStmt =
-            parse_stmt("COMMENT ON OPERATOR === (int4, int4) IS 'custom equality'");
+        let stmt = parse_stmt::<CommentStmt>("COMMENT ON OPERATOR === (int4, int4) IS 'custom equality'");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.object, CommentObject::Operator(_)));
     }
 
     #[test]
     fn comment_on_table_is_modelled() {
-        let stmt: CommentStmt = parse_stmt("COMMENT ON TABLE attmp IS 'table comment'");
+        let stmt = parse_stmt::<CommentStmt>("COMMENT ON TABLE attmp IS 'table comment'");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.text, CommentText::Text(_)));
         assert_eq!(
             roundtrip::<CommentStmt>("COMMENT ON TABLE attmp IS 'table comment'"),
@@ -25,7 +26,8 @@ mod tests {
 
     #[test]
     fn comment_on_table_null_is_modelled() {
-        let stmt: CommentStmt = parse_stmt("COMMENT ON TABLE attmp IS NULL");
+        let stmt = parse_stmt::<CommentStmt>("COMMENT ON TABLE attmp IS NULL");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.text, CommentText::Null));
         assert_eq!(
             roundtrip::<CommentStmt>("COMMENT ON TABLE attmp IS NULL"),
@@ -35,7 +37,8 @@ mod tests {
 
     #[test]
     fn comment_on_column_roundtrips() {
-        let stmt: CommentStmt = parse_stmt("COMMENT ON COLUMN ctlt1.a IS 'A'");
+        let stmt = parse_stmt::<CommentStmt>("COMMENT ON COLUMN ctlt1.a IS 'A'");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.object, CommentObject::Column(_)));
         reparse_stable::<CommentStmt>("COMMENT ON COLUMN ctlt1.a IS 'A'");
     }
@@ -106,28 +109,32 @@ mod tests {
 
     #[test]
     fn comment_on_function_with_args_roundtrips() {
-        let stmt: CommentStmt = parse_stmt("COMMENT ON FUNCTION f(int, text) IS 'x'");
+        let stmt = parse_stmt::<CommentStmt>("COMMENT ON FUNCTION f(int, text) IS 'x'");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.object, CommentObject::Function(_)));
         reparse_stable::<CommentStmt>("COMMENT ON FUNCTION f(int, text) IS 'x'");
     }
 
     #[test]
     fn comment_on_aggregate_star_roundtrips() {
-        let stmt: CommentStmt = parse_stmt("COMMENT ON AGGREGATE newcnt(*) IS 'x'");
+        let stmt = parse_stmt::<CommentStmt>("COMMENT ON AGGREGATE newcnt(*) IS 'x'");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.object, CommentObject::Aggregate(_)));
         reparse_stable::<CommentStmt>("COMMENT ON AGGREGATE newcnt(*) IS 'x'");
     }
 
     #[test]
     fn comment_on_aggregate_types_roundtrips() {
-        let stmt: CommentStmt = parse_stmt("COMMENT ON AGGREGATE newavg(int4) IS 'x'");
+        let stmt = parse_stmt::<CommentStmt>("COMMENT ON AGGREGATE newavg(int4) IS 'x'");
+        let stmt = stmt.ast();
         assert!(matches!(stmt.object, CommentObject::Aggregate(_)));
         reparse_stable::<CommentStmt>("COMMENT ON AGGREGATE newavg(int4) IS 'x'");
     }
 
     #[test]
     fn security_label_on_table_is_modelled() {
-        let stmt: SecurityLabelStmt = parse_stmt("SECURITY LABEL ON TABLE t IS 'classified'");
+        let stmt = parse_stmt::<SecurityLabelStmt>("SECURITY LABEL ON TABLE t IS 'classified'");
+        let stmt = stmt.ast();
         assert!(stmt.provider.is_none());
         assert_eq!(
             roundtrip::<SecurityLabelStmt>("SECURITY LABEL ON TABLE t IS 'classified'"),
@@ -137,8 +144,8 @@ mod tests {
 
     #[test]
     fn security_label_with_provider_keeps_provider() {
-        let stmt: SecurityLabelStmt =
-            parse_stmt("SECURITY LABEL FOR 'dummy' ON TABLE t IS 'classified'");
+        let stmt = parse_stmt::<SecurityLabelStmt>("SECURITY LABEL FOR 'dummy' ON TABLE t IS 'classified'");
+        let stmt = stmt.ast();
         assert!(stmt.provider.is_some());
         assert_eq!(
             roundtrip::<SecurityLabelStmt>("SECURITY LABEL FOR 'dummy' ON TABLE t IS 'classified'"),

@@ -7,17 +7,18 @@ mod tests {
         let lexed = crate::lex("CREATE TABLESPACE ts1 LOCATION '/tmp'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTablespaceStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn parse_create_tablespace_with_options() {
-        let lexed =
-            crate::lex("CREATE TABLESPACE ts1 LOCATION '' WITH (random_page_cost = 3.0)");
+        let lexed = crate::lex("CREATE TABLESPACE ts1 LOCATION '' WITH (random_page_cost = 3.0)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTablespaceStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -26,7 +27,8 @@ mod tests {
         let lexed = crate::lex("CREATE TABLESPACE ts1 OWNER foo LOCATION '/tmp'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = CreateTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = CreateTablespaceStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -35,7 +37,8 @@ mod tests {
         let lexed = crate::lex("DROP TABLESPACE ts1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = DropTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = DropTablespaceStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -44,7 +47,8 @@ mod tests {
         let lexed = crate::lex("DROP TABLESPACE IF EXISTS ts1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = DropTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = DropTablespaceStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -53,7 +57,8 @@ mod tests {
         let lexed = crate::lex("ALTER TABLESPACE ts SET (random_page_cost = 1.0)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTablespaceStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -64,7 +69,8 @@ mod tests {
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTablespaceStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -73,7 +79,8 @@ mod tests {
         let lexed = crate::lex("ALTER TABLESPACE ts RENAME TO ts2");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTablespaceStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -82,7 +89,8 @@ mod tests {
         let lexed = crate::lex("ALTER TABLESPACE ts OWNER TO foo");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterTablespaceStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterTablespaceStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 }

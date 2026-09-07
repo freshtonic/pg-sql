@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use recursa::Parse;
+    use recursa::ArenaParse;
 
     use super::literal::*;
 
@@ -308,7 +308,8 @@ mod tests {
         let lexed = crate::lex("'hello world'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = StringLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = StringLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "'hello world'");
         assert!(input.is_eof());
     }
@@ -318,7 +319,8 @@ mod tests {
         let lexed = crate::lex("'it''s'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = StringLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = StringLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "'it''s'");
     }
 
@@ -327,7 +329,8 @@ mod tests {
         let lexed = crate::lex("''");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = StringLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = StringLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "''");
     }
 
@@ -336,7 +339,8 @@ mod tests {
         let lexed = crate::lex("'   f           '");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = StringLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = StringLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "'   f           '");
     }
 
@@ -347,7 +351,8 @@ mod tests {
         let lexed = crate::lex("42");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = IntegerLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "42");
     }
 
@@ -356,7 +361,8 @@ mod tests {
         let lexed = crate::lex("0");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = IntegerLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "0");
     }
 
@@ -367,7 +373,8 @@ mod tests {
         let lexed = crate::lex("4.5");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = NumericLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "4.5");
     }
 
@@ -376,7 +383,8 @@ mod tests {
         let lexed = crate::lex(".5");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = NumericLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), ".5");
     }
 
@@ -385,7 +393,8 @@ mod tests {
         let lexed = crate::lex("2e3");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = NumericLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "2e3");
     }
 
@@ -394,7 +403,8 @@ mod tests {
         let lexed = crate::lex("4.5e10");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = NumericLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "4.5e10");
     }
 
@@ -403,7 +413,8 @@ mod tests {
         let lexed = crate::lex("1.5e-5");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = NumericLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "1.5e-5");
     }
 
@@ -412,7 +423,8 @@ mod tests {
         let lexed = crate::lex("4.4e131071");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = NumericLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "4.4e131071");
     }
 
@@ -421,7 +433,8 @@ mod tests {
         let lexed = crate::lex("100_000_000_000_000");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = IntegerLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "100_000_000_000_000");
     }
 
@@ -434,7 +447,8 @@ mod tests {
         let lexed = crate::lex("0x42F");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = IntegerLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "0x42F");
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -444,7 +458,8 @@ mod tests {
         let lexed = crate::lex("0X1A2b");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = IntegerLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "0X1A2b");
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -454,7 +469,8 @@ mod tests {
         let lexed = crate::lex("0xFF_FF");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = IntegerLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "0xFF_FF");
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -464,7 +480,8 @@ mod tests {
         let lexed = crate::lex("0o273");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = IntegerLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "0o273");
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -474,7 +491,8 @@ mod tests {
         let lexed = crate::lex("0b101");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = IntegerLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "0b101");
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -487,9 +505,10 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let lit = IntegerLit::parse(&mut input)
+            let lit_parsed = IntegerLit::parse_arena(&mut input)
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
-                .into_ast();
+                ;
+            let lit = lit_parsed.ast();
             assert_eq!(lit.text(), src);
             assert!(
                 input.is_eof(),
@@ -527,7 +546,8 @@ mod tests {
         let lexed = crate::lex("1_234.567_89");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = NumericLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = NumericLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "1_234.567_89");
     }
 
@@ -572,7 +592,8 @@ mod tests {
         let lexed = crate::lex("42");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = IntegerLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = IntegerLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "42");
     }
 
@@ -731,7 +752,8 @@ mod tests {
         let lexed = crate::lex("B'10'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = BitStringLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = BitStringLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "B'10'");
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -741,7 +763,8 @@ mod tests {
         let lexed = crate::lex("b'001'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = BitStringLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = BitStringLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "b'001'");
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -751,7 +774,8 @@ mod tests {
         let lexed = crate::lex("B''");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = BitStringLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = BitStringLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "B''");
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -761,7 +785,8 @@ mod tests {
         let lexed = crate::lex("X'1FF'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = HexStringLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = HexStringLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "X'1FF'");
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -771,7 +796,8 @@ mod tests {
         let lexed = crate::lex("x'42f'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = HexStringLit::parse(&mut input).unwrap().into_ast();
+        let lit_parsed = HexStringLit::parse_arena(&mut input).unwrap();
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "x'42f'");
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
@@ -817,9 +843,10 @@ mod tests {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let first = DollarStringLit::parse(&mut input)
+        let first_parsed = DollarStringLit::parse_arena(&mut input)
             .expect("first $$...$$ must parse")
-            .into_ast();
+            ;
+        let first = first_parsed.ast();
         assert_eq!(
             first.text(),
             "$$ A $$",
@@ -838,9 +865,10 @@ mod tests {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = DollarStringLit::parse(&mut input)
+        let lit_parsed = DollarStringLit::parse_arena(&mut input)
             .expect("named-tag dollar-string must parse")
-            .into_ast();
+            ;
+        let lit = lit_parsed.ast();
         assert_eq!(
             lit.text(),
             "$foo$ body $bar$ more $foo$",
@@ -856,9 +884,10 @@ mod tests {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let first = DollarStringLit::parse(&mut input)
+        let first_parsed = DollarStringLit::parse_arena(&mut input)
             .expect("first $foo$...$foo$ must parse")
-            .into_ast();
+            ;
+        let first = first_parsed.ast();
         assert_eq!(
             first.text(),
             "$foo$ A $foo$",
@@ -877,9 +906,10 @@ mod tests {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let first = DollarStringLit::parse(&mut input)
+        let first_parsed = DollarStringLit::parse_arena(&mut input)
             .expect("first $$...$$ must parse with classifier")
-            .into_ast();
+            ;
+        let first = first_parsed.ast();
         assert_eq!(
             first.text(),
             "$$ A $$",
@@ -894,9 +924,10 @@ mod tests {
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let lit = DollarStringLit::parse(&mut input)
+        let lit_parsed = DollarStringLit::parse_arena(&mut input)
             .expect("empty $$$$ must parse")
-            .into_ast();
+            ;
+        let lit = lit_parsed.ast();
         assert_eq!(lit.text(), "$$$$");
     }
 
@@ -911,15 +942,16 @@ mod tests {
         assert_eq!(lexed.errors().count(), 1, "invalid tag must be diagnosed");
         let mut input = lexed.input();
         assert!(
-            DollarStringLit::parse(&mut input).is_err(),
+            DollarStringLit::parse_arena(&mut input).is_err(),
             "$1$...$1$ must NOT parse as a dollar-string (tag cannot start with a digit)",
         );
         let lexed = crate::lex(src);
         assert_eq!(lexed.errors().count(), 1, "invalid tag must be diagnosed");
         let mut input = lexed.input();
-        let num = DollarNum::parse(&mut input)
+        let num_parsed = DollarNum::parse_arena(&mut input)
             .expect("$1 must parse as DollarNum")
-            .into_ast();
+            ;
+        let num = num_parsed.ast();
         assert_eq!(num.text(), "$1");
     }
 
@@ -960,9 +992,10 @@ mod tests {
             let lexed = crate::lex(word);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let id = Ident::parse(&mut input)
+            let id_parsed = Ident::parse_arena(&mut input)
                 .unwrap_or_else(|e| panic!("soft keyword {word:?} should parse as ident: {e}"))
-                .into_ast();
+                ;
+            let id = id_parsed.ast();
             assert_eq!(id.text(), word);
             assert!(input.is_eof(), "leftover after {word:?}");
         }
@@ -979,7 +1012,7 @@ mod tests {
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
             assert!(
-                Ident::parse(&mut input).is_err(),
+                Ident::parse_arena(&mut input).is_err(),
                 "reserved/clause keyword {word:?} must not parse as an identifier"
             );
         }
@@ -992,7 +1025,8 @@ mod tests {
         let lexed = crate::lex("my_table");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = Ident::parse(&mut input).unwrap().into_ast();
+        let id_parsed = Ident::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         assert_eq!(id.text(), "my_table");
     }
 
@@ -1001,7 +1035,8 @@ mod tests {
         let lexed = crate::lex("f1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = Ident::parse(&mut input).unwrap().into_ast();
+        let id_parsed = Ident::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         assert_eq!(id.text(), "f1");
     }
 
@@ -1010,7 +1045,8 @@ mod tests {
         let lexed = crate::lex("BOOLTBL1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = Ident::parse(&mut input).unwrap().into_ast();
+        let id_parsed = Ident::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         assert_eq!(id.text(), "BOOLTBL1");
     }
 
@@ -1019,7 +1055,7 @@ mod tests {
         let lexed = crate::lex("SELECT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        assert!(Ident::parse(&mut input).is_err());
+        assert!(Ident::parse_arena(&mut input).is_err());
     }
 
     #[test]
@@ -1027,7 +1063,7 @@ mod tests {
         let lexed = crate::lex("true");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        assert!(Ident::parse(&mut input).is_err());
+        assert!(Ident::parse_arena(&mut input).is_err());
     }
 
     #[test]
@@ -1035,7 +1071,7 @@ mod tests {
         let lexed = crate::lex("NULL");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        assert!(Ident::parse(&mut input).is_err());
+        assert!(Ident::parse_arena(&mut input).is_err());
     }
 
     #[test]
@@ -1044,7 +1080,7 @@ mod tests {
         let lexed = crate::lex("SELECT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        assert!(Ident::parse(&mut input).is_err());
+        assert!(Ident::parse_arena(&mut input).is_err());
         let input2_lexed = crate::lex("SELECT");
         assert_eq!(input2_lexed.errors().count(), 0, "lex errors in input2");
         let mut input2 = input2_lexed.input();
@@ -1059,9 +1095,10 @@ mod tests {
             let lexed = crate::lex(w);
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
-            let id = Ident::parse(&mut input)
+            let id_parsed = Ident::parse_arena(&mut input)
                 .unwrap_or_else(|_| panic!("{w} should parse as Ident"))
-                .into_ast();
+                ;
+            let id = id_parsed.ast();
             assert_eq!(id.text(), w);
         }
     }
@@ -1086,7 +1123,7 @@ mod tests {
             assert_eq!(lexed.errors().count(), 0, "lex errors in input");
             let mut input = lexed.input();
             assert!(
-                WindowRefNameIdent::parse(&mut input).is_err(),
+                WindowRefNameIdent::parse_arena(&mut input).is_err(),
                 "{w} must not parse as a window ref_name"
             );
         }
@@ -1097,7 +1134,8 @@ mod tests {
         let lexed = crate::lex("w1");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = WindowRefNameIdent::parse(&mut input).unwrap().into_ast();
+        let id_parsed = WindowRefNameIdent::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         let WindowRefNameIdent::Text(inner) = &id;
         assert_eq!(inner.text(), "w1");
     }
@@ -1107,7 +1145,8 @@ mod tests {
         let lexed = crate::lex("\"SELECT\"");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = Ident::parse(&mut input).unwrap().into_ast();
+        let id_parsed = Ident::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         assert_eq!(id.text(), "\"SELECT\"");
         assert!(input.is_eof());
     }
@@ -1117,7 +1156,8 @@ mod tests {
         let lexed = crate::lex("isfalse");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = Ident::parse(&mut input).unwrap().into_ast();
+        let id_parsed = Ident::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         assert_eq!(id.text(), "isfalse");
     }
 
@@ -1126,7 +1166,8 @@ mod tests {
         let lexed = crate::lex("booleq");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = Ident::parse(&mut input).unwrap().into_ast();
+        let id_parsed = Ident::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         assert_eq!(id.text(), "booleq");
     }
 
@@ -1135,7 +1176,8 @@ mod tests {
         let lexed = crate::lex("boolne");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = Ident::parse(&mut input).unwrap().into_ast();
+        let id_parsed = Ident::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         assert_eq!(id.text(), "boolne");
     }
 
@@ -1144,7 +1186,8 @@ mod tests {
         let lexed = crate::lex("isnul");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = Ident::parse(&mut input).unwrap().into_ast();
+        let id_parsed = Ident::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         assert_eq!(id.text(), "isnul");
     }
 
@@ -1153,7 +1196,8 @@ mod tests {
         let lexed = crate::lex("istrue");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = Ident::parse(&mut input).unwrap().into_ast();
+        let id_parsed = Ident::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         assert_eq!(id.text(), "istrue");
     }
 
@@ -1162,7 +1206,8 @@ mod tests {
         let lexed = crate::lex("pg_input_is_valid");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let id = Ident::parse(&mut input).unwrap().into_ast();
+        let id_parsed = Ident::parse_arena(&mut input).unwrap();
+        let id = id_parsed.ast();
         assert_eq!(id.text(), "pg_input_is_valid");
     }
 }

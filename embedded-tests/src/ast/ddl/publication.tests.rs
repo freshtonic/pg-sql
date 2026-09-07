@@ -14,7 +14,8 @@ mod tests {
         let lexed = crate::lex("ALTER PUBLICATION testpub1_forschema ADD TABLES IN SCHEMA foo (a, b)");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterPublicationStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterPublicationStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
@@ -25,13 +26,15 @@ mod tests {
         let lexed = crate::lex("ALTER PUBLICATION p ADD TABLES IN SCHEMA foo");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = AlterPublicationStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt_parsed = AlterPublicationStmt::parse(&mut input).unwrap();
+        let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
 
     #[test]
     fn create_publication_bare_roundtrips() {
-        let stmt: CreatePublicationStmt = parse_stmt("CREATE PUBLICATION testpub_default");
+        let stmt = parse_stmt::<CreatePublicationStmt>("CREATE PUBLICATION testpub_default");
+        let stmt = stmt.ast();
         assert_eq!(stmt.name.text(), "testpub_default");
         assert!(stmt.r#for.is_none());
         assert!(stmt.with.is_none());

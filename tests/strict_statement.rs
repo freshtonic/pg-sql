@@ -23,7 +23,7 @@ fn parses_one_complete_semantically_typed_statement() {
 
     assert!(input.is_eof(), "strict parsing must consume the statement");
     assert!(matches!(
-        parsed.into_ast(),
+        parsed.ast(),
         Statement::Query(query)
             if matches!(
                 &query.clause,
@@ -122,7 +122,7 @@ fn query_statement_owns_every_postgresql_query_prefix() {
         assert!(input.is_eof(), "strict query left input for {source:?}");
         // gram.y `SelectStmt` covers both shapes; pg-sql factors the
         // `with_clause` prefix once for every statement that admits it.
-        let is_query = match parsed.into_ast() {
+        let is_query = match parsed.ast() {
             Statement::Query(_) => true,
             Statement::With(with) => matches!(with.body, WithBody::Query(_)),
             _ => false,
@@ -155,7 +155,7 @@ fn parses_explain_without_optional_settings_as_a_guarded_statement() {
     let parsed = Statement::parse(&mut input).expect("strict EXPLAIN statement");
 
     assert!(input.is_eof(), "strict parsing must consume EXPLAIN's body");
-    let Statement::Explain(explain) = parsed.into_ast() else {
+    let Statement::Explain(explain) = parsed.ast() else {
         panic!("EXPLAIN must select the semantically typed statement variant");
     };
     assert!(explain.options().is_none());
