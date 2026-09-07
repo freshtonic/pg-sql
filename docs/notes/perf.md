@@ -1230,3 +1230,34 @@ Correctness evidence comprises Recursa's complete all-features workspace
 suite, pg-sql's PostgreSQL-oracle suite (including 234 differential files and
 1,121 passing embedded tests), and warnings-as-errors Clippy gates for both
 modified Recursa core and pg-sql.
+
+## Profile: 2026-09-08 — after compact provenance folding
+
+The committed compact-provenance trees (`pg-sql` `b7508a1`, Recursa
+`75e6563`) were profiled for 15 seconds on each canonical workload. Sampling
+throughput was 211,026.2 stmt/s for `corpus`, 166.1 stmt/s for
+`select_list_10000`, and 2,099.5 stmt/s for `bool_chain`; these figures include
+profiler overhead and are not benchmark baselines. Raw samples, folded stacks,
+statistics, and SVGs are under
+`docs/perf/flamegraphs/2026-09-07-b7508a1/` (the directory date is UTC).
+
+The next measured optimization candidates, in priority order, are:
+
+1. Remaining provenance folding. `OccurrenceStack::reduce` accounts for 21.4%
+   of corpus self samples, 21.0% of the wide select, and 25.1% of the boolean
+   chain. The earlier helper and destruction costs are gone, leaving the core
+   fold dispatcher and its corpus allocations.
+2. The LR driver. `lr::run` accounts for 20.4% of corpus self samples including
+   allocation, 16.8% of the wide select, and 18.2% of the boolean chain.
+3. Generated lexical bookkeeping. `__recursa_finalize` plus generated `lex`
+   orchestration account for 19.8% of corpus self samples, 18.8% of the wide
+   select, and 26.1% of the boolean chain. Actual Logos scanning is only
+   1.3–4.0%, so the cost is predominantly record finalization and parser-facing
+   bookkeeping.
+4. Arena list growth for very wide grammar lists. The generated select-target
+   `ArenaVec1::push` reduction accounts for 16.1% of the wide-select samples;
+   arena teardown surfaces separately as 4.7% in `madvise`.
+5. Recursive expression construction and movement. The generated `Expr::And`
+   action accounts for 12.0% of the boolean-chain samples, with simple
+   `Expr::ColumnRef` construction adding 4.3% and recursive `Expr` destruction
+   another 2.5%. The action allocates two arena boxes per boolean operator.
