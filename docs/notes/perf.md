@@ -1169,3 +1169,33 @@ suites, the hidden-ABI documentation policy, and all workspace doc tests. The
 Recursa workspace `-D warnings` gate passes. pg-sql's package gate passes; the
 workspace-wide command remains independently blocked by pg-psql's 21 existing
 LR conflicts.
+
+## Profile: 2026-09-08 — arena AST follow-up
+
+The committed arena-AST trees (`pg-sql` `dcab22e`, Recursa `ca2431f`) were
+profiled for 15 seconds on each canonical workload. Sampling throughput was
+169,090.3 stmt/s for `corpus`, 126.2 stmt/s for `select_list_10000`, and
+1,627.8 stmt/s for `bool_chain`; these figures include profiler overhead and
+are not benchmark baselines. Raw samples, folded stacks, statistics, and SVGs
+are under `docs/perf/flamegraphs/2026-09-07-dcab22e/` (the directory date is
+UTC).
+
+The next optimization candidates, in priority order, are:
+
+1. Provenance folding. `OccurrenceStack::reduce` accounts for 21.8–28.8% of
+   self samples, with `ProvenanceCollector::finish_repeated` adding 4.7–6.5%
+   and occurrence-vector destruction another 2.0–2.9%.
+2. The LR driver. `lr::run` accounts for 12.2–15.5% directly; corpus allocation
+   attributed to it adds 4.1%.
+3. Generated lexical finalization. `__recursa_finalize` accounts for
+   9.3–14.0%, while generated `lex` orchestration adds 4.5–7.0%. The finalizer
+   currently performs separate classification and diagnostic-normalization
+   passes over every record.
+4. Arena list growth. The generated `ArenaVec1::push` reduction for a wide
+   select list accounts for 15.8% (13.6% allocation); retained old bump-vector
+   buffers also surface as 7.8% in `madvise` when the parse arena is destroyed.
+5. Arena boxing in recursive expression reductions. The generated `Expr::And`
+   action, which performs two `ArenaBox::new_in` calls per operator, accounts
+   for 10.4% of the deep boolean workload. A simple `Expr::ColumnRef` move adds
+   another 3.6%, indicating that large enum movement/value-stack traffic also
+   deserves attention alongside allocation itself.
