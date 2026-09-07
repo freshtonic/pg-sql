@@ -1083,6 +1083,10 @@ pub struct JoinUsing<'input> {
 /// keep those longer spellings deterministic without admitting it after INNER
 /// or CROSS.
 #[derive(recursa::Node, Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "keep the public parser AST variants inline and source-compatible"
+)]
 pub enum JoinSuffix<'input> {
     /// `CROSS JOIN table_ref` and `NATURAL [join_type] JOIN table_ref`.
     Unqualified(UnqualifiedJoin<'input>),
@@ -1172,6 +1176,10 @@ pub struct TableRef<'input> {
 /// Variant ordering: `CurrentOf` must come before `Expr` since `CURRENT`
 /// is a specific keyword lead-in.
 #[derive(recursa::Node, Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "keep the public parser AST variants inline and source-compatible"
+)]
 pub enum WhereCondition<'input> {
     CurrentOf(WhereCurrentOf<'input>),
     Expr(Expr<'input>),
@@ -1338,6 +1346,10 @@ pub struct FetchFirstClause<'input> {
 ///
 /// `FetchFirst` and `Limit` start on distinct keywords (`FETCH` vs `LIMIT`).
 #[derive(recursa::Node, Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "keep the public parser AST variants inline and source-compatible"
+)]
 pub enum LimitingClause<'input> {
     FetchFirst(FetchFirstClause<'input>),
     Limit(LimitClause<'input>),

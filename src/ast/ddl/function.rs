@@ -437,6 +437,10 @@ pub enum FuncOption<'input> {
 /// bodies remain outside the issue-9 strict-statement grammar and surface
 /// as a structured parse error.
 #[derive(recursa::Node, Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "keep the public parser AST variants inline and source-compatible"
+)]
 pub enum RoutineBody<'input> {
     /// `RETURN expr` — SQL-standard single-expression function body.
     Return(ReturnOption<'input>),

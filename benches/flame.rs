@@ -176,9 +176,8 @@ fn load_workload(name: &str) -> Result<Vec<String>, String> {
                 let statements = statements
                     .into_iter()
                     .zip(kinds)
-                    .filter_map(|(statement, kind)| {
-                        (kind == &LegacyItemKind::Statement).then(|| statement.to_owned())
-                    })
+                    .filter(|(_, kind)| *kind == &LegacyItemKind::Statement)
+                    .map(|(statement, _)| statement.to_owned())
                     .collect();
                 inputs.extend(accepted_inputs(statements));
             }

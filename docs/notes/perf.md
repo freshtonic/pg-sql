@@ -1018,3 +1018,50 @@ Reports: `docs/benchmarks/2026-09-07T05-44-21Z-54fde18/` (before) and
 `docs/benchmarks/2026-09-07T05-50-40Z-54fde18/` (after). Profile:
 `docs/perf/flamegraphs/2026-09-07-54fde18-dirty/`. These run directories are
 ignored; this journal entry is the tracked record.
+
+## Benchmark: 2026-09-07 — Bison-shaped reduction dispatch
+
+The generated reducer was reshaped in five measured steps. Root semantic
+actions moved into cold leaf functions; the LR table gained a one-byte
+per-rule action flag so actionless rules bypass the reducer; global rule
+numbers now dispatch directly to coalesced semantic actions; the production
+grammar's rule population was audited; and the reducer became a monomorphized
+function item inside the LR loop. The tight corpus harness moved as follows
+(three runs per executable, median shown):
+
+| Stage | Statements/s | Change from previous | Change from baseline |
+| --- | --: | --: | --: |
+| Existing generated reducer | 110,688.8 | — | — |
+| Root actions split into leaves | 109,099.4 | -1.4% | -1.4% |
+| Actionless reductions bypass dispatch | 118,608.8 | +8.7% | +7.2% |
+| Global rule-to-action dispatch | 137,802.8 | +16.2% | +24.5% |
+| Reducer monomorphized into LR loop | 141,106.3 | +2.4% | +27.5% |
+
+The full 33,707-statement benchmark improved from 343.321 ms to 265.100 ms,
+a 22.8% reduction. PostgreSQL 17.9 took 39.488 ms and sqlparser 0.52 took
+213.699 ms, leaving pg-sql 6.714x PostgreSQL and 1.241x sqlparser. The result
+is a substantial dispatcher improvement, but it remains beyond the 1.25x
+PostgreSQL target.
+
+The rule audit found no helper-copy explosion. The grammar has 14,944 rules
+and 20,715 states: 10,745 type-origin rules, 1,504 start rules, 392 helper
+rules, two helper-copy rules, and 2,301 restriction rules. The 1,504 starts
+preserve the public parse-every-type contract; restrictions are already
+canonicalized by type, exclusion set, and minimum binding power. Collapsing
+those populations would therefore change the language or public contract.
+Coalescing equal semantic actions prevents this necessary grammar detail from
+becoming equal amounts of generated machine code. Of 621,493 table cells,
+65.9% of states act only by their default action.
+
+The post-change profile contains 8,238 main-thread samples. The standalone
+generated root dispatcher, formerly 1,880 samples (23.7%), is gone. Its work
+is now in the monomorphized LR loop (782 self samples, 9.5%) and a small
+generated reducer-call shim (267, 3.2%). The next dominant cluster is
+provenance and allocation: `OccurrenceStack::reduce` has 684 self samples
+(8.3%), `ParseContext::collect_occurrence` 508 (6.2%), `fold_site` 355
+(4.3%), and `nanov2_free` 638 (7.7%). This shifts the next optimization target
+from dispatch shape to occurrence/provenance ownership and allocation.
+
+Report: `docs/benchmarks/2026-09-07T07-07-51Z-048129c/`. Profile:
+`docs/perf/flamegraphs/2026-09-07-048129c/`. These run directories are ignored;
+this journal entry is the tracked record.

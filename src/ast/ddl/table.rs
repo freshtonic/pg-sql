@@ -295,6 +295,10 @@ pub struct GeneratedConstraint<'input> {
 ///
 /// Variant ordering: both start with `AS`; `IDENTITY` or `(` decides.
 #[derive(recursa::Node, Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "keep the public parser AST variants inline and source-compatible"
+)]
 pub enum GeneratedBody<'input> {
     Identity(GeneratedIdentityTail<'input>),
     Stored(GeneratedStoredTail<'input>),
@@ -760,6 +764,10 @@ pub struct LikeClause<'input> {
 /// tokens (`CONSTRAINT`, `PRIMARY`, `UNIQUE`, `FOREIGN`, `CHECK`) are
 /// keywords, while a `Column` starts with an identifier.
 #[derive(recursa::Node, Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "keep the public parser AST variants inline and source-compatible"
+)]
 pub enum ColumnOrConstraint<'input> {
     Like(LikeClause<'input>),
     Constraint(TableConstraint<'input>),
@@ -1459,6 +1467,10 @@ pub enum PartitionBoundSpec<'input> {
 /// - `GenericOptions` (FOREIGN-TABLE OPTIONS clause) last — `OPTIONS` is a
 ///   unique leading keyword.
 #[derive(recursa::Node, Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "keep the public parser AST variants inline and source-compatible"
+)]
 pub enum AlterTableCmd<'input> {
     // ADD ... — longer prefixes first.
     AddColumnIfNotExists(AddColumnIfNotExistsCmd<'input>),
