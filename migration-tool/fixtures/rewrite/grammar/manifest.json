@@ -50,7 +50,6 @@
       "expected": "tokens.expected.rs",
       "shapes": [
         "grammar_keyword_matching_ascii_insensitive",
-        "grammar_max_lookahead_five",
         "admission_all_word_kinds",
         "admission_col_id",
         "admission_type_function_name",

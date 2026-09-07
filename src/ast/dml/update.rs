@@ -16,8 +16,6 @@ use crate::tokens::literal;
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SingleAssignment<'input> {
     pub column: literal::Ident<'input>,
-    /// Greedy: a leading DOT, LBRACKET starts this element instead of ending `SingleAssignment` (bison shift preference).
-    #[greedy(DOT, LBRACKET)]
     pub indirection: Vec<crate::ast::shared::expr::IndirectionEl<'input>>,
     #[tok(EQ, this)]
     pub value: Expr<'input>,
@@ -30,8 +28,6 @@ pub struct SingleAssignment<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SetTarget<'input> {
     pub column: literal::Ident<'input>,
-    /// Greedy: a leading DOT, LBRACKET starts this element instead of ending `SetTarget` (bison shift preference).
-    #[greedy(DOT, LBRACKET)]
     pub indirection: Vec<crate::ast::shared::expr::IndirectionEl<'input>>,
 }
 

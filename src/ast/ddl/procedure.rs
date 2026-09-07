@@ -30,8 +30,6 @@ pub struct CreateProcedureStmt<'input> {
     #[tok(PROCEDURE, this)]
     pub name: crate::ast::shared::names::QualifiedName<'input>,
     pub args: FunctionParameters<'input>,
-    /// Greedy: any kind that can start this element continues it instead of ending `CreateProcedureStmt` (bison shift preference).
-    #[greedy(all)]
     pub options: Vec<FuncOption<'input>>,
     /// gram.y `opt_routine_body`, after `opt_createfunc_opt_list`.
     pub body: Option<RoutineBody<'input>>,

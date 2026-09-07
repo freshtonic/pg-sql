@@ -12,7 +12,7 @@ or handwritten lexer repair passes.
 | `dollar-and-nested-comment.sql` | Capture the matching dollar body; exclude the nested comment from the significant stream at this phase. | `same_delimiter` plus `ignore { BlockComment => nested(...) }`. Recursa #93 must add retained immutable gap records before the public document seam; this is not final ADR-0004 acceptance. |
 | `numeric-callback.sql` | Reject at the numeric token with trailing-junk location. | `next_exclusion` with `[A-Za-z0-9_]` excluded after the match. |
 | `window-ref-postcondition.sql` | Accept unquoted, quoted, and Unicode-quoted names as window references. | A source-backed identifier bound to `WindowRefName = ColId - { ROWS, RANGE, GROUPS }`. |
-| `function-table-alias-overlap.sql` | Preserve alias `t` and typed column `a int`. | Frozen FIRST-k dispatch with consumer `max_lookahead = 5`; this remains separate from lexical matcher migration. |
+| `function-table-alias-overlap.sql` | Preserve alias `t` and typed column `a int`. | LR conflict behavior; this remains separate from lexical matcher migration. |
 
 Scanner-correct psql directive boundaries belong to issue #12. This migration
 removes the generic `RestOfLine` parser but emits neither a `physical_line`

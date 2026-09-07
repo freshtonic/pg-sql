@@ -67,13 +67,8 @@ pub struct TextSearchWithDicts<'input> {
 /// `ALTER_TSCONFIG_ADD_MAPPING` branch.
 ///
 /// `tokens` and `dicts` are inlined as flat fields (rather than wrapped in
-/// `TextSearchTokenList` / `TextSearchWithDicts`) so the build-time
-/// first-set prefix dispatch sees a single-token chain
-/// (`ADD MAPPING FOR …`). If we nested `TextSearchTokenList` here, codegen
-/// would extend its first-set through both `FOR` and the trailing `WITH`,
-/// assuming the two are adjacent — but they're separated by the token
-/// list, so the prefix-driven parse path fails and the whole statement
-/// surfaces as a file-level parse error.
+/// `TextSearchTokenList` / `TextSearchWithDicts`) so the LR production mirrors
+/// gram.y's `ADD MAPPING FOR name_list WITH any_name_list` sequence directly.
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(ADD, MAPPING, FOR, this)]
 pub struct TSConfigAddMapping<'input> {

@@ -3203,8 +3203,8 @@ mod tests {
     /// `IN ((SELECT 1), (SELECT 2))` — gram.y `in_expr → '(' expr_list ')'`
     /// where each `expr_list` element is a parenthesized subquery expression.
     /// The expression-list and grouped-query alternatives share the `(`
-    /// prefix; generated balanced dispatch selects them after the matching
-    /// close while bare subqueries remain bounded decisions.
+    /// prefix; the LR state after the inner close distinguishes a comma from
+    /// a set operator, while bare subqueries have their own leading tokens.
     #[test]
     fn parse_in_list_of_parenthesised_subqueries() {
         for src in [

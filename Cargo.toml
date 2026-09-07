@@ -19,6 +19,12 @@ debug = "line-tables-only"
 [profile.dev.build-override]
 opt-level = 3
 
+# Release builds use the same generator. Cargo otherwise compiles build
+# dependencies at opt-level 0, making a forced LR generation dominate the
+# edit/build loop even though the generated crate itself now compiles quickly.
+[profile.release.build-override]
+opt-level = 3
+
 # The library carries no unit tests and no doctests: the embedded test bodies
 # compile as the `embedded` integration target, so `cargo test` builds the
 # generated crate once and skips the rustdoc pass over it.

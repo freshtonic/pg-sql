@@ -1,4 +1,4 @@
-//! Table-driven parser smoke gate. The PostgreSQL corpus differential is the
+//! Recursa parser smoke gate. The PostgreSQL corpus differential is the
 //! exhaustive acceptance gate; these cases keep common successes and failures
 //! cheap to diagnose.
 
@@ -36,7 +36,7 @@ const REJECTED: &[&str] = &[
 ];
 
 #[test]
-fn table_parser_accepts_representative_statements() {
+fn recursa_parser_accepts_representative_statements() {
     for source in ACCEPTED {
         let lexed = lex(source);
         assert!(
@@ -45,16 +45,13 @@ fn table_parser_accepts_representative_statements() {
         );
         let mut input = lexed.input();
         Statement::parse(&mut input)
-            .unwrap_or_else(|error| panic!("table-driven parser rejects {source:?}: {error}"));
-        assert!(
-            input.is_eof(),
-            "table-driven parser left input for {source:?}"
-        );
+            .unwrap_or_else(|error| panic!("Recursa parser rejects {source:?}: {error}"));
+        assert!(input.is_eof(), "Recursa parser left input for {source:?}");
     }
 }
 
 #[test]
-fn table_parser_rejects_representative_invalid_statements() {
+fn recursa_parser_rejects_representative_invalid_statements() {
     for source in REJECTED {
         let lexed = lex(source);
         assert!(
@@ -64,7 +61,7 @@ fn table_parser_rejects_representative_invalid_statements() {
         let mut input = lexed.input();
         assert!(
             Statement::parse(&mut input).is_err(),
-            "table-driven parser accepts {source:?}"
+            "Recursa parser accepts {source:?}"
         );
     }
 }
@@ -83,11 +80,8 @@ fn string_continuation_rejects_block_comments_and_preserves_newlines() {
     );
     let mut input = lexed.input();
     let parsed = Statement::parse(&mut input)
-        .unwrap_or_else(|error| panic!("table-driven parser rejects {valid:?}: {error}"));
-    assert!(
-        input.is_eof(),
-        "table-driven parser left input for {valid:?}"
-    );
+        .unwrap_or_else(|error| panic!("Recursa parser rejects {valid:?}: {error}"));
+    assert!(input.is_eof(), "Recursa parser left input for {valid:?}");
     let formatted = format_tokens_sql(&parsed.into_ast(), PrettyConfig::default());
     assert!(
         formatted.contains("'first line'")
@@ -107,6 +101,6 @@ fn string_continuation_rejects_block_comments_and_preserves_newlines() {
     let result = Statement::parse(&mut input);
     assert!(
         result.is_err() || !input.is_eof(),
-        "table-driven parser must not consume a block-comment-separated string continuation"
+        "Recursa parser must not consume a block-comment-separated string continuation"
     );
 }

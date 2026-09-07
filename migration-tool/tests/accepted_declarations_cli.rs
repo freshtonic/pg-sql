@@ -213,7 +213,7 @@ fn cli_rewrites_frozen_required_tokens_hooks_and_raw_line_omissions() {
     let crate_root = fs::read_to_string(destination.join("src/lib.rs")).unwrap();
     assert_eq!(crate_root.matches("recursa::grammar!").count(), 1);
     assert!(crate_root.contains(
-        "recursa::grammar! {\n    module = crate,\n    keyword_matching = ascii_insensitive,\n    max_lookahead = 5,\n}"
+        "recursa::grammar! {\n    module = crate,\n    keyword_matching = ascii_insensitive,\n}"
     ));
     assert!(!crate_root.contains("__firstset"));
     assert!(!crate_root.contains("Generated first-set dispatch helpers"));

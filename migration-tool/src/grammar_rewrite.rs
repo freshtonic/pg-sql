@@ -54,7 +54,6 @@ pub const SUPPORTED_SHAPES: &[&str] = &[
     "derive_stack",
     "fixed_syntax",
     "grammar_keyword_matching_ascii_insensitive",
-    "grammar_max_lookahead_five",
     "handwritten_bare_alias_name",
     "handwritten_custom_op",
     "handwritten_rest_of_line",
@@ -3271,7 +3270,7 @@ fn plan_crate_grammar_declaration(source: &str) -> Result<Vec<SpanEdit>, Grammar
     let mut edits = vec![SpanEdit {
         start: anchor,
         end: anchor,
-        replacement: "recursa::grammar! {\n    module = crate,\n    keyword_matching = ascii_insensitive,\n    max_lookahead = 5,\n}\n\n"
+        replacement: "recursa::grammar! {\n    module = crate,\n    keyword_matching = ascii_insensitive,\n}\n\n"
             .into(),
     }];
     for module in OBSOLETE_ROOT_MODULES {
@@ -4135,7 +4134,7 @@ const REWRITES: &[(&str, &str)] = &[
     ),
     (
         "    module = crate::grammar,\n}",
-        "    module = crate::grammar,\n    keyword_matching = ascii_insensitive,\n    max_lookahead = 5,\n}",
+        "    module = crate::grammar,\n    keyword_matching = ascii_insensitive,\n}",
     ),
     (
         "    classes { bare_label_keywords = keywords where bare_label }\n    targets {\n        ColId: literal::Ident admits UNRESERVED, COL_NAME,\n        type_function_name: literal::Ident admits UNRESERVED, TYPE_FUNC_NAME,\n        NonReservedWord: literal::Ident admits UNRESERVED, COL_NAME, TYPE_FUNC_NAME,\n        ColLabel: literal::Ident admits UNRESERVED, COL_NAME, TYPE_FUNC_NAME, RESERVED,\n        BareColLabel: literal::Ident admits bare_label_keywords,\n    }",

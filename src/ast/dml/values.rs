@@ -116,8 +116,8 @@ pub enum SimpleSelect<'input> {
 /// gram.y `select_clause: simple_select | select_with_parens`
 /// (gram.y:12757).
 ///
-/// Variant ordering: both alternatives can begin with `(`, and they part
-/// company after the balanced group — a set operation there continues a
+/// Both alternatives can begin with `(`, and they part company after the
+/// completed group — a set operation there continues a
 /// `simple_select`, and anything else ends the `select_with_parens`.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum SelectClause<'input> {

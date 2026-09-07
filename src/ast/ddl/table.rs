@@ -169,8 +169,6 @@ pub struct ReferencesConstraint<'input> {
     pub table: crate::ast::shared::names::QualifiedName<'input>,
     pub columns: Option<ReferencedColumnList<'input>>,
     pub match_clause: Option<MatchClause>,
-    /// Greedy: a leading ON starts this element instead of ending `ReferencesConstraint` (bison shift preference).
-    #[greedy(ON)]
     pub actions: Vec<OnAction<'input>>,
 }
 
@@ -190,8 +188,6 @@ pub struct CheckConstraint<'input> {
 pub struct TableCheck<'input> {
     #[tok(CHECK, LPAREN, this, RPAREN)]
     pub expr: crate::ast::shared::expr::Expr<'input>,
-    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `TableCheck` (bison shift preference).
-    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
@@ -363,10 +359,6 @@ pub struct DefaultConstraint<'input> {
         Or,
         And
     )))]
-    /// Greedy: `NOT` is not an extender of this restricted expression, but
-    /// the analysis does not consult the exclusion set for the overlap check
-    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
-    #[greedy(NOT)]
     #[tok(DEFAULT, this)]
     pub expr: crate::ast::shared::expr::Expr<'input>,
 }
@@ -479,22 +471,6 @@ pub struct ColumnDef<'input> {
     pub type_name: crate::ast::shared::expr::CastType<'input>,
     pub collate: Option<CollateClause<'input>>,
     pub column_options: Option<CreateGenericOptions<'input>>,
-    /// Greedy: a leading token from any of 11 kinds starts this element instead of ending `ColumnDef` (bison shift preference).
-    #[greedy(
-        CHECK,
-        COMPRESSION,
-        CONSTRAINT,
-        DEFAULT,
-        GENERATED,
-        NOT,
-        NULL,
-        PRIMARY,
-        REFERENCES,
-        STORAGE,
-        UNIQUE,
-        DEFERRABLE,
-        INITIALLY
-    )]
     pub constraints: Vec<ColumnConstraint<'input>>,
 }
 
@@ -565,8 +541,6 @@ pub struct TablePrimaryKey<'input> {
     #[tok(PRIMARY, KEY, this)]
     pub body: IndexedConstraintBody<'input>,
     /// gram.y `ConstraintAttributeSpec`.
-    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `TablePrimaryKey` (bison shift preference).
-    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
@@ -595,8 +569,6 @@ pub struct TableUnique<'input> {
     pub nulls: Option<NullsDistinctQualifier>,
     pub body: IndexedConstraintBody<'input>,
     /// gram.y `ConstraintAttributeSpec`.
-    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `TableUnique` (bison shift preference).
-    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
@@ -616,8 +588,6 @@ pub struct TableForeignKey<'input> {
     pub columns: ForeignKeyColumnList<'input>,
     pub references: ReferencesConstraint<'input>,
     /// gram.y `ConstraintAttributeSpec` after `key_actions`.
-    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `TableForeignKey` (bison shift preference).
-    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
@@ -700,8 +670,6 @@ pub struct TableExclude<'input> {
     /// `WHERE (expr)` partial-constraint predicate (parens mandatory).
     pub where_clause: Option<ExclusionWhereClause<'input>>,
     /// gram.y `ConstraintAttributeSpec`.
-    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `TableExclude` (bison shift preference).
-    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 
@@ -779,8 +747,6 @@ pub enum LikeOption {
 pub struct LikeClause<'input> {
     #[tok(LIKE, this)]
     pub source: crate::ast::shared::names::QualifiedName<'input>,
-    /// Greedy: a leading EXCLUDING, INCLUDING starts this element instead of ending `LikeClause` (bison shift preference).
-    #[greedy(EXCLUDING, INCLUDING)]
     pub options: Vec<LikeOption>,
 }
 
@@ -960,22 +926,6 @@ pub struct PartitionColumnOptionDef<'input> {
     #[presence(WITH, OPTIONS)]
     pub with_options: bool,
     pub collate: Option<CollateClause<'input>>,
-    /// Greedy: a leading token from any of 11 kinds starts this element instead of ending `PartitionColumnOptionDef` (bison shift preference).
-    #[greedy(
-        CHECK,
-        COMPRESSION,
-        CONSTRAINT,
-        DEFAULT,
-        GENERATED,
-        NOT,
-        NULL,
-        PRIMARY,
-        REFERENCES,
-        STORAGE,
-        UNIQUE,
-        DEFERRABLE,
-        INITIALLY
-    )]
     pub constraints: Vec<ColumnConstraint<'input>>,
 }
 
@@ -1330,8 +1280,8 @@ pub struct DropTableStmt<'input> {
 /// `ALTER TABLE ...` — Postgres' `AlterTableStmt` (table object kind), plus
 /// the table-shaped branches of `RenameStmt` and `AlterObjectSchemaStmt`.
 ///
-/// pg-sql's dispatcher commits at `ALTER TABLE`, so this one struct must cover
-/// every shape that begins with those two keywords:
+/// pg-sql keeps one LR production family for `ALTER TABLE`, so this one struct
+/// covers every shape that begins with those two keywords:
 ///
 /// - `ALTER TABLE [IF EXISTS] [ONLY] name [*] alter_table_cmds`
 /// - `ALTER TABLE [IF EXISTS] [ONLY] name [*] partition_cmd`
@@ -1626,8 +1576,6 @@ pub struct AlterConstraintCmd<'input> {
     #[tok(ALTER, CONSTRAINT, this)]
     pub name: literal::Ident<'input>,
     /// gram.y `ConstraintAttributeSpec`.
-    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `AlterConstraintCmd` (bison shift preference).
-    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub attrs: Vec<crate::ast::ddl::trigger::ConstraintAttributeElem>,
 }
 

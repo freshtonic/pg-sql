@@ -63,7 +63,7 @@ fn variable_set_stmt_keeps_scope_prefixes_and_special_rests() {
 }
 
 /// `UESCAPE` remains an ordinary bare label unless it introduces the Unicode
-/// string escape-clause shape. The table-driven feed classifies the latter
+/// string escape-clause shape. The LR token feed classifies the latter
 /// with `UESCAPE_LA` while preserving the source spelling in the AST.
 #[test]
 fn unicode_escape_clause_and_bare_uescape_label_remain_distinct() {

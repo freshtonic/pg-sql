@@ -114,8 +114,6 @@ pub struct QualifiedName<'input> {
     pub first: crate::tokens::ColId<'input>,
     /// gram.y `indirection`: each part after a dot is `attr_name`, a
     /// `ColLabel` (any keyword class).
-    /// Greedy: a leading DOT starts this element instead of ending `QualifiedName` (bison shift preference).
-    #[greedy(DOT)]
     pub rest: Vec<QualifiedNamePart<'input>>,
 }
 
@@ -168,8 +166,8 @@ impl<'input> FuncDefName<'input> {
 
 /// `RENAME TO new_name` — the rename action shared by many ALTER
 /// statements. Postgres routes most of these through `RenameStmt`, but
-/// pg-sql's dispatcher commits on the leading `ALTER objtype ...`
-/// keywords, so each `Alter*Stmt` re-models its own rename branch.
+/// pg-sql keeps one LR production family per leading `ALTER objtype ...`
+/// form, so each `Alter*Stmt` re-models its own rename branch.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct RenameTo<'input> {
     #[tok(RENAME, TO, this)]
@@ -178,8 +176,9 @@ pub struct RenameTo<'input> {
 
 /// `OWNER TO RoleSpec` — the owner-change action shared by many ALTER
 /// statements. Postgres routes most of these through `AlterOwnerStmt`,
-/// but pg-sql's dispatcher commits on the leading `ALTER objtype ...`
-/// keywords, so each `Alter*Stmt` re-models its own owner branch.
+/// but pg-sql keeps one LR production family per leading
+/// `ALTER objtype ...` form, so each `Alter*Stmt` re-models its own owner
+/// branch.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct OwnerTo<'input> {
     #[tok(OWNER, TO, this)]
@@ -189,8 +188,8 @@ pub struct OwnerTo<'input> {
 /// `SET SCHEMA name` — the set-schema action shared by ALTER FOREIGN
 /// TABLE, ALTER TABLE, ALTER VIEW, ALTER MATERIALIZED VIEW, etc.
 /// Postgres routes most of these through `AlterObjectSchemaStmt`, but
-/// pg-sql's dispatcher commits on the leading `ALTER objtype ...`
-/// keywords, so each `Alter*Stmt` re-models its own set-schema branch.
+/// pg-sql keeps one LR production family per leading `ALTER objtype ...`
+/// form, so each `Alter*Stmt` re-models its own set-schema branch.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SetSchemaClause<'input> {
     #[tok(SET, SCHEMA, this)]
@@ -416,8 +415,6 @@ pub enum QualifiedOperatorName<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct QualifiedOperatorPath<'input> {
     pub first: QualifiedOperatorPrefix<'input>,
-    /// Greedy: any kind that can start this element continues it instead of ending `QualifiedOperatorPath` (bison shift preference).
-    #[greedy(all)]
     pub rest: Vec<QualifiedOperatorPrefix<'input>>,
     pub name: OperatorName<'input>,
 }

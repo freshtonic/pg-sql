@@ -367,8 +367,7 @@ pub struct FuncTableRef<'input> {
 /// corpus: `CAST(expr AS type)` and `COLLATION FOR (expr)`. Extend this
 /// enum as new corpus statements demand additional special forms.
 ///
-/// Variant ordering: keyword-led forms in declaration order; each variant's
-/// leading token is distinct, so the first-set tree dispatches cleanly.
+/// Each keyword-led form has a distinct leading token.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum SpecialFuncTableExpr<'input> {
     /// `CAST(expr AS type [COLLATE "c"])`.
@@ -660,10 +659,6 @@ pub struct XmlTableColumnPath<'input> {
         Or,
         And
     )))]
-    /// Greedy: `NOT` is not an extender of this restricted expression, but
-    /// the analysis does not consult the exclusion set for the overlap check
-    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
-    #[greedy(NOT)]
     #[tok(PATH, this)]
     pub xpath: Box<Expr<'input>>,
 }
@@ -703,10 +698,6 @@ pub struct XmlTableColumnDefault<'input> {
         Or,
         And
     )))]
-    /// Greedy: `NOT` is not an extender of this restricted expression, but
-    /// the analysis does not consult the exclusion set for the overlap check
-    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
-    #[greedy(NOT)]
     #[tok(DEFAULT, this)]
     pub value: Box<Expr<'input>>,
 }
@@ -1005,8 +996,8 @@ pub enum SimpleTableRef<'input> {
     XmlTable(Box<XmlTableRef<'input>>),
     RowsFrom(Box<RowsFromRef<'input>>),
     /// `CAST(expr AS type) [alias]`, `COLLATION FOR (expr) [alias]`. Each
-    /// special form is keyword-led so the first-set tree disambiguates
-    /// against `Func` and `Table` cleanly.
+    /// special form is keyword-led, giving it distinct LR actions from
+    /// `Func` and `Table`.
     SpecialFunc(Box<SpecialFuncTableRef<'input>>),
     Paren(ParenTableRef<'input>),
     Only(OnlyTableRef<'input>),
@@ -1172,8 +1163,6 @@ pub struct TableSampleRepeatable<'input> {
 pub struct TableRef<'input> {
     pub base: SimpleTableRef<'input>,
     pub tablesample: Option<TableSampleClause<'input>>,
-    /// Greedy: a leading token from any of 7 kinds starts this element instead of ending `TableRef` (bison shift preference).
-    #[greedy(CROSS, FULL, INNER, JOIN, LEFT, NATURAL, RIGHT)]
     pub joins: Vec<JoinSuffix<'input>>,
 }
 
@@ -1572,15 +1561,6 @@ pub struct SelectStmt<'input> {
     /// `opt_target_list` is nullable, so a bare `SELECT` with no targets,
     /// no `INTO` and no `FROM` is a complete `simple_select` (`select;`).
     ///
-    /// Greedy: a target list begins with an identifier, and the identifier
-    /// admission sets reachable from a target item (`ColId`, the function and
-    /// type-name families, `BareColLabel`) cover the unreserved keyword
-    /// classes. Only `NULL` and `ABSENT` are both startable here and able to
-    /// follow `SelectStmt`, so the commitment is named exactly rather than
-    /// with `all`. A reserved keyword such as `UNION`, `EXCEPT` or
-    /// `INTERSECT` is not in FIRST(`SelectHead`) at all, so a targetless
-    /// `SELECT` is reached for it and composes as a set-operation operand
-    /// (issue #55).
     #[pretty(break_before = soft)]
     pub head: Option<SelectHead<'input>>,
     #[pretty(break_before = soft)]

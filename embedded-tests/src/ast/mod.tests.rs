@@ -555,7 +555,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt = Statement::parse(&mut input).unwrap().into_ast();
         // All query forms share the Subquery path so SELECT, VALUES, TABLE,
-        // WITH, parentheses, and set operations have one predictive branch.
+        // WITH, parentheses, and set operations share one Subquery path.
         assert!(matches!(stmt, Statement::Query(_)));
     }
 

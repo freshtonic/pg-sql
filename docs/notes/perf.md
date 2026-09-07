@@ -908,8 +908,8 @@ Report: `docs/benchmarks/2026-09-04T09-12-51Z-eb16f47/` (`report.md`,
 lookahead filters mirroring `parser.c`, a `precedence` block mirroring
 `gram.y`'s, node restructurings that mirror their `gram.y` nonterminals, the
 `ESCAPE` clause as an attached Pratt operand, a real custom-prefix Pratt
-variant, `DEFAULT` excluded from `b_expr` operands, and every `#[greedy(...)]`
-acceptance made exact against recursa's now-honoured exclusions. Every Pratt
+variant, `DEFAULT` excluded from `b_expr` operands, and the optional-viability
+annotations active in that experiment. Every Pratt
 binding power was rescaled by ten to make room for `gram.y`'s keyword levels.
 
 **Question.** The work exists to make the grammar LALR-clean. Did it cost the

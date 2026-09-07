@@ -711,17 +711,12 @@ mod tests {
     /// Corpus: `select * from json_populate_recordset(row(0::int),'[...]') q (a text, b text)`
     /// — function-call FROM source with a bare-alias-name column-def list (no AS).
     ///
-    /// DEFERRED: the `FuncTableAlias` enum disambiguates via first-token kind
-    /// only, and both `ColumnDefList` and `Plain(TableAlias)` start with Ident
-    /// (since `ColumnDefList::name` is `Option<AliasName>`). The codegen
-    /// dispatcher commits on `Plain` for any non-`AS` first token, so the bare-
-    /// name + column-def-list form (`q (a text, b text)`) falls into
-    /// `Plain(TableAlias::Bare)` and the columns survive as leftover. Fixing
-    /// this needs either a recursa-level longest-match-wins fallback for
-    /// overlapping enum first-sets, or restructuring `FuncTableAlias` so each
-    /// alternative has a distinct prefix (e.g. require the LParen first).
-    /// Affects 8 `json_populate_recordset(...) q (a text, b text)` PG-accepts
-    /// fallbacks across json.sql / jsonb.sql.
+    /// This was deferred when the old generated first-token dispatcher chose
+    /// the plain alias before seeing the typed columns. `FuncTableAlias` now
+    /// parses the alias head once and lets the LR grammar distinguish each
+    /// optional column type. The ignored identity remains pinned by the
+    /// immutable migration reconciliation contract; run it explicitly when
+    /// changing that contract.
     #[test]
     #[ignore]
     fn parse_select_func_table_bare_alias_col_def() {

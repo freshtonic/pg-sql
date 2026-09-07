@@ -176,15 +176,13 @@ pub struct AlterGenericOptions<'input> {
 /// plus the `RENAME TO` / `OWNER TO` branches from `RenameStmt` /
 /// `AlterOwnerStmt`.
 ///
-/// Variant ordering: keyword-distinct branches first (`Rename`,
-/// `Owner`, `Options`). The `Version` branch covers both `VERSION
+/// The branches begin with distinct keywords. The `Version` branch covers
+/// both `VERSION
 /// sconst` (bare) and `VERSION sconst OPTIONS (...)` (with trailing
 /// generic-options clause). Modelling both forms as one struct with
-/// an `Option<AlterGenericOptions>` tail keeps recursa's first-set
-/// prefix dispatch single-token (just `VERSION`), since two
-/// variants sharing the `VERSION` prefix would otherwise need
-/// multi-token first-set lookahead that doesn't account for the
-/// version literal between `VERSION` and `OPTIONS`.
+/// an `Option<AlterGenericOptions>` tail keeps the shared `VERSION sconst`
+/// prefix in one production and leaves the LR parser to decide whether the
+/// `OPTIONS` tail is present.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum AlterServerAction<'input> {
     Rename(RenameTo<'input>),
@@ -225,21 +223,18 @@ pub struct AlterServerStmt<'input> {
 /// alter_generic_options | ALTER FOREIGN DATA WRAPPER name fdw_options`
 /// for the branches that begin with `HANDLER` / `NO` / `VALIDATOR`.
 ///
-/// `head` is a single mandatory `FdwOption` (so this variant has a
-/// concrete first-set: `HANDLER` | `NO` | `VALIDATOR`); `rest` collects
+/// `head` is a single mandatory `FdwOption` (so this variant begins with
+/// `HANDLER` | `NO` | `VALIDATOR`); `rest` collects
 /// any further fdw_options; `generic` is the optional trailing
 /// `alter_generic_options` (`OPTIONS (...)`).
 ///
 /// The case where `alter_generic_options` is the *only* clause (no
 /// leading fdw_options) is modelled by the sibling
-/// [`AlterFdwAction::GenericOpts`] variant. Splitting these two avoids
-/// a struct whose first field is an empty-allowed `Vec<FdwOption>` —
-/// such a struct has an empty first-set and breaks enum peek dispatch.
+/// [`AlterFdwAction::GenericOpts`] variant. Splitting these two gives the LR
+/// grammar one non-nullable option-led production and one `OPTIONS` production.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterFdwOptsAction<'input> {
     pub head: FdwOption<'input>,
-    /// Greedy: a leading HANDLER, NO, VALIDATOR starts this element instead of ending `AlterFdwOptsAction` (bison shift preference).
-    #[greedy(HANDLER, NO, VALIDATOR)]
     pub rest: Vec<FdwOption<'input>>,
     pub generic: Option<AlterGenericOptions<'input>>,
 }
@@ -248,7 +243,7 @@ pub struct AlterFdwOptsAction<'input> {
 /// Postgres' `AlterFdwStmt` plus the `RENAME TO` / `OWNER TO` branches
 /// from `RenameStmt` / `AlterOwnerStmt`.
 ///
-/// Variant ordering: each variant has disjoint first tokens.
+/// Each variant has disjoint first tokens.
 /// - `Rename` — `RENAME`
 /// - `Owner` — `OWNER`
 /// - `FdwOpts` — `HANDLER` | `NO` | `VALIDATOR` (one or more
@@ -256,11 +251,9 @@ pub struct AlterFdwOptsAction<'input> {
 /// - `GenericOpts` — `OPTIONS` (`alter_generic_options` alone, no
 ///   leading fdw_options)
 ///
-/// The `alter_generic_options` and `fdw_options` clauses are split into
-/// two variants instead of one struct with an optional Vec, because a
-/// struct whose first field is a possibly-empty `Vec<FdwOption>` has an
-/// empty first-set and the enum's combined peek regex can't dispatch on
-/// `OPTIONS`. Splitting gives each variant a concrete first-set.
+/// The `alter_generic_options` and `fdw_options` clauses are split into two
+/// variants instead of one struct with a nullable leading `Vec<FdwOption>`,
+/// so the LR grammar has an explicit `OPTIONS`-only production.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum AlterFdwAction<'input> {
     Rename(RenameTo<'input>),
@@ -400,8 +393,6 @@ pub struct FdwValidatorOption<'input> {
 pub struct CreateFdwBody<'input> {
     #[tok(DATA, WRAPPER, this)]
     pub name: crate::tokens::ColId<'input>,
-    /// Greedy: a leading HANDLER, NO, VALIDATOR starts this element instead of ending `CreateFdwBody` (bison shift preference).
-    #[greedy(HANDLER, NO, VALIDATOR)]
     pub fdw_options: Vec<FdwOption<'input>>,
     pub options: Option<CreateGenericOptions<'input>>,
 }

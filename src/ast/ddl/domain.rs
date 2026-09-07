@@ -72,10 +72,6 @@ pub struct DomainDefault<'input> {
         Or,
         And
     )))]
-    /// Greedy: `NOT` is not an extender of this restricted expression, but
-    /// the analysis does not consult the exclusion set for the overlap check
-    /// (as `PositionInner` keeps `#[greedy(IN)]`), so the annotation stays.
-    #[greedy(NOT)]
     #[tok(DEFAULT, this)]
     pub expr: Box<Expr<'input>>,
 }
@@ -110,8 +106,6 @@ pub struct CreateDomainStmt<'input> {
     #[tok(optional(AS), this)]
     pub type_name: CastType<'input>,
     pub collate: Option<DomainCollate<'input>>,
-    /// Greedy: a leading token from any of 5 kinds starts this element instead of ending `CreateDomainStmt` (bison shift preference).
-    #[greedy(CHECK, CONSTRAINT, DEFAULT, NOT, NULL)]
     pub constraints: Vec<DomainConstraint<'input>>,
 }
 
@@ -132,8 +126,6 @@ pub struct DropDomainStmt<'input> {
 pub struct AlterDomainCheckConstraint<'input> {
     #[tok(CHECK, LPAREN, this, RPAREN)]
     pub expr: Box<Expr<'input>>,
-    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `AlterDomainCheckConstraint` (bison shift preference).
-    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub attrs: Vec<ConstraintAttributeElem>,
 }
 
@@ -149,8 +141,6 @@ pub struct AlterDomainCheckConstraint<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(NOT, NULL, this)]
 pub struct AlterDomainNotNullConstraint {
-    /// Greedy: a leading DEFERRABLE, INITIALLY, NO, NOT starts this element instead of ending `AlterDomainNotNullConstraint` (bison shift preference).
-    #[greedy(DEFERRABLE, INITIALLY, NO, NOT)]
     pub attrs: Vec<ConstraintAttributeElem>,
 }
 

@@ -54,12 +54,10 @@ pub struct PrepareTransactionBody<'input> {
 
 /// Body of a `PREPARE` statement.
 ///
-/// Variant ordering: both variants share a 1-token first-set. `Transaction`
-/// matches only the `TRANSACTION` keyword; `Standard` matches any word
-/// (`AliasName::Bare` accepts every keyword including `TRANSACTION` — see
-/// `tokens::literal::BareAliasName::peek`). Declaration order is the
-/// tiebreaker, so `Transaction` must come first to win when the source is
-/// literally `PREPARE TRANSACTION 'gid'`.
+/// `Transaction` matches the dedicated `TRANSACTION` form. `Standard` accepts
+/// an ordinary prepared-statement name; the grammar keeps these surface forms
+/// separate so the LR table can distinguish the following string from `AS` or
+/// a type list.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum PrepareStmtBody<'input> {
     Transaction(PrepareTransactionBody<'input>),

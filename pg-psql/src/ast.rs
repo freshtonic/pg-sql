@@ -13,10 +13,6 @@
 /// input, so an empty document is an empty list.
 #[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
 pub struct PsqlDocument<'input> {
-    /// Greedy over every kind: this is the root, so nothing follows it and
-    /// there is no caller continuation an item could be mistaken for. The
-    /// repetition ends at end of input, which `crate::parse` then checks.
-    #[greedy(all)]
     #[deref]
     pub items: Vec<PsqlItem<'input>>,
 }

@@ -52,7 +52,6 @@ recursa::grammar! {
     module = crate,
     derives(Pretty, Visit),
     keyword_matching = sensitive,
-    max_lookahead = 1,
     diagrams,
 }
 

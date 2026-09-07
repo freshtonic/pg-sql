@@ -25,17 +25,14 @@ pub struct CopyStmt<'input> {
 
 /// Body shape of a COPY statement.
 ///
-/// Variant ordering matters for disambiguation. The leading token uniquely
-/// identifies each variant:
+/// The leading token uniquely identifies each variant:
 /// - `Query` starts with `(` — `COPY (PreparableStmt) TO ...`.
 /// - `BinaryTable` starts with the `BINARY` keyword — `COPY BINARY t TO ...`.
 /// - `Table` starts with a qualified-name identifier — `COPY t FROM ...`.
 ///
 /// `BinaryTable` is a separate variant (rather than `Option<BINARY>` on
-/// `CopyTableBody`) so the derived first-set computation for `CopyBody`
-/// correctly lists both `BINARY` and the identifier first-set. With
-/// `Option<BINARY>` as the leading field of `CopyTableBody`, the codegen
-/// first-set was `{ LPAREN, BINARY }` and missed the identifier branch.
+/// `CopyTableBody`) so the legacy prefix remains an explicit grammar
+/// production alongside the ordinary identifier-led table form.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CopyBody<'input> {
     Query(CopyQueryBody<'input>),
@@ -118,9 +115,9 @@ pub enum CopyDirection {
 /// substituting before the server lexes, not a `copy_file_name` production;
 /// render such a script through the `pg-psql` crate first.
 ///
-/// Variant ordering: keyword forms first so they win over the otherwise-
-/// matching string rule (`STDIN` / `STDOUT` are soft keywords that the
-/// scanner could equally well classify as identifiers).
+/// `STDIN` / `STDOUT` are tokenized as their keyword kinds, while a quoted
+/// filename is a string token, so the three alternatives have distinct LR
+/// actions.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CopyTarget<'input> {
     #[tok(STDIN)]
@@ -142,9 +139,8 @@ pub struct CopyUsingDelimiters<'input> {
 /// the plain `'…'` form plus the `E'…'` (escape), `U&'…'` (unicode), and
 /// `B'…'` (bit) prefixed forms used in the regression corpus.
 ///
-/// Variant ordering: the prefixed forms (`U&`, `E`, `B`, `X`) come before the
-/// bare `StringLit` so the lexer's longest-match-wins picks the prefixed
-/// kind first.
+/// The lexer assigns the prefixed forms (`U&`, `E`, `B`, `X`) their own token
+/// kinds before the parser sees them.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum CopySconst<'input> {
     Unicode(literal::UnicodeStringLit<'input>),
@@ -157,8 +153,7 @@ pub enum CopySconst<'input> {
 /// The COPY options clause — either the legacy bareword form or the modern
 /// parenthesised name/value form.
 ///
-/// Variant ordering: `Generic` first because it begins with `(` (a single
-/// unambiguous lookahead). `Legacy` is the bareword form starting with one of
+/// `Generic` begins with `(`. `Legacy` is the bareword form starting with one of
 /// `BINARY`/`FREEZE`/`OIDS`/`DELIMITER`/`NULL`/`CSV`/`HEADER`/`QUOTE`/`ESCAPE`/
 /// `FORCE`/`ENCODING`.
 #[derive(recursa::Node, Debug, Clone)]

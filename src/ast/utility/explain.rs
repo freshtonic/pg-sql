@@ -73,8 +73,8 @@ pub enum ExplainableStmt<'input> {
 /// An EXPLAIN option list followed by the statement being explained.
 ///
 /// Keeping the optional prefix and required statement in one enum branch lets
-/// Recursa distinguish this form from a parenthesized statement by the token
-/// following the balanced option-list delimiter.
+/// the LR state after the option-list delimiter distinguish this form from a
+/// parenthesized statement.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ExplainOptionsAndStatement<'input> {
     pub options: ExplainOptions<'input>,

@@ -56,8 +56,6 @@ pub struct SearchClause<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 #[tok(CYCLE, this)]
 pub struct CycleClause<'input> {
-    /// Greedy: a leading SET starts this element instead of ending `CycleClause` (bison shift preference).
-    #[greedy(SET)]
     #[sep(COMMA)]
     pub columns: Vec<literal::AliasName<'input>>,
     #[tok(SET, this)]

@@ -308,9 +308,9 @@ pub enum AlterColumnIndexAction<'input> {
 /// STATISTICS` and `SET (params)`) both start with `ALTER … SET`; the
 /// disambiguation token is `STATISTICS` vs `(`.
 ///
-/// The common prefix is represented once so dispatch only needs to inspect
-/// the keyword or parenthesis immediately following `SET`, rather than look
-/// through a potentially multi-token signed column reference twice.
+/// The common prefix is represented once so the LR alternatives part at the
+/// keyword or parenthesis immediately following `SET`, rather than duplicating
+/// a potentially multi-token signed column reference.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AlterColumnIndexCmd<'input> {
     #[tok(ALTER, optional(COLUMN), this)]
@@ -366,8 +366,8 @@ pub struct OwnedByRoles<'input> {
 
 /// `ALTER INDEX [IF EXISTS] name action` plus the bulk `ALTER INDEX ALL IN
 /// TABLESPACE …` form. The two top-level shapes share the leading `ALTER
-/// INDEX` keywords, so they sit on either side of a single enum to
-/// preserve dispatcher commitment.
+/// INDEX` keywords, so they sit on either side of a single enum and share that
+/// LR prefix once.
 ///
 /// Variant ordering: `All` (starts with `ALL`) before `Single`
 /// (starts with `[IF EXISTS] qualified_name` — never `ALL`).

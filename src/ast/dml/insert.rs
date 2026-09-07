@@ -210,8 +210,6 @@ pub struct InsertStmt<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct InsertColumnItem<'input> {
     pub name: crate::tokens::ColId<'input>,
-    /// Greedy: a leading DOT, LBRACKET starts this element instead of ending `InsertColumnItem` (bison shift preference).
-    #[greedy(DOT, LBRACKET)]
     pub indirection: Vec<crate::ast::shared::expr::IndirectionEl<'input>>,
 }
 

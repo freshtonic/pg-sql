@@ -11,8 +11,8 @@ the reusable matching, provenance, validation, and rendering machinery.
 - `pg-sql` selects Recursa's ASCII-insensitive text-equivalence mode for
   keywords. Recursa continues to support both exact and ASCII-insensitive
   matching; it does not make Unicode case folding or normalization intrinsic.
-- `pg-sql` selects generated frozen FIRST-k dispatch with `max_lookahead = 5`.
-  This is a consumer setting, not an intrinsic Recursa limit.
+- pg-sql uses Recursa's implicit LR parser. Parser selection and bounded
+  predictive-dispatch configuration are not part of the grammar surface.
 - Keyword metadata has one category and zero or more orthogonal flags. Named
   token admissions use an acyclic union-and-subtraction algebra compiled to
   canonical bitsets. Duplicate union membership warns; an exclusion that

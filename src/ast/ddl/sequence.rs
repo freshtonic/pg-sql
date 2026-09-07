@@ -54,7 +54,7 @@ pub struct SeqCacheOption<'input> {
 /// `NONE` is an unreserved identifier in this position, so
 /// [`QualifiedName`] already accepts both grammar branches. Keeping a
 /// separate fixed-token `None` arm would describe the same token stream
-/// twice and leave the generated dispatcher ambiguous.
+/// twice and create two LR derivations for the same input.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum OwnedByTarget<'input> {
     Name(QualifiedName<'input>),
@@ -125,11 +125,6 @@ pub struct CreateSequenceStmt<'input> {
     pub sequence: SequenceKeyword,
     pub if_not_exists: Option<IfNotExists>,
     pub name: QualifiedName<'input>,
-    /// Greedy: a leading token from any of 12 kinds starts this element instead of ending `CreateSequenceStmt` (bison shift preference).
-    #[greedy(
-        AS, CACHE, CYCLE, INCREMENT, MAXVALUE, MINVALUE, NO, OWNED, RESTART, SEQUENCE, START,
-        UNLOGGED
-    )]
     pub options: Vec<SeqOption<'input>>,
 }
 
@@ -218,11 +213,6 @@ pub enum AlterSequenceAction<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct SeqOptList<'input> {
     pub head: SeqOption<'input>,
-    /// Greedy: a leading token from any of 12 kinds starts this element instead of ending `SeqOptList` (bison shift preference).
-    #[greedy(
-        AS, CACHE, CYCLE, INCREMENT, MAXVALUE, MINVALUE, NO, OWNED, RESTART, SEQUENCE, START,
-        UNLOGGED
-    )]
     pub rest: Vec<SeqOption<'input>>,
 }
 

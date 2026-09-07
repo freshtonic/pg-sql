@@ -176,8 +176,6 @@ pub struct FunctionCastTypeTail<'input> {
     pub precision: Option<TypePrecision<'input>>,
     pub tz: Option<TimeZoneQualifier>,
     pub interval_qualifier: Option<IntervalQualifier<'input>>,
-    /// Greedy: a leading LBRACKET starts this element instead of ending `FunctionCastTypeTail` (bison shift preference).
-    #[greedy(LBRACKET)]
     pub array_suffixes: Vec<ArraySuffix<'input>>,
     pub array_kw_suffix: Option<ArrayKwSuffix<'input>>,
 }
@@ -200,8 +198,6 @@ pub struct FunctionTypeNamePart<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionTypeName<'input> {
     pub first: crate::tokens::type_function_name<'input>,
-    /// Greedy: a leading DOT starts this element instead of ending `FunctionTypeName` (bison shift preference).
-    #[greedy(DOT)]
     pub rest: Vec<FunctionTypeNamePart<'input>>,
 }
 
@@ -228,8 +224,6 @@ pub enum FunctionIdentifierTypeSuffix<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionGenericTypeTail<'input> {
     pub precision: Option<TypePrecision<'input>>,
-    /// Greedy: a leading LBRACKET starts this element instead of ending `FunctionGenericTypeTail` (bison shift preference).
-    #[greedy(LBRACKET)]
     pub array_suffixes: Vec<ArraySuffix<'input>>,
     pub array_kw_suffix: Option<ArrayKwSuffix<'input>>,
 }
@@ -560,8 +554,6 @@ pub struct CreateFunctionStmt<'input> {
     pub name: crate::ast::shared::names::FuncDefName<'input>,
     pub args: FunctionParameters<'input>,
     pub returns: Option<FuncReturnsClause<'input>>,
-    /// Greedy: any kind that can start this element continues it instead of ending `CreateFunctionStmt` (bison shift preference).
-    #[greedy(all)]
     pub options: Vec<FuncOption<'input>>,
     /// gram.y `opt_routine_body`, after `opt_createfunc_opt_list`.
     pub body: Option<RoutineBody<'input>>,

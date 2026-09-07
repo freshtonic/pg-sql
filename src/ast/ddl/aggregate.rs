@@ -79,8 +79,8 @@ pub struct CreateAggregateOrderByInner<'input> {
 /// old_aggr_definition`), but on the surface both are one comma-separated
 /// group directly after the aggregate name, and they are told apart only by
 /// the `=` that follows the first name. Parse the shared `[mode] [name]
-/// type` prefix once and let the optional tail decide, rather than asking
-/// bounded lookahead to choose between two arbitrarily long alternatives.
+/// type` prefix once and let the optional tail decide, avoiding two LR
+/// productions with an arbitrarily long shared prefix.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct CreateAggregateArg<'input> {
     /// gram.y `aggr_arg: func_arg`.
@@ -115,8 +115,7 @@ pub struct CreateAggregateOrderedTail<'input> {
 /// both a definition element and a function parameter with an `=` default.
 /// Parse that shared first parenthesized group once as aggregate arguments;
 /// the presence of a second definition list records the modern form. This
-/// avoids making bounded lookahead search for a second `(` beyond an
-/// arbitrarily long first group.
+/// lets the LR parser decide on the `(` after the completed first group.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct AggregateSig<'input> {
     pub name: QualifiedName<'input>,
@@ -145,8 +144,6 @@ pub struct DropAggregateTarget<'input> {
 #[tok(DROP, AGGREGATE, this)]
 pub struct DropAggregateStmt<'input> {
     pub if_exists: Option<IfExists>,
-    /// Greedy: a leading CASCADE, RESTRICT starts this element instead of ending `DropAggregateStmt` (bison shift preference).
-    #[greedy(CASCADE, RESTRICT)]
     #[sep(COMMA)]
     pub targets: Vec<DropAggregateTarget<'input>>,
     pub behavior: Option<DropBehavior>,

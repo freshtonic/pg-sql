@@ -18,9 +18,9 @@ use crate::tokens::{literal, punct};
 ///            | '(' a_expr ')'
 /// ```
 ///
-/// Variant ordering: `Paren` (`(` lookahead) and `Func` (ident + `(`)
-/// before `Bare` (bare ident). `Paren` and `Func` both start with `(`/
-/// ident; `Func` is detected by the function-call shape via `Expr`. We
+/// `Paren` starts with `(`. `Func` and `Bare` both begin with an identifier,
+/// and the LR parser distinguishes them when it reaches the function-call
+/// `(`. We
 /// model `func_expr_windowless` by re-using `Expr` and letting any
 /// expression that begins like a function call lex into the `Func` arm.
 #[derive(recursa::Node, Debug, Clone)]

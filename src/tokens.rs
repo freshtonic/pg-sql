@@ -816,7 +816,7 @@ recursa::tokens! {
         // `%nonassoc IDENT ... KEYS OBJECT_P SCALAR VALUE_P ...` group), yet
         // `SELECT a value` and `SELECT a escape` stay valid: the keyword is
         // a bare label whenever no expression can continue. The set stays
-        // the full `bare_label`; the table-driven parser needs keyword
+        // the full `bare_label`; the LR parser needs keyword
         // precedence to settle those states (recursa #120).
         SelectBareAliasName = bare_label
             - { AND, OR, NOT, IS, IN, LIKE, ILIKE, COLLATE, SIMILAR, BETWEEN, OPERATOR, AT },
@@ -838,7 +838,7 @@ recursa::tokens! {
         IdentOnly = AllWordKinds - AllWordKinds,
     }
     // Lookahead filters, one per case of PostgreSQL's `base_yylex`
-    // (`src/backend/parser/parser.c`): the table-driven parser reads the
+    // (`src/backend/parser/parser.c`): the LR token feed reads the
     // merged kind when the token is immediately followed by a trigger, the
     // way `base_yylex` rewrites the token stream so that `gram.y` stays
     // LALR(1). Nodes keep writing
@@ -866,7 +866,7 @@ recursa::tokens! {
         // `parser.c`: after a Unicode string/identifier token, a following
         // `UESCAPE SCONST` is consumed as its escape clause. The grammar
         // keeps `UESCAPE` as a bare-label keyword for every other position;
-        // the table-driven feed therefore marks only the clause-shaped
+        // the LR token feed therefore marks only the clause-shaped
         // spelling. `StringLit` is content-bearing, unlike parser.c's other
         // fixed-token triggers.
         UESCAPE_LA = UESCAPE before { StringLit },
@@ -1193,8 +1193,9 @@ pub mod literal {
     // Catch-all for Postgres user-defined operator names.
     //
     // Matches any sequence of the characters `+ - * / < > = ~ ! @ # % ^ & | ?`.
-    // In expression contexts this is the LAST-RESORT infix/prefix in the Pratt
-    // parser — known punct tokens are tried first. In DDL contexts (CREATE/ALTER/
+    // In expression contexts this is the catch-all infix/prefix in the
+    // Pratt-declared expression grammar; known punct tokens have distinct
+    // lexical kinds. In DDL contexts (CREATE/ALTER/
     // DROP OPERATOR) this is the primary scanner for the operator name.
     //
     // `CustomOp` is produced by the declarative `operator_run` matcher and

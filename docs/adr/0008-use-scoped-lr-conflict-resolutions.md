@@ -20,7 +20,6 @@ narrowest change, has no runtime parsing cost, and uses Recursa's existing
 conflict-resolver seam.
 
 The original 12 cells and the remaining grammar work are resolved: the current
-pg-sql LALR dump has zero conflicts. The parser surface is table-driven-only
-(`parser_style = table_driven`), so pg-sql does not emit predictive
-recursive-descent statics. Recursa still supports recursive descent and applies
-its predictive ambiguity checks whenever a grammar selects that style.
+pg-sql's LALR dump has zero conflicts. Recursa now exposes one implicit LR
+parser (Recursa ADR 0005), so parser selection and predictive ambiguity checks
+are no longer part of pg-sql's grammar surface.
