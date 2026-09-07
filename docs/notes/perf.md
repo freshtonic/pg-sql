@@ -1199,3 +1199,34 @@ The next optimization candidates, in priority order, are:
    for 10.4% of the deep boolean workload. A simple `Expr::ColumnRef` move adds
    another 3.6%, indicating that large enum movement/value-stack traffic also
    deserves attention alongside allocation itself.
+
+## Benchmark: 2026-09-08 — compact provenance folding
+
+The provenance fold path now delays fixed-size child-vector allocation when a
+default-policy node captures neither a span nor a descendant. Spanned parses
+still retain every generated child ordinal. Retained occurrences are
+pointer-sized handles to nodes in the existing parse arena, rather than
+recursively move-owned nodes inside child vectors. Tiny policy, accumulation,
+and collection helpers are inlined into the fold dispatcher.
+
+Three three-second corpus runs establish each median; the shape workloads use
+one three-second confirmation run:
+
+| Canonical workload | Before | After | Change |
+| --- | --: | --: | --: |
+| `corpus` | 180,753.8 stmt/s | 211,630.8 stmt/s | **+17.1%** |
+| `select_list_10000` | 134.9 stmt/s | 158.1 stmt/s | **+17.2%** |
+| `bool_chain` | 1,754.2 stmt/s | 2,145.7 stmt/s | **+22.3%** |
+
+The final ten-second sample measured 204,257.3 corpus stmt/s under profiler
+overhead. Provenance helper frames (`finish_repeated`, occurrence accumulation,
+and recursive occurrence destruction) disappeared from the top attribution;
+`OccurrenceStack::reduce` remains at 19.3% direct plus 1.7% allocation. The LR
+driver is effectively tied at 15.8% direct plus 5.0% allocation and is the
+next non-provenance runtime candidate. Artifacts are under
+`docs/perf/flamegraphs/2026-09-07-a6dfe8d/` (directory date is UTC).
+
+Correctness evidence comprises Recursa's complete all-features workspace
+suite, pg-sql's PostgreSQL-oracle suite (including 234 differential files and
+1,121 passing embedded tests), and warnings-as-errors Clippy gates for both
+modified Recursa core and pg-sql.
