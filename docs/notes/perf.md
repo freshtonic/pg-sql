@@ -960,3 +960,61 @@ with any conflict. Issue #70 times it once they are retired. (Corrected
 after the fact: recursa #128 landed and took 1; recursa #129 was rejected,
 so the 23 it was to take are ordinary pg-sql grammar work. `tests/two_parsers.rs`
 carries the current breakdown.)
+
+## Benchmark: 2026-09-07 — LR corpus membership audit and runtime profile
+
+The first LR-only run used the existing benchmark unchanged at pg-sql
+`54fde18` / recursa `a97b8c2`. The second run explicitly removed frozen
+`LegacyItemKind::ParseError` entries before any parser probe. It also made the
+flame harness use the same accepted-by-all corpus membership as the
+head-to-head benchmark; those membership probes run once during workload
+loading, outside the timed loop.
+
+| Metric | Existing membership | Parse-fail stripped | Change |
+| --- | --: | --: | --: |
+| pg-sql total median time | 344.029 ms | 343.321 ms | -0.206% |
+| sqlparser 0.52 total | 214.226 ms | 212.381 ms | -0.861% |
+| PostgreSQL 17.9 total | 39.873 ms | 39.647 ms | -0.567% |
+| pg-sql / sqlparser | 1.606x | 1.617x | +0.011x |
+| pg-sql / PostgreSQL | 8.628x | 8.659x | +0.031x |
+| timed statements, including 15 stress fixtures | 33,720 | 33,707 | -13 |
+
+The corrected corpus starts from 43,474 frozen items, strips 125 deliberate
+parse-fail items, and retains 33,692 statements accepted by pg-sql,
+sqlparser, and PostgreSQL. The 15 stress fixtures bring the head-to-head total
+to 33,707. The membership correction therefore removes the error path but
+does not explain the LR regression: pg-sql remains far beyond the 1.25x
+PostgreSQL profiling threshold.
+
+There is no hidden pg-psql cost. `cargo bench -p pg-sql --features
+postgres-oracle --bench parse` has no `pg-psql` dependency (`pg-psql` depends
+on `pg-sql`, not the reverse). The pg-sql timed closure performs one generated
+lex pass and one `Statement::parse`; the three-engine membership probes happen
+before measurement.
+
+The corrected `corpus` workload was sampled for ten seconds with macOS
+`sample` (7,938 samples). The largest leaf hot paths were:
+
+| Self samples | Self time | Frame |
+| --: | --: | --- |
+| 1,880 | 23.7% | generated root `__recursa_reduce` dispatcher |
+| 584 | 7.4% | `recursa_core::lr::run` |
+| 496 | 6.2% | `OccurrenceStack::reduce` |
+| 355 | 4.5% | `ParseContext::collect_occurrence` |
+| 313 | 3.9% | `provenance::fold_site` |
+| 138 | 1.7% | generated lexical finalization |
+| 126 | 1.6% | `DecodedTables::filtered_action` |
+| 122 | 1.5% | generated lexer |
+| 100 | 1.3% | `DecodedTables::action` |
+
+Allocator functions occupy many additional high-ranked leaf frames. A counted
+pass makes the scale concrete: lexing performs 225,051 allocations (6.7 per
+statement, 43.1 MB), while parsing performs 3,244,021 allocations (96.3 per
+statement, 359.1 MB). Parsing is 93.5% of allocation count and 89.3% of bytes.
+The first runtime optimization targets are therefore the generated root
+reducer dispatch and provenance/occurrence allocation, not the error path.
+
+Reports: `docs/benchmarks/2026-09-07T05-44-21Z-54fde18/` (before) and
+`docs/benchmarks/2026-09-07T05-50-40Z-54fde18/` (after). Profile:
+`docs/perf/flamegraphs/2026-09-07-54fde18-dirty/`. These run directories are
+ignored; this journal entry is the tracked record.

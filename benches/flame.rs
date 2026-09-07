@@ -19,9 +19,10 @@
 //!
 //! Canonical workloads (CONTEXT.md):
 //!
-//! - `corpus` — every frozen corpus statement (the differential baseline
-//!   membership), parse errors included: rejected statements exercise the
-//!   error/expected-set paths that Track P attributes.
+//! - `corpus` — the frozen corpus statements accepted by pg-sql, sqlparser,
+//!   and PostgreSQL (the head-to-head benchmark membership). Deliberate legacy
+//!   parse-error entries, and statements rejected by any engine, are filtered
+//!   while the workload is loaded rather than exercised in the timed loop.
 //! - `select_list_10000` — `fixtures/stress/select_list_10000.sql`, one wide
 //!   SELECT list (10,000 columns).
 //! - `bool_chain` — `fixtures/stress/bool_chain_1000.sql`, one WHERE clause
@@ -36,10 +37,10 @@
 //!
 //! Track P additions:
 //!
-//! - `--count-allocs` runs one complete pass over the workload with a
+//! - `--count-allocs` runs one complete pass over the accepted workload with a
 //!   counting global allocator and reports allocation counts and bytes,
-//!   split by phase (lex vs parse) and by outcome (accepted vs rejected),
-//!   instead of the timing loop. The counter is two relaxed atomic adds per
+//!   split by phase (lex vs parse), instead of the timing loop. The counter is
+//!   two relaxed atomic adds per
 //!   allocation and is disabled outside this mode, so ordinary profiling
 //!   runs are unperturbed; the allocator itself still forwards to the
 //!   system allocator either way.
@@ -66,7 +67,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use pg_sql::ast::Statement;
-use support::baseline::FrozenStatements;
+use support::baseline::{FrozenStatements, LegacyItemKind};
 use support::diff_check::lex_statement_source;
 
 // --- Counting allocator (Track P allocation attribution) ---
@@ -124,7 +125,7 @@ fn alloc_snapshot() -> (u64, u64) {
 const WORKLOADS: [(&str, &str); 3] = [
     (
         "corpus",
-        "all frozen corpus statements (differential baseline)",
+        "frozen corpus statements accepted by all three engines",
     ),
     ("select_list_10000", "fixtures/stress/select_list_10000.sql"),
     ("bool_chain", "fixtures/stress/bool_chain_1000.sql"),
@@ -134,14 +135,23 @@ fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-/// Load a canonical workload's statements. Reads everything up front so no
-/// I/O frames appear in the profiled loop.
+/// Load a canonical workload's statements. Reads everything up front and
+/// probes membership once so neither I/O nor parity checks appear in the
+/// profiled loop.
 fn load_workload(name: &str) -> Result<Vec<String>, String> {
+    let accepted_inputs = |statements: Vec<String>| {
+        statements
+            .into_iter()
+            .filter(|sql| {
+                parse_with_pg_sql(sql) && parse_with_sqlparser(sql) && parse_with_postgres(sql)
+            })
+            .collect()
+    };
     let stress = |file: &str| -> Result<Vec<String>, String> {
         let path = manifest_dir().join("fixtures/stress").join(file);
         let sql = fs::read_to_string(&path)
             .map_err(|e| format!("read stress fixture {}: {e}", path.display()))?;
-        Ok(vec![sql])
+        Ok(accepted_inputs(vec![sql]))
     };
     match name {
         "corpus" => {
@@ -155,7 +165,22 @@ fn load_workload(name: &str) -> Result<Vec<String>, String> {
                 let statements = frozen.file(file_name).statements(&text).map_err(|error| {
                     format!("{file_name}: cannot load frozen statements: {error}")
                 })?;
-                inputs.extend(statements.into_iter().map(str::to_owned));
+                let kinds = frozen.file(file_name).legacy_item_kinds();
+                if kinds.len() != statements.len() {
+                    return Err(format!(
+                        "{file_name}: frozen item-kind count {} does not match statement count {}",
+                        kinds.len(),
+                        statements.len()
+                    ));
+                }
+                let statements = statements
+                    .into_iter()
+                    .zip(kinds)
+                    .filter_map(|(statement, kind)| {
+                        (kind == &LegacyItemKind::Statement).then(|| statement.to_owned())
+                    })
+                    .collect();
+                inputs.extend(accepted_inputs(statements));
             }
             Ok(inputs)
         }
@@ -198,7 +223,18 @@ fn parse_with_sqlparser(sql: &str) -> bool {
         .is_ok()
 }
 
-/// Accumulated allocation counts for one phase of the seam.
+/// Strictly parse one extracted statement with PostgreSQL 17.9's raw parser,
+/// matching `parse_with_postgres` in `benches/parse.rs`. This is a workload
+/// membership probe only; it runs once during loading and never in the
+/// profiled loop.
+fn parse_with_postgres(sql: &str) -> bool {
+    if sql.as_bytes().contains(&0) {
+        return false;
+    }
+    pg_oracle::parse_ok(sql)
+}
+
+/// Accumulated allocation counts for one phase of the accepted seam.
 #[derive(Clone, Copy, Default)]
 struct PhaseAllocs {
     /// Statements that went through this phase.
@@ -230,14 +266,13 @@ impl PhaseAllocs {
     }
 }
 
-/// One complete counted pass over the workload: lex and parse phases are
-/// counted separately, and the parse phase is further split by outcome so
-/// the error/expected-set paths of rejected statements stay visible.
+/// One complete counted pass over the accepted workload, with lex and parse
+/// phases counted separately. Deliberate parse-error entries and statements
+/// rejected by any parity engine were removed while loading the workload, so
+/// this pass intentionally does not measure error/expected-set paths.
 fn run_alloc_count(inputs: &[String]) {
     let mut lex = PhaseAllocs::default();
-    let mut lex_rejected = PhaseAllocs::default();
-    let mut parse_accepted = PhaseAllocs::default();
-    let mut parse_rejected = PhaseAllocs::default();
+    let mut parse = PhaseAllocs::default();
 
     COUNTING.store(true, Ordering::Relaxed);
     for sql in inputs {
@@ -246,7 +281,7 @@ fn run_alloc_count(inputs: &[String]) {
         let after_lex = alloc_snapshot();
         lex.add(before_lex, after_lex);
         if lexed.errors().next().is_some() {
-            lex_rejected.add(before_lex, after_lex);
+            debug_assert!(false, "accepted workload unexpectedly failed lexing");
             continue;
         }
         let mut input = lexed.input();
@@ -260,25 +295,16 @@ fn run_alloc_count(inputs: &[String]) {
             }
             Err(_) => false,
         };
-        if accepted {
-            parse_accepted.add(before_parse, after_parse);
-        } else {
-            parse_rejected.add(before_parse, after_parse);
-        }
+        parse.add(before_parse, after_parse);
+        debug_assert!(accepted, "accepted workload unexpectedly failed parsing");
     }
     COUNTING.store(false, Ordering::Relaxed);
 
     println!("allocation counts (counting global allocator, one pass):");
-    lex.report("lex (all statements)");
-    if lex_rejected.statements > 0 {
-        lex_rejected.report("  of which lexically rejected");
-    }
-    parse_accepted.report("parse (accepted)");
-    if parse_rejected.statements > 0 {
-        parse_rejected.report("parse (rejected)");
-    }
-    let total_allocs = lex.allocs + parse_accepted.allocs + parse_rejected.allocs;
-    let total_bytes = lex.bytes + parse_accepted.bytes + parse_rejected.bytes;
+    lex.report("lex (accepted workload)");
+    parse.report("parse (accepted workload)");
+    let total_allocs = lex.allocs + parse.allocs;
+    let total_bytes = lex.bytes + parse.bytes;
     println!(
         "alloc_total statements={} allocs={} bytes={}",
         lex.statements, total_allocs, total_bytes,

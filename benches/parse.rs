@@ -11,10 +11,11 @@
 //! for each corpus
 //! file it takes the frozen per-file statement list that the differential
 //! suite pins (`tests/support/baseline.rs`, `FrozenStatements::pinned()`)
-//! and times each engine over the statements that *all three* engines
-//! accept. A statement rejected by any engine is excluded for every engine,
-//! and the exclusions are counted in the report. The full Criterion port
-//! and file-level corpus parsing are #20.
+//! and times each engine over the statement items that *all three* engines
+//! accept. Deliberate parse-error items are removed before probing; a
+//! statement rejected by any engine is excluded for every engine, and those
+//! two kinds of exclusion are counted separately in the report. The full
+//! Criterion port and file-level corpus parsing are #20.
 //!
 //! Each run writes its own subdirectory `docs/benchmarks/<timestamp>-<commit>/`
 //! containing `report.md` (the human report), `time.svg` and `throughput.svg`
@@ -46,7 +47,7 @@ use pg_sql::ast::Statement;
 use pg_sql::bench_data::{BenchRecord, serialize_data_json};
 use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::Parser as SqlParser;
-use support::baseline::FrozenStatements;
+use support::baseline::{FrozenStatements, LegacyItemKind};
 use support::diff_check::lex_statement_source;
 
 // --- Paths ---
@@ -132,20 +133,22 @@ impl Rejections {
 /// iteration), and the total byte volume those statements represent (for
 /// throughput).
 ///
-/// `stmts_total` counts the frozen statements the workload started from;
-/// `stmts_total - inputs.len()` of them were excluded because at least one
-/// engine rejected them, with the per-engine causes in `rejections`.
+/// `stmts_total` counts all frozen items the workload started from. Deliberate
+/// legacy parse-error items are stripped before engine probing; the remaining
+/// statement items rejected by at least one engine are counted by
+/// `engine_excluded`, with the per-engine causes in `rejections`.
 struct Bench {
     name: String,
     inputs: Vec<String>,
     bytes: u64,
     stmts_total: usize,
+    parse_errors_stripped: usize,
     rejections: Rejections,
 }
 
 impl Bench {
-    fn excluded(&self) -> usize {
-        self.stmts_total - self.inputs.len()
+    fn engine_excluded(&self) -> usize {
+        self.stmts_total - self.parse_errors_stripped - self.inputs.len()
     }
 }
 
@@ -154,7 +157,8 @@ struct Row {
     name: String,
     bytes: u64,
     stmts_timed: usize,
-    stmts_excluded: usize,
+    parse_errors_stripped: usize,
+    engine_excluded: usize,
     pg_sql: Duration,
     sqlparser: Duration,
     postgres: Duration,
@@ -208,10 +212,11 @@ fn run_bench(b: &Bench) -> Row {
         (pg_sql, sqlparser, postgres)
     };
     println!(
-        "  {:<28} {:>4} stmts ({:>3} excl)   pg-sql {:>9.3} ms   sqlparser {:>9.3} ms   postgres {:>9.3} ms",
+        "  {:<28} {:>4} stmts ({:>3} parse-fail, {:>3} engine-excl)   pg-sql {:>9.3} ms   sqlparser {:>9.3} ms   postgres {:>9.3} ms",
         b.name,
         b.inputs.len(),
-        b.excluded(),
+        b.parse_errors_stripped,
+        b.engine_excluded(),
         ms(pg_sql),
         ms(sqlparser),
         ms(postgres),
@@ -220,7 +225,8 @@ fn run_bench(b: &Bench) -> Row {
         name: b.name.clone(),
         bytes: b.bytes,
         stmts_timed: b.inputs.len(),
-        stmts_excluded: b.excluded(),
+        parse_errors_stripped: b.parse_errors_stripped,
+        engine_excluded: b.engine_excluded(),
         pg_sql,
         sqlparser,
         postgres,
@@ -298,6 +304,35 @@ fn probe_statements(statements: &[&str]) -> (Vec<String>, u64, Rejections) {
     (inputs, bytes, rejections)
 }
 
+/// Remove deliberate legacy parse-error items before any parser is probed.
+/// The frozen ranges and item-kind metadata are parallel by construction;
+/// assert that contract here so a stale baseline cannot silently change the
+/// benchmark's membership.
+fn strip_parse_errors<'source>(
+    statements: &[&'source str],
+    kinds: &[LegacyItemKind],
+) -> (Vec<&'source str>, usize) {
+    assert_eq!(
+        statements.len(),
+        kinds.len(),
+        "frozen statement ranges and legacy item kinds must stay parallel"
+    );
+    let mut parse_errors_stripped = 0;
+    let statement_items = statements
+        .iter()
+        .zip(kinds)
+        .filter_map(|(source, kind)| {
+            if *kind == LegacyItemKind::ParseError {
+                parse_errors_stripped += 1;
+                None
+            } else {
+                Some(*source)
+            }
+        })
+        .collect();
+    (statement_items, parse_errors_stripped)
+}
+
 /// Build the benchmark set: one `corpus/<file>` benchmark per frozen corpus
 /// file (the exact membership the differential baseline pins), plus one
 /// `stress/<file>` benchmark per generated stress fixture (each is a single
@@ -315,11 +350,14 @@ fn build_benches() -> Vec<Bench> {
             .file(name)
             .statements(&text)
             .unwrap_or_else(|error| panic!("{name}: cannot load frozen statements: {error}"));
-        let (inputs, bytes, rejections) = probe_statements(&statements);
+        let (statement_items, parse_errors_stripped) =
+            strip_parse_errors(&statements, frozen.file(name).legacy_item_kinds());
+        let (inputs, bytes, rejections) = probe_statements(&statement_items);
         let stem = name.strip_suffix(".sql").unwrap_or(name);
         benches.push(Bench {
             name: format!("corpus/{stem}"),
             stmts_total: statements.len(),
+            parse_errors_stripped,
             inputs,
             bytes,
             rejections,
@@ -339,6 +377,7 @@ fn build_benches() -> Vec<Bench> {
             benches.push(Bench {
                 name: format!("stress/{stem}"),
                 stmts_total: 1,
+                parse_errors_stripped: 0,
                 inputs,
                 bytes,
                 rejections,
@@ -347,25 +386,25 @@ fn build_benches() -> Vec<Bench> {
     }
 
     let totals = benches.iter().fold(
-        (0usize, 0usize, Rejections::default()),
-        |(total, timed, mut rejections), bench| {
+        (0usize, 0usize, 0usize, 0usize, Rejections::default()),
+        |(total, parse_errors, timed, engine_excluded, mut rejections), bench| {
             rejections.add(bench.rejections);
             (
                 total + bench.stmts_total,
+                parse_errors + bench.parse_errors_stripped,
                 timed + bench.inputs.len(),
+                engine_excluded + bench.engine_excluded(),
                 rejections,
             )
         },
     );
-    let (total, timed, rejections) = totals;
+    let (total, parse_errors, timed, engine_excluded, rejections) = totals;
     eprintln!(
-        "statement probe: {total} frozen statements — {timed} accepted by all three \
-         engines and timed, {} excluded (rejections: pg-sql {}, sqlparser {}, \
+        "statement probe: {total} frozen items — {parse_errors} deliberate parse-fail \
+         items stripped, {timed} accepted by all three engines and timed, \
+         {engine_excluded} engine-excluded (rejections: pg-sql {}, sqlparser {}, \
          postgres {}).",
-        total - timed,
-        rejections.pg_sql,
-        rejections.sqlparser,
-        rejections.postgres,
+        rejections.pg_sql, rejections.sqlparser, rejections.postgres,
     );
 
     benches
@@ -588,10 +627,10 @@ struct Report {
 fn write_results_table(md: &mut String, rows: &[&Row]) {
     let _ = writeln!(
         md,
-        "| Benchmark | Stmts | Excluded | Bytes | pg-sql time | sqlparser time \
+        "| Benchmark | Stmts | Parse-fail stripped | Engine excluded | Bytes | pg-sql time | sqlparser time \
          | postgres time | pg-sql throughput | sqlparser throughput \
          | postgres throughput | pg-sql vs sqlparser | pg-sql vs postgres |\n\
-         |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|"
+         |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|"
     );
     for r in rows {
         let sp_speedup = if r.pg_sql.as_secs_f64() > 0.0 {
@@ -606,11 +645,12 @@ fn write_results_table(md: &mut String, rows: &[&Row]) {
         };
         let _ = writeln!(
             md,
-            "| {} | {} | {} | {} | {:.3} ms | {:.3} ms | {:.3} ms \
+            "| {} | {} | {} | {} | {} | {:.3} ms | {:.3} ms | {:.3} ms \
              | {:.1} MiB/s | {:.1} MiB/s | {:.1} MiB/s | {:.2}× | {:.2}× |",
             r.name,
             r.stmts_timed,
-            r.stmts_excluded,
+            r.parse_errors_stripped,
+            r.engine_excluded,
             r.bytes,
             ms(r.pg_sql),
             ms(r.sqlparser),
@@ -676,10 +716,11 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
     md.push('\n');
     let _ = writeln!(
         md,
-        "All three engines time the **same statement set**: a statement \
-         rejected by any engine (or carrying a NUL byte, which the \
+        "All three engines time the **same statement set**: deliberate corpus \
+         parse-error items are stripped before any engine probe, then a \
+         statement rejected by any engine (or carrying a NUL byte, which the \
          PostgreSQL C bridge cannot accept) is excluded for every engine, \
-         and counted in the Excluded column. Time is the median wall-clock \
+         and counted in the Engine excluded column. Time is the median wall-clock \
          per iteration over a benchmark's accepted statements; throughput is \
          the accepted statements' byte volume divided by that time. The \
          pg-sql column includes the generated lex pass and the differential \
@@ -695,11 +736,12 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
     let _ = writeln!(md, "- **Benchmarks:** {}", rows.len());
     let _ = writeln!(
         md,
-        "- **Frozen statements:** {} ({} timed by all three engines, {} \
-         excluded)",
+        "- **Frozen items:** {} ({} timed by all three engines, {} deliberate \
+         parse-fail items stripped, {} engine-excluded)",
         totals.stmts_total,
         totals.stmts_timed,
-        totals.stmts_total - totals.stmts_timed,
+        totals.parse_errors_stripped,
+        totals.engine_excluded,
     );
     let _ = writeln!(
         md,
@@ -765,6 +807,8 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
 struct BenchTotals {
     stmts_total: usize,
     stmts_timed: usize,
+    parse_errors_stripped: usize,
+    engine_excluded: usize,
     rejections: Rejections,
 }
 
@@ -772,11 +816,15 @@ fn bench_totals(benches: &[Bench]) -> BenchTotals {
     let mut totals = BenchTotals {
         stmts_total: 0,
         stmts_timed: 0,
+        parse_errors_stripped: 0,
+        engine_excluded: 0,
         rejections: Rejections::default(),
     };
     for bench in benches {
         totals.stmts_total += bench.stmts_total;
         totals.stmts_timed += bench.inputs.len();
+        totals.parse_errors_stripped += bench.parse_errors_stripped;
+        totals.engine_excluded += bench.engine_excluded();
         totals.rejections.add(bench.rejections);
     }
     totals
