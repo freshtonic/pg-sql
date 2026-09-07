@@ -1065,3 +1065,48 @@ from dispatch shape to occurrence/provenance ownership and allocation.
 Report: `docs/benchmarks/2026-09-07T07-07-51Z-048129c/`. Profile:
 `docs/perf/flamegraphs/2026-09-07-048129c/`. These run directories are ignored;
 this journal entry is the tracked record.
+
+## Benchmark: 2026-09-07 — arena-backed provenance
+
+Recursa's occurrence sidecar now allocates its recursive nodes, child vectors,
+separator vectors, and repetition accumulators in one `bumpalo::Bump` owned
+with the completed provenance by `self_cell`. The arena lifetime is confined to
+Recursa's hidden parser ABI: generated AST types and pg-sql's public `Parsed`
+surface are unchanged. Retained nodes take ownership of the arena vectors built
+during folding, avoiding a second copy whose abandoned capacity cannot be
+reclaimed until the arena is dropped.
+
+The comparison is pg-sql `b0362a6` / recursa `64be52b` before the change versus
+the same pg-sql tree and recursa `a59c23d` after it. Each final timing is a
+15-second clean flame-harness loop, run serially:
+
+| Canonical workload | Before statements/s | After statements/s | Change |
+| --- | --: | --: | --: |
+| `corpus` | 130,900.5 | 175,134.4 | **+33.8%** |
+| `select_list_10000` | 123.8 | 149.1 | **+20.4%** |
+| `bool_chain` | 1,157.8 | 1,431.1 | **+23.6%** |
+
+One counted pass over the 33,692-statement corpus isolates the allocation
+change. Lexing is identical; the table reports parsing only:
+
+| Parse allocation measure | Before | After | Change |
+| --- | --: | --: | --: |
+| Allocations | 3,244,021 | 748,926 | **-76.9%** |
+| Allocations / statement | 96.3 | 22.2 | **-76.9%** |
+| Allocated bytes | 359,052,178 | 255,778,802 | **-28.8%** |
+| Bytes / statement | 10,657 | 7,592 | **-28.8%** |
+
+The first arena version copied temporary bump vectors into retained bump
+vectors. It improved `corpus` and `bool_chain`, but regressed
+`select_list_10000` by 8.6% and allocated 22.8 MiB while parsing that one
+statement. A profile put 35.8% of attributed self time in provenance folding.
+Letting retained nodes own the already-built occurrence and separator vectors
+reduced the wide statement to 6.56 MiB and turned the regression into the
+20.4% gain above. That discarded profile is in
+`docs/perf/flamegraphs/2026-09-07-b0362a6-dirty/` (ignored).
+
+Correctness evidence after the final representation: Recursa core 63/63,
+pg-sql's full feature-enabled test targets including the 234-file differential
+suite and 1,121 embedded tests, the complete Recursa code-generation test
+suite, fixture-lock policy, hidden-ABI documentation policy, and the canonical
+warnings/private-documentation Clippy gate all pass.
