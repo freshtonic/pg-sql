@@ -8,7 +8,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
-        assert!(!stmt.with_clause.recursive);
+        assert!(!stmt.with_clause.is_recursive());
         assert_eq!(stmt.with_clause.ctes.len(), 1);
         assert!(input.is_eof());
     }
@@ -21,7 +21,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.with_clause.recursive);
+        assert!(stmt.with_clause.is_recursive());
         assert!(input.is_eof());
     }
 
@@ -32,7 +32,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.with_clause.recursive);
+        assert!(stmt.with_clause.is_recursive());
         assert_eq!(stmt.with_clause.ctes.len(), 1);
         assert!(input.is_eof());
     }
@@ -45,7 +45,7 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let stmt = WithStatement::parse(&mut input).unwrap().into_ast();
-        assert!(!stmt.with_clause.recursive);
+        assert!(!stmt.with_clause.is_recursive());
         assert_eq!(stmt.with_clause.ctes.len(), 2);
         assert!(input.is_eof());
     }

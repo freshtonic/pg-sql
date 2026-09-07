@@ -105,16 +105,47 @@ pub struct CteDefinition<'input> {
     pub cycle: Option<CycleClause<'input>>,
 }
 
+/// `WITH` with its optional `RECURSIVE` modifier. Keeping the alternatives
+/// explicit lets the LR table encode PostgreSQL's shift preference: an
+/// immediate `RECURSIVE` is always the modifier, never the first CTE name.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum WithClauseHead {
+    Recursive(RecursiveWith),
+    #[parse(lr_conflict(
+        action = shift,
+        against = ast::shared::with_clause::RecursiveWith,
+        lookahead = { RECURSIVE },
+        expect = 1
+    ))]
+    Plain(crate::ast::shared::flags::AnyWith),
+}
+
+#[derive(recursa::Node, Debug, Clone)]
+pub struct RecursiveWith {
+    pub with: crate::ast::shared::flags::AnyWith,
+    pub recursive: RecursiveKeyword,
+}
+
+#[derive(recursa::Node, Debug, Clone)]
+pub enum RecursiveKeyword {
+    #[tok(RECURSIVE)]
+    Value,
+}
+
 /// WITH clause: `WITH [RECURSIVE] cte_def, ...` — gram.y `with_clause:
 /// WITH cte_list | WITH_LA cte_list | WITH RECURSIVE cte_list`, whose
 /// `WITH_LA` twin lets the first CTE be named `time` or `ordinality`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct WithClause<'input> {
-    pub with: crate::ast::shared::flags::AnyWith,
-    #[presence(RECURSIVE)]
-    pub recursive: bool,
+    pub head: WithClauseHead,
     #[sep(COMMA)]
     pub ctes: recursa::Vec1<CteDefinition<'input>>,
+}
+
+impl WithClause<'_> {
+    pub fn is_recursive(&self) -> bool {
+        matches!(self.head, WithClauseHead::Recursive(_))
+    }
 }
 
 /// WITH statement: WITH clause followed by a query-shaped body.

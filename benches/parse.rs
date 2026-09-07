@@ -256,7 +256,7 @@ fn stress_shapes() -> Vec<(&'static str, Vec<(usize, &'static str)>)> {
                 (10_000, "select_list_10000.sql"),
             ],
         ),
-        // Sizes kept small: pg-sql's recursive-descent parser is pathologically
+        // Sizes kept small: deeply nested expressions are expensive to build and
         // slow on deep subquery nesting.
         (
             "nested_subquery",

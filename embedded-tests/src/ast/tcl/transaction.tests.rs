@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::session::set_reset::VariableSetStmt;
     use crate::ast::test_support::*;
 
     #[test]
@@ -41,12 +42,11 @@ mod tests {
 
     #[test]
     fn parse_set_transaction_modes() {
-        let lexed = crate::lex(
-            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE",
-        );
+        let lexed =
+            crate::lex("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetTransactionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -55,7 +55,7 @@ mod tests {
         let lexed = crate::lex("SET TRANSACTION READ WRITE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetTransactionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -64,7 +64,7 @@ mod tests {
         let lexed = crate::lex("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetTransactionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -73,7 +73,7 @@ mod tests {
         let lexed = crate::lex("SET TRANSACTION SNAPSHOT 'FFF-FFF-F'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetTransactionStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 

@@ -608,7 +608,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	is_true_in_select_item	false
 embedded-tests/src/ast/shared/expr.tests.rs	legacy_json_object_call_is_ordinary_func	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_addition	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_adjacent	false
-embedded-tests/src/ast/shared/expr.tests.rs	parse_adjacent_string_literals	false
+embedded-tests/src/ast/shared/expr.tests.rs	reject_same_line_adjacent_string_literals	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_all_array_literal	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_and_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_any_array_literal	false
@@ -726,6 +726,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_like_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_lt_caret_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_lt_percent_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_multidim_array_literal	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_multi_part_qualified_references	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_named_arg_colon_equals	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_neq_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_no_extend_above	false
@@ -782,7 +783,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_strictly_below	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_strictly_left	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_strictly_right	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_string_continuation_across_newline	false
-embedded-tests/src/ast/shared/expr.tests.rs	parse_string_continuation_after_comment_and_later_newline	false
+embedded-tests/src/ast/shared/expr.tests.rs	reject_string_continuation_across_block_comment	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_string_literal	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_subquery_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_subscript_unchanged	false

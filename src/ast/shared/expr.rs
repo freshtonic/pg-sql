@@ -20,35 +20,13 @@ pub enum ParenthesizedClose {
     Value,
 }
 
-/// A PostgreSQL query admitted directly inside a position that supplies its
-/// own parentheses: gram.y `select_no_parens` (gram.y:12698) restricted to
-/// the forms whose `select_clause` is a `simple_select`.
-///
-/// gram.y makes the same restriction, and for the same reason. A bare
-/// `select_clause` with no sort, limit or locking tail is only
-/// `select_no_parens` when it is a `simple_select`; a parenthesized one
-/// reaches these positions as `select_with_parens` instead, through the
-/// position's own alternative. Admitting `( SELECT 1 )` here as well would
-/// give `IN ((SELECT 1))` two derivations.
+/// One PostgreSQL string value, either a single literal or a scanner-valid
+/// newline-concatenated sequence. The sequence is one lexical token so ignored
+/// block-comment trivia cannot disappear between its fragments.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct DirectSubquery<'input> {
-    pub with: Option<crate::ast::shared::with_clause::WithClause<'input>>,
-    pub clause: crate::ast::dml::values::SimpleSelect<'input>,
-    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
-    pub limit_offset: Option<Box<crate::ast::dml::select::LimitOffsetClause<'input>>>,
-    pub for_update: Option<Box<crate::ast::dml::select::ForUpdateClause<'input>>>,
-}
-
-/// One or more adjacent string literals, concatenated by Postgres into a
-/// single value: `'first' ' - next' 'third'`.
-///
-/// PostgreSQL only concatenates two adjacent string literals when their gap
-/// contains a newline. A block comment does not itself satisfy that rule, but
-/// a later newline in the same gap does; the lexer records that classification
-/// before the generated parser sees the string parts.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct StringLitSeq0<'input> {
-    pub parts: recursa::Vec1<literal::StringLit<'input>>,
+pub enum StringLitSeq0<'input> {
+    Sequence(literal::StringLitSequence<'input>),
+    Single(literal::StringLit<'input>),
 }
 
 /// Content inside IN parentheses: either a subquery or expression list.
@@ -68,7 +46,7 @@ pub struct StringLitSeq0<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub enum InContent<'input> {
     Exprs(#[sep(COMMA)] recursa::Vec1<Expr<'input>>),
-    Subquery(Box<DirectSubquery<'input>>),
+    Subquery(Box<Subquery<'input>>),
 }
 
 /// `IN (expr, ...)` or `IN (subquery)` postfix suffix.
@@ -244,7 +222,8 @@ pub struct IsNotFormNormalizedTail {
 
 // --- Atom wrapper structs ---
 
-/// Qualified column reference: `table.column`
+/// Dotted or subscripted column reference: `table.column`,
+/// `schema.table.column`, or `schema.table.*`.
 ///
 /// gram.y spells this `columnref: ColId indirection`, so the qualifier is a
 /// `ColId`: unreserved and column-name keywords (`EXCLUDED`, `NEW`, `OLD`, ...)
@@ -260,13 +239,26 @@ pub struct IsNotFormNormalizedTail {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct QualifiedRef<'input> {
     pub table: crate::tokens::ColId<'input>,
-    #[tok(DOT, this)]
-    pub column: literal::AliasName<'input>,
-    /// The rest of gram.y `columnref: ColId indirection`: subscripts, each
-    /// with the field selectors that may follow it.
-    /// Greedy: a leading LBRACKET starts this element instead of ending `QualifiedRef` (bison shift preference).
-    #[greedy(LBRACKET)]
-    pub subscripts: Vec<SubscriptIndirection<'input>>,
+    /// Requiring the first indirection here keeps this branch disjoint from
+    /// [`ColumnRef`], while putting fields, wildcards, and subscripts in one
+    /// chain mirrors gram.y's `columnref: ColId indirection` for references
+    /// of any supported qualification depth.
+    pub first: QualifiedRefFirstIndirection<'input>,
+    #[greedy(DOT, LBRACKET)]
+    pub rest: Vec<ParenthesizedIndirection<'input>>,
+    /// A dotted function name and a dotted column reference share the same
+    /// unbounded prefix. Owning the optional call tail here lets the parser
+    /// decide at the first non-indirection token instead of trying to peek
+    /// past an arbitrary number of name parts.
+    pub call: Option<FunctionCallTail<'input>>,
+}
+
+/// The first indirection of a qualified reference must start with a dot.
+/// Later elements may also be subscripts.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum QualifiedRefFirstIndirection<'input> {
+    Field(IndirectionField<'input>),
+    Star(ParenthesizedDotStar),
 }
 
 /// gram.y `columnref: ColId | ColId indirection` for an unqualified name:
@@ -291,13 +283,6 @@ pub struct PositionalParam<'input> {
     /// Greedy: a leading LBRACKET starts this element instead of ending `PositionalParam` (bison shift preference).
     #[greedy(LBRACKET)]
     pub subscripts: Vec<SubscriptIndirection<'input>>,
-}
-
-/// Qualified wildcard: `table.*`
-#[derive(recursa::Node, Debug, Clone)]
-pub struct QualifiedWildcard<'input> {
-    #[tok(this, DOT, STAR)]
-    pub table: crate::tokens::ColId<'input>,
 }
 
 /// Window specification: `OVER window_name` or `OVER (inline_spec)`.
@@ -464,24 +449,32 @@ pub struct NamedFuncArg<'input> {
     pub value: Box<Expr<'input>>,
 }
 
-/// One or more ordinary PostgreSQL `func_arg_expr` values.
-///
-/// The comma is a separator for the whole sequence, rather than a leading
-/// token on every argument after the first. That keeps commas attached to the
-/// preceding argument when the sequence is pretty-printed.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
-pub struct FunctionArgumentSequence<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::Vec1<FuncArg<'input>>,
-);
-
 /// The `VARIADIC func_arg_expr` at either legal variadic site.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionVariadicArgument<'input> {
     #[tok(VARIADIC, this)]
     pub argument: FuncArg<'input>,
 }
+
+/// One or more ordinary PostgreSQL `func_arg_expr` values.
+///
+/// The comma belongs to the list, not to a modifier such as `ALL` or
+/// `DISTINCT`. Keeping the repetition in its own node is significant for the
+/// table-driven lowering: a token attachment on a repeated field is repeated
+/// with that field, whereas these modifiers occur exactly once before the
+/// complete list.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[parse(lr_conflict(
+    action = reduce,
+    against = ast::shared::expr::FunctionOrdinaryArguments,
+    lookahead = { RPAREN_TYPED_LA },
+    expect = 1
+))]
+pub struct FunctionArgumentList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<FuncArg<'input>>,
+);
 
 /// The sole `VARIADIC func_arg_expr` application form.
 #[derive(recursa::Node, Debug, Clone)]
@@ -490,47 +483,31 @@ pub struct FunctionLeadingVariadicArguments<'input> {
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
 }
 
-/// The state after a comma in an ordinary application.
+/// The final `, VARIADIC func_arg_expr` of a function application.
 ///
-/// `VARIADIC` cannot start [`FuncArg`], so these alternatives have disjoint
-/// FIRST sets. The variadic branch has no continuation and is terminal by
-/// construction.
+/// It immediately follows the ordinary comma-separated argument list. The
+/// list lowering recognises that its separator is this suffix's first token,
+/// and that `VARIADIC` cannot start [`FuncArg`], producing the same shared
+/// `func_arg_list ',' VARIADIC func_arg_expr` production as gram.y.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum FunctionArgumentAfterComma<'input> {
-    Variadic(FunctionVariadicArgument<'input>),
-    Next(Box<FunctionOrdinaryArgumentSequence<'input>>),
-}
-
-/// One comma followed by either the next plain argument or the one terminal
-/// variadic argument.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct FunctionArgumentContinuation<'input> {
+pub struct FunctionTrailingVariadicArgument<'input> {
     #[tok(COMMA, this)]
-    pub next: FunctionArgumentAfterComma<'input>,
-}
-
-/// A non-empty plain list with at most one trailing variadic argument.
-#[derive(recursa::Node, Debug, Clone)]
-pub struct FunctionOrdinaryArgumentSequence<'input> {
-    pub first: FuncArg<'input>,
-    pub next: Option<Box<FunctionArgumentContinuation<'input>>>,
-}
-
-impl FunctionOrdinaryArgumentSequence<'_> {
-    pub fn has_trailing_variadic(&self) -> bool {
-        match self.next.as_deref().map(|continuation| &continuation.next) {
-            None => false,
-            Some(FunctionArgumentAfterComma::Variadic(_)) => true,
-            Some(FunctionArgumentAfterComma::Next(next)) => next.has_trailing_variadic(),
-        }
-    }
+    pub variadic: FunctionVariadicArgument<'input>,
 }
 
 /// A plain non-empty argument list, optionally ending in one variadic
 /// argument, followed by the aggregate's optional inner `ORDER BY`.
 #[derive(recursa::Node, Debug, Clone)]
+#[parse(lr_conflict(
+    action = reduce,
+    against = ast::shared::expr::FunctionArgumentList,
+    lookahead = { RPAREN, RPAREN_SELECT_LA },
+    expect = 2
+))]
 pub struct FunctionOrdinaryArguments<'input> {
-    pub args: FunctionOrdinaryArgumentSequence<'input>,
+    #[sep(COMMA)]
+    pub args: recursa::Vec1<FuncArg<'input>>,
+    pub trailing_variadic: Option<FunctionTrailingVariadicArgument<'input>>,
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
 }
 
@@ -538,7 +515,7 @@ pub struct FunctionOrdinaryArguments<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionAllArguments<'input> {
     #[tok(ALL, this)]
-    pub args: FunctionArgumentSequence<'input>,
+    pub args: FunctionArgumentList<'input>,
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
 }
 
@@ -547,7 +524,7 @@ pub struct FunctionAllArguments<'input> {
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionDistinctArguments<'input> {
     #[tok(DISTINCT, this)]
-    pub args: FunctionArgumentSequence<'input>,
+    pub args: FunctionArgumentList<'input>,
     pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
 }
 
@@ -680,19 +657,19 @@ pub struct FunctionCallSuffix<'input> {
 
 /// gram.y `AexprConst: func_name '(' func_arg_list opt_sort_clause ')'
 /// Sconst`: a typed literal spelled like a call, `char(20) 'x'`. The
-/// argument list is `func_arg_list opt_sort_clause` and nothing more: `*`,
-/// `DISTINCT`, `ALL` and `VARIADIC` belong to `func_application` and are
-/// syntax errors here. A named argument or the sort clause is grammatical
-/// and gram.y rejects it in the rule's action ("type modifier cannot have
-/// parameter name" / "... ORDER BY"). It parts from [`FunctionCallSuffix`]
-/// on the string after `)`.
+/// argument list is `func_arg_list` and nothing more: `*`, `DISTINCT`,
+/// `ALL`, `VARIADIC`, and `ORDER BY` belong to `func_application` and are
+/// syntax errors here. PostgreSQL's `AexprConst` includes `opt_sort_clause`
+/// only to avoid a bison reduce/reduce conflict, then rejects that clause in
+/// its rule action. pg-sql has no rule actions, so its declarative grammar
+/// must exclude it. Named function arguments are a separate pre-existing
+/// semantic-action gap and remain structurally accepted here. It parts from
+/// [`FunctionCallSuffix`] on the string after `)`.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FunctionTypedLiteralTail<'input> {
     pub open: FunctionCallOpen,
     /// gram.y `func_arg_list`.
-    pub args: FunctionArgumentSequence<'input>,
-    /// gram.y `opt_sort_clause`.
-    pub order_by: Option<Box<crate::ast::dml::select::OrderByClause<'input>>>,
+    pub args: FunctionArgumentList<'input>,
     pub close: FunctionCallClose,
     pub value: literal::StringLit<'input>,
 }
@@ -707,10 +684,13 @@ pub enum FunctionCallTail<'input> {
     Call(FunctionCallSuffix<'input>),
 }
 
-/// Function expression with a staged, state-valid continuation.
+/// Unqualified function expression with a staged, state-valid continuation.
+///
+/// Dotted function calls are represented by [`QualifiedRef`], which owns the
+/// common unbounded dotted prefix shared with qualified column references.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct FuncCall<'input> {
-    pub name: FuncCallName<'input>,
+    pub name: crate::tokens::type_function_name<'input>,
     pub tail: FunctionCallTail<'input>,
 }
 
@@ -739,11 +719,20 @@ pub struct QuotedFuncCall<'input> {
 /// comma-separated expression list.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ParenContent<'input> {
-    /// gram.y `c_expr: select_with_parens %prec UMINUS`: with a query on the
-    /// stack the parser reduces rather than shifting the query's own
-    /// `ORDER BY` / `LIMIT` / `FETCH` / `FOR` tail.
     #[parse(prec = UMINUS)]
-    Subquery(Box<DirectSubquery<'input>>),
+    #[parse(lr_conflict(
+        action = reduce,
+        against = ast::dml::values::SelectWithParens,
+        lookahead = { RPAREN },
+        expect = 1
+    ))]
+    #[parse(lr_conflict(
+        action = shift,
+        against = ast::dml::values::SelectWithParens,
+        lookahead = { RPAREN_SELECT_LA },
+        expect = 1
+    ))]
+    Subquery(Box<Subquery<'input>>),
     Exprs(#[sep(COMMA)] recursa::Vec1<Expr<'input>>),
 }
 
@@ -765,19 +754,11 @@ pub enum ParenthesizedIndirection<'input> {
 
 /// Parenthesized scalar, row, or subquery content, optionally followed by an
 /// arbitrary field, wildcard, or subscript indirection chain.
-///
-/// Owning the common `(` prefix in one Pratt atom keeps `(expr)`, `(a, b)`,
-/// `(SELECT ...)`, `(expr).*`, and `(expr).field` in one declarative grammar
-/// branch. A singleton [`ParenContent::Exprs`] is the authored precedence
-/// grouping path used by Pretty. The grammar admits `.*` in the common chain;
-/// enforcing that it is terminal belongs to the later PostgreSQL
-/// semantic-validation layer.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct ParenthesizedExpr<'input> {
     pub open: ParenthesizedOpen,
     pub content: ParenContent<'input>,
     pub close: ParenthesizedClose,
-    /// Greedy: a leading DOT, LBRACKET starts this element instead of ending `ParenthesizedExpr` (bison shift preference).
     #[greedy(DOT, LBRACKET)]
     pub indirection: Vec<ParenthesizedIndirection<'input>>,
 }
@@ -1119,7 +1100,7 @@ pub enum QuantifiedComparisonKind {
 /// The single expression or query inside a quantified comparison.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum QuantifiedComparisonOperand<'input> {
-    Subquery(Box<DirectSubquery<'input>>),
+    Subquery(Box<Subquery<'input>>),
     Expr(Box<Expr<'input>>),
 }
 
@@ -1562,34 +1543,22 @@ pub enum TimeZoneQualifier {
 
 /// `TIMESTAMP [WITH|WITHOUT TIME ZONE] 'string'`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(TIMESTAMP, this)]
 pub struct TimestampLit<'input> {
-    pub timestamp: TimestampKeyword,
     /// Optional precision, e.g., `timestamp(6)`.
     pub precision: Option<TypePrecision<'input>>,
     pub tz: Option<TimeZoneQualifier>,
     pub value: literal::StringLit<'input>,
 }
 
-#[derive(recursa::Node, Debug, Clone)]
-pub enum TimestampKeyword {
-    #[tok(TIMESTAMP)]
-    Value,
-}
-
 /// `TIME [WITH|WITHOUT TIME ZONE] 'string'`.
 #[derive(recursa::Node, Debug, Clone)]
+#[tok(TIME, this)]
 pub struct TimeLit<'input> {
-    pub time: TimeKeyword,
     /// Optional precision, e.g., `time(2)`.
     pub precision: Option<TypePrecision<'input>>,
     pub tz: Option<TimeZoneQualifier>,
     pub value: literal::StringLit<'input>,
-}
-
-#[derive(recursa::Node, Debug, Clone)]
-pub enum TimeKeyword {
-    #[tok(TIME)]
-    Value,
 }
 
 /// `SECOND [(p)]` — the SECOND keyword with optional fractional-second
@@ -2461,11 +2430,11 @@ pub enum JsonArrayArgs<'input> {
 /// `select_no_parens json_format_clause_opt json_returning_clause_opt`: the
 /// query form has no `ON NULL` clause, so the query ends where its own
 /// syntax ends. The `FORMAT JSON` option is not admitted: `FORMAT` is also
-/// a table alias in the query's FROM list, which gram.y tells apart only
-/// through the `FORMAT_LA` token filter that recursive descent lacks.
+/// a table alias in the query's FROM list, which the `FORMAT_LA` token filter
+/// distinguishes in the table-driven grammar.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct JsonArrayQueryArgs<'input> {
-    pub query: Box<DirectSubquery<'input>>,
+    pub query: Box<Subquery<'input>>,
     pub returning: Option<JsonReturning<'input>>,
 }
 
@@ -2966,7 +2935,7 @@ pub enum Expr<'input> {
     // `%nonassoc ESCAPE` one level above `LIKE`. The `ESCAPE` operand is
     // an attached optional operand on the variant itself (recursa #123),
     // so it is a Pratt right operand at `ESCAPE`'s level and carries that
-    // precedence into both parsers: it takes every operator above
+    // precedence into the generated parser: it takes every operator above
     // `ESCAPE` (`'$'::bytea`, `'$' || 'x'`) and stops at `LIKE`'s level
     // and below. The first pass had to spell this as a separate
     // `EscapeClause` struct with an exclusion list, which no rule
@@ -3437,9 +3406,8 @@ pub enum Expr<'input> {
     /// atom. Declared before `ColumnRef` for clarity (ColumnRef cannot
     /// match a reserved keyword anyway).
     User,
-    /// Qualified wildcard: `table.*` -- must come before QualRef and ColumnRef
-    QualWild(QualifiedWildcard<'input>),
-    /// Qualified column reference: `table.column` -- must come before ColumnRef
+    /// Qualified reference: `table.column`, `schema.table.column`, or
+    /// `schema.table.*` -- must come before ColumnRef.
     QualRef(QualifiedRef<'input>),
     /// Parenthesized scalar, row, or subquery, with optional field
     /// indirection. Its singleton expression route supplies Pretty's authored

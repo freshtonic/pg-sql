@@ -1,15 +1,6 @@
 /// SET/RESET statement AST.
 use crate::tokens::literal;
 
-/// Scope of a SET statement: `SESSION` or `LOCAL`.
-#[derive(recursa::Node, Debug, Clone)]
-pub enum SetScope {
-    #[tok(SESSION)]
-    Session,
-    #[tok(LOCAL)]
-    Local,
-}
-
 /// The value in a SET statement: literal, keyword, or identifier.
 ///
 /// Variant ordering: NumericLit before IntegerLit so `77.7` is consumed as a
@@ -66,15 +57,30 @@ pub enum SetSep {
     Eq,
 }
 
-/// Plain SET statement: `SET [SESSION|LOCAL] param TO|= value [, value ...]`.
+/// The generic `set_rest_more` form shared by top-level and nested `SET`
+/// statements.
+///
+/// This deliberately has no leading `SET` or scope. PostgreSQL's
+/// `VariableSetStmt` owns those literal prefixes, before it enters
+/// `set_rest`; keeping the same boundary prevents `SET SESSION
+/// CHARACTERISTICS` from reducing `SESSION` as a scope before
+/// `CHARACTERISTICS` can decide the rest.
 #[derive(recursa::Node, Debug, Clone)]
-#[tok(SET, this)]
-pub struct SetStmt<'input> {
-    pub scope: Option<SetScope>,
+pub struct GenericSetRest<'input> {
     pub param: crate::ast::shared::names::QualifiedName<'input>,
     pub sep: SetSep,
     #[sep(COMMA)]
     pub values: recursa::Vec1<SetValue<'input>>,
+}
+
+/// Generic nested `SET`: `SET param TO|= value [, value ...]`.
+///
+/// `FunctionSetResetClause` and `SetResetClause` use PostgreSQL's
+/// `set_rest_more`, which does not permit `LOCAL` or `SESSION`.
+#[derive(recursa::Node, Debug, Clone)]
+#[tok(SET, this)]
+pub struct SetStmt<'input> {
+    pub rest: GenericSetRest<'input>,
 }
 
 /// Role target in `SET ROLE`: role name, `NONE`, or `DEFAULT`.
@@ -86,15 +92,13 @@ pub enum SetRoleTarget<'input> {
     String(literal::StringLit<'input>),
 }
 
-/// `SET [SESSION|LOCAL] ROLE { rolename | NONE | DEFAULT }`.
+/// `ROLE { rolename | NONE | DEFAULT }`, the `set_rest_more` role form.
 ///
 /// The `SET ROLE TO ...` spelling is accepted through [`SetStmt`], matching
 /// PostgreSQL's `generic_set` route. Keeping `TO` out of this dedicated form
 /// prevents the two AST alternatives from recognizing the same token stream.
 #[derive(recursa::Node, Debug, Clone)]
-#[tok(SET, this)]
 pub struct SetRoleStmt<'input> {
-    pub scope: Option<SetScope>,
     #[tok(ROLE, this)]
     pub target: SetRoleTarget<'input>,
 }
@@ -108,22 +112,14 @@ pub enum SetSessionAuthTarget<'input> {
     Role(crate::tokens::ColId<'input>),
 }
 
-/// `SET [SESSION|LOCAL] SESSION AUTHORIZATION { rolename | DEFAULT }`
+/// `SESSION AUTHORIZATION { rolename | DEFAULT }`, the `set_rest_more`
+/// session-authorisation form.
 ///
-/// gram.y reaches this through the scope prefix like every other `set_rest`:
-/// `VariableSetStmt: SET set_rest | SET LOCAL set_rest | SET SESSION
-/// set_rest` (gram.y:1617) over one `set_rest`, whose `set_rest_more` holds
-/// `SESSION AUTHORIZATION NonReservedWord_or_Sconst` and `SESSION
-/// AUTHORIZATION DEFAULT` (gram.y:1761, 1770). The earlier spelling took
-/// `LOCAL` as a presence flag and wrote `SESSION AUTHORIZATION` as a
-/// literal, which put the shift of that `SESSION` against the reduce of the
-/// shared [`SetScope`] and left `SET LOCAL . SESSION` undecidable. Taking
-/// the shared scope restores gram.y's `SET SESSION SESSION AUTHORIZATION`
-/// spelling with it.
+/// The enclosing [`VariableSetStmt`] supplies any `LOCAL` or `SESSION`
+/// prefix. This also retains PostgreSQL's `SET SESSION SESSION
+/// AUTHORIZATION` spelling.
 #[derive(recursa::Node, Debug, Clone)]
-#[tok(SET, this)]
 pub struct SetSessionAuthStmt<'input> {
-    pub scope: Option<SetScope>,
     #[tok(SESSION, AUTHORIZATION, this)]
     pub target: SetSessionAuthTarget<'input>,
 }
@@ -165,11 +161,10 @@ pub enum SetTimeZoneTarget<'input> {
     String(literal::StringLit<'input>),
 }
 
-/// `SET [SESSION|LOCAL] TIME ZONE { signed_number | string | LOCAL | DEFAULT }`
+/// `TIME ZONE { signed_number | string | LOCAL | DEFAULT }`, the
+/// `set_rest_more` time-zone form.
 #[derive(recursa::Node, Debug, Clone)]
-#[tok(SET, this)]
 pub struct SetTimeZoneStmt<'input> {
-    pub scope: Option<SetScope>,
     #[tok(TIME, ZONE, this)]
     pub target: SetTimeZoneTarget<'input>,
 }
@@ -187,11 +182,55 @@ pub enum SetXmlOptionValue {
 /// `xmloption` GUC. Special-cased in PG's gram.y (`VariableSetStmt:
 /// SET set_rest_more`'s `XML OPTION document_or_content` form).
 #[derive(recursa::Node, Debug, Clone)]
-#[tok(SET, this)]
 pub struct SetXmlOptionStmt {
-    pub scope: Option<SetScope>,
     #[tok(XML, OPTION, this)]
     pub value: SetXmlOptionValue,
+}
+
+/// PostgreSQL's `set_rest`: the statements allowed after each literal
+/// `SET`, `SET LOCAL`, or `SET SESSION` prefix.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum VariableSetRest<'input> {
+    Transaction(crate::ast::tcl::transaction::SetTransactionRest<'input>),
+    SessionCharacteristics(crate::ast::tcl::transaction::SetSessionCharacteristicsRest<'input>),
+    Role(SetRoleStmt<'input>),
+    SessionAuthorization(SetSessionAuthStmt<'input>),
+    TimeZone(SetTimeZoneStmt<'input>),
+    XmlOption(SetXmlOptionStmt),
+    // `QualifiedName` admits several special-form keywords, so keep this
+    // fallback after their literal-leading branches.
+    Generic(GenericSetRest<'input>),
+}
+
+/// PostgreSQL's `VariableSetStmt`.
+///
+/// The three prefixes intentionally own their literal scope keywords rather
+/// than reducing through a `SetScope` nonterminal. This is gram.y's shape:
+/// after `SET SESSION`, `CHARACTERISTICS` can continue the unscoped
+/// `set_rest`, while every other following token enters the scoped one.
+#[derive(recursa::Node, Debug, Clone)]
+pub enum VariableSetStmt<'input> {
+    Unscoped(SetUnscoped<'input>),
+    Local(SetLocal<'input>),
+    Session(SetSession<'input>),
+}
+
+#[derive(recursa::Node, Debug, Clone)]
+pub struct SetUnscoped<'input> {
+    #[tok(SET, this)]
+    pub rest: VariableSetRest<'input>,
+}
+
+#[derive(recursa::Node, Debug, Clone)]
+pub struct SetLocal<'input> {
+    #[tok(SET, LOCAL, this)]
+    pub rest: VariableSetRest<'input>,
+}
+
+#[derive(recursa::Node, Debug, Clone)]
+pub struct SetSession<'input> {
+    #[tok(SET, SESSION, this)]
+    pub rest: VariableSetRest<'input>,
 }
 
 /// Target of a RESET statement.

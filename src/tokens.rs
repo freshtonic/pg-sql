@@ -841,7 +841,7 @@ recursa::tokens! {
     // (`src/backend/parser/parser.c`): the table-driven parser reads the
     // merged kind when the token is immediately followed by a trigger, the
     // way `base_yylex` rewrites the token stream so that `gram.y` stays
-    // LALR(1). Recursive descent ignores the block. Nodes keep writing
+    // LALR(1). Nodes keep writing
     // `#[tok(NOT, BETWEEN)]`; lowering substitutes the merged kind where a
     // trigger can follow.
     lookahead {
@@ -863,6 +863,23 @@ recursa::tokens! {
         // column). recursa #121 twins a filtered token at any rule
         // position, a Pratt prefix included, so the filter now lowers.
         NOT_LA = NOT before { BETWEEN, IN, LIKE, ILIKE, SIMILAR },
+        // `parser.c`: after a Unicode string/identifier token, a following
+        // `UESCAPE SCONST` is consumed as its escape clause. The grammar
+        // keeps `UESCAPE` as a bare-label keyword for every other position;
+        // the table-driven feed therefore marks only the clause-shaped
+        // spelling. `StringLit` is content-bearing, unlike parser.c's other
+        // fixed-token triggers.
+        UESCAPE_LA = UESCAPE before { StringLit },
+        // The function-style typed literal spelling `type(args) 'value'`
+        // shares its argument list with an ordinary function call. Mark only
+        // the closing delimiter followed by its string payload so the LR
+        // table reduces ordinary arguments on `)` and shifts the typed-literal
+        // close on this distinct lookahead.
+        // Typed literals and parenthesized set queries need different merged
+        // kinds: their trigger sets are disjoint, and combining them would
+        // make a function close before `)` look like a typed-literal close.
+        RPAREN_TYPED_LA = RPAREN before { StringLit },
+        RPAREN_SELECT_LA = RPAREN before { UNION, INTERSECT, EXCEPT, RPAREN },
     }
 
     // PostgreSQL's precedence declarations (`gram.y:829-900`, "Precedence:
@@ -878,7 +895,8 @@ recursa::tokens! {
     // Levels gram.y declares that pg-sql does not repeat here, and why:
     // `UNION EXCEPT` / `INTERSECT` (gram.y:830-831) order the set
     // operators, which pg-sql parses as `CompoundBody` rather than as
-    // `Expr` extenders; `NOT` (gram.y:834) is `Expr::Not`, a Pratt prefix;
+    // `Expr` extenders. `NOT` is also a Pratt prefix, but gets a declared
+    // level below for the LR frame-bound boundary.
     // `+ - * / % ^` (gram.y:890-892), `AT` (gram.y:894), `COLLATE`
     // (gram.y:895), `TYPECAST` (gram.y:899) and `.` (gram.y:900) are all
     // `Expr` variants whose binding power is the level; `[` `]` `(` `)`
@@ -987,6 +1005,10 @@ recursa::tokens! {
         // gram.y writes `'(' select_with_parens ')' %prec UMINUS`. It sits
         // at `Expr::Neg`'s binding power (120).
         right(bp = 120) { UMINUS },
+        // `NOT` is `Expr::Not` (bp 150). This level is consulted only for
+        // non-Pratt LR choices: after `ROWS BETWEEN`, it must start the
+        // first frame bound instead of reducing `BETWEEN` as a `ColId`.
+        right(bp = 150) { NOT },
     }
 }
 
@@ -1139,6 +1161,13 @@ pub mod literal {
     #[allow(dead_code)]
     #[derive(recursa::Node, Debug, Clone)]
     pub struct LiteralBindings<'input> {
+        // PostgreSQL `quotecontinue`: the whole concatenated value is one
+        // token, including every qualifying newline gap. This prevents the
+        // general trivia skipper from erasing a block comment between parts.
+        #[lex(
+            pattern = r"'[^']*(?:''[^']*)*'(?:(?:[ \t\f\v]|--[^\r\n]*)*(?:\r\n|\r|\n)(?:[ \t\r\n\f\v]+|--[^\r\n]*(?:\r\n|\r|\n))*'[^']*(?:''[^']*)*')+"
+        )]
+        pub string_sequence: StringLitSequence<'input>,
         #[lex(pattern = r"'[^']*(?:''[^']*)*'")]
         pub string: StringLit<'input>,
         #[lex(pattern = r"(?i:U)&'(?:[^']|'')*'")]

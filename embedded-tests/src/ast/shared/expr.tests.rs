@@ -1,12 +1,12 @@
 #[cfg(test)]
 mod tests {
     use crate::ast::shared::expr::{
-        CastType, CastTypeHead, ColumnRef, DirectSubquery, Expr,
+        CastType, CastTypeHead, ColumnRef, Expr,
         FunctionCallBody,
-        FunctionCallTail, ParenContent, ParenthesizedDotStar, ParenthesizedExpr,
-        JsonObject, ParenthesizedIndirection, TypeName,
+        FunctionCallTail, JsonObject, ParenContent, ParenthesizedDotStar, ParenthesizedExpr,
+        ParenthesizedIndirection, StringLitSeq0, TypeName,
     };
-    use crate::ast::dml::values::SimpleSelect;
+    use crate::ast::dml::values::{SelectClause, SimpleSelect, Subquery};
 
     /// Parse `src` as an `Expr` through the logos lex pass.
     ///
@@ -358,33 +358,22 @@ mod tests {
     }
 
     #[test]
-    fn parse_adjacent_string_literals() {
+    fn reject_same_line_adjacent_string_literals() {
         let lexed = crate::lex("'a' 'b'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
-        if let Expr::StringLit(seq) = &expr {
-            assert_eq!(seq.parts.len(), 2);
-        } else {
-            panic!("expected Expr::StringLit, got {:?}", expr);
-        }
-        assert!(input.is_eof());
+        assert!(Expr::parse(&mut input).is_err() || !input.is_eof());
     }
 
-    /// A block comment does not itself qualify as string-continuation
-    /// whitespace, but the later newline in this gap does (ADR 0004).
+    /// PostgreSQL's scanner permits only spaces and line comments in a
+    /// string-continuation gap. A block comment therefore prevents it even
+    /// when another newline follows (ADR 0004).
     #[test]
-    fn parse_string_continuation_after_comment_and_later_newline() {
+    fn reject_string_continuation_across_block_comment() {
         let lexed = crate::lex("'first line'\n/* comment */\n' - next line'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let expr = Expr::parse(&mut input).unwrap().into_ast();
-        if let Expr::StringLit(seq) = &expr {
-            assert_eq!(seq.parts.len(), 2, "later newline must continue the string");
-        } else {
-            panic!("expected Expr::StringLit, got {expr:?}");
-        }
-        assert!(input.is_eof());
+        assert!(Expr::parse(&mut input).is_err() || !input.is_eof());
     }
 
     /// A legitimate newline-separated 3-part string continuation (no comment)
@@ -394,7 +383,7 @@ mod tests {
     fn parse_three_part_string_continuation_classified() {
         let expr = parse_expr_classified("'first line'\n' - next line'\n\t' - third line'");
         if let Expr::StringLit(seq) = &expr {
-            assert_eq!(seq.parts.len(), 3, "all three parts must concatenate");
+            assert!(matches!(seq, StringLitSeq0::Sequence(_)));
         } else {
             panic!("expected Expr::StringLit, got {expr:?}");
         }
@@ -409,7 +398,7 @@ mod tests {
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
         if let Expr::StringLit(seq) = &expr {
-            assert_eq!(seq.parts.len(), 2);
+            assert!(matches!(seq, StringLitSeq0::Sequence(_)));
         } else {
             panic!("expected Expr::StringLit, got {expr:?}");
         }
@@ -420,12 +409,12 @@ mod tests {
     fn parse_three_part_string_concat() {
         // 3-part adjacent string literal concatenation. Postgres concatenates
         // these into a single value at parse time.
-        let lexed = crate::lex("'first' 'second' 'third'");
+        let lexed = crate::lex("'first'\n'second'\n'third'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
         if let Expr::StringLit(seq) = &expr {
-            assert_eq!(seq.parts.len(), 3);
+            assert!(matches!(seq, StringLitSeq0::Sequence(_)));
         } else {
             panic!("expected StringLit, got {:?}", expr);
         }
@@ -434,12 +423,12 @@ mod tests {
 
     #[test]
     fn parse_four_part_string_concat() {
-        let lexed = crate::lex("'a' 'b' 'c' 'd'");
+        let lexed = crate::lex("'a'\n'b'\n'c'\n'd'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
         if let Expr::StringLit(seq) = &expr {
-            assert_eq!(seq.parts.len(), 4);
+            assert!(matches!(seq, StringLitSeq0::Sequence(_)));
         } else {
             panic!("expected StringLit");
         }
@@ -449,7 +438,7 @@ mod tests {
     fn parse_three_adjacent_strings_with_quoted_alias() {
         use crate::ast::dml::select::SelectStmt;
         let lexed = crate::lex(
-            "SELECT 'first line' ' - next line' ' - third line' AS \"Three lines to one\"",
+            "SELECT 'first line'\n' - next line'\n' - third line' AS \"Three lines to one\"",
         );
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
@@ -459,9 +448,9 @@ mod tests {
 
     #[test]
     fn parse_three_adjacent_strings_with_alias() {
-        // SELECT 'first line' ' - next line' AS foo
+        // SELECT 'first line' newline ' - next line' AS foo
         use crate::ast::dml::select::SelectStmt;
-        let lexed = crate::lex("SELECT 'first line' ' - next line' AS foo");
+        let lexed = crate::lex("SELECT 'first line'\n' - next line' AS foo");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let _stmt = SelectStmt::parse(&mut input).unwrap().into_ast();
@@ -762,7 +751,9 @@ mod tests {
                         Some(FunctionCallBody::All(_)) => "all",
                         Some(FunctionCallBody::Distinct(_)) => "distinct",
                         Some(FunctionCallBody::LeadingVariadic(_)) => "leading-variadic",
-                        Some(FunctionCallBody::Args(args)) if args.args.has_trailing_variadic() => {
+                        Some(FunctionCallBody::Args(args))
+                            if args.trailing_variadic.is_some() =>
+                        {
                             "trailing-variadic"
                         }
                         Some(FunctionCallBody::Args(args)) if args.order_by.is_some() => "ordered",
@@ -801,9 +792,9 @@ mod tests {
     /// production for every argument shape, so an ordered, `DISTINCT` or
     /// `VARIADIC` argument list before `WITHIN GROUP` is grammatical and only
     /// parse analysis rejects it (`cannot use multiple ORDER BY clauses with
-    /// WITHIN GROUP`). The typed literal `func_name '(' func_arg_list
-    /// opt_sort_clause ')' Sconst` admits a named argument and a sort clause,
-    /// which gram.y rejects in the rule's action, not in its grammar.
+    /// WITHIN GROUP`). A typed literal still admits a named argument, which
+    /// gram.y rejects in a rule action. Its semantically rejected inner
+    /// `ORDER BY` is excluded here because pg-sql has no rule-action phase.
     #[test]
     fn accept_function_applications_gram_y_admits() {
         for src in [
@@ -811,7 +802,6 @@ mod tests {
             "f(DISTINCT 1) WITHIN GROUP (ORDER BY 1)",
             "f(VARIADIC xs) WITHIN GROUP (ORDER BY 1)",
             "char(n => 1) 'x'",
-            "char(1 ORDER BY 1) 'x'",
         ] {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
@@ -858,6 +848,7 @@ mod tests {
             "char(*) 'x'",
             "char(DISTINCT 1) 'x'",
             "char(VARIADIC xs) 'x'",
+            "char(1 ORDER BY 1) 'x'",
             "char(1) 'x' FILTER (WHERE true)",
         ] {
             let lexed = crate::lex(src);
@@ -1655,7 +1646,21 @@ mod tests {
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let expr = Expr::parse(&mut input).unwrap().into_ast();
-        assert!(matches!(expr, Expr::QualWild(_)));
+        assert!(matches!(expr, Expr::QualRef(_)));
+    }
+
+    #[test]
+    fn parse_multi_part_qualified_references() {
+        for source in ["s.t.column", "s.t.*", "s.func(1)"] {
+            let lexed = crate::lex(source);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {source:?}");
+            let mut input = lexed.input();
+            let expr = Expr::parse(&mut input)
+                .unwrap_or_else(|error| panic!("parse {source:?}: {error}"))
+                .into_ast();
+            assert!(matches!(expr, Expr::QualRef(_)), "{source:?}");
+            assert!(input.is_eof(), "trailing input in {source:?}");
+        }
     }
 
     /// gram.y qualifies a `columnref` with a `ColId`, so unreserved and
@@ -1675,7 +1680,7 @@ mod tests {
                 .unwrap_or_else(|e| panic!("parse {src:?}: {e}"))
                 .into_ast();
             assert!(
-                matches!(expr, Expr::QualRef(_) | Expr::QualWild(_)),
+                matches!(expr, Expr::QualRef(_)),
                 "{src:?} must qualify",
             );
         }
@@ -1894,7 +1899,7 @@ mod tests {
                 content: ParenContent::Subquery(ref subquery),
                 ref indirection,
                 ..
-            }) if matches!(subquery.clause, SimpleSelect::ParenthesizedSet(_))
+            }) if matches!(subquery.body.clause, SelectClause::Simple(SimpleSelect::ParenthesizedSet(_)))
                 && indirection.is_empty()
         ));
         assert!(input.is_eof());
@@ -1916,7 +1921,7 @@ mod tests {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
             let mut input = lexed.input();
-            let parsed = DirectSubquery::parse(&mut input);
+            let parsed = Subquery::parse(&mut input);
             assert!(
                 parsed.is_err() || !input.is_eof(),
                 "invalid duplicate clause parsed to EOF: {src:?}"
@@ -1939,7 +1944,7 @@ mod tests {
             "(SELECT 1) UNION VALUES(2) OFFSET 3",
             "(SELECT 1) UNION VALUES(2) FETCH FIRST 2 ROWS ONLY",
         ] {
-            assert_eq!(roundtrip::<DirectSubquery>(src), src);
+            assert_eq!(roundtrip::<Subquery>(src), src);
         }
     }
 
@@ -3230,7 +3235,7 @@ mod tests {
     /// `(SubSelect)::Typename` is gram.y `c_expr → '(' SubSelect ')' typecast`.
     /// The unified parenthesized atom returns the inner `(SubSelect)` to the
     /// Pratt loop, which consumes each trailing cast before the next enclosing
-    /// `ParenContent` expects its close parenthesis.
+    /// the parenthesized expression expects its close parenthesis.
     #[test]
     fn parse_paren_subquery_cast_in_nested_contexts() {
         for src in [

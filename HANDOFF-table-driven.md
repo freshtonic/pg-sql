@@ -3,32 +3,29 @@
 Written 2026-09-06. Everything below is **local and unpushed**.
 
 The goal, from `docs/research/postgres-parser-performance.md` section 8: pg-sql's
-recursive-descent parser pays about 7.5x PostgreSQL per nesting level, which is a
-property of the technique, not a defect. So recursa gained a second parser style
-that generates an LALR(1) parser in bison's shape, and pg-sql is being made
-LALR-clean so it can use it.
+recursive-descent parser paid about 7.5x PostgreSQL per nesting level, which is a
+property of the technique, not a defect. Recursa gained a table-driven LALR(1)
+parser style in bison's shape; pg-sql now selects that style exclusively.
 
 The design is settled and written down. Read these three before anything else:
 
 - `../recursa/docs/table-driven-parsing.md` — the full design, decision by decision.
 - `../recursa/docs/adr/0004-lalr-tables-for-the-table-driven-parser-style.md`.
-- The module header of `tests/two_parsers.rs` in this repo — **the authoritative,
-  in-tree record of every remaining LR conflict and what each group needs.** It is
-  kept current and it is the first thing to read when resuming.
+- `tests/table_parser.rs` — the focused table-driven smoke gate. The PostgreSQL
+  differential suite is the exhaustive acceptance gate.
 
 ## State
 
 | | |
 |---|---|
-| recursa `main` | `08daf79`, **73 commits ahead of origin** |
-| pg-sql `main` | `0fab429`, **36 commits ahead of origin** |
-| recursa suite | 885 passed, 0 failed |
-| pg-sql differential | **231 passed / 3 failed** — the acceptance bar, unchanged all the way through |
-| LR conflicts | **17**, from 9,643 |
-| `parsers(rd, lr)` declared | **No.** recursa refuses to generate with any conflict |
+| recursa dependency | `.recursa-revision` pins `81dca1e` |
+| recursa validation | complete codegen integration suite passed |
+| pg-sql differential | **234 passed / 0 failed** |
+| LR conflicts | **0**, from 9,643 |
+| parser declaration | `parser_style = table_driven` — pg-sql emits no recursive-descent parser |
 
 The two repos are coupled by a path dependency and by `.recursa-revision`, which
-now pins `08daf79`. **They must be pushed together**; pushing one alone breaks CI.
+now pins `81dca1e`. **They must be pushed together**; pushing one alone breaks CI.
 
 ## What is done
 
@@ -38,12 +35,12 @@ value stack, containers, Pratt lowering to precedence, the lookahead filter,
 LAC error paths, provenance, named parsers, a `precedence { }` block mirroring
 gram.y's, and the twin-fixture gate that parses every example under both parsers.
 
-pg-sql has had four passes on #68, taking conflicts 9,643 → 522 → 33 → 31 → 23 → 17,
-plus the psql separation. Every pass held the differential at 231/3.
+pg-sql resolved #68, taking conflicts 9,643 → 522 → 33 → 31 → 23 → 17 → 0,
+plus the psql separation. The final differential is 234/234.
 
-## The remaining 17 conflicts
+## Resolution
 
-**12 — recursa #132. The blocker, and it needs a decision, not just work.**
+**12 — recursa #132. Resolved with scoped declarations.**
 gram.y writes every position admitting both a parenthesised query and a
 parenthesised expression as two alternatives that each own their `(`
 (gram.y:16715, 15391, 13492, 15152), and keeps `%expect 0` through token precedence
@@ -60,42 +57,46 @@ incapable, and deliberately **not merged** (branch `table-driven/129-shared-nont
 in `../recursa`, kept for the record). Do not resurrect it without a use case —
 the proof is on issue #129.
 
-Options worth weighing, none yet chosen:
-1. Give recursive descent a bounded committed-try at these sites — the
-   `#[parse(backtrack)]` valve `../recursa/docs/api-design.md` has reserved since
-   the start and nobody has built. Costs RD speed at those sites only.
-2. Teach balanced dispatch to separate alternatives whose residuals differ only
-   after the closing token.
-3. Let a grammar declare a per-site conflict resolution, bison's `%expect` narrowed
-   to one state. Retreats from ADR 0004's "every conflict is a hard build error".
+**Decision:** add scoped LR conflict resolutions, recorded in
+`docs/adr/0008-use-scoped-lr-conflict-resolutions.md`. It must select conflicts
+by stable grammar-source identities and lookaheads, never generated state
+numbers; declare the intended action or reducing source rule; match exactly the
+conflicts it claims; and appear in the automaton dump. The 12 cells are ten
+shift/reduce and two reduce/reduce conflicts. Stale, missing, ambiguous or over-broad
+declarations fail the build. Every unresolved conflict remains a hard build
+error.
 
-**3 — `func_arg_list`.** Merging `FunctionCallTail`'s variants would share every
+This was chosen over `#[parse(backtrack)]`, whose bounds and rollback semantics
+are not yet defined for this arbitrarily nested prefix, and over extending
+balanced dispatch to discriminate inside the enclosure, for which no algorithm
+or complexity bound exists. An AST rearrangement does not remove the recognition
+problem: it either recreates `RCA0200`, admits two derivations, or requires the
+much larger parser-specific-CST architecture.
+
+**3 — `func_arg_list`. Resolved.** Merging `FunctionCallTail`'s variants would share every
 nonterminal to `')'` as gram.y does, but pg-sql's `body` is `FunctionCallBody`, so
 typed literals would then admit `*`, `DISTINCT`, `ALL`, `VARIADIC`, which gram.y
 rejects grammatically (`AexprConst`, gram.y:17231). Over-acceptance bought for 3
-conflicts that cannot reach zero anyway. Left deliberately.
+conflicts that cannot reach zero under the prior shape.
 
-**1 — `SET SESSION . CHARACTERISTICS`.** Described in the in-tree note.
+**1 — `SET SESSION . CHARACTERISTICS`. Resolved.**
 
-**1 — `UESCAPE`.** Not expressible in an LALR grammar that sees the two tokens:
-`UESCAPE` is a bare-label keyword (gram.y:18474) so it may legitimately follow the
-literal, and `scan.l` merges them. Probably permanent.
+**1 — `UESCAPE`. Resolved.** The table-driven lexer/parser now preserves the
+PostgreSQL scanner's continuation boundary without admitting an invalid sequence.
 
 ## Next steps, in order
 
-1. **Decide recursa #132** (the three options above). It gates everything.
-2. Implement it; conflicts should fall to about 5.
-3. Decide whether the last 5 are acceptable, or press on to zero.
-4. At zero: declare `parsers(rd = recursive_descent, lr = table_driven)` in
-   `src/lib.rs` (rd first — a table-driven default beside framing or the explorer
-   is refused by design), and enable `tests/two_parsers.rs`, which is behind the
-   `table-driven` cargo feature and has never been able to compile.
-5. **pg-sql #69** — the style equivalence gate: run the differential through both
-   parsers and fail on any disagreement in value, provenance or failing token.
-6. **pg-sql #70** — benchmark the table-driven parser. The gate is in
+1. Keep the table-driven smoke gate and the 234/234 PostgreSQL differential green.
+2. **pg-sql #70** — benchmark the table-driven parser. The gate is in
    `../recursa/docs/table-driven-parsing.md` section 1: geomean pg-sql/PostgreSQL
    at or below 1.0, and nesting cost within 1.5x of PostgreSQL.
-7. Push both repos together.
+3. Push both repos together.
+
+Recursa still supports recursive-descent grammars and checks their predictive
+ambiguities when that parser style is selected. pg-sql does not select or test a
+second parser style. Its table-only generation omits recursive-descent predictive
+FOLLOW statics, including `__RECURSA_EMPTY_FOLLOW` and
+`__RECURSA_EXPECTED_SETS`.
 
 ## Measurements so far
 
@@ -108,9 +109,9 @@ benchmarks common to the last three runs (`docs/notes/perf.md`, Track T):
 | `7522830` | 144.7 ms | 39.3 ms | 3.421x | 0.681x |
 | `effe2aa` | 140.8 ms | 39.7 ms | **3.302x** | **0.671x** |
 
-Nesting: 1.754 → 1.683 us per level, still about 7x PostgreSQL. Only the
-table-driven parser will move that number, and it has **not been measured yet** —
-it cannot be generated until the conflicts reach zero.
+Nesting: 1.754 → 1.683 us per level, still about 7x PostgreSQL. These measurements
+are recursive-descent-only historical baselines. The table-driven parser is now
+generated but has not yet been benchmarked.
 
 Read the ratio, not the totals: the PostgreSQL control moved 1.0% between runs,
 marginally above the 0.88% same-commit spread, so the machine was slightly slower
@@ -147,7 +148,8 @@ recursa **#129** (rejected, branch parked), **#131** (closed matchers cannot mod
 region running to end of input — psql tolerates EOF inside a string, recursa does
 not; fails closed), **#132** (the blocker above).
 
-pg-sql **#68** (open, this work), **#69**, **#70** (both blocked on #68).
+pg-sql **#68** (resolved), **#69** (superseded by the table-only surface),
+**#70** (benchmark pending).
 
 ## Stale worktrees
 

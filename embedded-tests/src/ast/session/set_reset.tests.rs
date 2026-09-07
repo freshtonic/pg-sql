@@ -1,16 +1,21 @@
 #[cfg(test)]
 mod tests {
-    use crate::ast::session::set_reset::{
-        ResetStmt, SetRoleStmt, SetSessionAuthStmt, SetStmt, SetTimeZoneStmt, ShowStmt,
-    };
+    use crate::ast::session::set_reset::{ResetStmt, ShowStmt, VariableSetRest, VariableSetStmt};
 
     #[test]
     fn parse_set_to() {
         let lexed = crate::lex("SET enable_seqscan TO off");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SetStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.param.object(), "enable_seqscan");
+        let VariableSetStmt::Unscoped(body) =
+            VariableSetStmt::parse(&mut input).unwrap().into_ast()
+        else {
+            panic!("unscoped SET expected");
+        };
+        let VariableSetRest::Generic(rest) = body.rest else {
+            panic!("generic SET expected");
+        };
+        assert_eq!(rest.param.object(), "enable_seqscan");
         assert!(input.is_eof());
     }
 
@@ -19,8 +24,15 @@ mod tests {
         let lexed = crate::lex("SET enable_sort = false");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SetStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.param.object(), "enable_sort");
+        let VariableSetStmt::Unscoped(body) =
+            VariableSetStmt::parse(&mut input).unwrap().into_ast()
+        else {
+            panic!("unscoped SET expected");
+        };
+        let VariableSetRest::Generic(rest) = body.rest else {
+            panic!("generic SET expected");
+        };
+        assert_eq!(rest.param.object(), "enable_sort");
         assert!(input.is_eof());
     }
 
@@ -29,8 +41,15 @@ mod tests {
         let lexed = crate::lex("SET work_mem = 4096");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SetStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.values.len(), 1);
+        let VariableSetStmt::Unscoped(body) =
+            VariableSetStmt::parse(&mut input).unwrap().into_ast()
+        else {
+            panic!("unscoped SET expected");
+        };
+        let VariableSetRest::Generic(rest) = body.rest else {
+            panic!("generic SET expected");
+        };
+        assert_eq!(rest.values.len(), 1);
         assert!(input.is_eof());
     }
 
@@ -39,8 +58,15 @@ mod tests {
         let lexed = crate::lex("SET seq_page_cost = 1.5");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SetStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.values.len(), 1);
+        let VariableSetStmt::Unscoped(body) =
+            VariableSetStmt::parse(&mut input).unwrap().into_ast()
+        else {
+            panic!("unscoped SET expected");
+        };
+        let VariableSetRest::Generic(rest) = body.rest else {
+            panic!("generic SET expected");
+        };
+        assert_eq!(rest.values.len(), 1);
         assert!(input.is_eof());
     }
 
@@ -49,8 +75,15 @@ mod tests {
         let lexed = crate::lex("SET search_path TO public, pg_catalog");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SetStmt::parse(&mut input).unwrap().into_ast();
-        assert_eq!(stmt.values.len(), 2);
+        let VariableSetStmt::Unscoped(body) =
+            VariableSetStmt::parse(&mut input).unwrap().into_ast()
+        else {
+            panic!("unscoped SET expected");
+        };
+        let VariableSetRest::Generic(rest) = body.rest else {
+            panic!("generic SET expected");
+        };
+        assert_eq!(rest.values.len(), 2);
         assert!(input.is_eof());
     }
 
@@ -59,8 +92,11 @@ mod tests {
         let lexed = crate::lex("SET SESSION enable_seqscan TO off");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let stmt = SetStmt::parse(&mut input).unwrap().into_ast();
-        assert!(stmt.scope.is_some());
+        let VariableSetStmt::Session(body) = VariableSetStmt::parse(&mut input).unwrap().into_ast()
+        else {
+            panic!("SESSION-scoped SET expected");
+        };
+        assert!(matches!(body.rest, VariableSetRest::Generic(_)));
         assert!(input.is_eof());
     }
 
@@ -115,7 +151,7 @@ mod tests {
         let lexed = crate::lex("SET ROLE DEFAULT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetRoleStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -124,7 +160,7 @@ mod tests {
         let lexed = crate::lex("SET ROLE NONE");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetRoleStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -133,7 +169,7 @@ mod tests {
         let lexed = crate::lex("SET ROLE alice");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetRoleStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -142,7 +178,7 @@ mod tests {
         let lexed = crate::lex("SET LOCAL ROLE alice");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetRoleStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -151,7 +187,7 @@ mod tests {
         let lexed = crate::lex("SET SESSION AUTHORIZATION DEFAULT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetSessionAuthStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -160,7 +196,7 @@ mod tests {
         let lexed = crate::lex("SET SESSION AUTHORIZATION 'alice'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetSessionAuthStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -173,7 +209,7 @@ mod tests {
         let lexed = crate::lex("SET SESSION SESSION AUTHORIZATION alice");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetSessionAuthStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -182,7 +218,7 @@ mod tests {
         let lexed = crate::lex("SET LOCAL SESSION AUTHORIZATION DEFAULT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetSessionAuthStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -191,7 +227,7 @@ mod tests {
         let lexed = crate::lex("SET TIME ZONE 'UTC'");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetTimeZoneStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -200,7 +236,7 @@ mod tests {
         let lexed = crate::lex("SET TIME ZONE -8");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetTimeZoneStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -209,7 +245,7 @@ mod tests {
         let lexed = crate::lex("SET TIME ZONE DEFAULT");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetTimeZoneStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 
@@ -263,7 +299,7 @@ mod tests {
         let lexed = crate::lex("SET TIME ZONE LOCAL");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
-        let _stmt = SetTimeZoneStmt::parse(&mut input).unwrap().into_ast();
+        let _stmt = VariableSetStmt::parse(&mut input).unwrap().into_ast();
         assert!(input.is_eof());
     }
 }

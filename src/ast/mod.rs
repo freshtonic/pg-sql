@@ -54,10 +54,7 @@ use self::{
     dml::values::QueryBody,
     session::discard::*,
     session::notify::*,
-    session::set_reset::{
-        LoadStmt, ResetStmt, SetRoleStmt, SetSessionAuthStmt, SetStmt, SetTimeZoneStmt,
-        SetXmlOptionStmt, ShowStmt,
-    },
+    session::set_reset::{LoadStmt, ResetStmt, ShowStmt, VariableSetStmt},
     tcl::prepared::*,
     tcl::savepoint::*,
     tcl::transaction::*,
@@ -275,15 +272,10 @@ pub enum Statement<'input> {
     Close(CloseStmt<'input>),
     Move(MoveStmt<'input>),
     // Configuration
-    // Multi-keyword SET variants must come before plain Set so
-    // longest-match-wins picks the more specific form.
+    // VariableSetStmt owns PostgreSQL's complete `SET set_rest` family,
+    // including literal `LOCAL` / `SESSION` prefixes.
     SetConstraints(SetConstraintsStmt<'input>),
-    SetTransaction(SetTransactionStmt<'input>),
-    SetSessionAuth(SetSessionAuthStmt<'input>),
-    SetTimeZone(SetTimeZoneStmt<'input>),
-    SetXmlOption(SetXmlOptionStmt),
-    SetRole(SetRoleStmt<'input>),
-    Set(SetStmt<'input>),
+    Set(VariableSetStmt<'input>),
     Reset(ResetStmt<'input>),
     Show(ShowStmt<'input>),
     Load(LoadStmt<'input>),

@@ -85,8 +85,8 @@ newline-bearing continuation language:
 - a newline is required, so same-line `'a' 'b'` is rejected;
 - a line comment followed by its newline can participate in continuation;
 - a block comment does not itself qualify as continuation whitespace;
-- a block comment following the only newline prevents continuation unless a
-  later newline satisfies the scanner rule.
+- a block comment anywhere in the gap prevents continuation, even when a
+  later newline follows it.
 
 Legacy tests and migration fixtures that state the reverse are corrected rather
 than preserved.

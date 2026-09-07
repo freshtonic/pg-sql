@@ -33,6 +33,72 @@ fn parses_one_complete_semantically_typed_statement() {
     ));
 }
 
+/// PostgreSQL's `VariableSetStmt` owns the literal scope prefixes before the
+/// shared `set_rest`. In particular, `SET SESSION CHARACTERISTICS` must not
+/// reduce `SESSION` as a generic scope before its special rest is known.
+#[test]
+fn variable_set_stmt_keeps_scope_prefixes_and_special_rests() {
+    for source in [
+        "SET work_mem TO '64MB'",
+        "SET LOCAL work_mem = '64MB'",
+        "SET SESSION work_mem = '64MB'",
+        "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+        "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY",
+        "SET SESSION SESSION AUTHORIZATION DEFAULT",
+        "SET LOCAL TIME ZONE 'UTC'",
+        "SET XML OPTION DOCUMENT",
+        "SET ROLE DEFAULT",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+
+        let mut input = lexed.input();
+        Statement::parse(&mut input)
+            .unwrap_or_else(|error| panic!("strict statement {source:?}: {error}"));
+        assert!(input.is_eof(), "strict parse left input for {source:?}");
+    }
+}
+
+/// `UESCAPE` remains an ordinary bare label unless it introduces the Unicode
+/// string escape-clause shape. The table-driven feed classifies the latter
+/// with `UESCAPE_LA` while preserving the source spelling in the AST.
+#[test]
+fn unicode_escape_clause_and_bare_uescape_label_remain_distinct() {
+    for source in [
+        "SELECT U&'d!0061t' UESCAPE '!'",
+        "SELECT U&'d\\0061t' UESCAPE '!'",
+        "SELECT U&'d\\0061t' /* intervening trivia */ UESCAPE '!'",
+        "SELECT U&'d\\0061t' UESCAPE",
+        "SELECT 1 UESCAPE",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+
+        let mut input = lexed.input();
+        Statement::parse(&mut input)
+            .unwrap_or_else(|error| panic!("strict statement {source:?}: {error}"));
+        assert!(input.is_eof(), "strict parse left input for {source:?}");
+    }
+
+    let source = "SELECT U&'d!0061t' UESCAPE 1";
+    let lexed = lex(source);
+    assert!(
+        lexed.errors().next().is_none(),
+        "lexical errors in {source:?}"
+    );
+    let mut input = lexed.input();
+    assert!(
+        Statement::parse(&mut input).is_err() || !input.is_eof(),
+        "a UESCAPE keyword without a string literal must not consume a numeric literal"
+    );
+}
+
 #[test]
 fn query_statement_owns_every_postgresql_query_prefix() {
     for source in [
@@ -411,6 +477,55 @@ fn repaired_clauses_reject_the_per_element_spelling() {
         assert!(
             parsed.is_err() || !input.is_eof(),
             "the per-element spelling {source:?} must be rejected"
+        );
+    }
+}
+
+/// `AexprConst: func_name '(' func_arg_list opt_sort_clause ')' Sconst`
+/// includes the sort-clause production solely to make PostgreSQL's LALR
+/// grammar conflict-free, then its rule action rejects it. pg-sql has no
+/// rule-action escape hatch, so typed literals keep only the accepted
+/// structural `func_arg_list` shape; named arguments remain a pre-existing
+/// semantic-action gap. The surrounding function application remains free to
+/// carry each legal argument form.
+#[test]
+fn function_calls_keep_variadic_and_typed_literal_boundaries() {
+    for source in [
+        "SELECT f(1, 2)",
+        "SELECT f(VARIADIC values)",
+        "SELECT f(1, VARIADIC values)",
+        "SELECT f(DISTINCT value ORDER BY value)",
+        "SELECT made_up_type(12) 'value'",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        Statement::parse(&mut input)
+            .unwrap_or_else(|error| panic!("strict statement {source:?}: {error}"));
+        assert!(input.is_eof(), "strict parse left input for {source:?}");
+    }
+
+    for source in [
+        "SELECT made_up_type(* ) 'value'",
+        "SELECT made_up_type(ALL value) 'value'",
+        "SELECT made_up_type(DISTINCT value) 'value'",
+        "SELECT made_up_type(VARIADIC values) 'value'",
+        "SELECT made_up_type(1, VARIADIC values) 'value'",
+        "SELECT made_up_type(12 ORDER BY 1) 'value'",
+    ] {
+        let lexed = lex(source);
+        assert!(
+            lexed.errors().next().is_none(),
+            "lexical errors in {source:?}"
+        );
+        let mut input = lexed.input();
+        let parsed = Statement::parse(&mut input);
+        assert!(
+            parsed.is_err() || !input.is_eof(),
+            "typed literal form {source:?} must be rejected"
         );
     }
 }

@@ -41,7 +41,10 @@ pub struct AnalyzeOption<'input> {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub enum AnalyzeOptionValue<'input> {
-    String(#[lex(pattern = r"'[^']*(?:''[^']*)*'")] literal::StringLit<'input>),
+    // Use the canonical content token from `tokens::literal`. Keeping an
+    // inline lexer declaration here would create a second `StringLit`
+    // definition and prevent lookahead filters from naming it uniquely.
+    String(literal::StringLit<'input>),
     Integer(literal::IntegerLit<'input>),
     Name(literal::AliasName<'input>),
 }

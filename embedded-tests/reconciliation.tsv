@@ -55,6 +55,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_json_object_ordinary_function_form	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_json_timestamp_cast_before_unique_keys	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_json_typed_literal	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_multi_part_qualified_references	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_parenthesized_chained_fields_and_star	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_parenthesized_field_access	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_parenthesized_field_star	issue-9-generated-expression
@@ -314,7 +315,8 @@ ast::file::tests::parse_xml_sql_fixture	file-recovery-scope	-	-	adr-0005-file-re
 ast::file::tests::parse_xmlmap_sql_fixture	file-recovery-scope	-	-	adr-0005-file-recovery
 ast::shared::expr::tests::parse_psql_var	superseded	-	-	issue-68-psql-crate
 ast::shared::expr::tests::parse_psql_var_in_func_call	superseded	-	-	issue-68-psql-crate
-ast::shared::expr::tests::reject_string_continuation_across_comment	superseded	embedded-tests/src/ast/shared/expr.tests.rs	parse_string_continuation_after_comment_and_later_newline	corrected-adr-0004
+ast::shared::expr::tests::parse_adjacent_string_literals	renamed	embedded-tests/src/ast/shared/expr.tests.rs	reject_same_line_adjacent_string_literals	reviewed-rename
+ast::shared::expr::tests::reject_string_continuation_across_comment	superseded	embedded-tests/src/ast/shared/expr.tests.rs	reject_string_continuation_across_block_comment	corrected-adr-0004
 ast::tests::parse_psql_command_directive	superseded	embedded-tests/src/ast/mod.tests.rs	psql_directive_is_not_a_strict_statement	strict-entry-point
 ast::tests::parse_psql_command_statement	superseded	embedded-tests/src/ast/mod.tests.rs	parse_strict_statement_to_end_of_input	strict-entry-point
 ast::utility::copy::tests::copy_table_psql_var_target	superseded	-	-	issue-68-psql-crate

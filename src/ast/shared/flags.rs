@@ -23,10 +23,7 @@ pub enum IfExists {
 /// `ORDINALITY` into `WITH_LA` before the parser sees it, and gram.y spells
 /// the positions where a name may still follow as the twin `WITH | WITH_LA`
 /// (`with_clause`, `any_with`, `opt_with`). recursa's lookahead-filter
-/// lowering emits that twin for a keyword that ends its own rule and
-/// rejects the keyword inline in a longer rule as an ambiguous substitution
-/// (`RCA0404`), so this marker is the rule the twin attaches to. Inert
-/// under recursive descent.
+/// lowering emits that twin for this marker rule.
 #[derive(recursa::Node, Debug, Clone)]
 pub enum AnyWith {
     #[tok(WITH)]

@@ -24,10 +24,10 @@ without promising compatibility with the legacy Rust API.
   legacy grammar into current Recursa declarations.
 - **Parity gate**: geomean of per-benchmark pg-sql/sqlparser medians at or
   below 1.0 on the statement-level benchmark (ADR 0006).
-- **Style equivalence gate**: every named parser over the pg-sql grammar
-  must accept the same corpus statements with identical parsed values,
-  provenance, and failing tokens; recursa is permissive about this, pg-sql
-  enforces it against the differential baseline.
+- **Parser gate**: pg-sql's table-driven parser must preserve the pinned
+  differential outcomes, parsed values, provenance, and failing tokens.
+  Recursa continues to support recursive-descent grammars, but pg-sql does
+  not generate or test a second parser style.
 - **Canonical workloads**: the three profiling targets - corpus head-to-head,
   select_list_10000, bool_chain - every profile and journal entry names one.
 - **Perf journal**: `docs/notes/perf.md`, appended per profile/change pair;

@@ -94,23 +94,33 @@ pub struct StartTransactionStmt<'input> {
     pub modes: Option<recursa::Vec1<TransactionMode<'input>>>,
 }
 
-/// SET TRANSACTION transaction_mode [, ...]
-/// SET SESSION CHARACTERISTICS AS TRANSACTION transaction_mode [, ...]
+/// `TRANSACTION transaction_mode [, ...]`, the transaction branch of
+/// PostgreSQL's `set_rest`.
 #[derive(recursa::Node, Debug, Clone)]
-pub struct SetTransactionStmt<'input> {
-    #[tok(SET, this)]
-    pub target: SetTransactionTarget,
-    #[sep(COMMA)]
-    pub modes: Vec<TransactionMode<'input>>,
+pub struct SetTransactionRest<'input> {
+    #[tok(TRANSACTION, this)]
+    pub modes: TransactionModeList<'input>,
 }
 
+/// `SESSION CHARACTERISTICS AS TRANSACTION transaction_mode [, ...]`, the
+/// other transaction branch of PostgreSQL's `set_rest`.
 #[derive(recursa::Node, Debug, Clone)]
-pub enum SetTransactionTarget {
-    #[tok(SESSION, CHARACTERISTICS, AS, TRANSACTION)]
-    SessionCharacteristics,
-    #[tok(TRANSACTION)]
-    Transaction,
+pub struct SetSessionCharacteristicsRest<'input> {
+    #[tok(SESSION, CHARACTERISTICS, AS, TRANSACTION, this)]
+    pub modes: TransactionModeList<'input>,
 }
+
+/// One or more comma-separated transaction modes.
+///
+/// This owns the repetition so the prefixes attached by the two `set_rest`
+/// forms above are consumed once. A direct attachment on `Vec1` would make
+/// the generated table expect that prefix again after every comma.
+#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+pub struct TransactionModeList<'input>(
+    #[sep(COMMA)]
+    #[deref]
+    pub recursa::Vec1<TransactionMode<'input>>,
+);
 
 /// `SET CONSTRAINTS { ALL | name [, …] } { DEFERRED | IMMEDIATE }`
 #[derive(recursa::Node, Debug, Clone)]

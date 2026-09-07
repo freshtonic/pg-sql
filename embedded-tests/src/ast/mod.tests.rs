@@ -121,7 +121,7 @@ mod tests {
     }
 
     /// Regression guard: keep the top-level statement enums small enough that the
-    /// recursive descent parser fits in the default test thread stack.
+    /// generated parser fits in the default test thread stack.
     /// Prior to boxing the largest variants, `Statement` was 1480 bytes and
     /// fixture-parsing tests required `RUST_MIN_STACK=16777216`.
     #[test]
@@ -184,10 +184,6 @@ mod tests {
             (
                 "QualifiedRef",
                 size_of::<crate::ast::shared::expr::QualifiedRef<'_>>(),
-            ),
-            (
-                "QualifiedWildcard",
-                size_of::<crate::ast::shared::expr::QualifiedWildcard<'_>>(),
             ),
             (
                 "ParenthesizedExpr",

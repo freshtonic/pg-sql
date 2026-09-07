@@ -1,9 +1,9 @@
 /// SELECT statement AST.
 use crate::ast::dml::values::Subquery;
 use crate::ast::shared::expr::{
-    CastType, DirectSubquery, Expr, FunctionApplicationExpr, FunctionCallApplication,
-    JsonBehaviorClause, JsonEncoding, JsonOnBehavior, JsonPassing, JsonQuotes, JsonWrapper,
-    ParenthesizedClose, ParenthesizedOpen, XmlPassingBy,
+    CastType, Expr, FunctionApplicationExpr, FunctionCallApplication, JsonBehaviorClause,
+    JsonEncoding, JsonOnBehavior, JsonPassing, JsonQuotes, JsonWrapper, ParenthesizedClose,
+    ParenthesizedOpen, XmlPassingBy,
 };
 use crate::ast::shared::names::QualifiedName;
 use crate::tokens::literal;
@@ -168,7 +168,19 @@ pub struct ParenTableRef<'input> {
 
 #[derive(recursa::Node, Debug, Clone)]
 pub enum ParenTableBody<'input> {
-    Query(Box<DirectSubquery<'input>>),
+    #[parse(lr_conflict(
+        action = reduce,
+        against = ast::dml::values::SelectWithParens,
+        lookahead = { RPAREN },
+        expect = 1
+    ))]
+    #[parse(lr_conflict(
+        action = shift,
+        against = ast::dml::values::SelectWithParens,
+        lookahead = { RPAREN_SELECT_LA },
+        expect = 1
+    ))]
+    Query(Box<Subquery<'input>>),
     Table(Box<TableRef<'input>>),
 }
 
@@ -1092,7 +1104,7 @@ pub enum JoinSuffix<'input> {
 /// chain of them left-associative (`a CROSS JOIN b CROSS JOIN c` is
 /// `(a CROSS JOIN b) CROSS JOIN c`), so the right operand is one table
 /// reference and never a join; a parenthesized join is a
-/// `SimpleTableRef::Paren`.
+/// the parenthesized `SimpleTableRef` variants.
 #[derive(recursa::Node, Debug, Clone)]
 pub struct UnqualifiedJoin<'input> {
     pub kind: UnqualifiedJoinKind,
