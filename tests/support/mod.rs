@@ -1,5 +1,8 @@
 //! Shared helpers for the differential parser test.
 
+// Each integration target compiles this shared baseline module as a separate
+// crate and intentionally consumes a different subset of its query API.
+#[allow(dead_code)]
 pub mod baseline;
 pub mod diff_check;
 

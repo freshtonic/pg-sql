@@ -57,8 +57,8 @@ fn verify_pg_built(source: &Path, build: &Path) {
     // Not built yet — build it now. The PostgreSQL build is slow the first
     // time; surface that to the user since build-script output is otherwise
     // buffered until completion.
-    println!(
-        "cargo:warning=PostgreSQL is not built yet — running \
+    eprintln!(
+        "PostgreSQL is not built yet — running \
          pg-oracle/scripts/build-pg.sh (slow on the first build)"
     );
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/build-pg.sh");
