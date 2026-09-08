@@ -1628,3 +1628,25 @@ The wide-list delta is noise-level and no workload materially regressed.
 Per-pass allocation counts and requested bytes were identical before and
 after on all three workloads: the descriptor is populated during the tables'
 existing one-time lazy decode, before the measured parse pass.
+
+Three follow-up experiments were rejected:
+
+- Passing the already-read `pact` row base into ordinary action lookup changed
+  frozen A/B medians by -0.5% on corpus, -0.5% on the wide select, and +1.0%
+  on the boolean chain. The source-level duplicate load is not a useful
+  optimization once compiled.
+- Mutating list accumulators in place on the type-erased value stack was
+  neutral on corpus and the wide select and regressed the boolean chain by
+  1.1%. Moving the small `ArenaVec1` header off and back onto the stack is not
+  the source of the wide-list cost.
+- Growing `ArenaVec1` fourfold reduced the wide parse's allocation count from
+  23 to 19 and improved one diagnostic three-second run by 10.4%, but raised
+  requested parse bytes from 16.8 MB to 26.2 MB (+56%). Staging every arena
+  list in a standard `Vec` before one exact arena copy also failed the memory
+  gate: corpus parse allocations rose from 12.1 to 15.2 per statement and the
+  wide parse rose to 35 allocations and 19.1 MB.
+
+The wide-list evidence therefore points to a bounded chunked or threshold-
+switched staging representation: small lists must remain allocation-free in
+the AST arena, while very wide lists must avoid both retained geometric bump
+buffers and a second complete global-heap growth history.
