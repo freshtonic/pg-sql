@@ -56,9 +56,11 @@ pub fn parse_sql(source: &str) -> Result<SqlDocument<'_>, SqlParseError<'_>> {
 
 /// A complete, provenance-bearing strict PostgreSQL document.
 ///
-/// Wraps the exact-source [`CompleteFrame`] partition: every UTF-8 source
-/// byte is owned exactly once by an island extent or a right-owned gap, and
-/// [`CompleteFrame::render_exact`] reproduces the complete source.
+/// Wraps the exact-source [`recursa::framing::ArenaCompleteFrame`] partition:
+/// every UTF-8 source byte is owned exactly once by an island extent or a
+/// right-owned gap, and
+/// [`ArenaCompleteFrame::render_exact`](recursa::framing::ArenaCompleteFrame::render_exact)
+/// reproduces the complete source.
 #[derive(derive_more::Deref)]
 pub struct SqlDocument<'input> {
     /// Exact-source strict partition; [`std::ops::Deref`] target.

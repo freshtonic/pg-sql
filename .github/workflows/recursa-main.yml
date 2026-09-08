@@ -28,3 +28,5 @@ jobs:
         run: cargo check --manifest-path ../recursa/Cargo.toml --package recursa --package recursa-codegen
       - name: Check the pg-sql PostgreSQL statement grammar against Recursa main
         run: cargo check --locked --package pg-sql
+      - name: Check the psql client grammar against Recursa main
+        run: cargo check --locked --package pg-psql

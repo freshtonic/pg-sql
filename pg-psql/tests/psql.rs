@@ -630,6 +630,15 @@ fn an_empty_document_is_valid_and_source_preserving() {
 }
 
 #[test]
+fn plain_sql_is_one_maximal_text_run() {
+    let document = pg_psql::parse("SELECT 'x'::text / 2").expect("plain SQL must parse as psql");
+    let [PsqlItem::Sql(text)] = document.items.as_slice() else {
+        panic!("plain SQL must be represented by one text run");
+    };
+    assert!(text.atoms.len() > 1, "the text run must contain every atom");
+}
+
+#[test]
 fn rendering_preserves_every_byte_outside_a_rewrite() {
     // The strongest statement of the rendering contract: with nothing bound
     // and no send command, the output is the input.

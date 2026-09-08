@@ -151,7 +151,40 @@ impl<'input> SendCommand<'input> {
 }
 
 /// A maximal run of source that psql forwards to the server unchanged.
+///
+/// An atom lookahead can either extend this run or begin another `SqlText`
+/// item in the document repetition. Extending the current run is the psql
+/// scanner's maximal-match behaviour, so resolve that exact family of cells
+/// as shifts.
 #[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
+#[parse(lr_conflict(
+    action = shift,
+    against = ast::SqlAtom,
+    lookahead = {
+        StringText,
+        EscapeStringText,
+        UnicodeStringText,
+        BitStringText,
+        HexStringText,
+        UnicodeIdentifierText,
+        QuotedIdentifierText,
+        DollarString,
+        DollarNumber,
+        EscapedText,
+        WordText,
+        DigitsText,
+        PunctText,
+        COLONCOLON,
+        COLONEQUALS,
+        COLON,
+        MINUS,
+        SLASH,
+        DOLLAR,
+        MetaCommandText,
+        BACKSLASH,
+    },
+    expect = 21
+))]
 pub struct SqlText<'input> {
     #[deref]
     pub atoms: recursa::Vec1<SqlAtom<'input>>,
