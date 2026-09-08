@@ -1507,3 +1507,99 @@ for `corpus`, 177.2 stmt/s for `select_list_10000`, and 2,414.0 stmt/s for
 (227,282.8, 169.8, and 2,385.0 stmt/s), these are approximately +4.8%, +4.4%,
 and +1.2%; the allocation deltas are deterministic, while the timing deltas
 remain short-run measurements.
+
+## Profile: 2026-09-08 — after lexical record ownership transfer
+
+The committed trees (`pg-sql` `28af0bf`, Recursa `420c0fc`) were sampled for
+15 seconds on each canonical workload. Profiled throughput was 218,621.0
+stmt/s for `corpus`, 174.4 stmt/s for `select_list_10000`, and 2,251.6 stmt/s
+for `bool_chain`; preceding clean two-second runs produced 233,905.0, 176.4,
+and 2,391.7 stmt/s, respectively. Raw samples, folded stacks, statistics, and
+SVGs are under `docs/perf/flamegraphs/2026-09-08-28af0bf/`.
+
+Ranked by broad cross-workload share first, then shape-specific severity, the
+next five hotspots are:
+
+1. Remaining provenance folding. Inclusive `OccurrenceStack::reduce`
+   attribution, including allocator samples, is 21.7% on corpus, 19.6% on the
+   wide select, and 24.5% on the boolean chain.
+2. Generated lexical classification and finalization. Generated `lex`,
+   `__recursa_finalize`, `LexBuilder::append`, and token iteration together
+   account for about 21.7%, 17.4%, and 26.4%, respectively. Candidate-kind
+   `slice_contains` plus PHF lookup alone account for 6.6%, 8.1%, and 11.1%;
+   actual Logos DFA scanning is only 4.4%, 1.2%, and 2.1%.
+3. Residual LR interpretation. `lr::run`, including allocator samples
+   attributed directly to it, accounts for 20.6%, 16.0%, and 17.7%,
+   respectively; generated reducer bodies remain adjacent rather than
+   included in these figures.
+4. Wide-list growth, value movement, and release. The wide select-target root
+   reduction accounts for 18.8%, adjacent `SelectExprItem` and `SelectItem`
+   construction adds 11.0%, and arena release is 6.5% in `madvise`.
+   `_platform_memmove` is 20.9% of leaf samples and is predominantly
+   attributed back to these reduction/value-stack paths rather than counted
+   again.
+5. Recursive expression construction and destruction. On `bool_chain`, the
+   main expression reduction accounts for 15.3%, an adjacent expression
+   reduction contributes 4.8%, and recursive `Expr` destruction is 2.4%.
+   `_platform_memmove` is 14.2% of leaf samples and is chiefly carried back to
+   the expression reduction rather than counted separately.
+
+The ownership-transfer prediction held: allocator samples attributed to the
+generated `lex` function fell from 3.07% to 2.42% on corpus, 0.60% to 0.08%
+on the wide select, and 0.81% to 0.26% on the boolean chain. Total lexical
+share remains high because classification and finalization, not the removed
+record clone, now dominate that path.
+
+## Benchmark: 2026-09-08 — word-candidate match dispatch
+
+Generated word classification now dispatches candidate token kinds through a
+Rust `match` rather than calling slice `contains` over every grammar carrier
+kind for every lexical record. A code-generation regression test requires the
+match shape and rejects reintroduction of the slice scan.
+
+Three clean five-second runs before and after the change produced:
+
+| Canonical workload | Before statements/s | After statements/s | Change |
+| --- | --: | --: | --: |
+| `corpus` | 238,288.8 | 244,497.1 | **+2.6%** |
+| `select_list_10000` | 177.2 | 189.1 | **+6.7%** |
+| `bool_chain` | 2,414.0 | 2,518.0 | **+4.3%** |
+
+Allocation counts and bytes were unchanged on all three workloads, as
+expected for dispatch-only work. Ten-second confirmation profiles contain no
+`SliceContains::slice_contains` samples; the old profiles attributed 3.8%,
+3.7%, and 5.8% to that frame. Inclusive generated-finalization attribution
+fell from 9.8% to 6.4% on corpus, 10.1% to 7.4% on the wide select, and 14.7%
+to 10.8% on the boolean chain. The confirmation artifacts are under
+`docs/perf/flamegraphs/2026-09-08-28af0bf-dirty-match-dispatch/`.
+
+PHF keyword lookup is now the largest isolated lexical-classification leaf at
+2.6%, 4.9%, and 6.8%, respectively.
+
+## Benchmark: 2026-09-08 — bucketed word classification
+
+The generated word classifier now partitions folded keyword keys by byte
+length and first byte. Buckets of at most eight keywords use direct byte
+comparisons; denser buckets retain the perfect-hash lookup as a bounded
+fallback. This preserves the earlier protection against grammar-sized linear
+scans while avoiding SipHash work for ordinary vocabulary shapes.
+
+Three clean five-second runs against the preceding match-only classifier
+produced:
+
+| Canonical workload | Before statements/s | After statements/s | Change |
+| --- | --: | --: | --: |
+| `corpus` | 244,497.1 | 253,126.2 | **+3.5%** |
+| `select_list_10000` | 189.1 | 196.1 | **+3.7%** |
+| `bool_chain` | 2,518.0 | 2,753.0 | **+9.3%** |
+
+Ten-second confirmation profiles contain no PHF samples on the wide-list or
+boolean-chain workloads; the fallback appears in only two folded corpus
+stacks. The complete classifier leaf is 2.6% on corpus and 1.5% on the
+boolean chain, versus 2.6% and 6.8% for PHF alone before bucketing. Artifacts
+are under `docs/perf/flamegraphs/2026-09-08-28af0bf-dirty/`.
+
+A follow-up fused classification and diagnostic-normalization pass was
+rejected. Against the bucketed-classifier medians it was neutral on corpus
+(+0.5%) but regressed the wide list by 3.3% and the boolean chain by 2.3%.
+The two separately optimized loops are retained.
