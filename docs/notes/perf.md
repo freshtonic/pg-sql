@@ -1396,3 +1396,114 @@ warnings-as-errors Clippy gate. Two generated-fixture targets initially failed
 because both nightly and stable had populated the same persistent test target;
 after isolating those build-only directories, the mandated stable suite passed
 cleanly.
+
+## Profile: 2026-09-08 — after provenance folding optimization
+
+The committed trees (`pg-sql` `fc3588a`, Recursa `e8a2272`) were profiled for
+15 seconds on each canonical workload. Sampling throughput was 212,083.5
+stmt/s for `corpus`, 164.5 stmt/s for `select_list_10000`, and 2,174.9 stmt/s
+for `bool_chain`; these are diagnostic rates under profiler overhead rather
+than benchmark baselines. Raw samples, folded stacks, statistics, and SVGs are
+under `docs/perf/flamegraphs/2026-09-08-fc3588a/`.
+
+The next five measured hotspots, ranked by broad impact first and
+shape-specific impact second, are:
+
+1. Remaining provenance folding. Inclusive `OccurrenceStack::reduce`
+   attribution is 21.8% on corpus, 19.3% on the wide select, and 23.5% on the
+   boolean chain. The optimized `item_occurrence` component is now 0.68%,
+   0.24%, and 0.48%, respectively.
+2. Generated lexical copying and finalization. Generated `lex`,
+   `__recursa_finalize`, and `LexBuilder::append` remain roughly 18–24% across
+   the shapes, while actual Logos scanning is 4.4%, 1.1%, and 2.2%.
+3. Residual LR interpretation. `lr::run`, including allocation attributed to
+   it, is 20.3% on corpus, 14.6% on the wide select, and 17.3% on the boolean
+   chain.
+4. Wide arena-list growth and release. The select-target root reduction is
+   18.2% of the wide workload, adjacent item construction adds 8.5%, and arena
+   release costs another 8.8% in `madvise`.
+5. Recursive expression construction and destruction. The main boolean
+   expression action is 16.0% of the boolean workload, the adjacent column
+   reference action is 4.5%, and recursive expression destruction is 2.6%.
+
+## Profile: 2026-09-08 — provenance-folding follow-up repeat
+
+The current runtime (`pg-sql` `fc3588a`, Recursa `e8a2272`) was sampled again
+for 15 seconds per canonical workload. Sampling throughput was 222,961.7
+stmt/s for `corpus`, 177.3 stmt/s for `select_list_10000`, and 2,307.9 stmt/s
+for `bool_chain`. Artifacts are under
+`docs/perf/flamegraphs/2026-09-08-fc3588a-dirty/`.
+
+Ranked by broad cross-workload share first, then shape-specific severity, the
+next five hotspots are:
+
+1. Remaining provenance folding. Inclusive `OccurrenceStack::reduce` is
+   21.4% on corpus, 20.1% on the wide select, and 25.4% on the boolean chain.
+2. Generated lexical copying and finalization. `lex`,
+   `__recursa_finalize`, `LexBuilder::append`, and record iteration total
+   roughly 22.5%, 17%, and 25.8%, respectively; actual Logos scanning is only
+   4.0%, 1.1%, and 2.4%.
+3. Residual LR interpretation. `lr::run`, including attributed allocation,
+   is 20.3% on corpus, 15.6% on the wide select, and 17.4% on the boolean
+   chain.
+4. Wide arena-list growth and release. The select-target root reduction is
+   18.3% of the wide workload, adjacent item construction adds 8.6%, and arena
+   release is 6.8% in `madvise`.
+5. Recursive expression construction and destruction. The main boolean
+   expression action is 13.3%, the adjacent column-reference action is 4.8%,
+   and recursive expression destruction is 2.9%.
+
+## Profile: 2026-09-08 — provenance-folding second follow-up
+
+The unchanged committed runtime (`pg-sql` `fc3588a`, Recursa `e8a2272`) was
+sampled again for 15 seconds per canonical workload. Artifacts are under
+`docs/perf/flamegraphs/2026-09-08-fc3588a-dirty-2/`. This invocation of
+macOS `sample` was unusually intrusive: profiled throughput was 122,297.0
+stmt/s for `corpus`, 127.0 stmt/s for `select_list_10000`, and 897.8 stmt/s
+for `bool_chain`. An immediately following clean five-second run produced
+227,282.8, 169.8, and 2,385.0 stmt/s, respectively, reproducing the previous
+clean range. The ranking therefore uses sample shares, not the profiled rates.
+
+The next five hotspots, ranked by broad cross-workload impact first and
+shape-specific severity second, are:
+
+1. Remaining provenance folding. `OccurrenceStack::reduce`, including
+   allocator samples attributed to it, accounts for 20.7% of corpus, 18.0%
+   of the wide select, and 22.7% of the boolean chain.
+2. Generated lexical copying and finalization. Generated `lex`,
+   `__recursa_finalize`, `LexBuilder::append`, and token-record iteration
+   account for about 20.0%, 17.8%, and 26.4%, respectively. Actual Logos DFA
+   scanning is a separate 4.5%, 1.2%, and 2.6%.
+3. Residual LR interpretation. `lr::run`, including allocator samples
+   attributed directly to it, accounts for 21.2%, 13.8%, and 17.6%,
+   respectively; generated reducer dispatch remains adjacent rather than
+   included in those figures.
+4. Wide arena-list growth and release. The wide select-target root reduction
+   accounts for 20.0%, its adjacent `SelectItem` and `SelectExprItem`
+   construction contributes another 9.6%, and arena/allocator release leaves
+   10.5% directly in `madvise`.
+5. Recursive expression construction and destruction. On `bool_chain`, the
+   main expression reduction accounts for 14.5% including attributed
+   allocation, the adjacent expression reduction contributes 3.5%, and
+   recursive `Expr` destruction is 4.2%.
+
+## Benchmark: 2026-09-08 — lexical record ownership transfer
+
+The generated `lex` path now consumes the raw runtime `LexResult` and moves its
+owned token and trivia vectors into grammar-specific finalization. Previously
+it borrowed both vectors and cloned them before classification. The change
+removes one allocation per pg-sql statement; parse-phase allocation is
+unchanged.
+
+| Canonical workload | Lex allocations before | Lex allocations after | Lex bytes before | Lex bytes after |
+| --- | --: | --: | --: | --: |
+| `corpus` (33,692 statements) | 225,051 | 191,359 | 43,096,560 | 31,960,608 |
+| `select_list_10000` | 29 | 28 | 2,052,936 | 1,572,864 |
+| `bool_chain` | 21 | 20 | 146,376 | 98,304 |
+
+Three clean five-second runs produced median throughput of 238,288.8 stmt/s
+for `corpus`, 177.2 stmt/s for `select_list_10000`, and 2,414.0 stmt/s for
+`bool_chain`. Relative to the immediately preceding clean reference
+(227,282.8, 169.8, and 2,385.0 stmt/s), these are approximately +4.8%, +4.4%,
+and +1.2%; the allocation deltas are deterministic, while the timing deltas
+remain short-run measurements.
