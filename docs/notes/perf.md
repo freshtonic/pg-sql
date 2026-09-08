@@ -1261,3 +1261,34 @@ The next measured optimization candidates, in priority order, are:
    action accounts for 12.0% of the boolean-chain samples, with simple
    `Expr::ColumnRef` construction adding 4.3% and recursive `Expr` destruction
    another 2.5%. The action allocates two arena boxes per boolean operator.
+
+## Benchmark: 2026-09-08 — LR current-state and stack allocation
+
+The LR driver now retains its current automaton state in a local, matching
+bison's `yystate` shape instead of reloading the frame it just pushed. Its
+ordinary-heap state stack starts with capacity for 32 frames, avoiding
+geometric growth without putting transient parser storage in the AST arena.
+
+Because repeated release builds caused substantial thermal drift, the final
+comparison froze distinct baseline and optimized binaries and alternated them
+directly. Two five-second corpus runs per binary measured 207,970.4 and
+208,817.6 stmt/s before, versus 215,253.9 and 215,634.6 stmt/s after: **+3.4%**
+by median. Five-second shape confirmations measured 148.4 to 155.8 stmt/s for
+`select_list_10000` (**+5.0%**) and 2,090.2 to 2,170.2 stmt/s for `bool_chain`
+(**+3.8%**). Corpus parse allocations fell from 14.4 to 12.1 per statement;
+requested bytes rose from 8,296 to 8,464 per statement because the state stack
+buys its final capacity up front.
+
+Three isolated experiments were rejected. Retaining lookahead across reductions
+reduced the warm corpus median by 6.6%; default reductions already avoid most
+reads, so the cache-state branch cost more than the repeated slice access.
+Replacing hot state, rule, action, and goto indexing with `get_unchecked` reduced
+the corpus median by 4.9%, confirmed by a five-second run; LLVM already removed
+useful checks and forced inlining bloated the loop. Packing the shift/goto marker
+and state into a four-byte frame reduced the median by 4.7%; marker masking cost
+more than the unused stack bandwidth.
+
+Correctness evidence comprises Recursa's exhaustive all-targets/all-features
+workspace suite and pg-sql's PostgreSQL-oracle suite, including all 234
+differential files and 1,121 passing embedded tests. Normal warnings-as-errors
+Clippy gates pass for Recursa core and pg-sql.
