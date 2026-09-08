@@ -379,6 +379,10 @@ pub struct SetFuncOption<'input> {
 pub enum StrictnessOption {
     #[tok(CALLED, ON, NULL, INPUT)]
     CalledOnNullInput,
+    #[allow(
+        clippy::duplicated_attributes,
+        reason = "NULL occurs twice in the PostgreSQL RETURNS NULL ON NULL INPUT syntax"
+    )]
     #[tok(RETURNS, NULL, ON, NULL, INPUT)]
     ReturnsNullOnNullInput,
     #[tok(STRICT)]
@@ -734,6 +738,10 @@ pub enum CommonFuncOptItem<'input> {
     // Multi-keyword forms first.
     #[tok(CALLED, ON, NULL, INPUT)]
     CalledOnNullInput,
+    #[allow(
+        clippy::duplicated_attributes,
+        reason = "NULL occurs twice in the PostgreSQL RETURNS NULL ON NULL INPUT syntax"
+    )]
     #[tok(RETURNS, NULL, ON, NULL, INPUT)]
     ReturnsNullOnNullInput,
     ExternalSecurity(AlterFuncExternalSecurityItem),

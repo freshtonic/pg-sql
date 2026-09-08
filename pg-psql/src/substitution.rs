@@ -107,13 +107,13 @@ impl SourceMap {
         let next = self
             .regions
             .partition_point(|region| region.rendered.end <= rendered);
-        if let Some(region) = self.regions.get(next) {
-            if region.rendered.start <= rendered {
-                return Origin::Substituted {
-                    start: region.source.start,
-                    end: region.source.end,
-                };
-            }
+        if let Some(region) = self.regions.get(next)
+            && region.rendered.start <= rendered
+        {
+            return Origin::Substituted {
+                start: region.source.start,
+                end: region.source.end,
+            };
         }
         // Between regions the texts run in step, so the offset is the end of
         // the previous region plus the distance travelled since.

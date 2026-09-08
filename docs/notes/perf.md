@@ -1650,3 +1650,59 @@ The wide-list evidence therefore points to a bounded chunked or threshold-
 switched staging representation: small lists must remain allocation-free in
 the AST arena, while very wide lists must avoid both retained geometric bump
 buffers and a second complete global-heap growth history.
+
+## Investigation: 2026-09-08 — bounded wide-list staging
+
+Four parser-only staging designs were prototyped against the committed
+co-located-rule baseline. All retained the public contiguous `ArenaVec1` AST
+representation, so a staged list had to be flattened once at completion.
+
+- Standard-heap chunks beginning near 256 KiB improved a diagnostic wide-list
+  run by 3.5%, but increased wide requested bytes by 7.5% and regressed quick
+  corpus and boolean runs by 1.7% and 2.4%.
+- A 4 MiB byte threshold selected the wrong lists: `SelectItem` remained below
+  the threshold at 10,000 elements, while 113 corpus lists of large enum types
+  crossed it. Wide allocations were unchanged and corpus gained unwanted
+  staging allocations.
+- A fixed 8,192-element threshold triggered only on the intended wide list,
+  but its final whole-list copy regressed the frozen wide median by 4.2% and
+  increased requested bytes by 4.7%.
+- Fixed 256 KiB chunks allocated inside the existing bump arena made wide
+  requested bytes effectively identical (16,778,320 to 16,778,872) and
+  improved the frozen wide median from 197.1 to 201.5 stmt/s (**+2.2%**).
+  However, the larger accumulator and general list branch regressed corpus
+  from 255,552.2 to 249,759.1 stmt/s (**-2.3%**) and the boolean chain from
+  2,783.9 to 2,753.4 stmt/s (**-1.1%**).
+
+All four implementations were rejected and Recursa was restored to its clean
+committed tree. The experiment establishes a representation constraint: a
+transparent chunked accumulator cannot beat the current contiguous arena
+vector broadly while it enlarges every list value and must copy the complete
+wide list at finalization. Further progress requires either an opt-in wide-list
+grammar policy, a non-contiguous public list representation, or a same-size
+tagged accumulator integrated below `bumpalo::collections::Vec`.
+
+## Benchmark: 2026-09-08 — direct stack-to-arena value transfer
+
+Generated reduction actions now move a value directly from the type-erased
+semantic stack into the allocation for its innermost arena-boxed field.
+Previously each action returned the complete value from `ValueStack::pop` and
+then passed it to `ArenaBox::new_in`, materializing an intermediate value on the
+expression-construction path. The public AST, allocation policy, and provenance
+behavior are unchanged.
+
+Frozen baseline and candidate binaries were alternated for three five-second
+runs per canonical workload. Median throughput was:
+
+| Canonical workload | Before statements/s | After statements/s | Change |
+| --- | --: | --: | --: |
+| `corpus` | 261,220.7 | 261,697.9 | +0.2% |
+| `select_list_10000` | 197.7 | 206.6 | **+4.5%** |
+| `bool_chain` | 2,775.3 | 2,916.6 | **+5.1%** |
+
+Allocation counts and requested bytes were identical before and after on all
+three workloads: corpus parse allocations remained 407,317 / 285,167,872
+bytes, the wide parse remained 23 / 16,778,320 bytes, and the boolean parse
+remained 20 / 1,050,448 bytes. A drop-counted runtime test pins the ownership
+transfer, and a code-generation test prevents arena-boxed stack values from
+returning to the intermediate `ArenaBox::new_in(pop())` shape.
