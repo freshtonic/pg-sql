@@ -1603,3 +1603,28 @@ A follow-up fused classification and diagnostic-normalization pass was
 rejected. Against the bucketed-classifier medians it was neutral on corpus
 (+0.5%) but regressed the wide list by 3.3% and the boolean chain by 2.3%.
 The two separately optimized loops are retained.
+
+## Benchmark: 2026-09-08 — co-located LR rule metadata
+
+The decoded LR tables now collocate the five fields read by every reduction
+in a 16-byte rule descriptor. The driver performs one rule-index lookup for
+left-hand side, state pops, semantic-value pops, reduce-action presence, and
+tail policy instead of independently indexing five vectors. The original
+decoded vectors remain available to lookahead correction and the public
+decoded-table representation; collocation affects only the successful parse
+hot path. A compile-time size assertion prevents padding from silently
+inflating the descriptor.
+
+Frozen baseline and candidate binaries were alternated for three five-second
+runs per canonical workload. Median throughput was:
+
+| Canonical workload | Before statements/s | After statements/s | Change |
+| --- | --: | --: | --: |
+| `corpus` | 253,103.6 | 258,506.8 | **+2.1%** |
+| `select_list_10000` | 192.2 | 191.8 | -0.2% |
+| `bool_chain` | 2,758.1 | 2,768.2 | +0.4% |
+
+The wide-list delta is noise-level and no workload materially regressed.
+Per-pass allocation counts and requested bytes were identical before and
+after on all three workloads: the descriptor is populated during the tables'
+existing one-time lazy decode, before the measured parse pass.
