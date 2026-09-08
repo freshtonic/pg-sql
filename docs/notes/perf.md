@@ -1292,3 +1292,107 @@ Correctness evidence comprises Recursa's exhaustive all-targets/all-features
 workspace suite and pg-sql's PostgreSQL-oracle suite, including all 234
 differential files and 1,121 passing embedded tests. Normal warnings-as-errors
 Clippy gates pass for Recursa core and pg-sql.
+
+## Profile: 2026-09-08 — after LR state-stack optimization
+
+The committed LR optimization (`pg-sql` `0058543`, Recursa `0d516c2`) was
+profiled for 15 seconds on each canonical workload. Sampling throughput was
+194,978.1 stmt/s for `corpus`, 137.1 stmt/s for `select_list_10000`, and
+1,936.2 stmt/s for `bool_chain`; profiler overhead and machine load make these
+diagnostic rates rather than benchmark baselines. Raw samples, folded stacks,
+statistics, and SVGs are under
+`docs/perf/flamegraphs/2026-09-08-0058543/`.
+
+The next measured optimization candidates, in priority order, are:
+
+1. Provenance folding. `OccurrenceStack::reduce` accounts for 21.2% of corpus
+   self samples including allocation, 18.2% of the wide select, and 23.5% of
+   the boolean chain. Corpus root finalization and its public-capture scan add
+   another 2.2%.
+2. Generated lexical copying and finalization. Generated `lex`,
+   `__recursa_finalize`, and `LexBuilder::append` together account for 21.8%
+   of corpus self samples, 18.8% of the wide select, and 27.2% of the boolean
+   chain. The public generated `lex` path copies the runtime records and trivia,
+   then finalization walks every record once for classification and again for
+   diagnostic normalization. Actual Logos scanning is only 1.1–3.9%.
+3. Residual LR driver interpretation. `lr::run` accounts for 19.3% of corpus
+   self samples including allocation, 14.1% of the wide select, and 16.7% of
+   the boolean chain. The state-local and capacity change reduced all three
+   shares, but the table/action/reduction loop remains a broad cost.
+4. Wide arena-list growth and release. The generated select-target
+   `ArenaVec1::push` reduction accounts for 18.2% of wide-select samples, while
+   arena release surfaces separately as 11.5% in `madvise`. The adjacent
+   `SelectExprItem` and `SelectItem` construction actions add 8.0%.
+5. Recursive expression boxing, movement, and destruction. The generated
+   `Expr::And` action accounts for 13.9% of boolean-chain samples, simple
+   `Expr::ColumnRef` construction adds 4.5%, and recursive `Expr` destruction
+   adds 2.9%. Each `AND` action moves two expression values into separate arena
+   boxes before pushing the parent enum.
+
+## Profile: 2026-09-08 — current-runtime repeat
+
+The current trees (`pg-sql` `98b3c11`, Recursa `0d516c2`) were re-profiled
+for 15 seconds on each canonical workload. The intervening pg-sql commit
+changes only psql grammar, CI, and documentation, so this is an independent
+repeat of the same PostgreSQL parser runtime. Each profile contains roughly
+12,200 main-thread samples. Sampling throughput was 193,614.1 stmt/s for
+`corpus`, 141.5 stmt/s for `select_list_10000`, and 2,047.6 stmt/s for
+`bool_chain`; these remain diagnostic rates rather than benchmark baselines.
+Artifacts are under
+`docs/perf/flamegraphs/2026-09-08-98b3c11-dirty/`.
+
+The next five measured hotspots are:
+
+1. Provenance folding. `OccurrenceStack::reduce`, including allocation
+   attributed to it, accounts for 21.9% of corpus self samples, 19.0% of the
+   wide select, and 25.7% of the boolean chain.
+2. Generated lexical copying and finalization. Generated `lex`,
+   `__recursa_finalize`, `LexBuilder::append`, token iteration, and consumed-
+   fence bookkeeping together account for 21.9% of corpus, 17.8% of the wide
+   select, and 26.5% of the boolean chain. Actual Logos scanning is only 4.2%,
+   0.9%, and 2.2%, respectively.
+3. Residual LR driver interpretation. `lr::run`, including allocation
+   attributed to it, accounts for 20.8% of corpus, 14.5% of the wide select,
+   and 18.0% of the boolean chain.
+4. Wide arena-list growth and release. The generated `Vec1<SelectItem>::push`
+   reduction accounts for 18.1% of wide-select samples, arena release costs
+   11.3% in `madvise`, and adjacent `SelectExprItem` and `SelectItem`
+   construction actions add 8.2%.
+5. Recursive expression boxing, movement, and destruction. The generated
+   `Expr::And` action accounts for 13.7% of boolean-chain samples, the
+   `Expr::ColumnRef` action adds 4.4%, and recursive `Expr` destruction adds
+   2.7%.
+
+## Benchmark: 2026-09-08 — provenance policy and stack-slot folding
+
+Recursa's occurrence reducer now resolves a grouped site's capture policy once
+and avoids constructing token occurrences when that policy cannot capture. A
+non-empty reduction writes its result into the first popped occurrence-stack
+slot and truncates only the remaining slots, instead of truncating every
+popped entry and pushing an 88-byte replacement.
+
+The final comparison froze the original and optimized release binaries and
+alternated two five-second runs per workload. The deliberately conservative
+direct result was:
+
+| Canonical workload | Before statements/s | After statements/s | Change |
+| --- | --: | --: | --: |
+| `corpus` | 229,470.8 | 230,820.5 | **+0.6%** |
+| `select_list_10000` | 167.3 | 173.6 | **+3.8%** |
+| `bool_chain` | 2,285.5 | 2,345.6 | **+2.6%** |
+
+An isolated policy-versus-slot-reuse pairing measured an additional 2.1%,
+1.6%, and 2.6%, respectively, but the table retains the noisier end-to-end
+comparison rather than composing intermediate results. The diagnostic profile
+showed `item_occurrence` fall from 1.10% to 0.54% on corpus, 0.88% to 0.26% on
+the wide select, and 1.76% to 0.52% on the boolean chain. Inclusive
+`OccurrenceStack::reduce` attribution fell from 21.88% to 21.37% on corpus and
+25.74% to 24.14% on the boolean chain; fixed-duration sampling throughput makes
+the wide-select percentage unsuitable as a before/after rate.
+
+Correctness evidence is Recursa's stable exhaustive
+`cargo test --workspace --all-targets --all-features` suite and its matching
+warnings-as-errors Clippy gate. Two generated-fixture targets initially failed
+because both nightly and stable had populated the same persistent test target;
+after isolating those build-only directories, the mandated stable suite passed
+cleanly.
