@@ -35,10 +35,11 @@ doctest = false
 [features]
 arbitrary = ["dep:arbitrary", "recursa/arbitrary"]
 postgres-oracle = ["dep:pg-oracle"]
+spans = ["recursa/spans", "recursa-codegen/spans"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-recursa = { path = "../recursa/recursa", features = ["diagrams", "explorer"] }
+recursa = { path = "../recursa/recursa", default-features = false, features = ["diagrams", "explorer"] }
 regex = "1"
 derive_more = { version = "2.1.1", features = ["deref"] }
 arbitrary = { version = "1", features = ["derive"], optional = true }
@@ -88,4 +89,4 @@ name = "table_parser"
 path = "tests/table_parser.rs"
 
 [build-dependencies]
-recursa-codegen = { path = "../recursa/recursa-codegen", features = ["diagrams", "explorer"] }
+recursa-codegen = { path = "../recursa/recursa-codegen", default-features = false, features = ["diagrams", "explorer"] }

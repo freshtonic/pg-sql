@@ -33,6 +33,33 @@ fn parses_one_complete_semantically_typed_statement() {
     ));
 }
 
+#[test]
+fn spans_feature_controls_statement_provenance() {
+    let lexed = lex("SELECT 1");
+    let mut input = lexed.input();
+    let parsed = Statement::parse(&mut input).expect("strict statement");
+    assert_eq!(parsed.source().is_some(), cfg!(feature = "spans"));
+
+    let mut input = lexed.input();
+    let parsed =
+        Statement::parse_without_spans(&mut input).expect("strict statement without provenance");
+    assert_eq!(parsed.source(), None);
+
+    #[cfg(feature = "spans")]
+    {
+        let mut input = lexed.input();
+        let parsed = Statement::parse_spanned(&mut input).expect("strict spanned statement");
+        assert_eq!(parsed.source(), Some("SELECT 1"));
+    }
+
+    #[cfg(not(feature = "spans"))]
+    {
+        let mut input = lexed.input();
+        let parsed = Statement::parse_spanned(&mut input).expect("strict statement");
+        assert_eq!(parsed.source(), None);
+    }
+}
+
 /// PostgreSQL's `VariableSetStmt` owns the literal scope prefixes before the
 /// shared `set_rest`. In particular, `SET SESSION CHARACTERISTICS` must not
 /// reduce `SESSION` as a generic scope before its special rest is known.

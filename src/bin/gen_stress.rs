@@ -28,6 +28,7 @@ fn main() {
     for n in [100usize, 1_000, 10_000] {
         write(&out, &format!("in_list_{n}.sql"), &in_list(n));
     }
+    write(&out, "lexical_mix_1000.sql", &lexical_mix(1_000));
 
     println!("wrote stress fixtures to {}", out.display());
 }
@@ -95,5 +96,29 @@ fn in_list(n: usize) -> String {
         s.push_str(&format!("{i}"));
     }
     s.push_str(");\n");
+    s
+}
+
+/// A wide statement whose target entries rotate through PostgreSQL's major
+/// literal and identifier spellings. Comments are deliberately interleaved so
+/// the lexer also exercises trivia ownership without turning this into a
+/// document-level benchmark.
+fn lexical_mix(n: usize) -> String {
+    let mut s = String::from("SELECT\n");
+    for i in 0..n {
+        if i > 0 {
+            s.push_str(",\n");
+        }
+        s.push_str(&format!("  /* lexical item {i} */ "));
+        match i % 6 {
+            0 => s.push_str(&format!("\"quoted identifier {i}\"")),
+            1 => s.push_str(&format!("'single '' quoted {i}'")),
+            2 => s.push_str(&format!("E'escaped \\\\n \\\\x41 {i}'")),
+            3 => s.push_str(&format!("$tag_{i}$dollar quoted body {i}$tag_{i}$")),
+            4 => s.push_str(&format!("123456789.{i}e-3")),
+            _ => s.push_str(&format!("(1 + {i})::numeric")),
+        }
+    }
+    s.push_str(";\n");
     s
 }

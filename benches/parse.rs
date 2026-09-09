@@ -72,7 +72,7 @@ fn stress_dir() -> PathBuf {
 
 /// Strict statement-level parse with pg-sql: the generated lex pass, the
 /// differential suite's document-terminator exclusion, then the generated
-/// `Statement` parser. The lex and rebuild are counted in the measured time,
+/// provenance-free `Statement` parser. The lex and rebuild are counted in the measured time,
 /// mirroring the "parse one SQL string from scratch" model used for the
 /// other two engines.
 fn parse_with_pg_sql(sql: &str) -> bool {
@@ -81,7 +81,7 @@ fn parse_with_pg_sql(sql: &str) -> bool {
         return false;
     }
     let mut input = lexed.input();
-    match Statement::parse(&mut input) {
+    match Statement::parse_without_spans(&mut input) {
         Ok(parsed) => {
             std::hint::black_box(&parsed);
             input.is_eof()
@@ -280,6 +280,7 @@ fn stress_shapes() -> Vec<(&'static str, Vec<(usize, &'static str)>)> {
                 (10_000, "in_list_10000.sql"),
             ],
         ),
+        ("lexical_mix", vec![(1_000, "lexical_mix_1000.sql")]),
     ]
 }
 

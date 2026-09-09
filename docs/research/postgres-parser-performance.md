@@ -826,6 +826,10 @@ into evidence. Prefer it to waiting for a quiet machine, which may not come.
 
 ## 8. The price of recursive descent, measured
 
+> Historical result: this section describes the parser before Recursa adopted
+> its current table-driven LR backend. Section 9 supersedes its architectural
+> explanation; the old measurements remain useful as a record of that parser.
+
 Sections 4 and 7 argue from generated code that a table-driven parser handles nesting
 more cheaply than a recursive-descent one: bison pushes an `int16` onto a state stack,
 where recursive descent makes a real function call per nonterminal, with a stack frame, a
@@ -874,6 +878,133 @@ figures. This is strong enough to reframe the question and not strong enough to 
 it. The open question is whether roughly 7.5x per nesting level is simply what recursive
 descent costs, in which case it is a property to document rather than a defect to fix. It
 deserves a profile before anyone believes it.
+
+## 9. Why the current LR machine is larger than Bison's
+
+The current pg-sql parser is table-driven, so Bison's advantage can no longer
+be attributed to table-driven parsing versus recursive descent. A staged trace
+of Recursa lowering, a single-root counterfactual, kernel-origin accounting,
+and a fresh Bison 3.8.2 report over PostgreSQL 17.9's `gram.y` identify the
+actual structural differences. The checked-in PostgreSQL build uses Bison 2.3;
+its generated grammar dimensions match the fresh report.
+
+| Dimension | PostgreSQL/Bison | pg-sql/Recursa | Ratio |
+| --- | --: | --: | --: |
+| Terminals | 539 | 598 | 1.11x |
+| Nonterminals | 728 | 4,279 | 5.88x |
+| Rules | 3,408 | 14,944 | 4.38x |
+| LR states | 6,458 | 20,715 | 3.21x |
+| Packed action/goto slots | 123,278 | 262,296 | 2.13x |
+
+### 9.1 Flattened lexical atom sets are the largest rule multiplier
+
+PostgreSQL shares five keyword-category nonterminals. In the Bison report,
+the `ColId`/`ColLabel` wrappers and keyword categories occupy rules 2,448
+through 3,407: 960 rules in total. Higher-level identifier productions refer
+to those shared categories.
+
+Recursa expands every content token's accepted atom set directly into one
+production per terminal. Twenty-six content-token types therefore occupy
+5,469 final rules. The broad overlapping classes are repeated independently:
+`ColIdText` has 398 rules, `ColLabelText` 485, `NonReservedWordText` 420,
+`AliasNameText` 485, and eleven other identifier classes have roughly 370-447
+rules each. Kernel accounting associates 6,763 states with token actions;
+6,578 states (31.8% of the machine) contain only token-action kernels.
+
+This is not an EBNF helper problem. Recursa has only 196 ordinary helper
+nonterminals, and conflict repair makes one copy, adding two rules and three
+states.
+
+### 9.2 Pratt restrictions copy the expression grammar
+
+The base `Expr` nonterminal has 179 rules. Its 22 distinct exclusion/minimum-
+binding-power languages copy another 2,205 rules; 90 one-rule attachment
+restrictions and five other attachment restrictions bring the restriction
+total to 2,301 rules and 117 nonterminals. These restrictions account
+exclusively for 2,415 states (11.7%). PostgreSQL's hand-factored `a_expr`,
+`b_expr`, and `c_expr` occupy 104 rules.
+
+The seven authored `pratt(exclude(...))` sites are not themselves the large
+number. Operand minimum binding powers create the other distinct Expr
+languages, and cloning all eligible base productions turns 22 languages into
+2,205 rules.
+
+### 9.3 The public parse surface creates 1,504 roots
+
+Every concrete Node application and content token is independently parseable,
+so Recursa emits 1,504 synthetic start nonterminals and rules: 1,026 sequence
+applications, 451 enums, one Pratt type, and 26 content tokens. Start rules
+are the sole kernel origin in 3,007 states. A diagnostic build retaining only
+the public `Statement` root reduced the automaton from 20,715 to 16,245 states,
+a reduction of 4,470 (21.6% of the full machine). It subsequently fails normal
+code generation because the other public parsers require their start rules;
+the counterfactual was measurement, not a proposed API removal.
+
+PostgreSQL instead has one parser start and a small `MODE_*` prefix dispatch
+for its handful of supported entry modes. It does not expose every grammar
+nonterminal as a public parser.
+
+### 9.4 The remaining type count reflects the typed AST
+
+Source materialization produces 3,038 normalized types:
+
+| Shape | Count | Final type rules |
+| --- | --: | --: |
+| Token | 603 (26 become nonterminals) | 5,469 |
+| Sequence | 1,983 | 3,257 |
+| Enum | 451 | 1,840 |
+| Pratt | 1 | 179 |
+
+The 1,983 sequences are completely accounted for by 1,026 public Node
+applications, 746 fixed-token attachment units, 87 presence envelopes, and
+124 fixed sequences. There are 1,462 authored `Node` derives and 1,478
+materialized Node applications, so generic monomorphization contributes only
+16 applications. The granularity is predominantly deliberate typed-AST
+factoring, not accidental generic multiplication.
+
+### 9.5 How much of the delta is the AST?
+
+The typed AST and public API broaden the derived grammar, but they do not by
+themselves explain the parser gap. The 1,504 public roots contribute 3,007
+exclusive states, and 1,983 sequence types reflect typed applications,
+attachments, presence envelopes, and fixed sequences. Those are direct costs
+of deriving the grammar from pg-sql's supported AST surface.
+
+The largest multipliers are instead lowering choices over that surface:
+flattening 26 shared token-admission sets creates 5,469 token rules, while
+cloning 22 closely related Expr languages creates 2,205 restriction rules.
+PostgreSQL's handwritten grammar shares keyword categories and maintains only
+its explicit `a_expr`/`b_expr`/`c_expr` families. Even after removing the
+extra public roots, the Statement-only Recursa counterfactual has 16,245
+states versus PostgreSQL/Bison's 6,458, so root/API breadth is only part of
+the structural difference.
+
+Runtime cost has a further independent component: pg-sql constructs its typed
+arena AST and exact-source provenance, while PostgreSQL constructs a different
+raw parse tree and retains much coarser locations. A smaller LR machine can
+therefore still lose overall, as the rejected shared-token prototype proved:
+it removed about 20% of rules and states but added reductions and slowed the
+representative workloads. Grammar footprint, parser-loop work, semantic
+construction, and provenance must be measured separately.
+
+### 9.6 Final accounting
+
+| Final Recursa origin | Nonterminals | Rules |
+| --- | --: | --: |
+| Concrete grammar types | 2,461 | 10,745 |
+| Public starts | 1,504 | 1,504 |
+| Container helpers and one copy | 197 | 394 |
+| Pratt restrictions | 117 | 2,301 |
+| **Total** | **4,279** | **14,944** |
+
+Lookahead-filter substitution adds only 120 rules. Container helpers and
+helper conflict repair are therefore falsified as explanations of the size
+gap. Experiments subsequently rejected reduction-based lexical categories and
+duplicate public-root tables on runtime and binary-size grounds; Pratt
+restriction sharing remains the only material structural candidate, but it
+requires a genuine core/action overlay rather than helper interning. The
+implementation record and measurements are in
+[`docs/plans/2026-09-08-lr-grammar-footprint.md`](../plans/2026-09-08-lr-grammar-footprint.md).
 
 ## Sources
 

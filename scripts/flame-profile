@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Profile one canonical workload with the flame harness (benches/flame.rs).
+# Profile one workload or every member of a named flame suite.
 #
 # Runs the harness in a loop, samples it with macOS /usr/bin/sample, folds
 # the stacks with the FlameGraph scripts when a checkout is available, and
 # writes everything to docs/perf/flamegraphs/<date>-<sha>[-dirty]/.
 #
 # Usage:
-#   scripts/flame-profile <workload> [duration-seconds]
+#   scripts/flame-profile <workload|quick|discovery> [duration-seconds] [engine]
 #
-# Workloads: corpus | select_list_10000 | bool_chain (see benches/flame.rs).
+# Workloads and suites: see `flame --list` or benches/flame.rs.
 #
 # Environment:
 #   FLAMEGRAPH_DIR  checkout of https://github.com/brendangregg/FlameGraph
@@ -20,9 +20,28 @@
 
 set -euo pipefail
 
-workload="${1:?usage: scripts/flame-profile <workload> [duration-seconds]}"
+requested="${1:?usage: scripts/flame-profile <workload|quick|discovery> [duration-seconds]}"
 duration="${2:-10}"
+engine="${3:-pg-sql}"
 flamegraph_dir="${FLAMEGRAPH_DIR:-$HOME/tools/FlameGraph}"
+
+case "$requested" in
+  quick)
+    workloads=(corpus select_list_10000 bool_chain)
+    ;;
+  discovery)
+    workloads=(
+      corpus_pg_postgres
+      corpus_query corpus_dml corpus_ddl corpus_transaction
+      corpus_session corpus_access corpus_cursor corpus_utility
+      insert_values_10000 in_list_10000 nested_subquery_15
+      lexical_mix_1000 errors_pg_postgres
+    )
+    ;;
+  *)
+    workloads=("$requested")
+    ;;
+esac
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -45,30 +64,36 @@ dirty=""
 git diff --quiet HEAD -- . ':(exclude)docs/perf' 2>/dev/null || dirty="-dirty"
 run_dir="docs/perf/flamegraphs/$(date -u +%Y-%m-%d)-${sha}${dirty}"
 mkdir -p "$run_dir"
-stem="$run_dir/$workload"
+for workload in "${workloads[@]}"; do
+  stem="$run_dir/$workload"
+  if [ "$engine" != "pg-sql" ]; then
+    stem="$stem.$engine"
+  fi
 
-# The harness loops a little longer than the sampling window so the sampler
-# never outlives the profilee.
-harness_duration=$((duration + 5))
-"$bin" "$workload" --duration "$harness_duration" > "$stem.stats.txt" &
-harness_pid=$!
-sleep 1 # let the workload load before sampling
+  # The harness loops a little longer than the sampling window so the sampler
+  # never outlives the profilee.
+  harness_duration=$((duration + 5))
+  "$bin" "$workload" --duration "$harness_duration" --engine "$engine" \
+    > "$stem.stats.txt" &
+  harness_pid=$!
+  sleep 1 # let the workload load before sampling
 
-sample "$harness_pid" "$duration" -file "$stem.sample.txt"
-wait "$harness_pid"
-cat "$stem.stats.txt"
+  sample "$harness_pid" "$duration" -file "$stem.sample.txt"
+  wait "$harness_pid"
+  cat "$stem.stats.txt"
 
-if [ -x "$flamegraph_dir/flamegraph.pl" ]; then
-  awk -f "$flamegraph_dir/stackcollapse-sample.awk" "$stem.sample.txt" \
-    > "$stem.folded"
-  "$flamegraph_dir/flamegraph.pl" \
-    --title "pg-sql flame: $workload (${duration}s sample)" \
-    "$stem.folded" > "$stem.svg"
-  echo "flamegraph: $stem.svg"
-else
-  echo "flame-profile: no FlameGraph checkout at $flamegraph_dir;" \
-    "skipping fold/SVG (raw report: $stem.sample.txt)" >&2
-fi
+  if [ -x "$flamegraph_dir/flamegraph.pl" ]; then
+    awk -f "$flamegraph_dir/stackcollapse-sample.awk" "$stem.sample.txt" \
+      > "$stem.folded"
+    "$flamegraph_dir/flamegraph.pl" \
+      --title "pg-sql flame: $workload / $engine (${duration}s sample)" \
+      "$stem.folded" > "$stem.svg"
+    echo "flamegraph: $stem.svg"
+  else
+    echo "flame-profile: no FlameGraph checkout at $flamegraph_dir;" \
+      "skipping fold/SVG (raw report: $stem.sample.txt)" >&2
+  fi
 
-echo "sample report: $stem.sample.txt"
-echo "harness stats: $stem.stats.txt"
+  echo "sample report: $stem.sample.txt"
+  echo "harness stats: $stem.stats.txt"
+done

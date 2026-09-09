@@ -1,3 +1,5 @@
+#![cfg(feature = "spans")]
+
 //! Public strict PostgreSQL-document seam (issue #10).
 //!
 //! `document::parse_sql` accepts zero or more semicolon-separated PostgreSQL

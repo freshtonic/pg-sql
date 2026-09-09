@@ -1,5 +1,5 @@
-//! pg-sql flame harness: profiler-friendly parse loops over the canonical
-//! workloads (ADR 0006, performance-parity plan Track T).
+//! pg-sql flame harness: profiler-friendly parse loops over the quick and
+//! discovery workload suites (ADR 0006, performance-parity plan Track T).
 //!
 //! This is the port of recursa-old's `flame.rs`/`flame_target` pair onto the
 //! current runtime. The old crate exposed `pg_sql::flame::run_loop` from the
@@ -7,7 +7,8 @@
 //! surface is strict (generated grammar only), so the whole harness lives in
 //! this bench-adjacent target instead. Like `benches/parse.rs` it mounts the
 //! differential test support module, so it parses through the exact same
-//! statement lexing seam (`lex_statement_source` + `Statement::parse`) and
+//! provenance-free statement lexing seam
+//! (`lex_statement_source` + `Statement::parse_without_spans`) and
 //! the exact frozen statement membership that the differential suite pins.
 //!
 //! The harness does one thing: it parses one named canonical workload with
@@ -17,7 +18,7 @@
 //! It measures pg-sql alone; the head-to-head engine comparison stays in
 //! `benches/parse.rs`.
 //!
-//! Canonical workloads (CONTEXT.md):
+//! Quick workloads (CONTEXT.md):
 //!
 //! - `corpus` — the frozen corpus statements accepted by pg-sql, sqlparser,
 //!   and PostgreSQL (the head-to-head benchmark membership). Deliberate legacy
@@ -27,6 +28,11 @@
 //!   SELECT list (10,000 columns).
 //! - `bool_chain` — `fixtures/stress/bool_chain_1000.sql`, one WHERE clause
 //!   chaining 1,000 `AND` terms through the Pratt loop.
+//!
+//! The discovery suite adds a pg-sql/PostgreSQL-only corpus (both aggregate
+//! and partitioned by top-level statement family), structurally distinct
+//! stress fixtures, a lexer-heavy fixture, and corpus-derived rejection paths.
+//! `scripts/flame-profile discovery` profiles each member independently.
 //!
 //! Usage (`--duration` is in seconds, default 5):
 //!
@@ -45,8 +51,8 @@
 //!   runs are unperturbed; the allocator itself still forwards to the
 //!   system allocator either way.
 //! - `--engine sqlparser` times sqlparser 0.52 (the parity-gate reference)
-//!   over the same statements, giving a like-for-like denominator on the
-//!   canonical workloads without the full interim benchmark.
+//!   over the quick suite's three-way membership. `--engine postgres` runs
+//!   PostgreSQL's raw parser over either suite for generated-parser profiles.
 //!
 //! See `docs/notes/perf.md` for the profiling recipes built on top of this
 //! target (macOS `sample`/`xctrace`, Linux `perf`).
@@ -118,11 +124,10 @@ fn alloc_snapshot() -> (u64, u64) {
     )
 }
 
-// --- Canonical workloads ---
+// --- Profiling workloads ---
 
-/// The three canonical workload names, with the fixture each one loads.
-/// Every profile and perf-journal entry names one of these (CONTEXT.md).
-const WORKLOADS: [(&str, &str); 3] = [
+/// The three canonical workloads used for fast before/after checks.
+const QUICK_WORKLOADS: [(&str, &str); 3] = [
     (
         "corpus",
         "frozen corpus statements accepted by all three engines",
@@ -131,60 +136,184 @@ const WORKLOADS: [(&str, &str); 3] = [
     ("bool_chain", "fixtures/stress/bool_chain_1000.sql"),
 ];
 
+/// Broader workloads used to discover grammar- and mechanism-specific costs.
+const DISCOVERY_WORKLOADS: [(&str, &str); 14] = [
+    (
+        "corpus_pg_postgres",
+        "aggregate corpus accepted by pg-sql and PostgreSQL",
+    ),
+    ("corpus_query", "pg-sql/PostgreSQL corpus: query family"),
+    ("corpus_dml", "pg-sql/PostgreSQL corpus: DML family"),
+    ("corpus_ddl", "pg-sql/PostgreSQL corpus: DDL family"),
+    (
+        "corpus_transaction",
+        "pg-sql/PostgreSQL corpus: transaction family",
+    ),
+    ("corpus_session", "pg-sql/PostgreSQL corpus: session family"),
+    (
+        "corpus_access",
+        "pg-sql/PostgreSQL corpus: access-control family",
+    ),
+    ("corpus_cursor", "pg-sql/PostgreSQL corpus: cursor family"),
+    ("corpus_utility", "pg-sql/PostgreSQL corpus: utility family"),
+    (
+        "insert_values_10000",
+        "fixtures/stress/insert_values_10000.sql",
+    ),
+    ("in_list_10000", "fixtures/stress/in_list_10000.sql"),
+    (
+        "nested_subquery_15",
+        "fixtures/stress/nested_subquery_15.sql",
+    ),
+    ("lexical_mix_1000", "fixtures/stress/lexical_mix_1000.sql"),
+    (
+        "errors_pg_postgres",
+        "corpus parse-error items rejected by pg-sql and PostgreSQL",
+    ),
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ExpectedOutcome {
+    Accept,
+    Reject,
+}
+
+struct LoadedWorkload {
+    inputs: Vec<String>,
+    expected: ExpectedOutcome,
+    supports_sqlparser: bool,
+}
+
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-/// Load a canonical workload's statements. Reads everything up front and
+/// Loads the frozen corpus items of one legacy kind without probing engines.
+fn load_corpus_items(kind: LegacyItemKind) -> Result<Vec<String>, String> {
+    let frozen = FrozenStatements::pinned();
+    let corpus_dir = manifest_dir().join("vendor/postgres/src/test/regress/sql");
+    let mut inputs = Vec::with_capacity(frozen.total_statements());
+    for file_name in frozen.file_names() {
+        let path = corpus_dir.join(file_name);
+        let text = fs::read_to_string(&path)
+            .map_err(|e| format!("read corpus file {}: {e}", path.display()))?;
+        let statements = frozen
+            .file(file_name)
+            .statements(&text)
+            .map_err(|error| format!("{file_name}: cannot load frozen statements: {error}"))?;
+        let kinds = frozen.file(file_name).legacy_item_kinds();
+        if kinds.len() != statements.len() {
+            return Err(format!(
+                "{file_name}: frozen item-kind count {} does not match statement count {}",
+                kinds.len(),
+                statements.len()
+            ));
+        }
+        inputs.extend(
+            statements
+                .into_iter()
+                .zip(kinds)
+                .filter(|(_, item_kind)| **item_kind == kind)
+                .map(|(statement, _)| statement.to_owned()),
+        );
+    }
+    Ok(inputs)
+}
+
+/// A stable top-level dispatch partition. It intentionally follows the first
+/// significant SQL keyword rather than inspecting AST internals, keeping this
+/// profiling-only grouping independent of AST representation changes.
+fn statement_family(sql: &str) -> &'static str {
+    let lexed = lex_statement_source(sql);
+    let Some(first) = lexed.tokens().next() else {
+        return "utility";
+    };
+    match first.kind().to_string().as_str() {
+        "SELECT" | "VALUES" | "TABLE" | "WITH" | "(" => "query",
+        "INSERT" | "UPDATE" | "DELETE" | "MERGE" => "dml",
+        "CREATE" | "ALTER" | "DROP" => "ddl",
+        "BEGIN" | "START" | "COMMIT" | "END" | "ABORT" | "ROLLBACK" | "SAVEPOINT" | "RELEASE" => {
+            "transaction"
+        }
+        "SET" | "RESET" | "SHOW" | "LOAD" | "DISCARD" => "session",
+        "GRANT" | "REVOKE" => "access",
+        "DECLARE" | "FETCH" | "MOVE" | "CLOSE" => "cursor",
+        _ => "utility",
+    }
+}
+
+/// Load a profiling workload's statements. Reads everything up front and
 /// probes membership once so neither I/O nor parity checks appear in the
 /// profiled loop.
-fn load_workload(name: &str) -> Result<Vec<String>, String> {
-    let accepted_inputs = |statements: Vec<String>| {
+fn load_workload(name: &str) -> Result<LoadedWorkload, String> {
+    let accepted_inputs = |statements: Vec<String>, require_sqlparser: bool| {
         statements
             .into_iter()
             .filter(|sql| {
-                parse_with_pg_sql(sql) && parse_with_sqlparser(sql) && parse_with_postgres(sql)
+                parse_with_pg_sql(sql)
+                    && (!require_sqlparser || parse_with_sqlparser(sql))
+                    && parse_with_postgres(sql)
             })
             .collect()
     };
-    let stress = |file: &str| -> Result<Vec<String>, String> {
+    let stress = |file: &str, require_sqlparser: bool| -> Result<LoadedWorkload, String> {
         let path = manifest_dir().join("fixtures/stress").join(file);
         let sql = fs::read_to_string(&path)
             .map_err(|e| format!("read stress fixture {}: {e}", path.display()))?;
-        Ok(accepted_inputs(vec![sql]))
+        Ok(LoadedWorkload {
+            inputs: accepted_inputs(vec![sql], require_sqlparser),
+            expected: ExpectedOutcome::Accept,
+            supports_sqlparser: require_sqlparser,
+        })
     };
     match name {
         "corpus" => {
-            let frozen = FrozenStatements::pinned();
-            let corpus_dir = manifest_dir().join("vendor/postgres/src/test/regress/sql");
-            let mut inputs = Vec::with_capacity(frozen.total_statements());
-            for file_name in frozen.file_names() {
-                let path = corpus_dir.join(file_name);
-                let text = fs::read_to_string(&path)
-                    .map_err(|e| format!("read corpus file {}: {e}", path.display()))?;
-                let statements = frozen.file(file_name).statements(&text).map_err(|error| {
-                    format!("{file_name}: cannot load frozen statements: {error}")
-                })?;
-                let kinds = frozen.file(file_name).legacy_item_kinds();
-                if kinds.len() != statements.len() {
-                    return Err(format!(
-                        "{file_name}: frozen item-kind count {} does not match statement count {}",
-                        kinds.len(),
-                        statements.len()
-                    ));
-                }
-                let statements = statements
-                    .into_iter()
-                    .zip(kinds)
-                    .filter(|(_, kind)| *kind == &LegacyItemKind::Statement)
-                    .map(|(statement, _)| statement.to_owned())
-                    .collect();
-                inputs.extend(accepted_inputs(statements));
-            }
-            Ok(inputs)
+            let inputs = load_corpus_items(LegacyItemKind::Statement)?;
+            Ok(LoadedWorkload {
+                inputs: accepted_inputs(inputs, true),
+                expected: ExpectedOutcome::Accept,
+                supports_sqlparser: true,
+            })
         }
-        "select_list_10000" => stress("select_list_10000.sql"),
-        "bool_chain" => stress("bool_chain_1000.sql"),
+        "corpus_pg_postgres" => {
+            let inputs = load_corpus_items(LegacyItemKind::Statement)?;
+            Ok(LoadedWorkload {
+                inputs: accepted_inputs(inputs, false),
+                expected: ExpectedOutcome::Accept,
+                supports_sqlparser: false,
+            })
+        }
+        name @ ("corpus_query" | "corpus_dml" | "corpus_ddl" | "corpus_transaction"
+        | "corpus_session" | "corpus_access" | "corpus_cursor" | "corpus_utility") => {
+            let family = name.trim_start_matches("corpus_");
+            let inputs = load_corpus_items(LegacyItemKind::Statement)?;
+            let inputs = inputs
+                .into_iter()
+                .filter(|sql| statement_family(sql) == family)
+                .collect();
+            Ok(LoadedWorkload {
+                inputs: accepted_inputs(inputs, false),
+                expected: ExpectedOutcome::Accept,
+                supports_sqlparser: false,
+            })
+        }
+        "errors_pg_postgres" => {
+            let inputs = load_corpus_items(LegacyItemKind::ParseError)?;
+            Ok(LoadedWorkload {
+                inputs: inputs
+                    .into_iter()
+                    .filter(|sql| !parse_with_pg_sql(sql) && !parse_with_postgres(sql))
+                    .collect(),
+                expected: ExpectedOutcome::Reject,
+                supports_sqlparser: false,
+            })
+        }
+        "select_list_10000" => stress("select_list_10000.sql", true),
+        "bool_chain" => stress("bool_chain_1000.sql", true),
+        "insert_values_10000" => stress("insert_values_10000.sql", false),
+        "in_list_10000" => stress("in_list_10000.sql", false),
+        "nested_subquery_15" => stress("nested_subquery_15.sql", false),
+        "lexical_mix_1000" => stress("lexical_mix_1000.sql", false),
         other => Err(format!("unknown workload: {other}")),
     }
 }
@@ -193,7 +322,7 @@ fn load_workload(name: &str) -> Result<Vec<String>, String> {
 
 /// Strict statement-level parse with pg-sql — the generated lex pass, the
 /// differential suite's document-terminator exclusion, then the generated
-/// `Statement` parser. Byte-for-byte the same seam as
+/// provenance-free `Statement` parser. Byte-for-byte the same seam as
 /// `parse_with_pg_sql` in `benches/parse.rs`, so profiles correspond to
 /// what the interim benchmark times.
 fn parse_with_pg_sql(sql: &str) -> bool {
@@ -202,7 +331,7 @@ fn parse_with_pg_sql(sql: &str) -> bool {
         return false;
     }
     let mut input = lexed.input();
-    match Statement::parse(&mut input) {
+    match Statement::parse_without_spans(&mut input) {
         Ok(parsed) => {
             std::hint::black_box(&parsed);
             input.is_eof()
@@ -269,7 +398,7 @@ impl PhaseAllocs {
 /// phases counted separately. Deliberate parse-error entries and statements
 /// rejected by any parity engine were removed while loading the workload, so
 /// this pass intentionally does not measure error/expected-set paths.
-fn run_alloc_count(inputs: &[String]) {
+fn run_alloc_count(inputs: &[String], expected: ExpectedOutcome) {
     let mut lex = PhaseAllocs::default();
     let mut parse = PhaseAllocs::default();
 
@@ -279,23 +408,28 @@ fn run_alloc_count(inputs: &[String]) {
         let lexed = lex_statement_source(sql);
         let after_lex = alloc_snapshot();
         lex.add(before_lex, after_lex);
-        if lexed.errors().next().is_some() {
-            debug_assert!(false, "accepted workload unexpectedly failed lexing");
-            continue;
-        }
-        let mut input = lexed.input();
-        let before_parse = alloc_snapshot();
-        let outcome = Statement::parse(&mut input);
-        let after_parse = alloc_snapshot();
-        let accepted = match outcome {
-            Ok(parsed) => {
-                std::hint::black_box(&parsed);
-                input.is_eof()
-            }
-            Err(_) => false,
+        let accepted = if lexed.errors().next().is_some() {
+            false
+        } else {
+            let mut input = lexed.input();
+            let before_parse = alloc_snapshot();
+            let outcome = Statement::parse_without_spans(&mut input);
+            let after_parse = alloc_snapshot();
+            let accepted = match outcome {
+                Ok(parsed) => {
+                    std::hint::black_box(&parsed);
+                    input.is_eof()
+                }
+                Err(_) => false,
+            };
+            parse.add(before_parse, after_parse);
+            accepted
         };
-        parse.add(before_parse, after_parse);
-        debug_assert!(accepted, "accepted workload unexpectedly failed parsing");
+        debug_assert_eq!(
+            accepted,
+            expected == ExpectedOutcome::Accept,
+            "profile workload produced an unexpected parse outcome"
+        );
     }
     COUNTING.store(false, Ordering::Relaxed);
 
@@ -331,6 +465,7 @@ fn run_loop(inputs: &[String], duration: Duration, engine: Engine) -> LoopStats 
     let parse: fn(&str) -> bool = match engine {
         Engine::PgSql => parse_with_pg_sql,
         Engine::Sqlparser => parse_with_sqlparser,
+        Engine::Postgres => parse_with_postgres,
     };
     let start = Instant::now();
     let deadline = start + duration;
@@ -363,6 +498,7 @@ fn run_loop(inputs: &[String], duration: Duration, engine: Engine) -> LoopStats 
 enum Engine {
     PgSql,
     Sqlparser,
+    Postgres,
 }
 
 struct Args {
@@ -395,6 +531,7 @@ fn parse_args(args: &[String]) -> Result<Option<Args>, String> {
                 engine = match v.as_str() {
                     "pg-sql" => Engine::PgSql,
                     "sqlparser" => Engine::Sqlparser,
+                    "postgres" => Engine::Postgres,
                     other => return Err(format!("bad --engine: {other}")),
                 };
             }
@@ -421,11 +558,17 @@ fn parse_args(args: &[String]) -> Result<Option<Args>, String> {
     }))
 }
 
-fn print_workloads() {
-    println!("canonical workloads:");
-    for (name, source) in WORKLOADS {
+fn print_workload_group(label: &str, workloads: &[(&str, &str)]) {
+    println!("{label}:");
+    for (name, source) in workloads {
         println!("  {name:<20} {source}");
     }
+}
+
+fn print_workloads() {
+    print_workload_group("quick suite", &QUICK_WORKLOADS);
+    println!();
+    print_workload_group("discovery suite", &DISCOVERY_WORKLOADS);
 }
 
 fn main() -> ExitCode {
@@ -444,7 +587,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let inputs = match load_workload(&args.workload) {
+    let loaded = match load_workload(&args.workload) {
         Ok(inputs) => inputs,
         Err(msg) => {
             eprintln!("flame: {msg}");
@@ -452,19 +595,27 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let input_bytes: u64 = inputs.iter().map(|s| s.len() as u64).sum();
+    if args.engine == Engine::Sqlparser && !loaded.supports_sqlparser {
+        eprintln!(
+            "flame: {} has pg-sql/PostgreSQL membership and cannot be timed with sqlparser",
+            args.workload
+        );
+        return ExitCode::from(2);
+    }
+    let input_bytes: u64 = loaded.inputs.iter().map(|s| s.len() as u64).sum();
 
     println!("pg-sql flame harness");
     println!(
         "workload: {} ({} statements, {} bytes/pass)",
         args.workload,
-        inputs.len(),
+        loaded.inputs.len(),
         input_bytes,
     );
+    println!("expected: {:?}", loaded.expected);
     println!("pid: {}", std::process::id());
 
     if args.count_allocs {
-        run_alloc_count(&inputs);
+        run_alloc_count(&loaded.inputs, loaded.expected);
         return ExitCode::SUCCESS;
     }
 
@@ -472,12 +623,23 @@ fn main() -> ExitCode {
     println!("duration: {} s", args.duration_secs);
 
     let stats = run_loop(
-        &inputs,
+        &loaded.inputs,
         Duration::from_secs(args.duration_secs),
         args.engine,
     );
     if stats.statements == 0 {
         eprintln!("flame: 0 statements parsed (empty workload?)");
+        return ExitCode::from(1);
+    }
+    let expected_accepts = match loaded.expected {
+        ExpectedOutcome::Accept => stats.statements,
+        ExpectedOutcome::Reject => 0,
+    };
+    if stats.accepted != expected_accepts {
+        eprintln!(
+            "flame: workload outcome drift: expected {:?}, observed {} accepts in {} parses",
+            loaded.expected, stats.accepted, stats.statements
+        );
         return ExitCode::from(1);
     }
 

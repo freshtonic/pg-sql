@@ -25,9 +25,19 @@ without promising compatibility with the legacy Rust API.
 - **Parity gate**: geomean of per-benchmark pg-sql/sqlparser medians at or
   below 1.0 on the statement-level benchmark (ADR 0006).
 - **Parser gate**: pg-sql's Recursa parser must preserve the pinned
-  differential outcomes, parsed values, provenance, and failing tokens.
-- **Canonical workloads**: the three profiling targets - corpus head-to-head,
-  select_list_10000, bool_chain - every profile and journal entry names one.
+  differential outcomes, parsed values, failing tokens, and, when the
+  `spans` feature is enabled, provenance.
+- **Spans feature**: the opt-in Cargo feature that makes ordinary generated
+  parse entry points retain occurrence provenance. The always-available
+  `parse_without_spans` entry point is used by performance benchmarks for
+  comparison with PostgreSQL's raw parser.
+- **Quick profiling suite**: the three canonical profiling targets - corpus
+  head-to-head, select_list_10000, bool_chain - used for fast before/after
+  checks.
+- **Discovery profiling suite**: the broader pg-sql/PostgreSQL corpus and its
+  statement-family partitions, structural and lexical stress fixtures, and
+  rejected-input paths. Each member is profiled independently; results are
+  never blended into one flamegraph.
 - **Perf journal**: `docs/notes/perf.md`, appended per profile/change pair;
   diagnostic result sections read newest-last.
 

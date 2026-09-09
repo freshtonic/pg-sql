@@ -30,8 +30,9 @@ head-to-head engine comparison itself stays in that bench.
 
 ### Known blind spot: all three workloads are the statement seam
 
-Every workload above, every profile in this journal, and `benches/parse.rs`
-itself measure the same seam: `lex_statement_source` + `Statement::parse`,
+Every workload above, every new profile in this journal, and `benches/parse.rs`
+itself measure the same seam: `lex_statement_source` +
+`Statement::parse_without_spans`,
 one statement at a time. **Document framing (`pg_sql::document::parse_sql`)
 has never been measured here.** That is a gap in the discipline, not merely
 a missing number: a cost that lives only in the file-level path is
@@ -83,7 +84,8 @@ item 7.7 and is the only one closed so far.
 The harness is `benches/flame.rs` (Track T port of recursa-old's
 `flame.rs`/`flame_target`). It parses one canonical workload with pg-sql in
 a tight loop for a fixed duration, through the exact statement seam that
-`benches/parse.rs` times (`lex_statement_source` + `Statement::parse`). It
+`benches/parse.rs` times (`lex_statement_source` +
+`Statement::parse_without_spans`). It
 prints its PID for attach-style profilers and a machine-readable
 `iters=... elapsed_ns=...` line on completion.
 
@@ -106,6 +108,9 @@ folds the stacks with the FlameGraph scripts, and writes an SVG:
 git clone https://github.com/brendangregg/FlameGraph ~/tools/FlameGraph
 
 scripts/flame-profile bool_chain 10        # workload, sample seconds
+scripts/flame-profile quick 10             # canonical three-workload gate
+scripts/flame-profile discovery 10         # broad, independently sampled suite
+scripts/flame-profile corpus_query 10 postgres # PostgreSQL generated parser
 ```
 
 Output lands in `docs/perf/flamegraphs/<date>-<sha>[-dirty]/` (gitignored;
@@ -1706,3 +1711,174 @@ bytes, the wide parse remained 23 / 16,778,320 bytes, and the boolean parse
 remained 20 / 1,050,448 bytes. A drop-counted runtime test pins the ownership
 transfer, and a code-generation test prevents arena-boxed stack values from
 returning to the intermediate `ArenaBox::new_in(pop())` shape.
+
+## Investigation: 2026-09-08 — paired recursive-child arena reservation
+
+A follow-up prototype reserved one contiguous `[Expr; 2]` arena region for
+the separately owned left and right `ArenaBox<Expr>` fields of generated Pratt
+binary reductions. The specialization applied only to two same-node recursive
+boxed fields; heterogeneous and non-recursive fields kept the existing path.
+
+After forcing the larger helper inline to match the retained single-value
+transfer path, alternating three five-second `bool_chain` runs produced median
+throughput of 2,882.7 statements/s for the frozen baseline and 2,880.8
+statements/s for the candidate (-0.1%). Parse allocation count and requested
+bytes remained identical at 20 and 1,050,448. Earlier measurements spanning a
+laptop suspend/resume cycle were discarded.
+
+The prototype was rejected and Recursa restored to its committed tree. Once
+the semantic value moves directly from the stack into its arena box, the
+second bump-pointer reservation is not a measurable expression-construction
+cost. Further expression work should target the large parent value's semantic
+stack round-trip or recursive destruction rather than box reservation count.
+
+## Investigation: 2026-09-08 — arena-backed Pratt value staging
+
+A prototype stored completed arena-AST Pratt values behind a pointer on the
+semantic stack. A recursive boxed consumer could adopt that allocation instead
+of copying the large parent enum from the semantic stack into a new arena box;
+ordinary consumers still popped the authored unboxed type. Drop-counted tests
+covered normal pop, allocation adoption, and failed-parse unwind.
+
+Blanket staging confirmed the copy is expensive: alternating three five-second
+`bool_chain` runs improved median throughput from 2,838.5 to 2,994.8
+statements/s (+5.5%), while corpus and wide throughput were neutral. It was not
+acceptable as implemented because unboxed atomic expressions retained their
+temporary arena allocation: `select_list_10000` parse allocation doubled from
+16,778,320 to 33,555,616 bytes, and corpus parse allocation rose from
+285,167,872 to 313,375,904 bytes.
+
+A second version used bumpalo's allocator interface to rewind an arena-backed
+value when an unboxed pop consumed the most recent allocation. This restored
+wide allocation to 16,778,416 bytes and reduced corpus allocation to
+278,039,472 bytes. After reducing the reclaim path to one slot inspection, the
+boolean median remained 3.9% faster and corpus was neutral, but the 10,000-item
+wide median regressed from 187.4 to 180.4 statements/s (-3.7%) because every
+atomic expression still paid an allocate/reclaim cycle.
+
+Restricting arena staging to Pratt variants containing `Self` removed that
+wide allocation cycle, but also removed the target benefit: stable
+`bool_chain` medians were 2,927.2 for baseline and 2,924.7 for the candidate
+(-0.1%). The prototype was therefore rejected and both codebases restored.
+Avoiding this copy without a memory or atomic-expression penalty needs a
+context-sensitive representation for boxed Pratt occurrences (for example a
+distinct lowered symbol), not a blanket node representation. The next bounded
+hypothesis remains recursive AST destruction.
+
+## Investigation: 2026-09-08 — discovery coverage and LR grammar size
+
+The three canonical flame workloads remain the quick suite. A separate
+discovery suite now adds the pg-sql/PostgreSQL-only aggregate corpus, eight
+top-level statement-family partitions, `insert_values_10000`,
+`in_list_10000`, `nested_subquery_15`, a 50,596-byte lexical/trivia mix, and
+105 real corpus parse-error items rejected by both parsers. The macOS driver
+accepts `quick` or `discovery` and samples each workload separately; the flame
+harness can now run PostgreSQL as an engine as well.
+
+Removing the unrelated sqlparser acceptance gate grows the corpus from 33,692
+statements / 2,884,213 bytes to 42,972 / 3,720,653. Temporary LR coverage
+counters showed unique-state coverage rising from 3,493 to 6,858 (+96.3%) and
+unique-rule coverage from 2,424 to 4,609 (+90.1%). The broader membership is
+therefore important for discovery even though earlier measurement showed that
+it barely changes the aggregate pg-sql/PostgreSQL timing ratio.
+
+The accepted discovery corpus partitions exactly as follows:
+
+| Family | Statements | Bytes |
+| --- | --: | --: |
+| Query | 15,643 | 1,423,215 |
+| DML | 6,402 | 680,728 |
+| DDL | 13,150 | 1,120,642 |
+| Transaction | 1,412 | 39,256 |
+| Session | 2,222 | 92,687 |
+| Access control | 433 | 27,007 |
+| Cursor | 372 | 12,528 |
+| Utility | 3,338 | 324,590 |
+| **Total** | **42,972** | **3,720,653** |
+
+One-second unprofiled discovery loops (diagnostic rates, not benchmark
+baselines) immediately demonstrate why the partitions matter:
+
+| Workload | pg-sql MiB/s | PostgreSQL MiB/s | pg-sql/PostgreSQL time |
+| --- | --: | --: | --: |
+| Aggregate corpus | 22.259 | 71.746 | 3.22x |
+| Query | 19.902 | 68.275 | 3.43x |
+| DML | 29.165 | 91.439 | 3.14x |
+| DDL | 26.500 | 75.082 | 2.83x |
+| Transaction | 47.654 | 57.314 | 1.20x |
+| Session | 42.186 | 70.247 | 1.67x |
+| Access control | 30.776 | 76.918 | 2.50x |
+| Cursor | 21.316 | 54.435 | 2.55x |
+| Utility | 19.361 | 66.520 | 3.44x |
+| Insert values | 25.149 | 97.849 | 3.89x |
+| IN list | 15.321 | 105.039 | 6.86x |
+| Nested subquery | 13.202 | 66.667 | 5.05x |
+| Lexical mix | 65.878 | 269.852 | 4.10x |
+| Rejected-input paths | 7.774 | 68.786 | 8.85x |
+
+The aggregate's 3.22x conceals a 1.20x-8.85x range. Longer alternating runs
+remain necessary before judging an optimization; these loops establish where
+to profile and which regressions an aggregate alone would hide.
+
+Generation-stage and kernel-origin instrumentation then accounted for the
+20,715 states, 14,944 rules, and 4,279 nonterminals. The dominant findings are:
+
+- 26 flattened content-token atom sets produce 5,469 rules; 6,578 states
+  (31.8%) have exclusively token-action kernels. PostgreSQL instead shares
+  keyword categories in 960 Bison rules.
+- Expr's 22 restricted languages copy 2,205 rules. With attachment
+  restrictions, this origin has 2,301 rules and 2,415 exclusive states
+  (11.7%). PostgreSQL's `a_expr`, `b_expr`, and `c_expr` have 104 rules.
+- 1,504 public parse roots produce 1,504 nonterminals/rules and 3,007 exclusive
+  start states. A Statement-only counterfactual reduced the machine to 16,245
+  states (-4,470, or -21.6%) before deliberately failing the normal generated
+  public-parser contract.
+- The 957 non-public sequence types are exactly 746 attachment units, 87
+  presence envelopes, and 124 fixed sequences. Helper conflict repair adds
+  only one nonterminal, two rules, and three states; it is not the cause.
+
+Temporary instrumentation was removed from Recursa after the counts were
+captured. The durable analysis is in
+[`docs/research/postgres-parser-performance.md`](../research/postgres-parser-performance.md#9-why-the-current-lr-machine-is-larger-than-bisons),
+and the implementation sequence is in
+[`docs/plans/2026-09-08-lr-grammar-footprint.md`](../plans/2026-09-08-lr-grammar-footprint.md).
+
+## Investigation: 2026-09-08 — LR footprint plan execution
+
+Recursa now retains a deterministic `LrAnalysis::statistics` report instead
+of the temporary counters used above. The checked-in pg-sql snapshot records
+4,279 nonterminals, 14,944 rules, 20,715 states, every origin/action family,
+per-table encoded and decoded sizes, all content-token memberships, all 117
+Pratt restrictions, and reachability for all 1,504 public starts.
+
+Three bounded implementations failed their runtime or size gates and were
+removed:
+
+| Prototype | Structural result | Alternating quick result | Decision |
+| --- | --- | --- | --- |
+| Shared multi-kind token categories | 11,986 rules (-19.8%), 16,651 states (-19.6%), encoded tables +2.3% | Corpus/boolean about 1-3% slower | Reject: added reductions dominate |
+| Separate Statement table | 16,245 reachable states, 1,742,380 encoded bytes | Not timed after size gate failed | Reject: duplicate is 94.9% of full table |
+| Narrow action/check cells | Half-sized decoded action/check storage, wide fallback preserved | Corpus -0.4%, boolean -0.9%, wide list -2.5% | Reject: lookup dispatch dominates |
+
+The narrow-table comparison used two frozen release binaries and three-second
+runs. Baseline/candidate corpus pairs were 269,608.7/268,542.3 and
+270,353.8/269,407.6 statements/s. The shape runs measured 212.0/206.8 for
+`select_list_10000` and 2,924.8/2,898.8 for `bool_chain`.
+
+A follow-up selected the narrow or wide representation once at parse entry
+and monomorphized the LR loop, removing width dispatch from individual
+lookups. Its flame binary grew from 13,530,296 to 13,548,328 bytes (+0.13%).
+Corpus pairs crossed (257,356.7/261,665.5 then 262,482.7/259,322.8), and the
+wide pair was effectively flat at 191.4/191.1 statements/s. Boolean chains
+still regressed in both pairs: 2,885.2/2,806.3 (-2.7%) and
+2,894.9/2,846.5 (-1.7%). This variant was also removed; specializing the full
+loop changes code layout enough to erase the reduced data-cache footprint.
+
+The bounded Pratt-attachment audit also closed off the proposed first step:
+96 restricted attachment rules have 93 distinct right-hand-side shapes. The
+only duplicate shape is `DEFAULT` followed by the same restricted Expr (four
+instances), so exact identity sharing can remove at most three rules. The
+2,205-rule opportunity lies in the 22 full Expr restriction languages and
+needs restriction-aware LR-core/action overlays; ordinary helper interning
+cannot reach it. Existing discovery profiles do not identify a hot transparent
+attachment or envelope family for Phase 5 factoring.
