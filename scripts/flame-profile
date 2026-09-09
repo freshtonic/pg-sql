@@ -47,9 +47,9 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
 # Build (a no-op when fresh) and locate the harness binary.
-cargo bench -p pg-sql --features postgres-oracle --bench flame --no-run
+cargo +nightly bench -p pg-sql --features postgres-oracle --bench flame --no-run
 bin="$(
-  cargo bench -p pg-sql --features postgres-oracle --bench flame --no-run \
+  cargo +nightly bench -p pg-sql --features postgres-oracle --bench flame --no-run \
     --message-format=json 2>/dev/null |
     jq -r 'select(.reason == "compiler-artifact")
            | select(.target.name == "flame")
