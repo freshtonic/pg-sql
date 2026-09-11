@@ -9,7 +9,7 @@
 recursa::grammar! {
     module = crate,
     arena_ast,
-    derives(Pretty, Visit, VisitMut),
+    derives(Arbitrary, Pretty, Visit, VisitMut),
     keyword_matching = ascii_insensitive,
     diagrams,
     framing(island = ast::file::SqlDocumentItem, boundary = SEMI),

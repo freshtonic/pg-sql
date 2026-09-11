@@ -779,6 +779,10 @@ recursa::tokens! {
         CARET          => "^",
     },
     matchers {
+        // A hand-written `Arbitrary` impl below produces realistic dollar-quoted strings; the
+        // auto-generated "echo the fixed spelling" impl would conflict with it (E0119), so it's
+        // omitted here.
+        #[node(omit(Arbitrary))]
         DollarStringLit => same_delimiter(opener = r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$"),
         NumericLit => next_exclusion(pattern = r"(?:(?:[0-9](?:_?[0-9])*\.[0-9](?:_?[0-9])*|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\.)", excluded = r"[A-Za-z0-9_]"),
         IntegerLit => next_exclusion(pattern = r"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)", excluded = r"[A-Za-z0-9_]"),
@@ -1350,6 +1354,11 @@ pub mod literal {
                 pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
                 admits(UnquotedIdent)
             )]
+            // A hand-written `Arbitrary` impl below (`arb_non_keyword_ident`) produces realistic
+            // random identifiers; the auto-generated "echo the fixed spelling" impl would conflict
+            // with it (E0119), so it's omitted here. `Ident`'s own sampling is unaffected — it
+            // goes through the content-token's separate `__RecursaArbitraryWith` impl, not this one.
+            #[node(omit(Arbitrary))]
             IdentText<'input>,
         ),
     }
@@ -1514,6 +1523,11 @@ pub mod literal {
                 pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
                 admits(BareAliasName)
             )]
+            // A hand-written `Arbitrary` impl below (`arb_ident_str`) produces realistic random
+            // alias names; the auto-generated "echo the fixed spelling" impl would conflict with
+            // it (E0119), so it's omitted here. `AliasName`'s own sampling is unaffected — it goes
+            // through the content-token's separate `__RecursaArbitraryWith` impl, not this one.
+            #[node(omit(Arbitrary))]
             AliasNameText<'input>,
         ),
     }

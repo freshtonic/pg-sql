@@ -576,6 +576,7 @@ dependencies = [
  "bumpalo",
  "logos",
  "phf",
+ "recursa-diagrams",
  "self_cell",
 ]
 
