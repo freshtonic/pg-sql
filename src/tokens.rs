@@ -1217,141 +1217,33 @@ pub mod literal {
     // machinery.
     // --- Identifier ---
 
-    /// ALL SQL keywords (uppercase) for identifier exclusion.
+    /// `true` if `s` lexes as a fixed grammar keyword rather than a plain
+    /// identifier-shaped word.
     ///
-    /// This is the set the grammar treats as reserved for the purpose of
-    /// rejecting bare identifiers. Postgres has a much smaller reserved set
-    /// than listed here historically — many words that the grammar matches as
-    /// `keyword::X` in specific positions are still usable as identifiers in
-    /// other positions. Those words should NOT appear here.
-    ///
-    /// In the logos token model, identifier/keyword disambiguation is done by
-    /// `TokenKind` discriminant (`unquoted_ident_kind_ok`), so this set is no
-    /// longer consulted by `Parse` — it is retained only for the
-    /// `arbitrary`-feature generator (`arb_non_keyword_ident`).
-    #[cfg_attr(not(feature = "arbitrary"), allow(dead_code))]
-    const SQL_KEYWORDS: &[&str] = &[
-        // Core reserved: expression, query, clause keywords.
-        "SELECT",
-        "FROM",
-        "WHERE",
-        "AS",
-        "AND",
-        "OR",
-        "NOT",
-        "TRUE",
-        "FALSE",
-        "NULL",
-        "IS",
-        "UNKNOWN",
-        // STATEMENT leads.
-        "CREATE",
-        "TABLE",
-        "INSERT",
-        "INTO",
-        "VALUES",
-        "DROP",
-        "DELETE",
-        "UPDATE",
-        "MERGE",
-        "ALTER",
-        // Ordering / limit.
-        "ORDER",
-        "BY",
-        // PRIMARY and KEY are contextual: they appear in `PRIMARY KEY`
-        // constraint positions but PostgreSQL allows them as ordinary column
-        // and identifier names elsewhere (e.g., `CREATE INDEX i ON t(key)`).
-        // Recognized as `keyword::PRIMARY` / `keyword::KEY` only where the
-        // grammar explicitly looks for them.
-        "ASC",
-        "DESC",
-        "NULLS",
-        "UNIQUE",
-        "USING",
-        "OFFSET",
-        "LIMIT",
-        // Predicates / set ops.
-        "LIKE",
-        "ILIKE",
-        "IN",
-        "BETWEEN",
-        "EXISTS",
-        "WHEN",
-        "THEN",
-        "ELSE",
-        "END",
-        "CASE",
-        "UNION",
-        "INTERSECT",
-        "EXCEPT",
-        "DISTINCT",
-        "ALL",
-        "WITH",
-        "RECURSIVE",
-        "GROUP",
-        "HAVING",
-        "RETURNING",
-        "IF",
-        // Joins.
-        "JOIN",
-        "LEFT",
-        "RIGHT",
-        "FULL",
-        "INNER",
-        "CROSS",
-        "ON",
-        "OUTER",
-        "NATURAL",
-        // DDL structure.
-        "PARTITION",
-        "OF",
-        "FOR",
-        "INHERITS",
-        "REFERENCES",
-        "FOREIGN",
-        // Grammar clauses that appear after identifier positions and must
-        // be reserved to prevent being consumed as column/alias names.
-        "SET",
-        "WINDOW",
-        "TABLESAMPLE",
-        // NOTE: ROWS, RANGE, GROUPS are intentionally NOT listed here:
-        // Postgres treats them as unreserved, so they are valid table /
-        // column / alias names (`FROM rows`, `SELECT range FROM ...`).
-        // Window-reference positions exclude them through the dedicated
-        // `WindowRefName` admission set below.
-    ];
-
-    /// `true` if `s` matches a SQL_KEYWORDS entry case-insensitively.
-    ///
-    /// Used only by the `arbitrary`-feature identifier generator now that
-    /// `Parse` does keyword disambiguation by `TokenKind`. Uses a static
-    /// `HashSet<&'static str>` (built once, ASCII-uppercase keys) plus an
-    /// ASCII-uppercase stack buffer for short identifiers so the common case
-    /// has no heap allocation.
+    /// Used only by the `arbitrary`-feature identifier generator. A prior
+    /// version checked `s` against a hand-maintained keyword list that
+    /// silently missed real keywords (`USER`, `ROLE`, `TYPE`, `NAME`,
+    /// `VALUE`, `TIMESTAMP`, `COMMENT`, `PASSWORD`, `SESSION` — confirmed
+    /// against the grammar's actual ~480-entry keyword table), letting
+    /// `arb_ident_str` emit them as "identifiers" that the real lexer then
+    /// reclassified as fixed keywords, producing SQL that failed to
+    /// reparse. This runs the real generated lexer instead: a word that
+    /// isn't a keyword always lexes to the same generic content `TokenKind`
+    /// as a deliberately-nonsense baseline word that cannot match any
+    /// keyword pattern; anything that lexes to a *different* kind (or
+    /// doesn't lex as one clean token at all) matched a specific keyword
+    /// and is rejected. No list to keep in sync with the grammar.
     #[cfg_attr(not(feature = "arbitrary"), allow(dead_code))]
     fn is_keyword(s: &str) -> bool {
-        use std::collections::HashSet;
-        static SET: std::sync::OnceLock<HashSet<&'static str>> = std::sync::OnceLock::new();
-        let set = SET.get_or_init(|| SQL_KEYWORDS.iter().copied().collect());
-
-        // SQL_KEYWORDS keys are already uppercase. ASCII-uppercase the
-        // input into a stack buffer to avoid allocation for normal-size
-        // identifiers (the vast majority in practice).
-        const STACK_BUF: usize = 64;
-        let bytes = s.as_bytes();
-        if bytes.len() <= STACK_BUF {
-            let mut buf = [0u8; STACK_BUF];
-            for (i, &b) in bytes.iter().enumerate() {
-                buf[i] = b.to_ascii_uppercase();
-            }
-            // SAFETY: ASCII-uppercase preserves UTF-8 validity for ASCII
-            // bytes; non-ASCII bytes pass through unchanged.
-            let upper = unsafe { std::str::from_utf8_unchecked(&buf[..bytes.len()]) };
-            set.contains(upper)
-        } else {
-            // Long identifier (rare). Fall back to allocation.
-            set.contains(s.to_ascii_uppercase().as_str())
+        fn word_kind(word: &str) -> Option<String> {
+            let lexed = crate::lex(word);
+            let mut tokens = lexed.tokens();
+            let token = tokens.next()?;
+            (tokens.next().is_none() && lexed.errors().next().is_none())
+                .then(|| format!("{:?}", token.kind()))
         }
+        const BASELINE: &str = "zzqqnotarealkeyword";
+        word_kind(s) != word_kind(BASELINE)
     }
 
     /// SQL identifier admitted by PostgreSQL's `IDENT` / non-reserved-word
