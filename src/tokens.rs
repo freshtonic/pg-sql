@@ -1027,6 +1027,11 @@ pub enum ColId<'input> {
             pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
             admits(ColId)
         )]
+        // A hand-written `Arbitrary` impl below (`arb_non_keyword_ident`) produces realistic
+        // random identifiers (table/schema/column names go through `ColId`, e.g.
+        // `QualifiedName.first`); the auto-generated "echo the fixed spelling" impl would
+        // conflict with it (E0119), so it's omitted here.
+        #[node(omit(Arbitrary))]
         ColIdText<'input>,
     ),
 }
@@ -1048,6 +1053,11 @@ pub enum ColLabel<'input> {
             pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
             admits(ColLabel)
         )]
+        // A hand-written `Arbitrary` impl below (`arb_non_keyword_ident`) produces realistic
+        // random identifiers (qualified-name parts after a dot, e.g. `QualifiedNamePart.name`);
+        // the auto-generated "echo the fixed spelling" impl would conflict with it (E0119), so
+        // it's omitted here.
+        #[node(omit(Arbitrary))]
         ColLabelText<'input>,
     ),
 }
@@ -1550,21 +1560,36 @@ pub mod literal {
     #[cfg(feature = "arbitrary")]
     mod arbitrary_impls {
         use super::*;
+        use crate::tokens::{ColIdText, ColLabelText};
         use arbitrary::{Arbitrary, Unstructured};
 
-        const IDENT_FIRST: &[u8] = b"abcdefghijklmnopqrstuvwxyz_";
         const IDENT_REST: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789_";
         const SAFE_CHARS: &[u8] = b"abc123 ";
 
+        // Realistic table/column-style words for identifier and alias
+        // sampling, so Shuffle-generated SQL reads like plausible schema
+        // rather than random character soup. A few natural compounds are
+        // spelled directly into the list instead of combining words at
+        // runtime. None of these collide with SQL_KEYWORDS above, but
+        // `arb_non_keyword_ident` still enforces that as a backstop.
+        const WORDS: &[&str] = &[
+            "id", "uuid", "name", "title", "description", "email", "username",
+            "password", "user", "users", "customer", "customers", "account",
+            "accounts", "orders", "order_id", "order_date", "product",
+            "products", "item", "items", "price", "amount", "total",
+            "quantity", "count", "status", "active", "enabled", "type",
+            "category", "categories", "tag", "tags", "code", "key_name",
+            "value", "created_at", "updated_at", "deleted_at", "timestamp",
+            "address", "city", "state", "country", "postal_code", "phone",
+            "invoice", "payment", "balance", "currency", "employee",
+            "department", "role", "permission", "session", "token", "url",
+            "note", "notes", "comment", "message", "subject", "region",
+            "rating", "score", "priority", "start_date", "end_date",
+            "duration", "reference", "parent_id", "user_id", "customer_id",
+        ];
+
         fn arb_ident_str(u: &mut Unstructured<'_>) -> arbitrary::Result<String> {
-            let first = *u.choose(IDENT_FIRST)? as char;
-            let rest_len: usize = u.int_in_range(0..=8)?;
-            let mut s = String::with_capacity(1 + rest_len);
-            s.push(first);
-            for _ in 0..rest_len {
-                s.push(*u.choose(IDENT_REST)? as char);
-            }
-            Ok(s)
+            Ok((*u.choose(WORDS)?).to_string())
         }
 
         fn arb_non_keyword_ident(u: &mut Unstructured<'_>) -> arbitrary::Result<String> {
@@ -1595,7 +1620,21 @@ pub mod literal {
 
         impl<'a> Arbitrary<'a> for AliasNameText<'_> {
             fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
-                let s = arb_ident_str(u)?;
+                let s = arb_non_keyword_ident(u)?;
+                Ok(Self::new(s))
+            }
+        }
+
+        impl<'a> Arbitrary<'a> for ColIdText<'_> {
+            fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+                let s = arb_non_keyword_ident(u)?;
+                Ok(Self::new(s))
+            }
+        }
+
+        impl<'a> Arbitrary<'a> for ColLabelText<'_> {
+            fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+                let s = arb_non_keyword_ident(u)?;
                 Ok(Self::new(s))
             }
         }
