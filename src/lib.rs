@@ -6,10 +6,22 @@
 //! ordinary parsing also skips provenance and the exact-source document
 //! interface is unavailable.
 
+// Keep the optional sampling recipe aligned with the facade capability.
+#[cfg(feature = "arbitrary")]
 recursa::grammar! {
     module = crate,
     arena_ast,
     derives(Arbitrary, Pretty, Visit, VisitMut),
+    keyword_matching = ascii_insensitive,
+    diagrams,
+    framing(island = ast::file::SqlDocumentItem, boundary = SEMI),
+}
+
+#[cfg(not(feature = "arbitrary"))]
+recursa::grammar! {
+    module = crate,
+    arena_ast,
+    derives(Pretty, Visit, VisitMut),
     keyword_matching = ascii_insensitive,
     diagrams,
     framing(island = ast::file::SqlDocumentItem, boundary = SEMI),
