@@ -7,110 +7,130 @@ use crate::tokens::literal;
 
 // --- PREPARE / EXECUTE / DEALLOCATE ---
 
-/// A statement that can be the body of `PREPARE name AS ...` — Postgres'
-/// `PreparableStmt`: `SELECT | INSERT | UPDATE | DELETE | MERGE`.
-///
-/// `Query` uses `Subquery`, which already models Postgres' full `SelectStmt`
-/// grammar (`SELECT`, set operations, `VALUES`, `TABLE`, and `WITH`). The
-/// other four variants have disjoint leading keywords, so variant order does
-/// not affect disambiguation.
-#[derive(recursa::Node, Debug)]
-pub enum PreparableStmt<'input> {
-    Query(recursa::ArenaBox<'input, crate::ast::dml::values::QueryBody<'input>>),
-    /// `WITH ...` before a query or a DML statement, factored as in `Statement`.
-    With(recursa::ArenaBox<'input, crate::ast::shared::with_clause::WithStatement<'input>>),
-    Insert(recursa::ArenaBox<'input, crate::ast::dml::insert::InsertStmt<'input>>),
-    Update(recursa::ArenaBox<'input, crate::ast::dml::update::UpdateStmt<'input>>),
-    Delete(recursa::ArenaBox<'input, crate::ast::dml::delete::DeleteStmt<'input>>),
-    Merge(recursa::ArenaBox<'input, crate::ast::dml::merge::MergeStmt<'input>>),
+recursa::ast_node! {
+    /// A statement that can be the body of `PREPARE name AS ...` — Postgres'
+    /// `PreparableStmt`: `SELECT | INSERT | UPDATE | DELETE | MERGE`.
+    ///
+    /// `Query` uses `Subquery`, which already models Postgres' full `SelectStmt`
+    /// grammar (`SELECT`, set operations, `VALUES`, `TABLE`, and `WITH`). The
+    /// other four variants have disjoint leading keywords, so variant order does
+    /// not affect disambiguation.
+    #[derive(Debug)]
+    pub enum PreparableStmt {
+        Query(boxed!(crate::ast::dml::values::QueryBody)),
+        /// `WITH ...` before a query or a DML statement, factored as in `Statement`.
+        With(boxed!(crate::ast::shared::with_clause::WithStatement)),
+        Insert(boxed!(crate::ast::dml::insert::InsertStmt)),
+        Update(boxed!(crate::ast::dml::update::UpdateStmt)),
+        Delete(boxed!(crate::ast::dml::delete::DeleteStmt)),
+        Merge(boxed!(crate::ast::dml::merge::MergeStmt)),
+    }
 }
 
-/// `( typename [, ...] )` parameter-type list on a `PREPARE` statement
-/// (`prep_type_clause` in `gram.y`).
-#[derive(recursa::Node, Debug)]
-pub struct PrepareTypes<'input> {
+recursa::ast_node! {
+    /// `( typename [, ...] )` parameter-type list on a `PREPARE` statement
+    /// (`prep_type_clause` in `gram.y`).
+    #[derive(Debug)]
+    pub struct PrepareTypes {
+        #[tok(LPAREN, this, RPAREN)]
+        pub types: TypeNameList,
+    }
+}
+
+recursa::ast_node! {
+    /// Body of a standard `PREPARE name [(types)] AS stmt` statement.
+    #[derive(Debug)]
+    pub struct PrepareStandardBody {
+        pub name: literal::AliasName,
+        pub types: Option<PrepareTypes>,
+        #[tok(AS, this)]
+        pub body: PreparableStmt,
+    }
+}
+
+recursa::ast_node! {
+    /// `PREPARE TRANSACTION 'gid'` — the two-phase-commit transaction-prepare
+    /// form (`gram.y::TransactionStmt: PREPARE TRANSACTION Sconst`). Distinct
+    /// from the `PREPARE name … AS stmt` form modelled by
+    /// [`PrepareStandardBody`].
+    #[derive(Debug)]
+    pub struct PrepareTransactionBody {
+        #[tok(TRANSACTION, this)]
+        pub gid: literal::StringLit,
+    }
+}
+
+recursa::ast_node! {
+    /// Body of a `PREPARE` statement.
+    ///
+    /// `Transaction` matches the dedicated `TRANSACTION` form. `Standard` accepts
+    /// an ordinary prepared-statement name; the grammar keeps these surface forms
+    /// separate so the LR table can distinguish the following string from `AS` or
+    /// a type list.
+    #[derive(Debug)]
+    pub enum PrepareStmtBody {
+        Transaction(PrepareTransactionBody),
+        Standard(PrepareStandardBody),
+    }
+}
+
+recursa::ast_node! {
+    /// ```sql
+    /// PREPARE name [ (typename [, ...]) ] AS PreparableStmt
+    /// PREPARE TRANSACTION 'gid'
+    /// ```
+    #[derive(Debug)]
+    pub struct PrepareStmt {
+        #[tok(PREPARE, this)]
+        pub body: PrepareStmtBody,
+    }
+}
+
+recursa::ast_node! {
+    /// `( expr [, ...] )` argument list on an `EXECUTE` statement
+    /// (`execute_param_clause` in `gram.y`).
+    #[derive(Debug)]
     #[tok(LPAREN, this, RPAREN)]
-    pub types: TypeNameList<'input>,
+    pub struct ExecuteParams {
+        #[sep(COMMA)]
+        pub params: zero_or_many!(Expr),
+    }
 }
 
-/// Body of a standard `PREPARE name [(types)] AS stmt` statement.
-#[derive(recursa::Node, Debug)]
-pub struct PrepareStandardBody<'input> {
-    pub name: literal::AliasName<'input>,
-    pub types: Option<PrepareTypes<'input>>,
-    #[tok(AS, this)]
-    pub body: PreparableStmt<'input>,
+recursa::ast_node! {
+    /// ```sql
+    /// EXECUTE name [ (expr [, ...]) ]
+    /// ```
+    #[derive(Debug)]
+    pub struct ExecuteStmt {
+        #[tok(EXECUTE, this)]
+        pub name: literal::AliasName,
+        pub params: Option<ExecuteParams>,
+    }
 }
 
-/// `PREPARE TRANSACTION 'gid'` — the two-phase-commit transaction-prepare
-/// form (`gram.y::TransactionStmt: PREPARE TRANSACTION Sconst`). Distinct
-/// from the `PREPARE name … AS stmt` form modelled by
-/// [`PrepareStandardBody`].
-#[derive(recursa::Node, Debug)]
-pub struct PrepareTransactionBody<'input> {
-    #[tok(TRANSACTION, this)]
-    pub gid: literal::StringLit<'input>,
+recursa::ast_node! {
+    /// Target of a `DEALLOCATE` statement: a named prepared statement or `ALL`.
+    ///
+    /// Variant ordering: `All` (the `ALL` keyword) before `Name` so the reserved
+    /// word is not swallowed as a statement name.
+    #[derive(Debug)]
+    pub enum DeallocateTarget {
+        #[tok(ALL)]
+        All,
+        Name(literal::Ident),
+    }
 }
 
-/// Body of a `PREPARE` statement.
-///
-/// `Transaction` matches the dedicated `TRANSACTION` form. `Standard` accepts
-/// an ordinary prepared-statement name; the grammar keeps these surface forms
-/// separate so the LR table can distinguish the following string from `AS` or
-/// a type list.
-#[derive(recursa::Node, Debug)]
-pub enum PrepareStmtBody<'input> {
-    Transaction(PrepareTransactionBody<'input>),
-    Standard(PrepareStandardBody<'input>),
-}
-
-/// ```sql
-/// PREPARE name [ (typename [, ...]) ] AS PreparableStmt
-/// PREPARE TRANSACTION 'gid'
-/// ```
-#[derive(recursa::Node, Debug)]
-pub struct PrepareStmt<'input> {
-    #[tok(PREPARE, this)]
-    pub body: PrepareStmtBody<'input>,
-}
-
-/// `( expr [, ...] )` argument list on an `EXECUTE` statement
-/// (`execute_param_clause` in `gram.y`).
-#[derive(recursa::Node, Debug)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct ExecuteParams<'input> {
-    #[sep(COMMA)]
-    pub params: recursa::ArenaVec<'input, Expr<'input>>,
-}
-
-/// ```sql
-/// EXECUTE name [ (expr [, ...]) ]
-/// ```
-#[derive(recursa::Node, Debug)]
-pub struct ExecuteStmt<'input> {
-    #[tok(EXECUTE, this)]
-    pub name: literal::AliasName<'input>,
-    pub params: Option<ExecuteParams<'input>>,
-}
-
-/// Target of a `DEALLOCATE` statement: a named prepared statement or `ALL`.
-///
-/// Variant ordering: `All` (the `ALL` keyword) before `Name` so the reserved
-/// word is not swallowed as a statement name.
-#[derive(recursa::Node, Debug)]
-pub enum DeallocateTarget<'input> {
-    #[tok(ALL)]
-    All,
-    Name(literal::Ident<'input>),
-}
-
-/// ```sql
-/// DEALLOCATE [PREPARE] { name | ALL }
-/// ```
-#[derive(recursa::Node, Debug)]
-#[tok(DEALLOCATE, this)]
-pub struct DeallocateStmt<'input> {
-    #[presence(PREPARE)]
-    pub prepare: bool,
-    pub target: DeallocateTarget<'input>,
+recursa::ast_node! {
+    /// ```sql
+    /// DEALLOCATE [PREPARE] { name | ALL }
+    /// ```
+    #[derive(Debug)]
+    #[tok(DEALLOCATE, this)]
+    pub struct DeallocateStmt {
+        #[presence(PREPARE)]
+        pub prepare: bool,
+        pub target: DeallocateTarget,
+    }
 }

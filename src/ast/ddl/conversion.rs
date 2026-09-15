@@ -7,48 +7,56 @@ use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
-/// `CREATE [DEFAULT] CONVERSION name FOR 'src_enc' TO 'dst_enc' FROM func`.
-#[derive(recursa::Node, Debug)]
-pub struct CreateConversionStmt<'input> {
-    #[tok(CREATE, this, CONVERSION)]
-    #[presence(DEFAULT)]
-    pub default: bool,
-    pub name: QualifiedName<'input>,
-    #[tok(FOR, this)]
-    pub src_encoding: literal::StringLit<'input>,
-    #[tok(TO, this)]
-    pub dest_encoding: literal::StringLit<'input>,
-    #[tok(FROM, this)]
-    pub func_name: QualifiedName<'input>,
+recursa::ast_node! {
+    /// `CREATE [DEFAULT] CONVERSION name FOR 'src_enc' TO 'dst_enc' FROM func`.
+    #[derive(Debug)]
+    pub struct CreateConversionStmt {
+        #[tok(CREATE, this, CONVERSION)]
+        #[presence(DEFAULT)]
+        pub default: bool,
+        pub name: QualifiedName,
+        #[tok(FOR, this)]
+        pub src_encoding: literal::StringLit,
+        #[tok(TO, this)]
+        pub dest_encoding: literal::StringLit,
+        #[tok(FROM, this)]
+        pub func_name: QualifiedName,
+    }
 }
 
-/// `DROP CONVERSION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug)]
-#[tok(DROP, CONVERSION, this)]
-pub struct DropConversionStmt<'input> {
-    pub if_exists: Option<IfExists>,
-    pub names: NameList<'input>,
-    pub behavior: Option<DropBehavior>,
+recursa::ast_node! {
+    /// `DROP CONVERSION [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
+    #[derive(Debug)]
+    #[tok(DROP, CONVERSION, this)]
+    pub struct DropConversionStmt {
+        pub if_exists: Option<IfExists>,
+        pub names: NameList,
+        pub behavior: Option<DropBehavior>,
+    }
 }
 
-/// One action on `ALTER CONVERSION any_name action` — Postgres'
-/// `RenameStmt`, `AlterOwnerStmt`, and `AlterObjectSchemaStmt` branches
-/// for conversions.
-///
-/// Variant ordering: each variant has a distinct leading keyword
-/// (`RENAME`, `OWNER`, `SET`), so order is for clarity.
-#[derive(recursa::Node, Debug)]
-pub enum AlterConversionAction<'input> {
-    Rename(RenameTo<'input>),
-    Owner(OwnerTo<'input>),
-    SetSchema(SetSchemaClause<'input>),
+recursa::ast_node! {
+    /// One action on `ALTER CONVERSION any_name action` — Postgres'
+    /// `RenameStmt`, `AlterOwnerStmt`, and `AlterObjectSchemaStmt` branches
+    /// for conversions.
+    ///
+    /// Variant ordering: each variant has a distinct leading keyword
+    /// (`RENAME`, `OWNER`, `SET`), so order is for clarity.
+    #[derive(Debug)]
+    pub enum AlterConversionAction {
+        Rename(RenameTo),
+        Owner(OwnerTo),
+        SetSchema(SetSchemaClause),
+    }
 }
 
-/// `ALTER CONVERSION any_name action` — Postgres' `RenameStmt` /
-/// `AlterOwnerStmt` / `AlterObjectSchemaStmt` branches for conversions.
-#[derive(recursa::Node, Debug)]
-pub struct AlterConversionStmt<'input> {
-    #[tok(ALTER, CONVERSION, this)]
-    pub name: QualifiedName<'input>,
-    pub action: AlterConversionAction<'input>,
+recursa::ast_node! {
+    /// `ALTER CONVERSION any_name action` — Postgres' `RenameStmt` /
+    /// `AlterOwnerStmt` / `AlterObjectSchemaStmt` branches for conversions.
+    #[derive(Debug)]
+    pub struct AlterConversionStmt {
+        #[tok(ALTER, CONVERSION, this)]
+        pub name: QualifiedName,
+        pub action: AlterConversionAction,
+    }
 }

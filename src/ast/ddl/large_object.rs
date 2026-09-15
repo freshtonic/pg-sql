@@ -7,13 +7,15 @@ use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
-/// `ALTER LARGE OBJECT NumericOnly OWNER TO role_spec` — Postgres'
-/// `AlterOwnerStmt` branch for large objects. The only modifiable
-/// attribute is owner; large objects have no rename / set-schema /
-/// other actions.
-#[derive(recursa::Node, Debug)]
-pub struct AlterLargeObjectStmt<'input> {
-    #[tok(ALTER, LARGE, OBJECT, this)]
-    pub oid: NumericOnly<'input>,
-    pub owner_to: OwnerTo<'input>,
+recursa::ast_node! {
+    /// `ALTER LARGE OBJECT NumericOnly OWNER TO role_spec` — Postgres'
+    /// `AlterOwnerStmt` branch for large objects. The only modifiable
+    /// attribute is owner; large objects have no rename / set-schema /
+    /// other actions.
+    #[derive(Debug)]
+    pub struct AlterLargeObjectStmt {
+        #[tok(ALTER, LARGE, OBJECT, this)]
+        pub oid: NumericOnly,
+        pub owner_to: OwnerTo,
+    }
 }

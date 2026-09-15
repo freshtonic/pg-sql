@@ -4,41 +4,51 @@ use crate::tokens::literal;
 
 // --- NOTIFY / LISTEN / UNLISTEN ---
 
-/// The `, payload` clause on a `NOTIFY` statement (Postgres `notify_payload`).
-#[derive(recursa::Node, Debug)]
-pub struct NotifyPayload<'input> {
-    #[tok(COMMA, this)]
-    pub payload: literal::StringLit<'input>,
+recursa::ast_node! {
+    /// The `, payload` clause on a `NOTIFY` statement (Postgres `notify_payload`).
+    #[derive(Debug)]
+    pub struct NotifyPayload {
+        #[tok(COMMA, this)]
+        pub payload: literal::StringLit,
+    }
 }
 
-/// NOTIFY channel [, payload]
-#[derive(recursa::Node, Debug)]
-pub struct NotifyStmt<'input> {
-    #[tok(NOTIFY, this)]
-    pub channel: crate::tokens::ColId<'input>,
-    pub payload: Option<NotifyPayload<'input>>,
+recursa::ast_node! {
+    /// NOTIFY channel [, payload]
+    #[derive(Debug)]
+    pub struct NotifyStmt {
+        #[tok(NOTIFY, this)]
+        pub channel: crate::tokens::ColId,
+        pub payload: Option<NotifyPayload>,
+    }
 }
 
-/// LISTEN channel
-#[derive(recursa::Node, Debug)]
-pub struct ListenStmt<'input> {
-    #[tok(LISTEN, this)]
-    pub channel: crate::tokens::ColId<'input>,
+recursa::ast_node! {
+    /// LISTEN channel
+    #[derive(Debug)]
+    pub struct ListenStmt {
+        #[tok(LISTEN, this)]
+        pub channel: crate::tokens::ColId,
+    }
 }
 
-/// Target of an UNLISTEN statement: a channel name or `*` (all channels).
-#[derive(recursa::Node, Debug)]
-pub enum UnlistenTarget<'input> {
-    #[tok(STAR)]
-    /// `*` — unlisten from every channel.
-    All,
-    /// A specific channel name.
-    Channel(crate::tokens::ColId<'input>),
+recursa::ast_node! {
+    /// Target of an UNLISTEN statement: a channel name or `*` (all channels).
+    #[derive(Debug)]
+    pub enum UnlistenTarget {
+        #[tok(STAR)]
+        /// `*` — unlisten from every channel.
+        All,
+        /// A specific channel name.
+        Channel(crate::tokens::ColId),
+    }
 }
 
-/// UNLISTEN channel | *
-#[derive(recursa::Node, Debug)]
-pub struct UnlistenStmt<'input> {
-    #[tok(UNLISTEN, this)]
-    pub target: UnlistenTarget<'input>,
+recursa::ast_node! {
+    /// UNLISTEN channel | *
+    #[derive(Debug)]
+    pub struct UnlistenStmt {
+        #[tok(UNLISTEN, this)]
+        pub target: UnlistenTarget,
+    }
 }

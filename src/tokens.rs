@@ -1020,20 +1020,22 @@ recursa::tokens! {
 // spellings. Keep that as one canonical content base; the generated admission
 // types below differ only in which fixed keyword kinds each grammar position
 // may reclaim.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ColId<'input> {
-    Text(
-        #[lex(
-            pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-            admits(ColId)
-        )]
-        // A hand-written `Arbitrary` impl below (`arb_non_keyword_ident`) produces realistic
-        // random identifiers (table/schema/column names go through `ColId`, e.g.
-        // `QualifiedName.first`); the auto-generated "echo the fixed spelling" impl would
-        // conflict with it (E0119), so it's omitted here.
-        #[node(omit(Arbitrary))]
-        ColIdText<'input>,
-    ),
+recursa::ast_node! {
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum ColId {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(ColId)
+            )]
+            // A hand-written `Arbitrary` impl below (`arb_non_keyword_ident`) produces realistic
+            // random identifiers (table/schema/column names go through `ColId`, e.g.
+            // `QualifiedName.first`); the auto-generated "echo the fixed spelling" impl would
+            // conflict with it (E0119), so it's omitted here.
+            #[node(omit(Arbitrary))]
+            ColIdText,
+        ),
+    }
 }
 
 impl ColId<'_> {
@@ -1046,20 +1048,22 @@ impl ColId<'_> {
 
 // gram.y `ColLabel`: every keyword class, the `attr_name` after a dot in
 // `qualified_name` and `func_name` indirection.
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ColLabel<'input> {
-    Text(
-        #[lex(
-            pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-            admits(ColLabel)
-        )]
-        // A hand-written `Arbitrary` impl below (`arb_non_keyword_ident`) produces realistic
-        // random identifiers (qualified-name parts after a dot, e.g. `QualifiedNamePart.name`);
-        // the auto-generated "echo the fixed spelling" impl would conflict with it (E0119), so
-        // it's omitted here.
-        #[node(omit(Arbitrary))]
-        ColLabelText<'input>,
-    ),
+recursa::ast_node! {
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum ColLabel {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(ColLabel)
+            )]
+            // A hand-written `Arbitrary` impl below (`arb_non_keyword_ident`) produces realistic
+            // random identifiers (qualified-name parts after a dot, e.g. `QualifiedNamePart.name`);
+            // the auto-generated "echo the fixed spelling" impl would conflict with it (E0119), so
+            // it's omitted here.
+            #[node(omit(Arbitrary))]
+            ColLabelText,
+        ),
+    }
 }
 
 impl ColLabel<'_> {
@@ -1070,15 +1074,17 @@ impl ColLabel<'_> {
     }
 }
 
-#[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum NonReservedWord<'input> {
-    Text(
-        #[lex(
-            pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-            admits(NonReservedWord)
-        )]
-        NonReservedWordText<'input>,
-    ),
+recursa::ast_node! {
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum NonReservedWord {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(NonReservedWord)
+            )]
+            NonReservedWordText,
+        ),
+    }
 }
 
 impl NonReservedWord<'_> {
@@ -1089,47 +1095,53 @@ impl NonReservedWord<'_> {
     }
 }
 
-#[allow(non_camel_case_types)]
-#[derive(recursa::Node, Debug, Clone)]
-pub enum type_function_name<'input> {
-    Text(
-        #[lex(
-            pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-            admits(type_function_name)
-        )]
-        TypeFunctionNameText<'input>,
-    ),
+recursa::ast_node! {
+    #[allow(non_camel_case_types)]
+    #[derive(Debug, Clone)]
+    pub enum type_function_name {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(type_function_name)
+            )]
+            TypeFunctionNameText,
+        ),
+    }
 }
 
-/// Unqualified function/table name after reserving `COLLATION FOR (...)` for
-/// its dedicated SQL-standard table-expression production.
-#[allow(non_camel_case_types)]
-#[derive(recursa::Node, Debug, Clone)]
-pub enum table_function_name<'input> {
-    Text(
-        #[lex(
-            pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-            admits(TableFunctionName)
-        )]
-        TableFunctionNameText<'input>,
-    ),
+recursa::ast_node! {
+    /// Unqualified function/table name after reserving `COLLATION FOR (...)` for
+    /// its dedicated SQL-standard table-expression production.
+    #[allow(non_camel_case_types)]
+    #[derive(Debug, Clone)]
+    pub enum table_function_name {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(TableFunctionName)
+            )]
+            TableFunctionNameText,
+        ),
+    }
 }
 
-/// Identifier spelling admitted by an expression-level type name.
-///
-/// PostgreSQL treats the legacy built-ins modeled as fixed `TypeName`
-/// variants separately, while `json` remains an identifier-spelled type even
-/// though the lexer classifies it as a `COL_NAME` keyword.
-#[allow(non_camel_case_types)]
-#[derive(recursa::Node, Debug, Clone)]
-pub enum type_name_ident<'input> {
-    Text(
-        #[lex(
-            pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-            admits(TypeNameIdent)
-        )]
-        TypeNameIdentText<'input>,
-    ),
+recursa::ast_node! {
+    /// Identifier spelling admitted by an expression-level type name.
+    ///
+    /// PostgreSQL treats the legacy built-ins modeled as fixed `TypeName`
+    /// variants separately, while `json` remains an identifier-spelled type even
+    /// though the lexer classifies it as a `COL_NAME` keyword.
+    #[allow(non_camel_case_types)]
+    #[derive(Debug, Clone)]
+    pub enum type_name_ident {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(TypeNameIdent)
+            )]
+            TypeNameIdentText,
+        ),
+    }
 }
 
 impl type_name_ident<'_> {
@@ -1140,15 +1152,17 @@ impl type_name_ident<'_> {
     }
 }
 
-#[derive(recursa::Node, Debug, Clone)]
-pub enum BareColLabel<'input> {
-    Text(
-        #[lex(
-            pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-            admits(BareColLabel)
-        )]
-        BareColLabelText<'input>,
-    ),
+recursa::ast_node! {
+    #[derive(Debug, Clone)]
+    pub enum BareColLabel {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(BareColLabel)
+            )]
+            BareColLabelText,
+        ),
+    }
 }
 
 // Re-exports preserving the legacy `keyword::` / `punct::` / `literal::` paths
@@ -1170,38 +1184,40 @@ pub mod punct {}
 
 // Literals
 pub mod literal {
-    /// Canonical source module for the generated content-bearing literal
-    /// types used by the migrated PostgreSQL grammar.
-    #[allow(dead_code)]
-    #[derive(recursa::Node, Debug, Clone)]
-    pub struct LiteralBindings<'input> {
-        // PostgreSQL `quotecontinue`: the whole concatenated value is one
-        // token, including every qualifying newline gap. This prevents the
-        // general trivia skipper from erasing a block comment between parts.
-        #[lex(
-            pattern = r"'[^']*(?:''[^']*)*'(?:(?:[ \t\f\v]|--[^\r\n]*)*(?:\r\n|\r|\n)(?:[ \t\r\n\f\v]+|--[^\r\n]*(?:\r\n|\r|\n))*'[^']*(?:''[^']*)*')+"
-        )]
-        pub string_sequence: StringLitSequence<'input>,
-        #[lex(pattern = r"'[^']*(?:''[^']*)*'")]
-        pub string: StringLit<'input>,
-        #[lex(pattern = r"(?i:U)&'(?:[^']|'')*'")]
-        pub unicode_string: UnicodeStringLit<'input>,
-        #[lex(pattern = r"(?i:E)'(?:[^'\\]|\\.|'')*'")]
-        pub escape_string: EscapeStringLit<'input>,
-        #[lex(pattern = r"(?i:B)'[^']*'")]
-        pub bit_string: BitStringLit<'input>,
-        #[lex(pattern = r"(?i:X)'[^']*'")]
-        pub hex_string: HexStringLit<'input>,
-        #[lex(matcher)]
-        pub dollar_string: DollarStringLit<'input>,
-        #[lex(matcher)]
-        pub dollar_number: DollarNum<'input>,
-        #[lex(matcher)]
-        pub integer: IntegerLit<'input>,
-        #[lex(matcher)]
-        pub numeric: NumericLit<'input>,
-        #[lex(matcher)]
-        pub custom_operator: CustomOp<'input>,
+    recursa::ast_node! {
+        /// Canonical source module for the generated content-bearing literal
+        /// types used by the migrated PostgreSQL grammar.
+        #[allow(dead_code)]
+        #[derive(Debug, Clone)]
+        pub struct LiteralBindings {
+            // PostgreSQL `quotecontinue`: the whole concatenated value is one
+            // token, including every qualifying newline gap. This prevents the
+            // general trivia skipper from erasing a block comment between parts.
+            #[lex(
+                pattern = r"'[^']*(?:''[^']*)*'(?:(?:[ \t\f\v]|--[^\r\n]*)*(?:\r\n|\r|\n)(?:[ \t\r\n\f\v]+|--[^\r\n]*(?:\r\n|\r|\n))*'[^']*(?:''[^']*)*')+"
+            )]
+            pub string_sequence: StringLitSequence,
+            #[lex(pattern = r"'[^']*(?:''[^']*)*'")]
+            pub string: StringLit,
+            #[lex(pattern = r"(?i:U)&'(?:[^']|'')*'")]
+            pub unicode_string: UnicodeStringLit,
+            #[lex(pattern = r"(?i:E)'(?:[^'\\]|\\.|'')*'")]
+            pub escape_string: EscapeStringLit,
+            #[lex(pattern = r"(?i:B)'[^']*'")]
+            pub bit_string: BitStringLit,
+            #[lex(pattern = r"(?i:X)'[^']*'")]
+            pub hex_string: HexStringLit,
+            #[lex(matcher)]
+            pub dollar_string: DollarStringLit,
+            #[lex(matcher)]
+            pub dollar_number: DollarNum,
+            #[lex(matcher)]
+            pub integer: IntegerLit,
+            #[lex(matcher)]
+            pub numeric: NumericLit,
+            #[lex(matcher)]
+            pub custom_operator: CustomOp,
+        }
     }
 
     // Catch-all for Postgres user-defined operator names.
@@ -1246,23 +1262,25 @@ pub mod literal {
         word_kind(s) != word_kind(BASELINE)
     }
 
-    /// SQL identifier admitted by PostgreSQL's `IDENT` / non-reserved-word
-    /// production. Quoted and unquoted spellings share one lexical base; the
-    /// named admission set controls which fixed keywords may occupy it.
-    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub enum Ident<'input> {
-        Text(
-            #[lex(
-                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-                admits(UnquotedIdent)
-            )]
-            // A hand-written `Arbitrary` impl below (`arb_non_keyword_ident`) produces realistic
-            // random identifiers; the auto-generated "echo the fixed spelling" impl would conflict
-            // with it (E0119), so it's omitted here. `Ident`'s own sampling is unaffected — it
-            // goes through the content-token's separate `__RecursaArbitraryWith` impl, not this one.
-            #[node(omit(Arbitrary))]
-            IdentText<'input>,
-        ),
+    recursa::ast_node! {
+        /// SQL identifier admitted by PostgreSQL's `IDENT` / non-reserved-word
+        /// production. Quoted and unquoted spellings share one lexical base; the
+        /// named admission set controls which fixed keywords may occupy it.
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum Ident {
+            Text(
+                #[lex(
+                    pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                    admits(UnquotedIdent)
+                )]
+                // A hand-written `Arbitrary` impl below (`arb_non_keyword_ident`) produces realistic
+                // random identifiers; the auto-generated "echo the fixed spelling" impl would conflict
+                // with it (E0119), so it's omitted here. `Ident`'s own sampling is unaffected — it
+                // goes through the content-token's separate `__RecursaArbitraryWith` impl, not this one.
+                #[node(omit(Arbitrary))]
+                IdentText,
+            ),
+        }
     }
 
     impl<'input> Ident<'input> {
@@ -1274,20 +1292,22 @@ pub mod literal {
         }
     }
 
-    /// Name of a `CREATE DATABASE` / `ALTER DATABASE` option: gram.y
-    /// `createdb_opt_name`, which admits a non-keyword identifier and the
-    /// keywords `ENCODING`, `LOCATION`, `OWNER`, `TABLESPACE` and
-    /// `TEMPLATE`. Every other keyword (`WITH`, `SET`, `REFRESH`, ...) is
-    /// the statement's own syntax and must not be reclaimed here.
-    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub enum CreateDbOptWord<'input> {
-        Text(
-            #[lex(
-                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-                admits(CreateDbOptWord)
-            )]
-            CreateDbOptWordText<'input>,
-        ),
+    recursa::ast_node! {
+        /// Name of a `CREATE DATABASE` / `ALTER DATABASE` option: gram.y
+        /// `createdb_opt_name`, which admits a non-keyword identifier and the
+        /// keywords `ENCODING`, `LOCATION`, `OWNER`, `TABLESPACE` and
+        /// `TEMPLATE`. Every other keyword (`WITH`, `SET`, `REFRESH`, ...) is
+        /// the statement's own syntax and must not be reclaimed here.
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum CreateDbOptWord {
+            Text(
+                #[lex(
+                    pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                    admits(CreateDbOptWord)
+                )]
+                CreateDbOptWordText,
+            ),
+        }
     }
 
     impl<'input> CreateDbOptWord<'input> {
@@ -1299,21 +1319,23 @@ pub mod literal {
         }
     }
 
-    /// Name of an `EXPLAIN` / `VACUUM` / `ANALYZE` option: gram.y
-    /// `utility_option_name`, which is `NonReservedWord`, `analyze_keyword`
-    /// or `FORMAT` (`ANALYSE` is not a pg-sql keyword and lexes as an
-    /// identifier). Reserved words such as `SELECT`, `TABLE` and
-    /// `WITH` stay the statement's own syntax, so `EXPLAIN (SELECT 1)` is a
-    /// parenthesized statement and not an option list.
-    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub enum UtilityOptionName<'input> {
-        Text(
-            #[lex(
-                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-                admits(UtilityOptionName)
-            )]
-            UtilityOptionNameText<'input>,
-        ),
+    recursa::ast_node! {
+        /// Name of an `EXPLAIN` / `VACUUM` / `ANALYZE` option: gram.y
+        /// `utility_option_name`, which is `NonReservedWord`, `analyze_keyword`
+        /// or `FORMAT` (`ANALYSE` is not a pg-sql keyword and lexes as an
+        /// identifier). Reserved words such as `SELECT`, `TABLE` and
+        /// `WITH` stay the statement's own syntax, so `EXPLAIN (SELECT 1)` is a
+        /// parenthesized statement and not an option list.
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum UtilityOptionName {
+            Text(
+                #[lex(
+                    pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                    admits(UtilityOptionName)
+                )]
+                UtilityOptionNameText,
+            ),
+        }
     }
 
     impl<'input> UtilityOptionName<'input> {
@@ -1325,16 +1347,18 @@ pub mod literal {
         }
     }
 
-    /// gram.y `IDENT`: an identifier that is not a keyword.
-    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub enum IdentOnly<'input> {
-        Text(
-            #[lex(
-                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-                admits(IdentOnly)
-            )]
-            IdentOnlyText<'input>,
-        ),
+    recursa::ast_node! {
+        /// gram.y `IDENT`: an identifier that is not a keyword.
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum IdentOnly {
+            Text(
+                #[lex(
+                    pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                    admits(IdentOnly)
+                )]
+                IdentOnlyText,
+            ),
+        }
     }
 
     impl<'input> IdentOnly<'input> {
@@ -1346,20 +1370,22 @@ pub mod literal {
         }
     }
 
-    /// Bare alias on an UPDATE target relation.
-    ///
-    /// PostgreSQL's `relation_expr_opt_alias` gives the following `SET`
-    /// keyword precedence over interpreting it as a bare alias. Quoted
-    /// identifiers and every other `ColId` spelling remain available.
-    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub enum UpdateAliasName<'input> {
-        Text(
-            #[lex(
-                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-                admits(UpdateAliasName)
-            )]
-            UpdateAliasNameText<'input>,
-        ),
+    recursa::ast_node! {
+        /// Bare alias on an UPDATE target relation.
+        ///
+        /// PostgreSQL's `relation_expr_opt_alias` gives the following `SET`
+        /// keyword precedence over interpreting it as a bare alias. Quoted
+        /// identifiers and every other `ColId` spelling remain available.
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum UpdateAliasName {
+            Text(
+                #[lex(
+                    pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                    admits(UpdateAliasName)
+                )]
+                UpdateAliasNameText,
+            ),
+        }
     }
 
     impl<'input> UpdateAliasName<'input> {
@@ -1371,21 +1397,23 @@ pub mod literal {
         }
     }
 
-    /// Bare alias on a SELECT target.
-    ///
-    /// `IS` starts several expression continuations. PostgreSQL's generated
-    /// parser shifts those continuations before reducing a bare alias; this
-    /// admission set encodes that precedence while explicit `AS is` and quoted
-    /// `"is"` aliases remain available.
-    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub enum SelectBareAliasName<'input> {
-        Text(
-            #[lex(
-                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-                admits(SelectBareAliasName)
-            )]
-            SelectBareAliasNameText<'input>,
-        ),
+    recursa::ast_node! {
+        /// Bare alias on a SELECT target.
+        ///
+        /// `IS` starts several expression continuations. PostgreSQL's generated
+        /// parser shifts those continuations before reducing a bare alias; this
+        /// admission set encodes that precedence while explicit `AS is` and quoted
+        /// `"is"` aliases remain available.
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum SelectBareAliasName {
+            Text(
+                #[lex(
+                    pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                    admits(SelectBareAliasName)
+                )]
+                SelectBareAliasNameText,
+            ),
+        }
     }
 
     impl<'input> SelectBareAliasName<'input> {
@@ -1397,41 +1425,45 @@ pub mod literal {
         }
     }
 
-    /// Identifier usable as a window `ref_name` (existing-window reference).
-    /// Rejects clause heads (`PARTITION`, `ORDER`, `ROWS`, `RANGE`, `GROUPS`)
-    /// so clauses after the optional `ref_name` parse deterministically.
-    ///
-    /// Modeled as a single-variant enum to preserve the legacy wrapper while
-    /// the generated content matcher enforces the named admission set.
-    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub enum WindowRefNameIdent<'input> {
-        Text(
-            #[lex(
-                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-                admits(WindowRefName)
-            )]
-            WindowRefNameText<'input>,
-        ),
+    recursa::ast_node! {
+        /// Identifier usable as a window `ref_name` (existing-window reference).
+        /// Rejects clause heads (`PARTITION`, `ORDER`, `ROWS`, `RANGE`, `GROUPS`)
+        /// so clauses after the optional `ref_name` parse deterministically.
+        ///
+        /// Modeled as a single-variant enum to preserve the legacy wrapper while
+        /// the generated content matcher enforces the named admission set.
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum WindowRefNameIdent {
+            Text(
+                #[lex(
+                    pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                    admits(WindowRefName)
+                )]
+                WindowRefNameText,
+            ),
+        }
     }
 
     // --- Alias name (any SQL word — identifier or keyword) ---
 
-    /// Alias name, including PostgreSQL keywords admitted in bare-label
-    /// positions. Quoted and unquoted spellings share the identifier base.
-    #[derive(recursa::Node, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub enum AliasName<'input> {
-        Text(
-            #[lex(
-                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-                admits(BareAliasName)
-            )]
-            // A hand-written `Arbitrary` impl below (`arb_ident_str`) produces realistic random
-            // alias names; the auto-generated "echo the fixed spelling" impl would conflict with
-            // it (E0119), so it's omitted here. `AliasName`'s own sampling is unaffected — it goes
-            // through the content-token's separate `__RecursaArbitraryWith` impl, not this one.
-            #[node(omit(Arbitrary))]
-            AliasNameText<'input>,
-        ),
+    recursa::ast_node! {
+        /// Alias name, including PostgreSQL keywords admitted in bare-label
+        /// positions. Quoted and unquoted spellings share the identifier base.
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum AliasName {
+            Text(
+                #[lex(
+                    pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                    admits(BareAliasName)
+                )]
+                // A hand-written `Arbitrary` impl below (`arb_ident_str`) produces realistic random
+                // alias names; the auto-generated "echo the fixed spelling" impl would conflict with
+                // it (E0119), so it's omitted here. `AliasName`'s own sampling is unaffected — it goes
+                // through the content-token's separate `__RecursaArbitraryWith` impl, not this one.
+                #[node(omit(Arbitrary))]
+                AliasNameText,
+            ),
+        }
     }
 
     impl<'input> AliasName<'input> {
@@ -1465,19 +1497,80 @@ pub mod literal {
         // runtime. None of these collide with SQL_KEYWORDS above, but
         // `arb_non_keyword_ident` still enforces that as a backstop.
         const WORDS: &[&str] = &[
-            "id", "uuid", "name", "title", "description", "email", "username",
-            "password", "user", "users", "customer", "customers", "account",
-            "accounts", "orders", "order_id", "order_date", "product",
-            "products", "item", "items", "price", "amount", "total",
-            "quantity", "count", "status", "active", "enabled", "type",
-            "category", "categories", "tag", "tags", "code", "key_name",
-            "value", "created_at", "updated_at", "deleted_at", "timestamp",
-            "address", "city", "state", "country", "postal_code", "phone",
-            "invoice", "payment", "balance", "currency", "employee",
-            "department", "role", "permission", "session", "token", "url",
-            "note", "notes", "comment", "message", "subject", "region",
-            "rating", "score", "priority", "start_date", "end_date",
-            "duration", "reference", "parent_id", "user_id", "customer_id",
+            "id",
+            "uuid",
+            "name",
+            "title",
+            "description",
+            "email",
+            "username",
+            "password",
+            "user",
+            "users",
+            "customer",
+            "customers",
+            "account",
+            "accounts",
+            "orders",
+            "order_id",
+            "order_date",
+            "product",
+            "products",
+            "item",
+            "items",
+            "price",
+            "amount",
+            "total",
+            "quantity",
+            "count",
+            "status",
+            "active",
+            "enabled",
+            "type",
+            "category",
+            "categories",
+            "tag",
+            "tags",
+            "code",
+            "key_name",
+            "value",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "timestamp",
+            "address",
+            "city",
+            "state",
+            "country",
+            "postal_code",
+            "phone",
+            "invoice",
+            "payment",
+            "balance",
+            "currency",
+            "employee",
+            "department",
+            "role",
+            "permission",
+            "session",
+            "token",
+            "url",
+            "note",
+            "notes",
+            "comment",
+            "message",
+            "subject",
+            "region",
+            "rating",
+            "score",
+            "priority",
+            "start_date",
+            "end_date",
+            "duration",
+            "reference",
+            "parent_id",
+            "user_id",
+            "customer_id",
         ];
 
         fn arb_ident_str(u: &mut Unstructured<'_>) -> arbitrary::Result<String> {

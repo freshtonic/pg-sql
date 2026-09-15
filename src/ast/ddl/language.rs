@@ -7,83 +7,99 @@ use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
-/// `INLINE name` — optional inline handler in `CREATE LANGUAGE`.
-#[derive(recursa::Node, Debug)]
-pub struct LanguageInlineHandler<'input> {
-    #[tok(INLINE, this)]
-    pub name: QualifiedName<'input>,
+recursa::ast_node! {
+    /// `INLINE name` — optional inline handler in `CREATE LANGUAGE`.
+    #[derive(Debug)]
+    pub struct LanguageInlineHandler {
+        #[tok(INLINE, this)]
+        pub name: QualifiedName,
+    }
 }
 
-/// `VALIDATOR name | NO VALIDATOR` — Postgres' `validator_clause`.
-///
-/// Variant ordering: the two-token `NO VALIDATOR` before the
-/// `VALIDATOR name` so the longer match wins on a leading `NO`.
-#[derive(recursa::Node, Debug)]
-pub enum LanguageValidatorClause<'input> {
-    #[tok(NO, VALIDATOR)]
-    None,
-    Some(LanguageValidator<'input>),
+recursa::ast_node! {
+    /// `VALIDATOR name | NO VALIDATOR` — Postgres' `validator_clause`.
+    ///
+    /// Variant ordering: the two-token `NO VALIDATOR` before the
+    /// `VALIDATOR name` so the longer match wins on a leading `NO`.
+    #[derive(Debug)]
+    pub enum LanguageValidatorClause {
+        #[tok(NO, VALIDATOR)]
+        None,
+        Some(LanguageValidator),
+    }
 }
 
-/// `VALIDATOR name` — the populated validator branch.
-#[derive(recursa::Node, Debug)]
-pub struct LanguageValidator<'input> {
-    #[tok(VALIDATOR, this)]
-    pub name: QualifiedName<'input>,
+recursa::ast_node! {
+    /// `VALIDATOR name` — the populated validator branch.
+    #[derive(Debug)]
+    pub struct LanguageValidator {
+        #[tok(VALIDATOR, this)]
+        pub name: QualifiedName,
+    }
 }
 
-/// `HANDLER name [INLINE name] [VALIDATOR name | NO VALIDATOR]` — the
-/// populated CREATE LANGUAGE handler clause.
-#[derive(recursa::Node, Debug)]
-pub struct LanguageHandlerClause<'input> {
-    #[tok(HANDLER, this)]
-    pub name: QualifiedName<'input>,
-    pub inline: Option<LanguageInlineHandler<'input>>,
-    pub validator: Option<LanguageValidatorClause<'input>>,
+recursa::ast_node! {
+    /// `HANDLER name [INLINE name] [VALIDATOR name | NO VALIDATOR]` — the
+    /// populated CREATE LANGUAGE handler clause.
+    #[derive(Debug)]
+    pub struct LanguageHandlerClause {
+        #[tok(HANDLER, this)]
+        pub name: QualifiedName,
+        pub inline: Option<LanguageInlineHandler>,
+        pub validator: Option<LanguageValidatorClause>,
+    }
 }
 
-/// `CREATE [OR REPLACE] [TRUSTED] [PROCEDURAL] LANGUAGE name
-/// [HANDLER name [INLINE name] [VALIDATOR name | NO VALIDATOR]]` —
-/// Postgres' `CreatePLangStmt`. The handler-less form is silently treated as
-/// `CREATE EXTENSION` by PG; structurally it is still a CREATE LANGUAGE.
-#[derive(recursa::Node, Debug)]
-pub struct CreateLanguageStmt<'input> {
-    #[tok(CREATE, this)]
-    #[presence(OR, REPLACE)]
-    pub or_replace: bool,
-    #[tok(this, optional(PROCEDURAL), LANGUAGE)]
-    #[presence(TRUSTED)]
-    pub trusted: bool,
-    pub name: crate::tokens::ColId<'input>,
-    pub handler: Option<LanguageHandlerClause<'input>>,
+recursa::ast_node! {
+    /// `CREATE [OR REPLACE] [TRUSTED] [PROCEDURAL] LANGUAGE name
+    /// [HANDLER name [INLINE name] [VALIDATOR name | NO VALIDATOR]]` —
+    /// Postgres' `CreatePLangStmt`. The handler-less form is silently treated as
+    /// `CREATE EXTENSION` by PG; structurally it is still a CREATE LANGUAGE.
+    #[derive(Debug)]
+    pub struct CreateLanguageStmt {
+        #[tok(CREATE, this)]
+        #[presence(OR, REPLACE)]
+        pub or_replace: bool,
+        #[tok(this, optional(PROCEDURAL), LANGUAGE)]
+        #[presence(TRUSTED)]
+        pub trusted: bool,
+        pub name: crate::tokens::ColId,
+        pub handler: Option<LanguageHandlerClause>,
+    }
 }
 
-/// `DROP [PROCEDURAL] LANGUAGE [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug)]
-#[tok(DROP, optional(PROCEDURAL), LANGUAGE, this)]
-pub struct DropLanguageStmt<'input> {
-    pub if_exists: Option<IfExists>,
-    pub names: NameList<'input>,
-    pub behavior: Option<DropBehavior>,
+recursa::ast_node! {
+    /// `DROP [PROCEDURAL] LANGUAGE [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
+    #[derive(Debug)]
+    #[tok(DROP, optional(PROCEDURAL), LANGUAGE, this)]
+    pub struct DropLanguageStmt {
+        pub if_exists: Option<IfExists>,
+        pub names: NameList,
+        pub behavior: Option<DropBehavior>,
+    }
 }
 
-/// One action on `ALTER [PROCEDURAL] LANGUAGE name action` — covers
-/// Postgres' `RenameStmt` and `AlterOwnerStmt` branches for
-/// procedural languages. Languages have no SET SCHEMA action.
-///
-/// Variant ordering: each variant has a distinct leading keyword
-/// (`RENAME`, `OWNER`), so order is for clarity.
-#[derive(recursa::Node, Debug)]
-pub enum AlterLanguageAction<'input> {
-    Rename(RenameTo<'input>),
-    Owner(OwnerTo<'input>),
+recursa::ast_node! {
+    /// One action on `ALTER [PROCEDURAL] LANGUAGE name action` — covers
+    /// Postgres' `RenameStmt` and `AlterOwnerStmt` branches for
+    /// procedural languages. Languages have no SET SCHEMA action.
+    ///
+    /// Variant ordering: each variant has a distinct leading keyword
+    /// (`RENAME`, `OWNER`), so order is for clarity.
+    #[derive(Debug)]
+    pub enum AlterLanguageAction {
+        Rename(RenameTo),
+        Owner(OwnerTo),
+    }
 }
 
-/// `ALTER [PROCEDURAL] LANGUAGE name action` — Postgres' `RenameStmt`
-/// and `AlterOwnerStmt` branches for procedural languages.
-#[derive(recursa::Node, Debug)]
-pub struct AlterLanguageStmt<'input> {
-    #[tok(ALTER, optional(PROCEDURAL), LANGUAGE, this)]
-    pub name: crate::tokens::ColId<'input>,
-    pub action: AlterLanguageAction<'input>,
+recursa::ast_node! {
+    /// `ALTER [PROCEDURAL] LANGUAGE name action` — Postgres' `RenameStmt`
+    /// and `AlterOwnerStmt` branches for procedural languages.
+    #[derive(Debug)]
+    pub struct AlterLanguageStmt {
+        #[tok(ALTER, optional(PROCEDURAL), LANGUAGE, this)]
+        pub name: crate::tokens::ColId,
+        pub action: AlterLanguageAction,
+    }
 }

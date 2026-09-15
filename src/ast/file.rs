@@ -10,16 +10,18 @@
 
 use crate::ast::Statement;
 
-/// One semicolon-separated item of a strict PostgreSQL document.
-///
-/// The framing island for `framing(island = ast::file::SqlDocumentItem,
-/// boundary = SEMI)`. The statement is optional because PostgreSQL's raw
-/// parser accepts empty statements (`;`, `;;`, leading and interior
-/// semicolons): an empty item remains a source and provenance occurrence in
-/// the framed document without entering the semantic statement list.
-#[derive(recursa::Node, Debug)]
-pub struct SqlDocumentItem<'input> {
-    pub statement: Option<Statement<'input>>,
+recursa::ast_node! {
+    /// One semicolon-separated item of a strict PostgreSQL document.
+    ///
+    /// The framing island for `framing(island = ast::file::SqlDocumentItem,
+    /// boundary = SEMI)`. The statement is optional because PostgreSQL's raw
+    /// parser accepts empty statements (`;`, `;;`, leading and interior
+    /// semicolons): an empty item remains a source and provenance occurrence in
+    /// the framed document without entering the semantic statement list.
+    #[derive(Debug)]
+    pub struct SqlDocumentItem {
+        pub statement: Option<Statement>,
+    }
 }
 
 /// The terminator of a SQL statement.

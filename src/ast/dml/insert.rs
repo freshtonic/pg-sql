@@ -8,72 +8,86 @@ use crate::ast::dml::values::Subquery;
 use crate::ast::shared::expr::Expr;
 use crate::ast::shared::names::QualifiedName;
 
-/// `[AS] alias` on INSERT target table, e.g. `INSERT INTO t AS x`.
-#[derive(recursa::Node, Debug)]
-pub struct InsertTableAlias<'input> {
-    #[tok(AS, this)]
-    pub name: crate::tokens::ColId<'input>,
+recursa::ast_node! {
+    /// `[AS] alias` on INSERT target table, e.g. `INSERT INTO t AS x`.
+    #[derive(Debug)]
+    pub struct InsertTableAlias {
+        #[tok(AS, this)]
+        pub name: crate::tokens::ColId,
+    }
 }
 
-/// `OVERRIDING {SYSTEM | USER} VALUE` clause on an INSERT statement.
-///
-/// Variant ordering: distinct first tokens (`SYSTEM` vs `USER`), so
-/// declaration order is cosmetic.
-#[derive(recursa::Node, Debug)]
-pub struct OverridingClause {
-    #[tok(OVERRIDING, this, VALUE)]
-    pub which: OverridingKind,
+recursa::ast_node! {
+    /// `OVERRIDING {SYSTEM | USER} VALUE` clause on an INSERT statement.
+    ///
+    /// Variant ordering: distinct first tokens (`SYSTEM` vs `USER`), so
+    /// declaration order is cosmetic.
+    #[derive(Debug)]
+    pub struct OverridingClause {
+        #[tok(OVERRIDING, this, VALUE)]
+        pub which: OverridingKind,
+    }
 }
 
-#[derive(recursa::Node, Debug)]
-pub enum OverridingKind {
-    #[tok(SYSTEM)]
-    System,
-    #[tok(USER)]
-    User,
+recursa::ast_node! {
+    #[derive(Debug)]
+    pub enum OverridingKind {
+        #[tok(SYSTEM)]
+        System,
+        #[tok(USER)]
+        User,
+    }
 }
 
-/// Multiple value rows: `VALUES (row1), (row2), ...`
-#[derive(recursa::Node, Debug)]
-#[tok(VALUES, this)]
-pub struct InsertValueRows<'input> {
-    #[sep(COMMA)]
-    pub rows: recursa::ArenaVec<'input, ValueList<'input>>,
+recursa::ast_node! {
+    /// Multiple value rows: `VALUES (row1), (row2), ...`
+    #[derive(Debug)]
+    #[tok(VALUES, this)]
+    pub struct InsertValueRows {
+        #[sep(COMMA)]
+        pub rows: zero_or_many!(ValueList),
+    }
 }
 
-/// Insert source: `DEFAULT VALUES` or a query.
-///
-/// PostgreSQL's query form includes `VALUES`, so the `Subquery` AST retains
-/// the distinction between SELECT, VALUES, TABLE, and parenthesized sources
-/// without declaring the VALUES language twice at this enum boundary.
-/// gram.y `insert_rest`: `SelectStmt`, `OVERRIDING ... SelectStmt`,
-/// `'(' insert_column_list ')' [OVERRIDING ...] SelectStmt` or
-/// `DEFAULT VALUES`, as two alternatives that both begin by shifting the
-/// parenthesis marker when a `(` follows the table name.
-///
-/// Variant ordering: `Columns` starts with `(`; `Plain` with `OVERRIDING`,
-/// `DEFAULT` or a query (which may also start with `(`, decided by the
-/// token after it).
-#[derive(recursa::Node, Debug)]
-pub enum InsertRest<'input> {
-    Columns(InsertColumnsRest<'input>),
-    Plain(InsertPlainRest<'input>),
+recursa::ast_node! {
+    /// Insert source: `DEFAULT VALUES` or a query.
+    ///
+    /// PostgreSQL's query form includes `VALUES`, so the `Subquery` AST retains
+    /// the distinction between SELECT, VALUES, TABLE, and parenthesized sources
+    /// without declaring the VALUES language twice at this enum boundary.
+    /// gram.y `insert_rest`: `SelectStmt`, `OVERRIDING ... SelectStmt`,
+    /// `'(' insert_column_list ')' [OVERRIDING ...] SelectStmt` or
+    /// `DEFAULT VALUES`, as two alternatives that both begin by shifting the
+    /// parenthesis marker when a `(` follows the table name.
+    ///
+    /// Variant ordering: `Columns` starts with `(`; `Plain` with `OVERRIDING`,
+    /// `DEFAULT` or a query (which may also start with `(`, decided by the
+    /// token after it).
+    #[derive(Debug)]
+    pub enum InsertRest {
+        Columns(InsertColumnsRest),
+        Plain(InsertPlainRest),
+    }
 }
 
-/// `'(' insert_column_list ')' [OVERRIDING ...] source`.
-#[derive(recursa::Node, Debug)]
-pub struct InsertColumnsRest<'input> {
-    pub columns: recursa::ArenaBox<'input, ColumnList<'input>>,
-    pub overriding: Option<OverridingClause>,
-    #[pretty(break_before = soft)]
-    pub source: recursa::ArenaBox<'input, InsertSource<'input>>,
+recursa::ast_node! {
+    /// `'(' insert_column_list ')' [OVERRIDING ...] source`.
+    #[derive(Debug)]
+    pub struct InsertColumnsRest {
+        pub columns: boxed!(ColumnList),
+        pub overriding: Option<OverridingClause>,
+        #[pretty(break_before = soft)]
+        pub source: boxed!(InsertSource),
+    }
 }
 
-/// `[OVERRIDING ...] source`.
-#[derive(recursa::Node, Debug)]
-pub struct InsertPlainRest<'input> {
-    pub overriding: Option<OverridingClause>,
-    pub source: recursa::ArenaBox<'input, InsertSource<'input>>,
+recursa::ast_node! {
+    /// `[OVERRIDING ...] source`.
+    #[derive(Debug)]
+    pub struct InsertPlainRest {
+        pub overriding: Option<OverridingClause>,
+        pub source: boxed!(InsertSource),
+    }
 }
 
 impl<'input> InsertRest<'input> {
@@ -102,136 +116,160 @@ impl<'input> InsertRest<'input> {
     }
 }
 
-#[derive(recursa::Node, Debug)]
-pub enum InsertSource<'input> {
-    #[tok(DEFAULT, VALUES)]
-    Default,
-    Select(recursa::ArenaBox<'input, Subquery<'input>>),
+recursa::ast_node! {
+    #[derive(Debug)]
+    pub enum InsertSource {
+        #[tok(DEFAULT, VALUES)]
+        Default,
+        Select(boxed!(Subquery)),
+    }
 }
 
-/// DO UPDATE SET ... [WHERE ...] action.
-#[derive(recursa::Node, Debug)]
-#[tok(DO, UPDATE, SET, this)]
-pub struct DoUpdateAction<'input> {
-    #[sep(COMMA)]
-    pub assignments: recursa::ArenaVec1<'input, SetAssignment<'input>>,
-    pub where_clause: Option<WhereClause<'input>>,
+recursa::ast_node! {
+    /// DO UPDATE SET ... [WHERE ...] action.
+    #[derive(Debug)]
+    #[tok(DO, UPDATE, SET, this)]
+    pub struct DoUpdateAction {
+        #[sep(COMMA)]
+        pub assignments: one_or_many!(SetAssignment),
+        pub where_clause: Option<WhereClause>,
+    }
 }
 
-/// ON CONFLICT action: DO UPDATE SET ... [WHERE ...] or DO NOTHING.
-///
-/// Variant ordering: DoUpdate (`DO UPDATE SET`) is longer than
-/// DoNothing (`DO NOTHING`), but both start with `DO` and diverge
-/// at the next keyword, so the regex disambiguates.
-#[derive(recursa::Node, Debug)]
-pub enum ConflictAction<'input> {
-    DoUpdate(recursa::ArenaBox<'input, DoUpdateAction<'input>>),
-    #[tok(DO, NOTHING)]
-    DoNothing,
+recursa::ast_node! {
+    /// ON CONFLICT action: DO UPDATE SET ... [WHERE ...] or DO NOTHING.
+    ///
+    /// Variant ordering: DoUpdate (`DO UPDATE SET`) is longer than
+    /// DoNothing (`DO NOTHING`), but both start with `DO` and diverge
+    /// at the next keyword, so the regex disambiguates.
+    #[derive(Debug)]
+    pub enum ConflictAction {
+        DoUpdate(boxed!(DoUpdateAction)),
+        #[tok(DO, NOTHING)]
+        DoNothing,
+    }
 }
 
-/// One entry in an `ON CONFLICT (...)` target list.
-///
-/// Matches the index-element grammar: an expression (plain column name,
-/// qualified name, parenthesized expression, or function call) optionally
-/// followed by a `COLLATE "name"` clause and an optional opclass ident.
-#[derive(recursa::Node, Debug)]
-pub struct ConflictTargetItem<'input> {
-    pub target: crate::ast::ddl::index::IndexTarget<'input>,
-    pub collate: Option<crate::ast::ddl::table::CollateClause<'input>>,
-    pub opclass: Option<crate::tokens::ColId<'input>>,
+recursa::ast_node! {
+    /// One entry in an `ON CONFLICT (...)` target list.
+    ///
+    /// Matches the index-element grammar: an expression (plain column name,
+    /// qualified name, parenthesized expression, or function call) optionally
+    /// followed by a `COLLATE "name"` clause and an optional opclass ident.
+    #[derive(Debug)]
+    pub struct ConflictTargetItem {
+        pub target: crate::ast::ddl::index::IndexTarget,
+        pub collate: Option<crate::ast::ddl::table::CollateClause>,
+        pub opclass: Option<crate::tokens::ColId>,
+    }
 }
 
-/// `ON CONSTRAINT name` arbiter form of `opt_conf_expr` — names a unique
-/// or exclusion constraint directly instead of inferring from column list.
-/// Per gram.y `opt_conf_expr: ON CONSTRAINT name`.
-#[derive(recursa::Node, Debug)]
-pub struct OnConflictConstraint<'input> {
-    #[tok(ON, CONSTRAINT, this)]
-    pub name: crate::tokens::ColId<'input>,
+recursa::ast_node! {
+    /// `ON CONSTRAINT name` arbiter form of `opt_conf_expr` — names a unique
+    /// or exclusion constraint directly instead of inferring from column list.
+    /// Per gram.y `opt_conf_expr: ON CONSTRAINT name`.
+    #[derive(Debug)]
+    pub struct OnConflictConstraint {
+        #[tok(ON, CONSTRAINT, this)]
+        pub name: crate::tokens::ColId,
+    }
 }
 
-/// Parenthesized `index_params` arbiter list on `ON CONFLICT`.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct ConflictTargetList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec<'input, ConflictTargetItem<'input>>,
-);
-
-/// Arbiter specification for `ON CONFLICT` — Postgres' `opt_conf_expr`.
-///
-/// Variant ordering: each variant has a distinct first token (`(` vs `ON`),
-/// so order is for clarity.
-#[derive(recursa::Node, Debug)]
-pub enum ConflictTarget<'input> {
-    /// `( index_params )` — the inferring-by-columns form.
-    Index(ConflictTargetList<'input>),
-    /// `ON CONSTRAINT name` — the named-constraint form.
-    Constraint(OnConflictConstraint<'input>),
+recursa::ast_node! {
+    /// Parenthesized `index_params` arbiter list on `ON CONFLICT`.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct ConflictTargetList(
+        #[sep(COMMA)]
+        #[deref]
+        pub zero_or_many!(ConflictTargetItem),
+    );
 }
 
-/// ON CONFLICT clause: `ON CONFLICT [(col, ...) | ON CONSTRAINT name]
-/// DO UPDATE SET ... | DO NOTHING`
-#[derive(recursa::Node, Debug)]
-#[tok(ON, CONFLICT, this)]
-pub struct OnConflictClause<'input> {
-    pub target: Option<ConflictTarget<'input>>,
-    /// `WHERE predicate` after the arbiter target list, restricting the
-    /// partial-index arbiter to matching rows. Only valid for the
-    /// index-params form (gram.y attaches `where_clause` to that branch
-    /// only); attached at the outer struct so the enum stays simple.
-    pub where_clause: Option<WhereClause<'input>>,
-    pub action: ConflictAction<'input>,
+recursa::ast_node! {
+    /// Arbiter specification for `ON CONFLICT` — Postgres' `opt_conf_expr`.
+    ///
+    /// Variant ordering: each variant has a distinct first token (`(` vs `ON`),
+    /// so order is for clarity.
+    #[derive(Debug)]
+    pub enum ConflictTarget {
+        /// `( index_params )` — the inferring-by-columns form.
+        Index(ConflictTargetList),
+        /// `ON CONSTRAINT name` — the named-constraint form.
+        Constraint(OnConflictConstraint),
+    }
 }
 
-/// INSERT INTO statement with optional ON CONFLICT and RETURNING.
-#[derive(recursa::Node, Debug)]
-#[pretty(group = consistent)]
-pub struct InsertStmt<'input> {
-    #[tok(INSERT, INTO, this)]
-    pub table_name: QualifiedName<'input>,
-    /// Optional `[AS] alias` after the target table, used to rebind the
-    /// target in ON CONFLICT DO UPDATE expressions.
-    pub alias: Option<InsertTableAlias<'input>>,
-    /// gram.y `insert_rest`.
-    #[pretty(break_before = soft)]
-    pub rest: InsertRest<'input>,
-    #[pretty(break_before = soft)]
-    pub on_conflict: Option<recursa::ArenaBox<'input, OnConflictClause<'input>>>,
-    #[pretty(break_before = soft)]
-    pub returning: Option<recursa::ArenaBox<'input, ReturningClause<'input>>>,
+recursa::ast_node! {
+    /// ON CONFLICT clause: `ON CONFLICT [(col, ...) | ON CONSTRAINT name]
+    /// DO UPDATE SET ... | DO NOTHING`
+    #[derive(Debug)]
+    #[tok(ON, CONFLICT, this)]
+    pub struct OnConflictClause {
+        pub target: Option<ConflictTarget>,
+        /// `WHERE predicate` after the arbiter target list, restricting the
+        /// partial-index arbiter to matching rows. Only valid for the
+        /// index-params form (gram.y attaches `where_clause` to that branch
+        /// only); attached at the outer struct so the enum stays simple.
+        pub where_clause: Option<WhereClause>,
+        pub action: ConflictAction,
+    }
 }
 
-/// One target column of an INSERT column list: a column name plus an
-/// optional indirection chain — `f2[1]`, `f3.if1`, `a[1:5]` (Postgres
-/// `insert_column_item: ColId opt_indirection`).
-#[derive(recursa::Node, Debug)]
-pub struct InsertColumnItem<'input> {
-    pub name: crate::tokens::ColId<'input>,
-    pub indirection: recursa::ArenaVec<'input, crate::ast::shared::expr::IndirectionEl<'input>>,
+recursa::ast_node! {
+    /// INSERT INTO statement with optional ON CONFLICT and RETURNING.
+    #[derive(Debug)]
+    #[pretty(group = consistent)]
+    pub struct InsertStmt {
+        #[tok(INSERT, INTO, this)]
+        pub table_name: QualifiedName,
+        /// Optional `[AS] alias` after the target table, used to rebind the
+        /// target in ON CONFLICT DO UPDATE expressions.
+        pub alias: Option<InsertTableAlias>,
+        /// gram.y `insert_rest`.
+        #[pretty(break_before = soft)]
+        pub rest: InsertRest,
+        #[pretty(break_before = soft)]
+        pub on_conflict: Option<boxed!(OnConflictClause)>,
+        #[pretty(break_before = soft)]
+        pub returning: Option<boxed!(ReturningClause)>,
+    }
 }
 
-/// Column list: `(col1, col2[1], col3.field, ...)`.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-pub struct ColumnList<'input> {
-    /// The shared parenthesis markers: after `INSERT INTO t` a `(` opens
-    /// either this list or a parenthesized query, and both reduce the same
-    /// marker before the next token decides (gram.y `insert_rest`).
-    pub open: crate::ast::shared::expr::ParenthesizedOpen,
-    /// gram.y `insert_column_list`: one or more items.
-    #[sep(COMMA)]
-    #[deref]
-    pub items: recursa::ArenaVec1<'input, InsertColumnItem<'input>>,
-    pub close: crate::ast::shared::expr::ParenthesizedClose,
+recursa::ast_node! {
+    /// One target column of an INSERT column list: a column name plus an
+    /// optional indirection chain — `f2[1]`, `f3.if1`, `a[1:5]` (Postgres
+    /// `insert_column_item: ColId opt_indirection`).
+    #[derive(Debug)]
+    pub struct InsertColumnItem {
+        pub name: crate::tokens::ColId,
+        pub indirection: zero_or_many!(crate::ast::shared::expr::IndirectionEl),
+    }
 }
 
-/// Value list: `(col1, col2, ...)`.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct ValueList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec<'input, Expr<'input>>,
-);
+recursa::ast_node! {
+    /// Column list: `(col1, col2[1], col3.field, ...)`.
+    #[derive(Debug, derive_more :: Deref)]
+    pub struct ColumnList {
+        /// The shared parenthesis markers: after `INSERT INTO t` a `(` opens
+        /// either this list or a parenthesized query, and both reduce the same
+        /// marker before the next token decides (gram.y `insert_rest`).
+        pub open: crate::ast::shared::expr::ParenthesizedOpen,
+        /// gram.y `insert_column_list`: one or more items.
+        #[sep(COMMA)]
+        #[deref]
+        pub items: one_or_many!(InsertColumnItem),
+        pub close: crate::ast::shared::expr::ParenthesizedClose,
+    }
+}
+
+recursa::ast_node! {
+    /// Value list: `(col1, col2, ...)`.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct ValueList(
+        #[sep(COMMA)]
+        #[deref]
+        pub zero_or_many!(Expr),
+    );
+}

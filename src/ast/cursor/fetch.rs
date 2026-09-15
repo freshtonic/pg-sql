@@ -2,117 +2,139 @@
 
 use crate::tokens::literal;
 
-/// `FROM` or `IN` cursor-source keyword in FETCH/MOVE.
-#[derive(recursa::Node, Debug)]
-pub enum FetchSource {
-    #[tok(FROM)]
-    From,
-    #[tok(IN)]
-    In,
+recursa::ast_node! {
+    /// `FROM` or `IN` cursor-source keyword in FETCH/MOVE.
+    #[derive(Debug)]
+    pub enum FetchSource {
+        #[tok(FROM)]
+        From,
+        #[tok(IN)]
+        In,
+    }
 }
 
-/// `ABSOLUTE n` form. `n` is a `SignedIconst` per gram.y's
-/// `fetch_args: ABSOLUTE_P SignedIconst opt_from_in cursor_name` — so a
-/// leading sign (e.g. `ABSOLUTE -1`) is accepted.
-#[derive(recursa::Node, Debug)]
-pub struct FetchAbsolute<'input> {
-    #[tok(ABSOLUTE, this)]
-    pub count: crate::ast::shared::numbers::SignedIconst<'input>,
+recursa::ast_node! {
+    /// `ABSOLUTE n` form. `n` is a `SignedIconst` per gram.y's
+    /// `fetch_args: ABSOLUTE_P SignedIconst opt_from_in cursor_name` — so a
+    /// leading sign (e.g. `ABSOLUTE -1`) is accepted.
+    #[derive(Debug)]
+    pub struct FetchAbsolute {
+        #[tok(ABSOLUTE, this)]
+        pub count: crate::ast::shared::numbers::SignedIconst,
+    }
 }
 
-/// `RELATIVE n` form. `n` is a `SignedIconst` (see [`FetchAbsolute`]).
-#[derive(recursa::Node, Debug)]
-pub struct FetchRelative<'input> {
-    #[tok(RELATIVE, this)]
-    pub count: crate::ast::shared::numbers::SignedIconst<'input>,
+recursa::ast_node! {
+    /// `RELATIVE n` form. `n` is a `SignedIconst` (see [`FetchAbsolute`]).
+    #[derive(Debug)]
+    pub struct FetchRelative {
+        #[tok(RELATIVE, this)]
+        pub count: crate::ast::shared::numbers::SignedIconst,
+    }
 }
 
-/// `FORWARD [n|ALL]` form.
-#[derive(recursa::Node, Debug)]
-#[tok(FORWARD, this)]
-pub struct FetchForward<'input> {
-    pub count: Option<FetchCountOrAll<'input>>,
+recursa::ast_node! {
+    /// `FORWARD [n|ALL]` form.
+    #[derive(Debug)]
+    #[tok(FORWARD, this)]
+    pub struct FetchForward {
+        pub count: Option<FetchCountOrAll>,
+    }
 }
 
-/// `BACKWARD [n|ALL]` form.
-#[derive(recursa::Node, Debug)]
-#[tok(BACKWARD, this)]
-pub struct FetchBackward<'input> {
-    pub count: Option<FetchCountOrAll<'input>>,
+recursa::ast_node! {
+    /// `BACKWARD [n|ALL]` form.
+    #[derive(Debug)]
+    #[tok(BACKWARD, this)]
+    pub struct FetchBackward {
+        pub count: Option<FetchCountOrAll>,
+    }
 }
 
-/// A count or `ALL` marker following `FORWARD`/`BACKWARD`.
-#[derive(recursa::Node, Debug)]
-pub enum FetchCountOrAll<'input> {
-    #[tok(ALL)]
-    All,
-    Count(literal::IntegerLit<'input>),
+recursa::ast_node! {
+    /// A count or `ALL` marker following `FORWARD`/`BACKWARD`.
+    #[derive(Debug)]
+    pub enum FetchCountOrAll {
+        #[tok(ALL)]
+        All,
+        Count(literal::IntegerLit),
+    }
 }
 
-/// FETCH/MOVE direction clause.
-///
-/// Variant ordering: multi-token forms (`ABSOLUTE n`, `RELATIVE n`,
-/// `FORWARD [...]`, `BACKWARD [...]`) before single-keyword directions.
-/// `Count` (bare integer) listed last since it has no keyword prefix.
-#[derive(recursa::Node, Debug)]
-pub enum FetchDirection<'input> {
-    Absolute(FetchAbsolute<'input>),
-    Relative(FetchRelative<'input>),
-    Forward(FetchForward<'input>),
-    Backward(FetchBackward<'input>),
-    #[tok(NEXT)]
-    Next,
-    #[tok(PRIOR)]
-    Prior,
-    #[tok(FIRST)]
-    First,
-    #[tok(LAST)]
-    Last,
-    #[tok(ALL)]
-    All,
-    Count(literal::IntegerLit<'input>),
+recursa::ast_node! {
+    /// FETCH/MOVE direction clause.
+    ///
+    /// Variant ordering: multi-token forms (`ABSOLUTE n`, `RELATIVE n`,
+    /// `FORWARD [...]`, `BACKWARD [...]`) before single-keyword directions.
+    /// `Count` (bare integer) listed last since it has no keyword prefix.
+    #[derive(Debug)]
+    pub enum FetchDirection {
+        Absolute(FetchAbsolute),
+        Relative(FetchRelative),
+        Forward(FetchForward),
+        Backward(FetchBackward),
+        #[tok(NEXT)]
+        Next,
+        #[tok(PRIOR)]
+        Prior,
+        #[tok(FIRST)]
+        First,
+        #[tok(LAST)]
+        Last,
+        #[tok(ALL)]
+        All,
+        Count(literal::IntegerLit),
+    }
 }
 
-/// ```sql
-/// FETCH [direction] [FROM|IN] cursor_name
-/// ```
-#[derive(recursa::Node, Debug)]
-#[tok(FETCH, this)]
-pub struct FetchStmt<'input> {
-    pub direction: Option<FetchDirection<'input>>,
-    pub source: Option<FetchSource>,
-    /// gram.y `cursor_name: name`, a `ColId`.
-    pub cursor: crate::tokens::ColId<'input>,
+recursa::ast_node! {
+    /// ```sql
+    /// FETCH [direction] [FROM|IN] cursor_name
+    /// ```
+    #[derive(Debug)]
+    #[tok(FETCH, this)]
+    pub struct FetchStmt {
+        pub direction: Option<FetchDirection>,
+        pub source: Option<FetchSource>,
+        /// gram.y `cursor_name: name`, a `ColId`.
+        pub cursor: crate::tokens::ColId,
+    }
 }
 
-/// Target of a `CLOSE` statement: a named cursor or `ALL`.
-///
-/// Variant ordering: `All` (the `ALL` keyword) before `Cursor` so the
-/// reserved word is not swallowed as a cursor name.
-#[derive(recursa::Node, Debug)]
-pub enum CloseTarget<'input> {
-    #[tok(ALL)]
-    All,
-    Cursor(literal::Ident<'input>),
+recursa::ast_node! {
+    /// Target of a `CLOSE` statement: a named cursor or `ALL`.
+    ///
+    /// Variant ordering: `All` (the `ALL` keyword) before `Cursor` so the
+    /// reserved word is not swallowed as a cursor name.
+    #[derive(Debug)]
+    pub enum CloseTarget {
+        #[tok(ALL)]
+        All,
+        Cursor(literal::Ident),
+    }
 }
 
-/// ```sql
-/// CLOSE { cursor_name | ALL }
-/// ```
-#[derive(recursa::Node, Debug)]
-pub struct CloseStmt<'input> {
-    #[tok(CLOSE, this)]
-    pub target: CloseTarget<'input>,
+recursa::ast_node! {
+    /// ```sql
+    /// CLOSE { cursor_name | ALL }
+    /// ```
+    #[derive(Debug)]
+    pub struct CloseStmt {
+        #[tok(CLOSE, this)]
+        pub target: CloseTarget,
+    }
 }
 
-/// ```sql
-/// MOVE [direction] [FROM|IN] cursor_name
-/// ```
-#[derive(recursa::Node, Debug)]
-#[tok(MOVE, this)]
-pub struct MoveStmt<'input> {
-    pub direction: Option<FetchDirection<'input>>,
-    pub source: Option<FetchSource>,
-    /// gram.y `cursor_name: name`, a `ColId`.
-    pub cursor: crate::tokens::ColId<'input>,
+recursa::ast_node! {
+    /// ```sql
+    /// MOVE [direction] [FROM|IN] cursor_name
+    /// ```
+    #[derive(Debug)]
+    #[tok(MOVE, this)]
+    pub struct MoveStmt {
+        pub direction: Option<FetchDirection>,
+        pub source: Option<FetchSource>,
+        /// gram.y `cursor_name: name`, a `ColId`.
+        pub cursor: crate::tokens::ColId,
+    }
 }

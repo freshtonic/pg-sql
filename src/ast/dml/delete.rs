@@ -3,25 +3,29 @@ use crate::ast::dml::select::WhereClause;
 use crate::ast::dml::update::ReturningClause;
 use crate::ast::shared::names::QualifiedName;
 
-/// Table alias with explicit AS keyword: `AS alias`.
-#[derive(recursa::Node, Debug)]
-pub struct DeleteAsAlias<'input> {
-    #[tok(AS, this)]
-    pub name: crate::tokens::ColId<'input>,
+recursa::ast_node! {
+    /// Table alias with explicit AS keyword: `AS alias`.
+    #[derive(Debug)]
+    pub struct DeleteAsAlias {
+        #[tok(AS, this)]
+        pub name: crate::tokens::ColId,
+    }
 }
 
-/// Table alias in DELETE FROM: either `AS alias` or bare `alias`.
-///
-/// gram.y's `relation_expr_opt_alias` spells both forms with `ColId`, not
-/// with `BareColLabel`: a reserved keyword such as `USING` or `NULL` can
-/// never open the alias, which is what keeps `USING ...` a using-clause.
-///
-/// Variant ordering: WithAs (`AS ident`) has a longer first_pattern than
-/// Bare (`ident`), so longest-match-wins picks it when AS is present.
-#[derive(recursa::Node, Debug)]
-pub enum DeleteTableAlias<'input> {
-    WithAs(DeleteAsAlias<'input>),
-    Bare(crate::tokens::ColId<'input>),
+recursa::ast_node! {
+    /// Table alias in DELETE FROM: either `AS alias` or bare `alias`.
+    ///
+    /// gram.y's `relation_expr_opt_alias` spells both forms with `ColId`, not
+    /// with `BareColLabel`: a reserved keyword such as `USING` or `NULL` can
+    /// never open the alias, which is what keeps `USING ...` a using-clause.
+    ///
+    /// Variant ordering: WithAs (`AS ident`) has a longer first_pattern than
+    /// Bare (`ident`), so longest-match-wins picks it when AS is present.
+    #[derive(Debug)]
+    pub enum DeleteTableAlias {
+        WithAs(DeleteAsAlias),
+        Bare(crate::tokens::ColId),
+    }
 }
 
 impl<'input> DeleteTableAlias<'input> {
@@ -35,35 +39,39 @@ impl<'input> DeleteTableAlias<'input> {
     }
 }
 
-/// `USING table, ...` clause in DELETE statements.
-///
-/// `USING` leads the whole from-list, so it is declared on the struct;
-/// gram.y's `using_clause: USING from_list` makes the list non-empty.
-#[derive(recursa::Node, Debug)]
-#[tok(USING, this)]
-pub struct DeleteUsingClause<'input> {
-    #[sep(COMMA)]
-    pub tables: recursa::ArenaVec1<'input, crate::ast::dml::select::TableRef<'input>>,
+recursa::ast_node! {
+    /// `USING table, ...` clause in DELETE statements.
+    ///
+    /// `USING` leads the whole from-list, so it is declared on the struct;
+    /// gram.y's `using_clause: USING from_list` makes the list non-empty.
+    #[derive(Debug)]
+    #[tok(USING, this)]
+    pub struct DeleteUsingClause {
+        #[sep(COMMA)]
+        pub tables: one_or_many!(crate::ast::dml::select::TableRef),
+    }
 }
 
-/// DELETE FROM statement: `DELETE FROM [ONLY] table [alias] [USING ...] [WHERE expr] [RETURNING ...]`.
-///
-/// The optional `ONLY` modifier excludes inheritance children — Postgres'
-/// `relation_expr` in `gram.y`. The legacy `ONLY (name)` parenthesised form is
-/// not exercised by any DELETE corpus statement, so it is not modelled (matches
-/// the `TruncateRelation` / `LockRelation` shape).
-#[derive(recursa::Node, Debug)]
-#[pretty(group = consistent)]
-pub struct DeleteStmt<'input> {
-    #[tok(DELETE, FROM, this)]
-    #[presence(ONLY)]
-    pub only: bool,
-    pub table_name: QualifiedName<'input>,
-    pub alias: Option<recursa::ArenaBox<'input, DeleteTableAlias<'input>>>,
-    #[pretty(break_before = soft)]
-    pub using_clause: Option<recursa::ArenaBox<'input, DeleteUsingClause<'input>>>,
-    #[pretty(break_before = soft)]
-    pub where_clause: Option<recursa::ArenaBox<'input, WhereClause<'input>>>,
-    #[pretty(break_before = soft)]
-    pub returning: Option<recursa::ArenaBox<'input, ReturningClause<'input>>>,
+recursa::ast_node! {
+    /// DELETE FROM statement: `DELETE FROM [ONLY] table [alias] [USING ...] [WHERE expr] [RETURNING ...]`.
+    ///
+    /// The optional `ONLY` modifier excludes inheritance children — Postgres'
+    /// `relation_expr` in `gram.y`. The legacy `ONLY (name)` parenthesised form is
+    /// not exercised by any DELETE corpus statement, so it is not modelled (matches
+    /// the `TruncateRelation` / `LockRelation` shape).
+    #[derive(Debug)]
+    #[pretty(group = consistent)]
+    pub struct DeleteStmt {
+        #[tok(DELETE, FROM, this)]
+        #[presence(ONLY)]
+        pub only: bool,
+        pub table_name: QualifiedName,
+        pub alias: Option<boxed!(DeleteTableAlias)>,
+        #[pretty(break_before = soft)]
+        pub using_clause: Option<boxed!(DeleteUsingClause)>,
+        #[pretty(break_before = soft)]
+        pub where_clause: Option<boxed!(WhereClause)>,
+        #[pretty(break_before = soft)]
+        pub returning: Option<boxed!(ReturningClause)>,
+    }
 }

@@ -2,12 +2,14 @@
 /// operator names, and the rename/owner/schema action clauses that bundle them.
 use crate::tokens::literal;
 
-/// A comma-separated list of qualified (dotted) names — Postgres'
-/// `any_name_list` / `name_list` in DROP-family statements.
-#[derive(recursa::Node, Debug, PartialEq, Eq, Hash)]
-pub struct NameList<'input> {
-    #[sep(COMMA)]
-    pub names: recursa::ArenaVec1<'input, QualifiedName<'input>>,
+recursa::ast_node! {
+    /// A comma-separated list of qualified (dotted) names — Postgres'
+    /// `any_name_list` / `name_list` in DROP-family statements.
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    pub struct NameList {
+        #[sep(COMMA)]
+        pub names: one_or_many!(QualifiedName),
+    }
 }
 
 impl<'input> NameList<'input> {
@@ -22,23 +24,27 @@ impl<'input> NameList<'input> {
     }
 }
 
-/// A single role reference — Postgres' `RoleSpec`.
-///
-/// Only the `NonReservedWord` form is modelled: every role reference in the
-/// differential corpus is a plain (possibly quoted) identifier. The reserved
-/// pseudo-roles `CURRENT_ROLE` / `CURRENT_USER` / `SESSION_USER` are not yet
-/// modelled — when a corpus statement needs one, add reserved-keyword tokens
-/// and extend this enum to a tuple variant per form.
-#[derive(recursa::Node, Debug, PartialEq, Eq, Hash)]
-pub struct RoleSpec<'input> {
-    pub name: crate::tokens::NonReservedWord<'input>,
+recursa::ast_node! {
+    /// A single role reference — Postgres' `RoleSpec`.
+    ///
+    /// Only the `NonReservedWord` form is modelled: every role reference in the
+    /// differential corpus is a plain (possibly quoted) identifier. The reserved
+    /// pseudo-roles `CURRENT_ROLE` / `CURRENT_USER` / `SESSION_USER` are not yet
+    /// modelled — when a corpus statement needs one, add reserved-keyword tokens
+    /// and extend this enum to a tuple variant per form.
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    pub struct RoleSpec {
+        pub name: crate::tokens::NonReservedWord,
+    }
 }
 
-/// A comma-separated list of roles — Postgres' `role_list`.
-#[derive(recursa::Node, Debug, PartialEq, Eq, Hash)]
-pub struct RoleList<'input> {
-    #[sep(COMMA)]
-    pub roles: recursa::ArenaVec1<'input, RoleSpec<'input>>,
+recursa::ast_node! {
+    /// A comma-separated list of roles — Postgres' `role_list`.
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    pub struct RoleList {
+        #[sep(COMMA)]
+        pub roles: one_or_many!(RoleSpec),
+    }
 }
 
 impl<'input> RoleList<'input> {
@@ -62,66 +68,76 @@ impl<'input> RoleList<'input> {
 /// by any DROP corpus statement.
 pub use crate::ast::shared::expr::TypeName;
 
-/// A comma-separated list of type names — Postgres' `type_name_list`.
-///
-/// Items are `CastType` rather than bare `TypeName` so the array suffix
-/// (`int[]`, `text[]`) survives. PG's `type_name_list` is built from
-/// `Typename`, which includes the `[]`/`[N]` array suffix(es) — the bare
-/// `TypeName` enum in pg-sql models only `SimpleTypename`.
-#[derive(recursa::Node, Debug, PartialEq, Eq)]
-pub struct TypeNameList<'input> {
-    #[sep(COMMA)]
-    pub types: recursa::ArenaVec1<'input, crate::ast::shared::expr::CastType<'input>>,
+recursa::ast_node! {
+    /// A comma-separated list of type names — Postgres' `type_name_list`.
+    ///
+    /// Items are `CastType` rather than bare `TypeName` so the array suffix
+    /// (`int[]`, `text[]`) survives. PG's `type_name_list` is built from
+    /// `Typename`, which includes the `[]`/`[N]` array suffix(es) — the bare
+    /// `TypeName` enum in pg-sql models only `SimpleTypename`.
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct TypeNameList {
+        #[sep(COMMA)]
+        pub types: one_or_many!(crate::ast::shared::expr::CastType),
+    }
 }
 
-/// The `(...)` argument signature on `DROP AGGREGATE name(...)`.
-///
-/// The corpus only exercises `(*)` (zero-argument aggregate) and a plain
-/// comma-separated type list. The ordered-set `(... ORDER BY ...)` forms and
-/// named/moded `aggr_arg`s are not used by any DROP corpus statement.
-#[derive(recursa::Node, Debug, PartialEq, Eq)]
-pub enum AggregateArgs<'input> {
-    #[tok(LPAREN, STAR, RPAREN)]
-    /// `(*)` — the zero-argument aggregate (spelled like `COUNT(*)`).
-    Star,
-    /// `(type, ...)` — explicit argument type list.
-    Types(AggregateArgTypeList<'input>),
+recursa::ast_node! {
+    /// The `(...)` argument signature on `DROP AGGREGATE name(...)`.
+    ///
+    /// The corpus only exercises `(*)` (zero-argument aggregate) and a plain
+    /// comma-separated type list. The ordered-set `(... ORDER BY ...)` forms and
+    /// named/moded `aggr_arg`s are not used by any DROP corpus statement.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum AggregateArgs {
+        #[tok(LPAREN, STAR, RPAREN)]
+        /// `(*)` — the zero-argument aggregate (spelled like `COUNT(*)`).
+        Star,
+        /// `(type, ...)` — explicit argument type list.
+        Types(AggregateArgTypeList),
+    }
 }
 
-/// The parenthesized type list of `aggregate_with_argtypes`.
-///
-/// The parentheses surround the whole list; a field-level attachment would
-/// bind to each element and declare `(int), (text)`.
-#[derive(recursa::Node, Debug, PartialEq, Eq, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct AggregateArgTypeList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec1<'input, TypeName<'input>>,
-);
-
-/// A dotted name: `name`, `schema.name`, or `catalog.schema.name`.
-///
-/// This is the usual shape for table/view/sequence/type references in SQL.
-/// Must NOT collide with `Expr::QualRef` at the Pratt level because
-/// `QualifiedName` is only used in non-expression positions (FROM targets,
-/// DROP targets, ALTER targets, etc.).
-#[derive(recursa::Node, Debug, PartialEq, Eq, Hash)]
-pub struct QualifiedName<'input> {
-    /// gram.y `qualified_name: ColId | ColId indirection`: the first part is
-    /// a `ColId`, so `verbose`, `full` and the other `type_func_name`
-    /// keywords are not object names.
-    pub first: crate::tokens::ColId<'input>,
-    /// gram.y `indirection`: each part after a dot is `attr_name`, a
-    /// `ColLabel` (any keyword class).
-    pub rest: recursa::ArenaVec<'input, QualifiedNamePart<'input>>,
+recursa::ast_node! {
+    /// The parenthesized type list of `aggregate_with_argtypes`.
+    ///
+    /// The parentheses surround the whole list; a field-level attachment would
+    /// bind to each element and declare `(int), (text)`.
+    #[derive(Debug, PartialEq, Eq, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct AggregateArgTypeList(
+        #[sep(COMMA)]
+        #[deref]
+        pub one_or_many!(TypeName),
+    );
 }
 
-/// One `'.' attr_name` of gram.y `indirection` inside a `qualified_name`.
-#[derive(recursa::Node, Debug, PartialEq, Eq, Hash)]
-pub struct QualifiedNamePart<'input> {
-    #[tok(DOT, this)]
-    pub name: crate::tokens::ColLabel<'input>,
+recursa::ast_node! {
+    /// A dotted name: `name`, `schema.name`, or `catalog.schema.name`.
+    ///
+    /// This is the usual shape for table/view/sequence/type references in SQL.
+    /// Must NOT collide with `Expr::QualRef` at the Pratt level because
+    /// `QualifiedName` is only used in non-expression positions (FROM targets,
+    /// DROP targets, ALTER targets, etc.).
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    pub struct QualifiedName {
+        /// gram.y `qualified_name: ColId | ColId indirection`: the first part is
+        /// a `ColId`, so `verbose`, `full` and the other `type_func_name`
+        /// keywords are not object names.
+        pub first: crate::tokens::ColId,
+        /// gram.y `indirection`: each part after a dot is `attr_name`, a
+        /// `ColLabel` (any keyword class).
+        pub rest: zero_or_many!(QualifiedNamePart),
+    }
+}
+
+recursa::ast_node! {
+    /// One `'.' attr_name` of gram.y `indirection` inside a `qualified_name`.
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    pub struct QualifiedNamePart {
+        #[tok(DOT, this)]
+        pub name: crate::tokens::ColLabel,
+    }
 }
 
 impl<'input> QualifiedName<'input> {
@@ -144,15 +160,17 @@ impl<'input> QualifiedName<'input> {
     }
 }
 
-/// Function definition name (CREATE FUNCTION / DROP FUNCTION / DROP ROUTINE).
-///
-/// PG's `func_name: type_function_name | ColId indirection` admits
-/// unreserved keywords such as `SET`. [`QualifiedName`] already uses the
-/// generated identifier admission set containing those keywords, so one
-/// canonical variant covers both ordinary and keyword-spelled names.
-#[derive(recursa::Node, Debug)]
-pub enum FuncDefName<'input> {
-    Name(QualifiedName<'input>),
+recursa::ast_node! {
+    /// Function definition name (CREATE FUNCTION / DROP FUNCTION / DROP ROUTINE).
+    ///
+    /// PG's `func_name: type_function_name | ColId indirection` admits
+    /// unreserved keywords such as `SET`. [`QualifiedName`] already uses the
+    /// generated identifier admission set containing those keywords, so one
+    /// canonical variant covers both ordinary and keyword-spelled names.
+    #[derive(Debug)]
+    pub enum FuncDefName {
+        Name(QualifiedName),
+    }
 }
 
 impl<'input> FuncDefName<'input> {
@@ -164,284 +182,300 @@ impl<'input> FuncDefName<'input> {
     }
 }
 
-/// `RENAME TO new_name` — the rename action shared by many ALTER
-/// statements. Postgres routes most of these through `RenameStmt`, but
-/// pg-sql keeps one LR production family per leading `ALTER objtype ...`
-/// form, so each `Alter*Stmt` re-models its own rename branch.
-#[derive(recursa::Node, Debug)]
-pub struct RenameTo<'input> {
-    #[tok(RENAME, TO, this)]
-    pub new_name: literal::Ident<'input>,
+recursa::ast_node! {
+    /// `RENAME TO new_name` — the rename action shared by many ALTER
+    /// statements. Postgres routes most of these through `RenameStmt`, but
+    /// pg-sql keeps one LR production family per leading `ALTER objtype ...`
+    /// form, so each `Alter*Stmt` re-models its own rename branch.
+    #[derive(Debug)]
+    pub struct RenameTo {
+        #[tok(RENAME, TO, this)]
+        pub new_name: literal::Ident,
+    }
 }
 
-/// `OWNER TO RoleSpec` — the owner-change action shared by many ALTER
-/// statements. Postgres routes most of these through `AlterOwnerStmt`,
-/// but pg-sql keeps one LR production family per leading
-/// `ALTER objtype ...` form, so each `Alter*Stmt` re-models its own owner
-/// branch.
-#[derive(recursa::Node, Debug)]
-pub struct OwnerTo<'input> {
-    #[tok(OWNER, TO, this)]
-    pub new_owner: RoleSpec<'input>,
+recursa::ast_node! {
+    /// `OWNER TO RoleSpec` — the owner-change action shared by many ALTER
+    /// statements. Postgres routes most of these through `AlterOwnerStmt`,
+    /// but pg-sql keeps one LR production family per leading
+    /// `ALTER objtype ...` form, so each `Alter*Stmt` re-models its own owner
+    /// branch.
+    #[derive(Debug)]
+    pub struct OwnerTo {
+        #[tok(OWNER, TO, this)]
+        pub new_owner: RoleSpec,
+    }
 }
 
-/// `SET SCHEMA name` — the set-schema action shared by ALTER FOREIGN
-/// TABLE, ALTER TABLE, ALTER VIEW, ALTER MATERIALIZED VIEW, etc.
-/// Postgres routes most of these through `AlterObjectSchemaStmt`, but
-/// pg-sql keeps one LR production family per leading `ALTER objtype ...`
-/// form, so each `Alter*Stmt` re-models its own set-schema branch.
-#[derive(recursa::Node, Debug)]
-pub struct SetSchemaClause<'input> {
-    #[tok(SET, SCHEMA, this)]
-    pub new_schema: literal::Ident<'input>,
+recursa::ast_node! {
+    /// `SET SCHEMA name` — the set-schema action shared by ALTER FOREIGN
+    /// TABLE, ALTER TABLE, ALTER VIEW, ALTER MATERIALIZED VIEW, etc.
+    /// Postgres routes most of these through `AlterObjectSchemaStmt`, but
+    /// pg-sql keeps one LR production family per leading `ALTER objtype ...`
+    /// form, so each `Alter*Stmt` re-models its own set-schema branch.
+    #[derive(Debug)]
+    pub struct SetSchemaClause {
+        #[tok(SET, SCHEMA, this)]
+        pub new_schema: literal::Ident,
+    }
 }
 
-/// A single (unqualified) operator name — Postgres' `all_Op` rule
-/// (`Op | MathOp`).
-///
-/// `all_Op` is a lexer class in PG that absorbs any operator-character
-/// sequence, plus the single-char `MathOp`s (`+ - * / % ^ < > =`) and the
-/// 2-char comparisons `<= >= <>`. In recursa's logos token model every
-/// distinct multi-char operator gets its own punct token (`Lte`, `Gte`,
-/// `Neq`, `TripleEq`, `BangEqEq`, `BangEqMinus`, `LtLtLt`, …), so this enum
-/// must enumerate every punct token whose spelling is made of operator
-/// characters (`+ - * / % ^ < > = ~ ! @ # & | ?`). Anything else falls into
-/// the multi-char catch-all `CustomOp`.
-///
-/// Variant ordering: peek regexes are exact per-variant (each variant maps
-/// to exactly one token kind), so disambiguation is unambiguous regardless
-/// of order. Variants are grouped by leading char for readability.
-///
-/// `FatArrow` (`=>`) is deliberately omitted: PG explicitly rejects `=>` as
-/// an operator name, and excluding it lets the few corpus `CREATE OPERATOR
-/// =>` lines surface as file-level parse errors, matching
-/// PG's rejection on both sides of the differential oracle.
-#[derive(recursa::Node, Debug)]
-pub enum OperatorName<'input> {
-    // Multi-char tokens whose spelling is purely operator chars. Each is
-    // a single logos token kind so their peek regexes are disjoint.
-    #[tok(STARLTE)]
-    StarLte,
-    #[tok(STARGTE)]
-    StarGte,
-    #[tok(STARNEQ)]
-    StarNeq,
-    #[tok(STARLT)]
-    StarLt,
-    #[tok(STARGT)]
-    StarGt,
-    #[tok(STAREQ)]
-    StarEq,
-    #[tok(TRIPLEEQ)]
-    TripleEq,
-    #[tok(BANGEQEQ)]
-    BangEqEq,
-    #[tok(BANGEQMINUS)]
-    BangEqMinus,
-    #[tok(BANGEQ)]
-    BangEq,
-    #[tok(LTLTLT)]
-    LtLtLt,
-    #[tok(LTLTEQ)]
-    LtLtEq,
-    #[tok(LTLTPIPE)]
-    LtLtPipe,
-    #[tok(LTMINUSGT)]
-    LtMinusGt,
-    #[tok(LTLT)]
-    LtLt,
-    #[tok(LTCARET)]
-    LtCaret,
-    #[tok(LTAT)]
-    LtAt,
-    #[tok(GTGTGT)]
-    GtGtGt,
-    #[tok(GTGTEQ)]
-    GtGtEq,
-    #[tok(GTGT)]
-    GtGt,
-    #[tok(GTCARET)]
-    GtCaret,
-    #[tok(HASHARROWARROW)]
-    HashArrowArrow,
-    #[tok(HASHARROW)]
-    HashArrow,
-    #[tok(HASHHASH)]
-    HashHash,
-    #[tok(HASHMINUS)]
-    HashMinus,
-    #[tok(ARROWARROW)]
-    ArrowArrow,
-    #[tok(ARROW)]
-    Arrow,
-    #[tok(MINUSPIPEMINUS)]
-    MinusPipeMinus,
-    #[tok(PIPEGTGT)]
-    PipeGtGt,
-    #[tok(PIPEAMPGT)]
-    PipeAmpGt,
-    #[tok(PIPEPIPESLASH)]
-    PipePipeSlash,
-    #[tok(CONCAT)]
-    Concat,
-    #[tok(PIPESLASH)]
-    PipeSlash,
-    #[tok(QUESTIONPIPEPIPE)]
-    QuestionPipePipe,
-    #[tok(QUESTIONDASHPIPE)]
-    QuestionDashPipe,
-    #[tok(QUESTIONPIPE)]
-    QuestionPipe,
-    #[tok(QUESTIONAMP)]
-    QuestionAmp,
-    #[tok(QUESTIONHASH)]
-    QuestionHash,
-    #[tok(QUESTIONDASH)]
-    QuestionDash,
-    #[tok(ATATAT)]
-    AtAtAt,
-    #[tok(ATMINUSAT)]
-    AtMinusAt,
-    #[tok(ATHASHAT)]
-    AtHashAt,
-    #[tok(ATPLUSAT)]
-    AtPlusAt,
-    #[tok(ATAT)]
-    AtAt,
-    #[tok(ATQUESTION)]
-    AtQuestion,
-    #[tok(ATGT)]
-    AtGt,
-    #[tok(AMPLTPIPE)]
-    AmpLtPipe,
-    #[tok(AMPAMP)]
-    AmpAmp,
-    #[tok(AMPLT)]
-    AmpLt,
-    #[tok(AMPGT)]
-    AmpGt,
-    #[tok(TILDELEQTILDE)]
-    TildeLeqTilde,
-    #[tok(TILDEGEQTILDE)]
-    TildeGeqTilde,
-    #[tok(TILDELTTILDE)]
-    TildeLtTilde,
-    #[tok(TILDEGTTILDE)]
-    TildeGtTilde,
-    #[tok(BANGTILDETILDESTAR)]
-    BangTildeTildeStar,
-    #[tok(TILDETILDESTAR)]
-    TildeTildeStar,
-    #[tok(BANGTILDETILDE)]
-    BangTildeTilde,
-    #[tok(TILDETILDE)]
-    TildeTilde,
-    #[tok(BANGTILDESTAR)]
-    BangTildeStar,
-    #[tok(TILDESTAR)]
-    TildeStar,
-    #[tok(BANGTILDE)]
-    BangTilde,
-    #[tok(TILDEEQ)]
-    TildeEq,
-    #[tok(CARETAT)]
-    CaretAt,
-    // Single-char punct tokens (the `MathOp` set plus the bare operator
-    // characters PG treats as operator chars).
-    #[tok(LTE)]
-    Lte,
-    #[tok(GTE)]
-    Gte,
-    #[tok(NEQ)]
-    Neq,
-    #[tok(PLUS)]
-    Plus,
-    #[tok(MINUS)]
-    Minus,
-    #[tok(STAR)]
-    Star,
-    #[tok(SLASH)]
-    Slash,
-    #[tok(PERCENT)]
-    Percent,
-    #[tok(CARET)]
-    Caret,
-    #[tok(LT)]
-    Lt,
-    #[tok(GT)]
-    Gt,
-    #[tok(EQ)]
-    Eq,
-    #[tok(TILDE)]
-    Tilde,
-    #[tok(ATSIGN)]
-    At,
-    #[tok(POUND)]
-    Pound,
-    #[tok(AMP)]
-    Amp,
-    #[tok(PIPE)]
-    Pipe,
-    #[tok(QUESTION)]
-    Question,
-    // Multi-char catch-all. Listed last because each of the specific punct
-    // tokens above wins at the lexer level (logos longest-match-wins with
-    // declaration order tiebreaker); only operator names that don't match
-    // any specific token end up as `CustomOp`.
-    Custom(literal::CustomOp<'input>),
+recursa::ast_node! {
+    /// A single (unqualified) operator name — Postgres' `all_Op` rule
+    /// (`Op | MathOp`).
+    ///
+    /// `all_Op` is a lexer class in PG that absorbs any operator-character
+    /// sequence, plus the single-char `MathOp`s (`+ - * / % ^ < > =`) and the
+    /// 2-char comparisons `<= >= <>`. In recursa's logos token model every
+    /// distinct multi-char operator gets its own punct token (`Lte`, `Gte`,
+    /// `Neq`, `TripleEq`, `BangEqEq`, `BangEqMinus`, `LtLtLt`, …), so this enum
+    /// must enumerate every punct token whose spelling is made of operator
+    /// characters (`+ - * / % ^ < > = ~ ! @ # & | ?`). Anything else falls into
+    /// the multi-char catch-all `CustomOp`.
+    ///
+    /// Variant ordering: peek regexes are exact per-variant (each variant maps
+    /// to exactly one token kind), so disambiguation is unambiguous regardless
+    /// of order. Variants are grouped by leading char for readability.
+    ///
+    /// `FatArrow` (`=>`) is deliberately omitted: PG explicitly rejects `=>` as
+    /// an operator name, and excluding it lets the few corpus `CREATE OPERATOR
+    /// =>` lines surface as file-level parse errors, matching
+    /// PG's rejection on both sides of the differential oracle.
+    #[derive(Debug)]
+    pub enum OperatorName {
+        // Multi-char tokens whose spelling is purely operator chars. Each is
+        // a single logos token kind so their peek regexes are disjoint.
+        #[tok(STARLTE)]
+        StarLte,
+        #[tok(STARGTE)]
+        StarGte,
+        #[tok(STARNEQ)]
+        StarNeq,
+        #[tok(STARLT)]
+        StarLt,
+        #[tok(STARGT)]
+        StarGt,
+        #[tok(STAREQ)]
+        StarEq,
+        #[tok(TRIPLEEQ)]
+        TripleEq,
+        #[tok(BANGEQEQ)]
+        BangEqEq,
+        #[tok(BANGEQMINUS)]
+        BangEqMinus,
+        #[tok(BANGEQ)]
+        BangEq,
+        #[tok(LTLTLT)]
+        LtLtLt,
+        #[tok(LTLTEQ)]
+        LtLtEq,
+        #[tok(LTLTPIPE)]
+        LtLtPipe,
+        #[tok(LTMINUSGT)]
+        LtMinusGt,
+        #[tok(LTLT)]
+        LtLt,
+        #[tok(LTCARET)]
+        LtCaret,
+        #[tok(LTAT)]
+        LtAt,
+        #[tok(GTGTGT)]
+        GtGtGt,
+        #[tok(GTGTEQ)]
+        GtGtEq,
+        #[tok(GTGT)]
+        GtGt,
+        #[tok(GTCARET)]
+        GtCaret,
+        #[tok(HASHARROWARROW)]
+        HashArrowArrow,
+        #[tok(HASHARROW)]
+        HashArrow,
+        #[tok(HASHHASH)]
+        HashHash,
+        #[tok(HASHMINUS)]
+        HashMinus,
+        #[tok(ARROWARROW)]
+        ArrowArrow,
+        #[tok(ARROW)]
+        Arrow,
+        #[tok(MINUSPIPEMINUS)]
+        MinusPipeMinus,
+        #[tok(PIPEGTGT)]
+        PipeGtGt,
+        #[tok(PIPEAMPGT)]
+        PipeAmpGt,
+        #[tok(PIPEPIPESLASH)]
+        PipePipeSlash,
+        #[tok(CONCAT)]
+        Concat,
+        #[tok(PIPESLASH)]
+        PipeSlash,
+        #[tok(QUESTIONPIPEPIPE)]
+        QuestionPipePipe,
+        #[tok(QUESTIONDASHPIPE)]
+        QuestionDashPipe,
+        #[tok(QUESTIONPIPE)]
+        QuestionPipe,
+        #[tok(QUESTIONAMP)]
+        QuestionAmp,
+        #[tok(QUESTIONHASH)]
+        QuestionHash,
+        #[tok(QUESTIONDASH)]
+        QuestionDash,
+        #[tok(ATATAT)]
+        AtAtAt,
+        #[tok(ATMINUSAT)]
+        AtMinusAt,
+        #[tok(ATHASHAT)]
+        AtHashAt,
+        #[tok(ATPLUSAT)]
+        AtPlusAt,
+        #[tok(ATAT)]
+        AtAt,
+        #[tok(ATQUESTION)]
+        AtQuestion,
+        #[tok(ATGT)]
+        AtGt,
+        #[tok(AMPLTPIPE)]
+        AmpLtPipe,
+        #[tok(AMPAMP)]
+        AmpAmp,
+        #[tok(AMPLT)]
+        AmpLt,
+        #[tok(AMPGT)]
+        AmpGt,
+        #[tok(TILDELEQTILDE)]
+        TildeLeqTilde,
+        #[tok(TILDEGEQTILDE)]
+        TildeGeqTilde,
+        #[tok(TILDELTTILDE)]
+        TildeLtTilde,
+        #[tok(TILDEGTTILDE)]
+        TildeGtTilde,
+        #[tok(BANGTILDETILDESTAR)]
+        BangTildeTildeStar,
+        #[tok(TILDETILDESTAR)]
+        TildeTildeStar,
+        #[tok(BANGTILDETILDE)]
+        BangTildeTilde,
+        #[tok(TILDETILDE)]
+        TildeTilde,
+        #[tok(BANGTILDESTAR)]
+        BangTildeStar,
+        #[tok(TILDESTAR)]
+        TildeStar,
+        #[tok(BANGTILDE)]
+        BangTilde,
+        #[tok(TILDEEQ)]
+        TildeEq,
+        #[tok(CARETAT)]
+        CaretAt,
+        // Single-char punct tokens (the `MathOp` set plus the bare operator
+        // characters PG treats as operator chars).
+        #[tok(LTE)]
+        Lte,
+        #[tok(GTE)]
+        Gte,
+        #[tok(NEQ)]
+        Neq,
+        #[tok(PLUS)]
+        Plus,
+        #[tok(MINUS)]
+        Minus,
+        #[tok(STAR)]
+        Star,
+        #[tok(SLASH)]
+        Slash,
+        #[tok(PERCENT)]
+        Percent,
+        #[tok(CARET)]
+        Caret,
+        #[tok(LT)]
+        Lt,
+        #[tok(GT)]
+        Gt,
+        #[tok(EQ)]
+        Eq,
+        #[tok(TILDE)]
+        Tilde,
+        #[tok(ATSIGN)]
+        At,
+        #[tok(POUND)]
+        Pound,
+        #[tok(AMP)]
+        Amp,
+        #[tok(PIPE)]
+        Pipe,
+        #[tok(QUESTION)]
+        Question,
+        // Multi-char catch-all. Listed last because each of the specific punct
+        // tokens above wins at the lexer level (logos longest-match-wins with
+        // declaration order tiebreaker); only operator names that don't match
+        // any specific token end up as `CustomOp`.
+        Custom(literal::CustomOp),
+    }
 }
 
-/// A possibly schema-qualified operator name — Postgres' `any_operator`.
-///
-/// Postgres allows arbitrary prefixes of `ColId.` parts (e.g., `pg_catalog.+`,
-/// `schema_op1.#*#`). Modelled as an enum so the peek set covers both the
-/// `Ident.` qualified path and every bare-operator first-token from
-/// [`OperatorName`].
-///
-/// Variant ordering: `Qualified` starts with `Ident`, `Plain` starts with a
-/// punct/operator token. Their first sets are disjoint, so order is for
-/// clarity.
-#[derive(recursa::Node, Debug)]
-pub enum QualifiedOperatorName<'input> {
-    /// `[schema.]op` — at least one `Ident.` segment followed by an
-    /// `OperatorName`.
-    Qualified(QualifiedOperatorPath<'input>),
-    /// Bare operator name with no schema qualifier.
-    Plain(OperatorName<'input>),
+recursa::ast_node! {
+    /// A possibly schema-qualified operator name — Postgres' `any_operator`.
+    ///
+    /// Postgres allows arbitrary prefixes of `ColId.` parts (e.g., `pg_catalog.+`,
+    /// `schema_op1.#*#`). Modelled as an enum so the peek set covers both the
+    /// `Ident.` qualified path and every bare-operator first-token from
+    /// [`OperatorName`].
+    ///
+    /// Variant ordering: `Qualified` starts with `Ident`, `Plain` starts with a
+    /// punct/operator token. Their first sets are disjoint, so order is for
+    /// clarity.
+    #[derive(Debug)]
+    pub enum QualifiedOperatorName {
+        /// `[schema.]op` — at least one `Ident.` segment followed by an
+        /// `OperatorName`.
+        Qualified(QualifiedOperatorPath),
+        /// Bare operator name with no schema qualifier.
+        Plain(OperatorName),
+    }
 }
 
-/// A schema-qualified operator name: one or more `Ident.` segments followed
-/// by an `OperatorName`.
-#[derive(recursa::Node, Debug)]
-pub struct QualifiedOperatorPath<'input> {
-    pub first: QualifiedOperatorPrefix<'input>,
-    pub rest: recursa::ArenaVec<'input, QualifiedOperatorPrefix<'input>>,
-    pub name: OperatorName<'input>,
+recursa::ast_node! {
+    /// A schema-qualified operator name: one or more `Ident.` segments followed
+    /// by an `OperatorName`.
+    #[derive(Debug)]
+    pub struct QualifiedOperatorPath {
+        pub first: QualifiedOperatorPrefix,
+        pub rest: zero_or_many!(QualifiedOperatorPrefix),
+        pub name: OperatorName,
+    }
 }
 
-/// One `Ident.` segment of a qualified operator name's schema prefix.
-#[derive(recursa::Node, Debug)]
-pub struct QualifiedOperatorPrefix<'input> {
-    #[tok(this, DOT)]
-    pub name: literal::Ident<'input>,
+recursa::ast_node! {
+    /// One `Ident.` segment of a qualified operator name's schema prefix.
+    #[derive(Debug)]
+    pub struct QualifiedOperatorPrefix {
+        #[tok(this, DOT)]
+        pub name: literal::Ident,
+    }
 }
 
-/// One side of an `oper_argtypes` pair: a type name, or `NONE` —
-/// PostgreSQL's missing-operand marker on a unary operator.
-///
-/// `NONE` is a `COL_NAME` keyword, and `Typename`'s `type_function_name`
-/// path admits only `UNRESERVED` and `TYPE_FUNC_NAME` keywords, so
-/// [`TypeName`] does not reach it. gram.y likewise spells
-/// `'(' NONE ',' Typename ')'` as its own `oper_argtypes` alternative rather
-/// than widening the type name.
-///
-/// Variant ordering: `None` first, because the literal `NONE` keyword is the
-/// specific match and `Type` would otherwise have to reject it.
-#[derive(recursa::Node, Debug)]
-pub enum OperatorArgType<'input> {
-    #[tok(NONE)]
-    None,
-    Type(TypeName<'input>),
+recursa::ast_node! {
+    /// One side of an `oper_argtypes` pair: a type name, or `NONE` —
+    /// PostgreSQL's missing-operand marker on a unary operator.
+    ///
+    /// `NONE` is a `COL_NAME` keyword, and `Typename`'s `type_function_name`
+    /// path admits only `UNRESERVED` and `TYPE_FUNC_NAME` keywords, so
+    /// [`TypeName`] does not reach it. gram.y likewise spells
+    /// `'(' NONE ',' Typename ')'` as its own `oper_argtypes` alternative rather
+    /// than widening the type name.
+    ///
+    /// Variant ordering: `None` first, because the literal `NONE` keyword is the
+    /// specific match and `Type` would otherwise have to reject it.
+    #[derive(Debug)]
+    pub enum OperatorArgType {
+        #[tok(NONE)]
+        None,
+        Type(TypeName),
+    }
 }
 
 impl<'input> OperatorArgType<'input> {
@@ -454,25 +488,27 @@ impl<'input> OperatorArgType<'input> {
     }
 }
 
-/// `(left, right)` argument-type signature on `operator_with_argtypes` —
-/// Postgres' `oper_argtypes`.
-///
-/// gram.y gives the unary spellings their own alternatives (`'(' NONE ','
-/// Typename ')'` and `'(' Typename ',' NONE ')'`), which duplicates the same
-/// token language three times. This shared-prefix type parses the pair once
-/// and lets [`OperatorArgType`] carry the `NONE` marker; [`Self::left`] and
-/// [`Self::right`] read it back.
-///
-/// The shared prefix also admits `(NONE, NONE)`, which gram.y has no
-/// alternative for. PostgreSQL rejects that pair semantically ("an operator
-/// must have at least one operand"), so the over-acceptance costs nothing a
-/// parser can decide.
-#[derive(recursa::Node, Debug)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct OperatorArgtypes<'input> {
-    pub left_type: OperatorArgType<'input>,
-    #[tok(COMMA, this)]
-    pub right_type: OperatorArgType<'input>,
+recursa::ast_node! {
+    /// `(left, right)` argument-type signature on `operator_with_argtypes` —
+    /// Postgres' `oper_argtypes`.
+    ///
+    /// gram.y gives the unary spellings their own alternatives (`'(' NONE ','
+    /// Typename ')'` and `'(' Typename ',' NONE ')'`), which duplicates the same
+    /// token language three times. This shared-prefix type parses the pair once
+    /// and lets [`OperatorArgType`] carry the `NONE` marker; [`Self::left`] and
+    /// [`Self::right`] read it back.
+    ///
+    /// The shared prefix also admits `(NONE, NONE)`, which gram.y has no
+    /// alternative for. PostgreSQL rejects that pair semantically ("an operator
+    /// must have at least one operand"), so the over-acceptance costs nothing a
+    /// parser can decide.
+    #[derive(Debug)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct OperatorArgtypes {
+        pub left_type: OperatorArgType,
+        #[tok(COMMA, this)]
+        pub right_type: OperatorArgType,
+    }
 }
 
 impl<'input> OperatorArgtypes<'input> {
@@ -489,12 +525,14 @@ impl<'input> OperatorArgtypes<'input> {
     }
 }
 
-/// `any_operator oper_argtypes` — Postgres' `operator_with_argtypes`. The
-/// full reference to a specific operator (including overload signature)
-/// used by `DROP OPERATOR`, `ALTER OPERATOR`, `COMMENT ON OPERATOR`,
-/// `SECURITY LABEL ON OPERATOR`, etc.
-#[derive(recursa::Node, Debug)]
-pub struct OperatorWithArgtypes<'input> {
-    pub name: QualifiedOperatorName<'input>,
-    pub args: OperatorArgtypes<'input>,
+recursa::ast_node! {
+    /// `any_operator oper_argtypes` — Postgres' `operator_with_argtypes`. The
+    /// full reference to a specific operator (including overload signature)
+    /// used by `DROP OPERATOR`, `ALTER OPERATOR`, `COMMENT ON OPERATOR`,
+    /// `SECURITY LABEL ON OPERATOR`, etc.
+    #[derive(Debug)]
+    pub struct OperatorWithArgtypes {
+        pub name: QualifiedOperatorName,
+        pub args: OperatorArgtypes,
+    }
 }

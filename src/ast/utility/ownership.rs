@@ -10,23 +10,27 @@ use crate::ast::shared::names::{RoleList, RoleSpec};
 
 // --- REASSIGN ---
 
-/// REASSIGN OWNED BY role_list TO role
-#[derive(recursa::Node, Debug)]
-pub struct ReassignStmt<'input> {
-    #[tok(REASSIGN, OWNED, BY, this)]
-    pub roles: RoleList<'input>,
-    #[tok(TO, this)]
-    pub new_role: RoleSpec<'input>,
+recursa::ast_node! {
+    /// REASSIGN OWNED BY role_list TO role
+    #[derive(Debug)]
+    pub struct ReassignStmt {
+        #[tok(REASSIGN, OWNED, BY, this)]
+        pub roles: RoleList,
+        #[tok(TO, this)]
+        pub new_role: RoleSpec,
+    }
 }
 
 // -----------------------------------------------------------------------
 // DROP OWNED.
 // -----------------------------------------------------------------------
 
-/// `DROP OWNED BY role [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug)]
-pub struct DropOwnedStmt<'input> {
-    #[tok(DROP, OWNED, BY, this)]
-    pub roles: RoleList<'input>,
-    pub behavior: Option<DropBehavior>,
+recursa::ast_node! {
+    /// `DROP OWNED BY role [, ...] [CASCADE | RESTRICT]`.
+    #[derive(Debug)]
+    pub struct DropOwnedStmt {
+        #[tok(DROP, OWNED, BY, this)]
+        pub roles: RoleList,
+        pub behavior: Option<DropBehavior>,
+    }
 }

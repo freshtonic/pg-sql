@@ -323,6 +323,20 @@ impl<'a> Scan<'a> {
                 }
                 Item::Struct(s) => self.scan_struct(rel, source, module, s),
                 Item::Enum(e) => self.scan_enum(rel, source, module, e),
+                Item::Macro(invocation)
+                    if invocation
+                        .mac
+                        .path
+                        .segments
+                        .last()
+                        .is_some_and(|segment| segment.ident == "ast_node") =>
+                {
+                    if let Ok(declarations) =
+                        syn::parse2::<syn::File>(invocation.mac.tokens.clone())
+                    {
+                        self.scan_items(rel, source, module, &declarations.items);
+                    }
+                }
                 Item::Type(t) => self.scan_type(rel, source, module, t),
                 Item::Fn(function) => {
                     if has_attr(&function.attrs, "test") {
@@ -2488,4 +2502,31 @@ fn callback_entries(tokens: &TokenStream) -> Vec<(String, Span)> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod ast_node_inventory_tests {
+    use super::*;
+
+    #[test]
+    fn live_inventory_scans_declarations_inside_ast_node() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("src/ast/sample.rs");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "recursa::ast_node! { pub enum Choice { One, Two { value: Name } } }",
+        )
+        .unwrap();
+        let mut scan = Scan::new(root.path());
+        scan.scan_rust(&path).unwrap();
+        let ids = scan
+            .semantics
+            .iter()
+            .map(|row| row.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(ids.contains(&"ast::sample::Choice"));
+        assert!(ids.contains(&"ast::sample::Choice::One"));
+        assert!(ids.contains(&"ast::sample::Choice::Two.value"));
+    }
 }

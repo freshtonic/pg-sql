@@ -6,60 +6,70 @@ use crate::ast::utility::vacuum::VacuumOptions;
 
 // --- CLUSTER ---
 
-/// `USING index_name` — Postgres' `cluster_index_specification`.
-#[derive(recursa::Node, Debug)]
-pub struct ClusterUsingIndex<'input> {
-    #[tok(USING, this)]
-    pub index: crate::tokens::ColId<'input>,
+recursa::ast_node! {
+    /// `USING index_name` — Postgres' `cluster_index_specification`.
+    #[derive(Debug)]
+    pub struct ClusterUsingIndex {
+        #[tok(USING, this)]
+        pub index: crate::tokens::ColId,
+    }
 }
 
-/// Modern target: `qualified_name [USING index]`.
-#[derive(recursa::Node, Debug)]
-pub struct ClusterModernTarget<'input> {
-    pub table: QualifiedName<'input>,
-    pub using_index: Option<ClusterUsingIndex<'input>>,
+recursa::ast_node! {
+    /// Modern target: `qualified_name [USING index]`.
+    #[derive(Debug)]
+    pub struct ClusterModernTarget {
+        pub table: QualifiedName,
+        pub using_index: Option<ClusterUsingIndex>,
+    }
 }
 
-/// Pre-8.3 legacy target: `index_name ON qualified_name`.
-///
-/// `ON` after the first identifier disambiguates this from the modern form
-/// (which would have `USING` there, or nothing).
-#[derive(recursa::Node, Debug)]
-pub struct ClusterLegacyTarget<'input> {
-    pub index: crate::tokens::ColId<'input>,
-    #[tok(ON, this)]
-    pub table: QualifiedName<'input>,
+recursa::ast_node! {
+    /// Pre-8.3 legacy target: `index_name ON qualified_name`.
+    ///
+    /// `ON` after the first identifier disambiguates this from the modern form
+    /// (which would have `USING` there, or nothing).
+    #[derive(Debug)]
+    pub struct ClusterLegacyTarget {
+        pub index: crate::tokens::ColId,
+        #[tok(ON, this)]
+        pub table: QualifiedName,
+    }
 }
 
-/// `CLUSTER` target: either the pre-8.3 `index ON table` form or the
-/// modern `table [USING index]` form.
-///
-/// Variant ordering: the legacy form is listed first because both variants
-/// start with an identifier; the legacy form's distinguishing `ON` is
-/// reached after two tokens, while the modern form can stop after one
-/// identifier (no `USING`). Declaration-order tiebreak prefers the legacy
-/// form when both could parse a prefix, but the modern form is selected
-/// once the parser sees no `ON` after the leading identifier.
-#[derive(recursa::Node, Debug)]
-pub enum ClusterTarget<'input> {
-    Legacy(ClusterLegacyTarget<'input>),
-    Modern(ClusterModernTarget<'input>),
+recursa::ast_node! {
+    /// `CLUSTER` target: either the pre-8.3 `index ON table` form or the
+    /// modern `table [USING index]` form.
+    ///
+    /// Variant ordering: the legacy form is listed first because both variants
+    /// start with an identifier; the legacy form's distinguishing `ON` is
+    /// reached after two tokens, while the modern form can stop after one
+    /// identifier (no `USING`). Declaration-order tiebreak prefers the legacy
+    /// form when both could parse a prefix, but the modern form is selected
+    /// once the parser sees no `ON` after the leading identifier.
+    #[derive(Debug)]
+    pub enum ClusterTarget {
+        Legacy(ClusterLegacyTarget),
+        Modern(ClusterModernTarget),
+    }
 }
 
-/// ```sql
-/// CLUSTER '(' option [, ...] ')' [qualified_name [USING index]]
-/// CLUSTER [VERBOSE]              [qualified_name [USING index]]
-/// CLUSTER [VERBOSE] index ON qualified_name              -- pre-8.3
-/// ```
-///
-/// In the parenthesised form, `options` is `Some` and `verbose` is `None`
-/// (the option list expresses `VERBOSE` instead). In any legacy form,
-/// `options` is `None` and `verbose` may be `Some` or `None`.
-#[derive(recursa::Node, Debug)]
-#[tok(CLUSTER, this)]
-pub struct ClusterStmt<'input> {
-    pub options: Option<VacuumOptions<'input>>,
-    #[presence(VERBOSE)]
-    pub verbose: bool,
-    pub target: Option<ClusterTarget<'input>>,
+recursa::ast_node! {
+    /// ```sql
+    /// CLUSTER '(' option [, ...] ')' [qualified_name [USING index]]
+    /// CLUSTER [VERBOSE]              [qualified_name [USING index]]
+    /// CLUSTER [VERBOSE] index ON qualified_name              -- pre-8.3
+    /// ```
+    ///
+    /// In the parenthesised form, `options` is `Some` and `verbose` is `None`
+    /// (the option list expresses `VERBOSE` instead). In any legacy form,
+    /// `options` is `None` and `verbose` may be `Some` or `None`.
+    #[derive(Debug)]
+    #[tok(CLUSTER, this)]
+    pub struct ClusterStmt {
+        pub options: Option<VacuumOptions>,
+        #[presence(VERBOSE)]
+        pub verbose: bool,
+        pub target: Option<ClusterTarget>,
+    }
 }

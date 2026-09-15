@@ -7,33 +7,39 @@ use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
-/// `INDEX | TABLE` — the access-method type keyword in `CREATE ACCESS METHOD`.
-#[derive(recursa::Node, Debug)]
-pub enum AccessMethodType {
-    #[tok(INDEX)]
-    Index,
-    #[tok(TABLE)]
-    Table,
+recursa::ast_node! {
+    /// `INDEX | TABLE` — the access-method type keyword in `CREATE ACCESS METHOD`.
+    #[derive(Debug)]
+    pub enum AccessMethodType {
+        #[tok(INDEX)]
+        Index,
+        #[tok(TABLE)]
+        Table,
+    }
 }
 
-/// `CREATE ACCESS METHOD name TYPE { INDEX | TABLE } HANDLER handler_name` —
-/// Postgres' `CreateAmStmt`. `handler_name` is a possibly-qualified function
-/// name (`name [.name …]`).
-#[derive(recursa::Node, Debug)]
-pub struct CreateAccessMethodStmt<'input> {
-    #[tok(CREATE, ACCESS, METHOD, this)]
-    pub name: crate::tokens::ColId<'input>,
-    #[tok(TYPE, this)]
-    pub am_type: AccessMethodType,
-    #[tok(HANDLER, this)]
-    pub handler_name: QualifiedName<'input>,
+recursa::ast_node! {
+    /// `CREATE ACCESS METHOD name TYPE { INDEX | TABLE } HANDLER handler_name` —
+    /// Postgres' `CreateAmStmt`. `handler_name` is a possibly-qualified function
+    /// name (`name [.name …]`).
+    #[derive(Debug)]
+    pub struct CreateAccessMethodStmt {
+        #[tok(CREATE, ACCESS, METHOD, this)]
+        pub name: crate::tokens::ColId,
+        #[tok(TYPE, this)]
+        pub am_type: AccessMethodType,
+        #[tok(HANDLER, this)]
+        pub handler_name: QualifiedName,
+    }
 }
 
-/// `DROP ACCESS METHOD [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug)]
-#[tok(DROP, ACCESS, METHOD, this)]
-pub struct DropAccessMethodStmt<'input> {
-    pub if_exists: Option<IfExists>,
-    pub names: NameList<'input>,
-    pub behavior: Option<DropBehavior>,
+recursa::ast_node! {
+    /// `DROP ACCESS METHOD [IF EXISTS] name [, ...] [CASCADE | RESTRICT]`.
+    #[derive(Debug)]
+    #[tok(DROP, ACCESS, METHOD, this)]
+    pub struct DropAccessMethodStmt {
+        pub if_exists: Option<IfExists>,
+        pub names: NameList,
+        pub behavior: Option<DropBehavior>,
+    }
 }

@@ -24,460 +24,544 @@ use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
 #[allow(unused_imports)]
 use crate::ast::shared::numbers::*;
-#[allow(unused_imports)]
-// ---------------------------------------------------------------------------
-/// `USING INDEX TABLESPACE name` — tablespace for the index backing a PRIMARY
-/// KEY or UNIQUE column constraint.
-#[derive(recursa::Node, Debug)]
-pub struct UsingIndexTablespace<'input> {
-    #[tok(USING, INDEX, TABLESPACE, this)]
-    pub name: literal::Ident<'input>,
+recursa::ast_node! {
+    #[allow(unused_imports)]
+    // ---------------------------------------------------------------------------
+    /// `USING INDEX TABLESPACE name` — tablespace for the index backing a PRIMARY
+    /// KEY or UNIQUE column constraint.
+    #[derive(Debug)]
+    pub struct UsingIndexTablespace {
+        #[tok(USING, INDEX, TABLESPACE, this)]
+        pub name: literal::Ident,
+    }
 }
 
-/// PRIMARY KEY column constraint.
-#[derive(recursa::Node, Debug)]
-#[tok(PRIMARY, KEY, this)]
-pub struct PrimaryKeyConstraint<'input> {
-    pub index_tablespace: Option<UsingIndexTablespace<'input>>,
+recursa::ast_node! {
+    /// PRIMARY KEY column constraint.
+    #[derive(Debug)]
+    #[tok(PRIMARY, KEY, this)]
+    pub struct PrimaryKeyConstraint {
+        pub index_tablespace: Option<UsingIndexTablespace>,
+    }
 }
 
-/// UNIQUE column constraint.
-#[derive(recursa::Node, Debug)]
-#[tok(UNIQUE, this)]
-pub struct UniqueConstraint<'input> {
-    /// Optional `NULLS [NOT] DISTINCT` qualifier (Postgres 15+).
-    pub nulls: Option<NullsDistinctQualifier>,
-    pub index_tablespace: Option<UsingIndexTablespace<'input>>,
+recursa::ast_node! {
+    /// UNIQUE column constraint.
+    #[derive(Debug)]
+    #[tok(UNIQUE, this)]
+    pub struct UniqueConstraint {
+        /// Optional `NULLS [NOT] DISTINCT` qualifier (Postgres 15+).
+        pub nulls: Option<NullsDistinctQualifier>,
+        pub index_tablespace: Option<UsingIndexTablespace>,
+    }
 }
 
-/// `NULLS DISTINCT` or `NULLS NOT DISTINCT` for UNIQUE constraints.
-#[derive(recursa::Node, Debug)]
-pub struct NullsDistinctQualifier {
-    #[tok(NULLS, this, DISTINCT)]
-    #[presence(NOT)]
-    pub not: bool,
+recursa::ast_node! {
+    /// `NULLS DISTINCT` or `NULLS NOT DISTINCT` for UNIQUE constraints.
+    #[derive(Debug)]
+    pub struct NullsDistinctQualifier {
+        #[tok(NULLS, this, DISTINCT)]
+        #[presence(NOT)]
+        pub not: bool,
+    }
 }
 
-/// Referential action for `ON DELETE` / `ON UPDATE`.
-///
-/// Variant ordering: multi-word variants (`NO ACTION`, `SET NULL`, `SET DEFAULT`)
-/// come before single-word ones to satisfy longest-match.
-#[derive(recursa::Node, Debug)]
-pub enum ReferentialAction<'input> {
-    #[tok(NO, ACTION)]
-    NoAction,
-    SetNull(SetNullKw<'input>),
-    SetDefault(SetDefaultKw<'input>),
-    #[tok(CASCADE)]
-    Cascade,
-    #[tok(RESTRICT)]
-    Restrict,
+recursa::ast_node! {
+    /// Referential action for `ON DELETE` / `ON UPDATE`.
+    ///
+    /// Variant ordering: multi-word variants (`NO ACTION`, `SET NULL`, `SET DEFAULT`)
+    /// come before single-word ones to satisfy longest-match.
+    #[derive(Debug)]
+    pub enum ReferentialAction {
+        #[tok(NO, ACTION)]
+        NoAction,
+        SetNull(SetNullKw),
+        SetDefault(SetDefaultKw),
+        #[tok(CASCADE)]
+        Cascade,
+        #[tok(RESTRICT)]
+        Restrict,
+    }
 }
 
-/// Parenthesized column list on `ON DELETE SET NULL` / `SET DEFAULT`.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct ReferentialActionColumnList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
-);
-
-#[derive(recursa::Node, Debug)]
-#[tok(SET, NULL, this)]
-pub struct SetNullKw<'input> {
-    pub cols: Option<ReferentialActionColumnList<'input>>,
+recursa::ast_node! {
+    /// Parenthesized column list on `ON DELETE SET NULL` / `SET DEFAULT`.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct ReferentialActionColumnList(
+        #[sep(COMMA)]
+        #[deref]
+        pub one_or_many!(crate::tokens::ColId),
+    );
 }
 
-#[derive(recursa::Node, Debug)]
-#[tok(SET, DEFAULT, this)]
-pub struct SetDefaultKw<'input> {
-    pub cols: Option<ReferentialActionColumnList<'input>>,
+recursa::ast_node! {
+    #[derive(Debug)]
+    #[tok(SET, NULL, this)]
+    pub struct SetNullKw {
+        pub cols: Option<ReferentialActionColumnList>,
+    }
 }
 
-/// `ON DELETE action`.
-#[derive(recursa::Node, Debug)]
-pub struct OnDeleteAction<'input> {
-    #[tok(ON, DELETE, this)]
-    pub action: ReferentialAction<'input>,
+recursa::ast_node! {
+    #[derive(Debug)]
+    #[tok(SET, DEFAULT, this)]
+    pub struct SetDefaultKw {
+        pub cols: Option<ReferentialActionColumnList>,
+    }
 }
 
-/// `ON UPDATE action`.
-#[derive(recursa::Node, Debug)]
-pub struct OnUpdateAction<'input> {
-    #[tok(ON, UPDATE, this)]
-    pub action: ReferentialAction<'input>,
+recursa::ast_node! {
+    /// `ON DELETE action`.
+    #[derive(Debug)]
+    pub struct OnDeleteAction {
+        #[tok(ON, DELETE, this)]
+        pub action: ReferentialAction,
+    }
 }
 
-/// Match type for a foreign key: `MATCH FULL | PARTIAL | SIMPLE`.
-#[derive(recursa::Node, Debug)]
-pub enum MatchKind {
-    #[tok(FULL)]
-    Full,
-    #[tok(PARTIAL)]
-    Partial,
-    #[tok(SIMPLE)]
-    Simple,
+recursa::ast_node! {
+    /// `ON UPDATE action`.
+    #[derive(Debug)]
+    pub struct OnUpdateAction {
+        #[tok(ON, UPDATE, this)]
+        pub action: ReferentialAction,
+    }
 }
 
-/// `MATCH FULL | MATCH PARTIAL | MATCH SIMPLE`.
-#[derive(recursa::Node, Debug)]
-pub struct MatchClause {
-    #[tok(MATCH, this)]
-    pub kind: MatchKind,
+recursa::ast_node! {
+    /// Match type for a foreign key: `MATCH FULL | PARTIAL | SIMPLE`.
+    #[derive(Debug)]
+    pub enum MatchKind {
+        #[tok(FULL)]
+        Full,
+        #[tok(PARTIAL)]
+        Partial,
+        #[tok(SIMPLE)]
+        Simple,
+    }
 }
 
-/// gram.y `ConstraintAttr`: the deferrability entries of a column's
-/// constraint list (`ColConstraint: ConstraintAttr`).
-#[derive(recursa::Node, Debug)]
-pub enum ColumnConstraintAttr {
-    #[tok(NOT, DEFERRABLE)]
-    NotDeferrable,
-    #[tok(DEFERRABLE)]
-    Deferrable,
-    #[tok(INITIALLY, DEFERRED)]
-    InitiallyDeferred,
-    #[tok(INITIALLY, IMMEDIATE)]
-    InitiallyImmediate,
+recursa::ast_node! {
+    /// `MATCH FULL | MATCH PARTIAL | MATCH SIMPLE`.
+    #[derive(Debug)]
+    pub struct MatchClause {
+        #[tok(MATCH, this)]
+        pub kind: MatchKind,
+    }
 }
 
-/// `ON DELETE ...` or `ON UPDATE ...` trailing action on a REFERENCES
-/// constraint. Modeled as an enum so both orders of the two clauses
-/// are accepted via a [`Vec`]`<`[`OnAction`]`>`.
-///
-/// Variant ordering: both start with `ON`; they diverge at the next keyword.
-#[derive(recursa::Node, Debug)]
-pub enum OnAction<'input> {
-    OnDelete(OnDeleteAction<'input>),
-    OnUpdate(OnUpdateAction<'input>),
+recursa::ast_node! {
+    /// gram.y `ConstraintAttr`: the deferrability entries of a column's
+    /// constraint list (`ColConstraint: ConstraintAttr`).
+    #[derive(Debug)]
+    pub enum ColumnConstraintAttr {
+        #[tok(NOT, DEFERRABLE)]
+        NotDeferrable,
+        #[tok(DEFERRABLE)]
+        Deferrable,
+        #[tok(INITIALLY, DEFERRED)]
+        InitiallyDeferred,
+        #[tok(INITIALLY, IMMEDIATE)]
+        InitiallyImmediate,
+    }
 }
 
-/// Parenthesized referenced-column list on a `REFERENCES` clause.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct ReferencedColumnList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec1<'input, literal::AliasName<'input>>,
-);
-
-/// REFERENCES constraint:
-/// `REFERENCES table [(col, ...)] [MATCH ...] [ON DELETE|UPDATE ...]* [DEFERRABLE | NOT DEFERRABLE] [INITIALLY ...]`
-#[derive(recursa::Node, Debug)]
-pub struct ReferencesConstraint<'input> {
-    #[tok(REFERENCES, this)]
-    pub table: crate::ast::shared::names::QualifiedName<'input>,
-    pub columns: Option<ReferencedColumnList<'input>>,
-    pub match_clause: Option<MatchClause>,
-    pub actions: recursa::ArenaVec<'input, OnAction<'input>>,
+recursa::ast_node! {
+    /// `ON DELETE ...` or `ON UPDATE ...` trailing action on a REFERENCES
+    /// constraint. Modeled as an enum so both orders of the two clauses
+    /// are accepted via a [`Vec`]`<`[`OnAction`]`>`.
+    ///
+    /// Variant ordering: both start with `ON`; they diverge at the next keyword.
+    #[derive(Debug)]
+    pub enum OnAction {
+        OnDelete(OnDeleteAction),
+        OnUpdate(OnUpdateAction),
+    }
 }
 
-/// `CHECK (expr) [NO INHERIT] [NOT VALID]`
-#[derive(recursa::Node, Debug)]
-pub struct CheckConstraint<'input> {
-    #[tok(CHECK, LPAREN, this, RPAREN)]
-    pub expr: crate::ast::shared::expr::Expr<'input>,
-    #[presence(NO, INHERIT)]
-    pub no_inherit: bool,
+recursa::ast_node! {
+    /// Parenthesized referenced-column list on a `REFERENCES` clause.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct ReferencedColumnList(
+        #[sep(COMMA)]
+        #[deref]
+        pub one_or_many!(literal::AliasName),
+    );
 }
 
-/// Table-level `CHECK (expr)` — gram.y `ConstraintElem: CHECK '(' a_expr ')'
-/// ConstraintAttributeSpec`, where the spec also carries `NO INHERIT` and
-/// `NOT VALID`.
-#[derive(recursa::Node, Debug)]
-pub struct TableCheck<'input> {
-    #[tok(CHECK, LPAREN, this, RPAREN)]
-    pub expr: crate::ast::shared::expr::Expr<'input>,
-    pub attrs: recursa::ArenaVec<'input, crate::ast::ddl::trigger::ConstraintAttributeElem>,
+recursa::ast_node! {
+    /// REFERENCES constraint:
+    /// `REFERENCES table [(col, ...)] [MATCH ...] [ON DELETE|UPDATE ...]* [DEFERRABLE | NOT DEFERRABLE] [INITIALLY ...]`
+    #[derive(Debug)]
+    pub struct ReferencesConstraint {
+        #[tok(REFERENCES, this)]
+        pub table: crate::ast::shared::names::QualifiedName,
+        pub columns: Option<ReferencedColumnList>,
+        pub match_clause: Option<MatchClause>,
+        pub actions: zero_or_many!(OnAction),
+    }
 }
 
-/// `GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY` modifier.
-///
-/// Variant ordering: both start with a distinct keyword after `GENERATED`
-/// (`ALWAYS` vs `BY`), so order is cosmetic.
-#[derive(recursa::Node, Debug)]
-pub enum GeneratedIdentityMode {
-    #[tok(ALWAYS)]
-    Always,
-    #[tok(BY, DEFAULT)]
-    ByDefault,
+recursa::ast_node! {
+    /// `CHECK (expr) [NO INHERIT] [NOT VALID]`
+    #[derive(Debug)]
+    pub struct CheckConstraint {
+        #[tok(CHECK, LPAREN, this, RPAREN)]
+        pub expr: crate::ast::shared::expr::Expr,
+        #[presence(NO, INHERIT)]
+        pub no_inherit: bool,
+    }
 }
 
-/// GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY column constraint, with
-/// optional `(sequence_option ...)` parenthesized list (e.g. `START WITH 44`).
-#[derive(recursa::Node, Debug)]
-pub struct GeneratedIdentityConstraint<'input> {
-    #[tok(GENERATED, this)]
-    pub mode: GeneratedIdentityMode,
-    pub identity: AsIdentity,
-    pub seq_options: Option<IdentitySeqOptionList<'input>>,
+recursa::ast_node! {
+    /// Table-level `CHECK (expr)` — gram.y `ConstraintElem: CHECK '(' a_expr ')'
+    /// ConstraintAttributeSpec`, where the spec also carries `NO INHERIT` and
+    /// `NOT VALID`.
+    #[derive(Debug)]
+    pub struct TableCheck {
+        #[tok(CHECK, LPAREN, this, RPAREN)]
+        pub expr: crate::ast::shared::expr::Expr,
+        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+    }
 }
 
-/// Parenthesized sequence-option list on `GENERATED ... AS IDENTITY (...)`.
-///
-/// `SeqOptList` is space-separated, so the parentheses have to surround the
-/// whole list; a field-level attachment would demand a fresh pair per option
-/// (`(START WITH 44) (INCREMENT BY 2)`).
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct IdentitySeqOptionList<'input>(
-    #[deref] pub recursa::ArenaVec1<'input, IdentitySeqOption<'input>>,
-);
-
-/// Required `AS IDENTITY` marker after the generation mode.
-#[derive(recursa::Node, Debug)]
-pub enum AsIdentity {
-    #[tok(AS, IDENTITY)]
-    Value,
+recursa::ast_node! {
+    /// `GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY` modifier.
+    ///
+    /// Variant ordering: both start with a distinct keyword after `GENERATED`
+    /// (`ALWAYS` vs `BY`), so order is cosmetic.
+    #[derive(Debug)]
+    pub enum GeneratedIdentityMode {
+        #[tok(ALWAYS)]
+        Always,
+        #[tok(BY, DEFAULT)]
+        ByDefault,
+    }
 }
 
-/// One option inside an `IDENTITY ( ... )` sequence option list.
-///
-/// Variant ordering: longer multi-word forms first so longest-match-wins
-/// picks them.
-#[derive(recursa::Node, Debug)]
-pub enum IdentitySeqOption<'input> {
-    StartWith(SeqOptStartWith<'input>),
-    IncrementBy(SeqOptIncrementBy<'input>),
-    MinValue(SeqOptMinValue<'input>),
-    #[tok(NO, MINVALUE)]
-    NoMinValue,
-    MaxValue(SeqOptMaxValue<'input>),
-    #[tok(NO, MAXVALUE)]
-    NoMaxValue,
-    Cache(SeqOptCache<'input>),
-    #[tok(CYCLE)]
-    Cycle,
-    #[tok(NO, CYCLE)]
-    NoCycle,
+recursa::ast_node! {
+    /// GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY column constraint, with
+    /// optional `(sequence_option ...)` parenthesized list (e.g. `START WITH 44`).
+    #[derive(Debug)]
+    pub struct GeneratedIdentityConstraint {
+        #[tok(GENERATED, this)]
+        pub mode: GeneratedIdentityMode,
+        pub identity: AsIdentity,
+        pub seq_options: Option<IdentitySeqOptionList>,
+    }
 }
 
-#[derive(recursa::Node, Debug)]
-pub struct SeqOptStartWith<'input> {
-    #[tok(START, optional(WITH), this)]
-    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
+recursa::ast_node! {
+    /// Parenthesized sequence-option list on `GENERATED ... AS IDENTITY (...)`.
+    ///
+    /// `SeqOptList` is space-separated, so the parentheses have to surround the
+    /// whole list; a field-level attachment would demand a fresh pair per option
+    /// (`(START WITH 44) (INCREMENT BY 2)`).
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct IdentitySeqOptionList(#[deref] pub one_or_many!(IdentitySeqOption));
 }
 
-#[derive(recursa::Node, Debug)]
-pub struct SeqOptIncrementBy<'input> {
-    #[tok(INCREMENT, optional(BY), this)]
-    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
+recursa::ast_node! {
+    /// Required `AS IDENTITY` marker after the generation mode.
+    #[derive(Debug)]
+    pub enum AsIdentity {
+        #[tok(AS, IDENTITY)]
+        Value,
+    }
 }
 
-#[derive(recursa::Node, Debug)]
-pub struct SeqOptMinValue<'input> {
-    #[tok(MINVALUE, this)]
-    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
+recursa::ast_node! {
+    /// One option inside an `IDENTITY ( ... )` sequence option list.
+    ///
+    /// Variant ordering: longer multi-word forms first so longest-match-wins
+    /// picks them.
+    #[derive(Debug)]
+    pub enum IdentitySeqOption {
+        StartWith(SeqOptStartWith),
+        IncrementBy(SeqOptIncrementBy),
+        MinValue(SeqOptMinValue),
+        #[tok(NO, MINVALUE)]
+        NoMinValue,
+        MaxValue(SeqOptMaxValue),
+        #[tok(NO, MAXVALUE)]
+        NoMaxValue,
+        Cache(SeqOptCache),
+        #[tok(CYCLE)]
+        Cycle,
+        #[tok(NO, CYCLE)]
+        NoCycle,
+    }
 }
 
-#[derive(recursa::Node, Debug)]
-pub struct SeqOptMaxValue<'input> {
-    #[tok(MAXVALUE, this)]
-    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
+recursa::ast_node! {
+    #[derive(Debug)]
+    pub struct SeqOptStartWith {
+        #[tok(START, optional(WITH), this)]
+        pub value: crate::ast::shared::numbers::NumericOnly,
+    }
 }
 
-#[derive(recursa::Node, Debug)]
-pub struct SeqOptCache<'input> {
-    #[tok(CACHE, this)]
-    pub value: crate::ast::shared::numbers::NumericOnly<'input>,
+recursa::ast_node! {
+    #[derive(Debug)]
+    pub struct SeqOptIncrementBy {
+        #[tok(INCREMENT, optional(BY), this)]
+        pub value: crate::ast::shared::numbers::NumericOnly,
+    }
 }
 
-/// `GENERATED {ALWAYS | BY DEFAULT} AS {IDENTITY [(seq options)] | (expr)
-/// STORED}` — gram.y `ColConstraintElem`'s two `GENERATED generated_when AS`
-/// forms with their shared prefix factored, so the parser shifts `AS` before
-/// choosing.
-#[derive(recursa::Node, Debug)]
-pub struct GeneratedConstraint<'input> {
-    #[tok(GENERATED, this)]
-    pub mode: GeneratedIdentityMode,
-    pub body: GeneratedBody<'input>,
+recursa::ast_node! {
+    #[derive(Debug)]
+    pub struct SeqOptMinValue {
+        #[tok(MINVALUE, this)]
+        pub value: crate::ast::shared::numbers::NumericOnly,
+    }
 }
 
-/// What follows `GENERATED generated_when`.
-///
-/// Variant ordering: both start with `AS`; `IDENTITY` or `(` decides.
-#[derive(recursa::Node, Debug)]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "keep the public parser AST variants inline and source-compatible"
-)]
-pub enum GeneratedBody<'input> {
-    Identity(GeneratedIdentityTail<'input>),
-    Stored(GeneratedStoredTail<'input>),
+recursa::ast_node! {
+    #[derive(Debug)]
+    pub struct SeqOptMaxValue {
+        #[tok(MAXVALUE, this)]
+        pub value: crate::ast::shared::numbers::NumericOnly,
+    }
 }
 
-/// `AS IDENTITY [(seq options)]`.
-#[derive(recursa::Node, Debug)]
-pub struct GeneratedIdentityTail<'input> {
-    pub identity: AsIdentity,
-    pub seq_options: Option<IdentitySeqOptionList<'input>>,
+recursa::ast_node! {
+    #[derive(Debug)]
+    pub struct SeqOptCache {
+        #[tok(CACHE, this)]
+        pub value: crate::ast::shared::numbers::NumericOnly,
+    }
 }
 
-/// `AS (expr) STORED`.
-#[derive(recursa::Node, Debug)]
-pub struct GeneratedStoredTail<'input> {
-    #[tok(AS, LPAREN, this, RPAREN, STORED)]
-    pub expr: crate::ast::shared::expr::Expr<'input>,
+recursa::ast_node! {
+    /// `GENERATED {ALWAYS | BY DEFAULT} AS {IDENTITY [(seq options)] | (expr)
+    /// STORED}` — gram.y `ColConstraintElem`'s two `GENERATED generated_when AS`
+    /// forms with their shared prefix factored, so the parser shifts `AS` before
+    /// choosing.
+    #[derive(Debug)]
+    pub struct GeneratedConstraint {
+        #[tok(GENERATED, this)]
+        pub mode: GeneratedIdentityMode,
+        pub body: GeneratedBody,
+    }
 }
 
-/// `COMPRESSION method` column clause. Sets the compression method
-/// (e.g. `pglz`, `lz4`) for a toastable column.
-#[derive(recursa::Node, Debug)]
-pub struct CompressionConstraint<'input> {
-    #[tok(COMPRESSION, this)]
-    pub method: literal::Ident<'input>,
+recursa::ast_node! {
+    /// What follows `GENERATED generated_when`.
+    ///
+    /// Variant ordering: both start with `AS`; `IDENTITY` or `(` decides.
+    #[derive(Debug)]
+    #[allow(
+        clippy::large_enum_variant,
+        reason = "keep the public parser AST variants inline and source-compatible"
+    )]
+    pub enum GeneratedBody {
+        Identity(GeneratedIdentityTail),
+        Stored(GeneratedStoredTail),
+    }
 }
 
-/// DEFAULT expr column constraint.
-#[derive(recursa::Node, Debug)]
-pub struct DefaultConstraint<'input> {
-    /// gram.y `ColConstraintElem: DEFAULT b_expr`: the restricted
-    /// expression grammar, which has no `AND`, `OR`, `LIKE`, `BETWEEN`,
-    /// `IN`, `IS NULL` or subquery extender, so `DEFAULT 1 NOT NULL` ends
-    /// the default at `NOT`. The exclusions are those of `PositionInner`.
-    #[parse(pratt(exclude(
+recursa::ast_node! {
+    /// `AS IDENTITY [(seq options)]`.
+    #[derive(Debug)]
+    pub struct GeneratedIdentityTail {
+        pub identity: AsIdentity,
+        pub seq_options: Option<IdentitySeqOptionList>,
+    }
+}
+
+recursa::ast_node! {
+    /// `AS (expr) STORED`.
+    #[derive(Debug)]
+    pub struct GeneratedStoredTail {
+        #[tok(AS, LPAREN, this, RPAREN, STORED)]
+        pub expr: crate::ast::shared::expr::Expr,
+    }
+}
+
+recursa::ast_node! {
+    /// `COMPRESSION method` column clause. Sets the compression method
+    /// (e.g. `pglz`, `lz4`) for a toastable column.
+    #[derive(Debug)]
+    pub struct CompressionConstraint {
+        #[tok(COMPRESSION, this)]
+        pub method: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// DEFAULT expr column constraint.
+    #[derive(Debug)]
+    pub struct DefaultConstraint {
+        /// gram.y `ColConstraintElem: DEFAULT b_expr`: the restricted
+        /// expression grammar, which has no `AND`, `OR`, `LIKE`, `BETWEEN`,
+        /// `IN`, `IS NULL` or subquery extender, so `DEFAULT 1 NOT NULL` ends
+        /// the default at `NOT`. The exclusions are those of `PositionInner`.
+        #[parse(pratt(exclude(
+            Default,
+            Collate,
+            QuantifiedComparisonCmp,
+            QuantifiedComparisonLike,
+            QuantifiedComparisonOp,
+            QuantifiedComparisonAdd,
+            QuantifiedComparisonMul,
+            QuantifiedComparisonPow,
+            IsJson,
+            IsNormalized,
+            BoolTest,
+            Notnull,
+            Isnull,
+            AtLocal,
+            AtTimeZone,
+            NotInExpr,
+            NotIlike,
+            NotSimilarTo,
+            NotLike,
+            SimilarTo,
+            Ilike,
+            Like,
+            Overlaps,
+            InExpr,
+            NotBetweenExpr,
+            BetweenExpr,
+            Or,
+            And
+        )))]
+        #[tok(DEFAULT, this)]
+        pub expr: crate::ast::shared::expr::Expr,
+    }
+}
+
+recursa::ast_node! {
+    /// Column constraint kind (without the optional `CONSTRAINT name` prefix).
+    ///
+    /// Variant ordering for longest-match-wins:
+    /// - GeneratedIdentity (`GENERATED`) first (unique keyword)
+    /// - PrimaryKey (`PRIMARY KEY`) before others (unique keyword)
+    /// - NotNull (`NOT NULL`) before others
+    /// - References, Unique, Default, Check all start with distinct keywords
+    #[derive(Debug)]
+    pub enum ColumnConstraintKind {
+        Generated(GeneratedConstraint),
+        PrimaryKey(PrimaryKeyConstraint),
+        #[tok(NOT, NULL)]
+        NotNull,
+        #[tok(NULL)]
+        /// Bare `NULL` — redundant (columns are nullable by default) but
+        /// syntactically accepted.
+        Null,
+        /// gram.y `ColConstraint: ConstraintAttr`: `[NOT] DEFERRABLE` and
+        /// `INITIALLY {DEFERRED | IMMEDIATE}` are entries of the column's
+        /// constraint list in their own right, not a tail of the constraint
+        /// before them, so `UNIQUE NOT DEFERRABLE NOT NULL` needs no
+        /// two-token decision after `UNIQUE`.
+        Attr(ColumnConstraintAttr),
+        Unique(UniqueConstraint),
+        References(ReferencesConstraint),
+        Default(DefaultConstraint),
+        Check(CheckConstraint),
+        Compression(CompressionConstraint),
+        Storage(StorageConstraint),
+    }
+}
+
+recursa::ast_node! {
+    /// Column STORAGE mode: `STORAGE { PLAIN | EXTERNAL | EXTENDED | MAIN | DEFAULT }`.
+    #[derive(Debug)]
+    pub enum ColumnStorageMode {
+        #[tok(PLAIN)]
+        Plain,
+        #[tok(EXTERNAL)]
+        External,
+        #[tok(EXTENDED)]
+        Extended,
+        #[tok(MAIN)]
+        Main,
+        #[tok(DEFAULT)]
         Default,
-        Collate,
-        QuantifiedComparisonCmp,
-        QuantifiedComparisonLike,
-        QuantifiedComparisonOp,
-        QuantifiedComparisonAdd,
-        QuantifiedComparisonMul,
-        QuantifiedComparisonPow,
-        IsJson,
-        IsNormalized,
-        BoolTest,
-        Notnull,
-        Isnull,
-        AtLocal,
-        AtTimeZone,
-        NotInExpr,
-        NotIlike,
-        NotSimilarTo,
-        NotLike,
-        SimilarTo,
-        Ilike,
-        Like,
-        Overlaps,
-        InExpr,
-        NotBetweenExpr,
-        BetweenExpr,
-        Or,
-        And
-    )))]
-    #[tok(DEFAULT, this)]
-    pub expr: crate::ast::shared::expr::Expr<'input>,
+    }
 }
 
-/// Column constraint kind (without the optional `CONSTRAINT name` prefix).
-///
-/// Variant ordering for longest-match-wins:
-/// - GeneratedIdentity (`GENERATED`) first (unique keyword)
-/// - PrimaryKey (`PRIMARY KEY`) before others (unique keyword)
-/// - NotNull (`NOT NULL`) before others
-/// - References, Unique, Default, Check all start with distinct keywords
-#[derive(recursa::Node, Debug)]
-pub enum ColumnConstraintKind<'input> {
-    Generated(GeneratedConstraint<'input>),
-    PrimaryKey(PrimaryKeyConstraint<'input>),
-    #[tok(NOT, NULL)]
-    NotNull,
-    #[tok(NULL)]
-    /// Bare `NULL` — redundant (columns are nullable by default) but
-    /// syntactically accepted.
-    Null,
-    /// gram.y `ColConstraint: ConstraintAttr`: `[NOT] DEFERRABLE` and
-    /// `INITIALLY {DEFERRED | IMMEDIATE}` are entries of the column's
-    /// constraint list in their own right, not a tail of the constraint
-    /// before them, so `UNIQUE NOT DEFERRABLE NOT NULL` needs no
-    /// two-token decision after `UNIQUE`.
-    Attr(ColumnConstraintAttr),
-    Unique(UniqueConstraint<'input>),
-    References(ReferencesConstraint<'input>),
-    Default(DefaultConstraint<'input>),
-    Check(CheckConstraint<'input>),
-    Compression(CompressionConstraint<'input>),
-    Storage(StorageConstraint),
+recursa::ast_node! {
+    /// `STORAGE mode` column-level storage specifier (used inline in CREATE
+    /// TABLE column definitions).
+    #[derive(Debug)]
+    pub struct StorageConstraint {
+        #[tok(STORAGE, this)]
+        pub mode: ColumnStorageMode,
+    }
 }
 
-/// Column STORAGE mode: `STORAGE { PLAIN | EXTERNAL | EXTENDED | MAIN | DEFAULT }`.
-#[derive(recursa::Node, Debug)]
-pub enum ColumnStorageMode {
-    #[tok(PLAIN)]
-    Plain,
-    #[tok(EXTERNAL)]
-    External,
-    #[tok(EXTENDED)]
-    Extended,
-    #[tok(MAIN)]
-    Main,
-    #[tok(DEFAULT)]
-    Default,
+recursa::ast_node! {
+    /// Optional `CONSTRAINT name` prefix shared by column-level and
+    /// table-level constraints.
+    #[derive(Debug)]
+    pub struct ConstraintNamePrefix {
+        #[tok(CONSTRAINT, this)]
+        pub name: literal::Ident,
+    }
 }
 
-/// `STORAGE mode` column-level storage specifier (used inline in CREATE
-/// TABLE column definitions).
-#[derive(recursa::Node, Debug)]
-pub struct StorageConstraint {
-    #[tok(STORAGE, this)]
-    pub mode: ColumnStorageMode,
+recursa::ast_node! {
+    /// A column constraint with its optional `CONSTRAINT name` prefix.
+    #[derive(Debug)]
+    pub struct ColumnConstraint {
+        pub name: Option<ConstraintNamePrefix>,
+        pub kind: ColumnConstraintKind,
+    }
 }
 
-/// Optional `CONSTRAINT name` prefix shared by column-level and
-/// table-level constraints.
-#[derive(recursa::Node, Debug)]
-pub struct ConstraintNamePrefix<'input> {
-    #[tok(CONSTRAINT, this)]
-    pub name: literal::Ident<'input>,
+recursa::ast_node! {
+    /// `COLLATE "name"` clause used after a column's type.
+    #[derive(Debug)]
+    pub struct CollateClause {
+        #[tok(COLLATE, this)]
+        pub name: literal::Ident,
+    }
 }
 
-/// A column constraint with its optional `CONSTRAINT name` prefix.
-#[derive(recursa::Node, Debug)]
-pub struct ColumnConstraint<'input> {
-    pub name: Option<ConstraintNamePrefix<'input>>,
-    pub kind: ColumnConstraintKind<'input>,
+recursa::ast_node! {
+    /// One entry in a column-level `OPTIONS (name 'value', ...)` clause —
+    /// Postgres' `generic_option_elem` (`generic_option_name generic_option_arg`).
+    ///
+    /// The name is a `ColLabel` (any identifier-or-keyword), and the argument is
+    /// a single-quoted string constant (`Sconst`).
+    #[derive(Debug)]
+    pub struct GenericOption {
+        pub name: literal::AliasName,
+        pub value: crate::ast::utility::copy::CopySconst,
+    }
 }
 
-/// `COLLATE "name"` clause used after a column's type.
-#[derive(recursa::Node, Debug)]
-pub struct CollateClause<'input> {
-    #[tok(COLLATE, this)]
-    pub name: literal::Ident<'input>,
+recursa::ast_node! {
+    /// Postgres' `create_generic_options`: `OPTIONS (generic_option_list)`.
+    /// Used by CREATE FOREIGN DATA WRAPPER, CREATE SERVER, CREATE FOREIGN TABLE,
+    /// CREATE USER MAPPING, IMPORT FOREIGN SCHEMA, and column-level options on
+    /// foreign-table columns.
+    #[derive(Debug)]
+    #[tok(OPTIONS, LPAREN, this, RPAREN)]
+    pub struct CreateGenericOptions {
+        #[sep(COMMA)]
+        pub list: one_or_many!(GenericOption),
+    }
 }
 
-/// One entry in a column-level `OPTIONS (name 'value', ...)` clause —
-/// Postgres' `generic_option_elem` (`generic_option_name generic_option_arg`).
-///
-/// The name is a `ColLabel` (any identifier-or-keyword), and the argument is
-/// a single-quoted string constant (`Sconst`).
-#[derive(recursa::Node, Debug)]
-pub struct GenericOption<'input> {
-    pub name: literal::AliasName<'input>,
-    pub value: crate::ast::utility::copy::CopySconst<'input>,
-}
-
-/// Postgres' `create_generic_options`: `OPTIONS (generic_option_list)`.
-/// Used by CREATE FOREIGN DATA WRAPPER, CREATE SERVER, CREATE FOREIGN TABLE,
-/// CREATE USER MAPPING, IMPORT FOREIGN SCHEMA, and column-level options on
-/// foreign-table columns.
-#[derive(recursa::Node, Debug)]
-#[tok(OPTIONS, LPAREN, this, RPAREN)]
-pub struct CreateGenericOptions<'input> {
-    #[sep(COMMA)]
-    pub list: recursa::ArenaVec1<'input, GenericOption<'input>>,
-}
-
-/// A column definition: `name type [COLLATE "..."] [OPTIONS (...)] [constraints...]`.
-///
-/// The `column_options` slot models Postgres' `create_generic_options` on
-/// `columnDef` — used in CREATE FOREIGN TABLE column lists.
-#[derive(recursa::Node, Debug)]
-pub struct ColumnDef<'input> {
-    pub name: crate::tokens::ColId<'input>,
-    pub type_name: crate::ast::shared::expr::CastType<'input>,
-    pub collate: Option<CollateClause<'input>>,
-    pub column_options: Option<CreateGenericOptions<'input>>,
-    pub constraints: recursa::ArenaVec<'input, ColumnConstraint<'input>>,
+recursa::ast_node! {
+    /// A column definition: `name type [COLLATE "..."] [OPTIONS (...)] [constraints...]`.
+    ///
+    /// The `column_options` slot models Postgres' `create_generic_options` on
+    /// `columnDef` — used in CREATE FOREIGN TABLE column lists.
+    #[derive(Debug)]
+    pub struct ColumnDef {
+        pub name: crate::tokens::ColId,
+        pub type_name: crate::ast::shared::expr::CastType,
+        pub collate: Option<CollateClause>,
+        pub column_options: Option<CreateGenericOptions>,
+        pub constraints: zero_or_many!(ColumnConstraint),
+    }
 }
 
 impl<'input> ColumnDef<'input> {
@@ -491,314 +575,366 @@ impl<'input> ColumnDef<'input> {
 
 // --- Table-level constraints ---
 
-/// `USING INDEX name` — gram.y `ExistingIndex`. The named index must
-/// already exist on the table; used by `PRIMARY KEY USING INDEX name` and
-/// `UNIQUE USING INDEX name` table constraint forms.
-#[derive(recursa::Node, Debug)]
-pub struct ExistingIndex<'input> {
-    #[tok(USING, INDEX, this)]
-    pub name: literal::Ident<'input>,
+recursa::ast_node! {
+    /// `USING INDEX name` — gram.y `ExistingIndex`. The named index must
+    /// already exist on the table; used by `PRIMARY KEY USING INDEX name` and
+    /// `UNIQUE USING INDEX name` table constraint forms.
+    #[derive(Debug)]
+    pub struct ExistingIndex {
+        #[tok(USING, INDEX, this)]
+        pub name: literal::Ident,
+    }
 }
 
-/// Body of a table-level `PRIMARY KEY` / `UNIQUE` constraint — either the
-/// `(cols) [INCLUDE (…)]` column-list form or the `USING INDEX name`
-/// existing-index form (gram.y `ConstraintElem` `PRIMARY KEY (cols) …`
-/// vs `PRIMARY KEY ExistingIndex …`, and the analogous `UNIQUE` pair).
-///
-/// Variant ordering: `UsingIndex` first because its first token (`USING`)
-/// is disjoint from `(`; declaration order is then for clarity.
-#[derive(recursa::Node, Debug)]
-pub enum IndexedConstraintBody<'input> {
-    /// `USING INDEX name` — bind constraint to an existing index.
-    UsingIndex(ExistingIndex<'input>),
-    /// `(cols) [INCLUDE (…)]` — declare the constraint on columns.
-    Columns(IndexedConstraintColumns<'input>),
+recursa::ast_node! {
+    /// Body of a table-level `PRIMARY KEY` / `UNIQUE` constraint — either the
+    /// `(cols) [INCLUDE (…)]` column-list form or the `USING INDEX name`
+    /// existing-index form (gram.y `ConstraintElem` `PRIMARY KEY (cols) …`
+    /// vs `PRIMARY KEY ExistingIndex …`, and the analogous `UNIQUE` pair).
+    ///
+    /// Variant ordering: `UsingIndex` first because its first token (`USING`)
+    /// is disjoint from `(`; declaration order is then for clarity.
+    #[derive(Debug)]
+    pub enum IndexedConstraintBody {
+        /// `USING INDEX name` — bind constraint to an existing index.
+        UsingIndex(ExistingIndex),
+        /// `(cols) [INCLUDE (…)]` — declare the constraint on columns.
+        Columns(IndexedConstraintColumns),
+    }
 }
 
-/// Parenthesized column list in a PRIMARY KEY or UNIQUE constraint.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct IndexedConstraintColumnList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec<'input, crate::tokens::ColId<'input>>,
-);
-
-/// `(cols) [INCLUDE (…)] [WITH (...)] [USING INDEX TABLESPACE name]` — the
-/// column-list branch of a PK/UNIQUE constraint body. Per gram.y
-/// `ConstraintElem`'s `UNIQUE … '(' columnList ')' opt_c_include
-/// opt_definition OptConsTableSpace ConstraintAttributeSpec` rule.
-#[derive(recursa::Node, Debug)]
-pub struct IndexedConstraintColumns<'input> {
-    pub columns: IndexedConstraintColumnList<'input>,
-    pub include: Option<IncludeColumns<'input>>,
-    /// `WITH (storage_param = value, ...)` — gram.y's `opt_definition`.
-    pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
-    /// `USING INDEX TABLESPACE name` — gram.y's `OptConsTableSpace`.
-    pub index_tablespace: Option<UsingIndexTablespace<'input>>,
+recursa::ast_node! {
+    /// Parenthesized column list in a PRIMARY KEY or UNIQUE constraint.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct IndexedConstraintColumnList(
+        #[sep(COMMA)]
+        #[deref]
+        pub zero_or_many!(crate::tokens::ColId),
+    );
 }
 
-/// `PRIMARY KEY {(cols) [INCLUDE (…)] | USING INDEX name}` — table-level
-/// constraint. Per gram.y `ConstraintElem`:
-/// `PRIMARY KEY '(' columnList ')' opt_c_include … ConstraintAttributeSpec`
-/// or `PRIMARY KEY ExistingIndex ConstraintAttributeSpec`.
-#[derive(recursa::Node, Debug)]
-pub struct TablePrimaryKey<'input> {
-    #[tok(PRIMARY, KEY, this)]
-    pub body: IndexedConstraintBody<'input>,
-    /// gram.y `ConstraintAttributeSpec`.
-    pub attrs: recursa::ArenaVec<'input, crate::ast::ddl::trigger::ConstraintAttributeElem>,
+recursa::ast_node! {
+    /// `(cols) [INCLUDE (…)] [WITH (...)] [USING INDEX TABLESPACE name]` — the
+    /// column-list branch of a PK/UNIQUE constraint body. Per gram.y
+    /// `ConstraintElem`'s `UNIQUE … '(' columnList ')' opt_c_include
+    /// opt_definition OptConsTableSpace ConstraintAttributeSpec` rule.
+    #[derive(Debug)]
+    pub struct IndexedConstraintColumns {
+        pub columns: IndexedConstraintColumnList,
+        pub include: Option<IncludeColumns>,
+        /// `WITH (storage_param = value, ...)` — gram.y's `opt_definition`.
+        pub with_storage: Option<crate::ast::ddl::index::WithStorage>,
+        /// `USING INDEX TABLESPACE name` — gram.y's `OptConsTableSpace`.
+        pub index_tablespace: Option<UsingIndexTablespace>,
+    }
 }
 
-/// `INCLUDE (col, ...)` covering-index clause used on PRIMARY KEY / UNIQUE
-/// table constraints and on CREATE INDEX.
-#[derive(recursa::Node, Debug)]
-#[tok(INCLUDE, LPAREN, this, RPAREN)]
-pub struct IncludeColumns<'input> {
-    #[sep(COMMA)]
-    pub columns: recursa::ArenaVec<'input, crate::tokens::ColId<'input>>,
+recursa::ast_node! {
+    /// `PRIMARY KEY {(cols) [INCLUDE (…)] | USING INDEX name}` — table-level
+    /// constraint. Per gram.y `ConstraintElem`:
+    /// `PRIMARY KEY '(' columnList ')' opt_c_include … ConstraintAttributeSpec`
+    /// or `PRIMARY KEY ExistingIndex ConstraintAttributeSpec`.
+    #[derive(Debug)]
+    pub struct TablePrimaryKey {
+        #[tok(PRIMARY, KEY, this)]
+        pub body: IndexedConstraintBody,
+        /// gram.y `ConstraintAttributeSpec`.
+        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+    }
 }
 
-/// `UNIQUE {(cols) [INCLUDE (…)] | USING INDEX name}` — table-level
-/// constraint. Per gram.y `ConstraintElem`:
-/// `UNIQUE … '(' columnList ')' opt_c_include … ConstraintAttributeSpec`
-/// or `UNIQUE ExistingIndex ConstraintAttributeSpec`. The `USING INDEX`
-/// branch has no `NULLS [NOT] DISTINCT` qualifier (PG infers it from the
-/// existing index definition).
-#[derive(recursa::Node, Debug)]
-#[tok(UNIQUE, this)]
-pub struct TableUnique<'input> {
-    /// `NULLS [NOT] DISTINCT` qualifier — only meaningful for the
-    /// `(cols)` branch but accepted before either body for parsing
-    /// simplicity. If present alongside `USING INDEX`, PG rejects at
-    /// semantic time; the diff oracle handles that case.
-    pub nulls: Option<NullsDistinctQualifier>,
-    pub body: IndexedConstraintBody<'input>,
-    /// gram.y `ConstraintAttributeSpec`.
-    pub attrs: recursa::ArenaVec<'input, crate::ast::ddl::trigger::ConstraintAttributeElem>,
+recursa::ast_node! {
+    /// `INCLUDE (col, ...)` covering-index clause used on PRIMARY KEY / UNIQUE
+    /// table constraints and on CREATE INDEX.
+    #[derive(Debug)]
+    #[tok(INCLUDE, LPAREN, this, RPAREN)]
+    pub struct IncludeColumns {
+        #[sep(COMMA)]
+        pub columns: zero_or_many!(crate::tokens::ColId),
+    }
 }
 
-/// Parenthesized local-column list in a table-level foreign-key constraint.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct ForeignKeyColumnList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec<'input, crate::tokens::ColId<'input>>,
-);
-
-/// `FOREIGN KEY (col, ...) REFERENCES table [(col, ...)] [MATCH ...] [ON ...] [DEFERRABLE ...] [INITIALLY ...]`
-#[derive(recursa::Node, Debug)]
-#[tok(FOREIGN, KEY, this)]
-pub struct TableForeignKey<'input> {
-    pub columns: ForeignKeyColumnList<'input>,
-    pub references: ReferencesConstraint<'input>,
-    /// gram.y `ConstraintAttributeSpec` after `key_actions`.
-    pub attrs: recursa::ArenaVec<'input, crate::ast::ddl::trigger::ConstraintAttributeElem>,
+recursa::ast_node! {
+    /// `UNIQUE {(cols) [INCLUDE (…)] | USING INDEX name}` — table-level
+    /// constraint. Per gram.y `ConstraintElem`:
+    /// `UNIQUE … '(' columnList ')' opt_c_include … ConstraintAttributeSpec`
+    /// or `UNIQUE ExistingIndex ConstraintAttributeSpec`. The `USING INDEX`
+    /// branch has no `NULLS [NOT] DISTINCT` qualifier (PG infers it from the
+    /// existing index definition).
+    #[derive(Debug)]
+    #[tok(UNIQUE, this)]
+    pub struct TableUnique {
+        /// `NULLS [NOT] DISTINCT` qualifier — only meaningful for the
+        /// `(cols)` branch but accepted before either body for parsing
+        /// simplicity. If present alongside `USING INDEX`, PG rejects at
+        /// semantic time; the diff oracle handles that case.
+        pub nulls: Option<NullsDistinctQualifier>,
+        pub body: IndexedConstraintBody,
+        /// gram.y `ConstraintAttributeSpec`.
+        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+    }
 }
 
-/// One entry in an EXCLUDE constraint's exclusion list: `index_elem WITH any_operator`.
-///
-/// Postgres' `ExclusionConstraintElem`. The operator may also appear wrapped
-/// in `OPERATOR(...)` for the benefit of `ruleutils.c`; we accept both forms
-/// via [`ExclusionOperator`].
-#[derive(recursa::Node, Debug)]
-pub struct ExclusionConstraintElem<'input> {
-    pub elem: crate::ast::ddl::index::IndexElem<'input>,
-    /// gram.y writes a plain `WITH` here, so PostgreSQL rejects an operator
-    /// qualified by a schema named `time` or `ordinality`; pg-sql accepts
-    /// it, as it did before the marker.
-    pub with: crate::ast::shared::flags::AnyWith,
-    pub op: ExclusionOperator<'input>,
+recursa::ast_node! {
+    /// Parenthesized local-column list in a table-level foreign-key constraint.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct ForeignKeyColumnList(
+        #[sep(COMMA)]
+        #[deref]
+        pub zero_or_many!(crate::tokens::ColId),
+    );
 }
 
-/// The operator slot of an exclusion constraint element.
-///
-/// Two forms per `gram.y::ExclusionConstraintElem`:
-/// - `any_operator`                — bare operator name.
-/// - `OPERATOR ( any_operator )`   — same operator decorated with `OPERATOR(...)`.
-///
-/// Variant ordering: `Decorated` starts with the `OPERATOR` keyword; `Plain`
-/// starts with an operator-name token. Their first sets are disjoint.
-#[derive(recursa::Node, Debug)]
-pub enum ExclusionOperator<'input> {
-    Decorated(ExclusionOperatorDecorated<'input>),
-    Plain(crate::ast::shared::names::QualifiedOperatorName<'input>),
+recursa::ast_node! {
+    /// `FOREIGN KEY (col, ...) REFERENCES table [(col, ...)] [MATCH ...] [ON ...] [DEFERRABLE ...] [INITIALLY ...]`
+    #[derive(Debug)]
+    #[tok(FOREIGN, KEY, this)]
+    pub struct TableForeignKey {
+        pub columns: ForeignKeyColumnList,
+        pub references: ReferencesConstraint,
+        /// gram.y `ConstraintAttributeSpec` after `key_actions`.
+        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+    }
 }
 
-/// `OPERATOR ( any_operator )` decorated form of an exclusion operator.
-#[derive(recursa::Node, Debug)]
-pub struct ExclusionOperatorDecorated<'input> {
-    #[tok(OPERATOR, LPAREN, this, RPAREN)]
-    pub name: crate::ast::shared::names::QualifiedOperatorName<'input>,
+recursa::ast_node! {
+    /// One entry in an EXCLUDE constraint's exclusion list: `index_elem WITH any_operator`.
+    ///
+    /// Postgres' `ExclusionConstraintElem`. The operator may also appear wrapped
+    /// in `OPERATOR(...)` for the benefit of `ruleutils.c`; we accept both forms
+    /// via [`ExclusionOperator`].
+    #[derive(Debug)]
+    pub struct ExclusionConstraintElem {
+        pub elem: crate::ast::ddl::index::IndexElem,
+        /// gram.y writes a plain `WITH` here, so PostgreSQL rejects an operator
+        /// qualified by a schema named `time` or `ordinality`; pg-sql accepts
+        /// it, as it did before the marker.
+        pub with: crate::ast::shared::flags::AnyWith,
+        pub op: ExclusionOperator,
+    }
 }
 
-/// `WHERE (predicate)` clause on an EXCLUDE constraint — Postgres'
-/// `OptWhereClause` in `gram.y`. The parens are mandatory (unlike the regular
-/// `WHERE expr` form used by SELECT).
-#[derive(recursa::Node, Debug)]
-pub struct ExclusionWhereClause<'input> {
-    #[tok(WHERE, LPAREN, this, RPAREN)]
-    pub expr: crate::ast::shared::expr::Expr<'input>,
+recursa::ast_node! {
+    /// The operator slot of an exclusion constraint element.
+    ///
+    /// Two forms per `gram.y::ExclusionConstraintElem`:
+    /// - `any_operator`                — bare operator name.
+    /// - `OPERATOR ( any_operator )`   — same operator decorated with `OPERATOR(...)`.
+    ///
+    /// Variant ordering: `Decorated` starts with the `OPERATOR` keyword; `Plain`
+    /// starts with an operator-name token. Their first sets are disjoint.
+    #[derive(Debug)]
+    pub enum ExclusionOperator {
+        Decorated(ExclusionOperatorDecorated),
+        Plain(crate::ast::shared::names::QualifiedOperatorName),
+    }
 }
 
-/// Parenthesized, non-empty list of exclusion-constraint elements.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct ExclusionConstraintList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec1<'input, ExclusionConstraintElem<'input>>,
-);
-
-/// `EXCLUDE [USING method] (index_elem WITH op [, ...]) [INCLUDE (...)]
-///         [WITH (storage_params)] [USING INDEX TABLESPACE name] [WHERE (expr)]
-///         [DEFERRABLE/INITIALLY ...]` table-level constraint.
-///
-/// Per `gram.y::ConstraintElem`:
-/// ```text
-/// EXCLUDE access_method_clause '(' ExclusionConstraintList ')'
-///     opt_c_include opt_definition OptConsTableSpace OptWhereClause
-///     ConstraintAttributeSpec
-/// ```
-#[derive(recursa::Node, Debug)]
-#[tok(EXCLUDE, this)]
-pub struct TableExclude<'input> {
-    /// `access_method_clause` — `USING method` is optional (defaults to gist).
-    pub using: Option<crate::ast::ddl::index::UsingMethod<'input>>,
-    pub exclusions: ExclusionConstraintList<'input>,
-    /// `INCLUDE (col, ...)` covering-index clause.
-    pub include: Option<IncludeColumns<'input>>,
-    /// `WITH (param = value, ...)` storage parameters (`opt_definition`).
-    pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
-    /// `USING INDEX TABLESPACE name` (`OptConsTableSpace`).
-    pub index_tablespace: Option<UsingIndexTablespace<'input>>,
-    /// `WHERE (expr)` partial-constraint predicate (parens mandatory).
-    pub where_clause: Option<ExclusionWhereClause<'input>>,
-    /// gram.y `ConstraintAttributeSpec`.
-    pub attrs: recursa::ArenaVec<'input, crate::ast::ddl::trigger::ConstraintAttributeElem>,
+recursa::ast_node! {
+    /// `OPERATOR ( any_operator )` decorated form of an exclusion operator.
+    #[derive(Debug)]
+    pub struct ExclusionOperatorDecorated {
+        #[tok(OPERATOR, LPAREN, this, RPAREN)]
+        pub name: crate::ast::shared::names::QualifiedOperatorName,
+    }
 }
 
-/// A table-level constraint kind.
-///
-/// Variant ordering: `PRIMARY KEY` (PRIMARY), `FOREIGN KEY` (FOREIGN),
-/// `UNIQUE`, `CHECK`, `EXCLUDE` — all start with distinct unique keywords
-/// so order is not strictly required for disambiguation.
-#[derive(recursa::Node, Debug)]
-pub enum TableConstraintKind<'input> {
-    PrimaryKey(TablePrimaryKey<'input>),
-    ForeignKey(TableForeignKey<'input>),
-    Unique(TableUnique<'input>),
-    Check(TableCheck<'input>),
-    Exclude(TableExclude<'input>),
+recursa::ast_node! {
+    /// `WHERE (predicate)` clause on an EXCLUDE constraint — Postgres'
+    /// `OptWhereClause` in `gram.y`. The parens are mandatory (unlike the regular
+    /// `WHERE expr` form used by SELECT).
+    #[derive(Debug)]
+    pub struct ExclusionWhereClause {
+        #[tok(WHERE, LPAREN, this, RPAREN)]
+        pub expr: crate::ast::shared::expr::Expr,
+    }
 }
 
-/// A table-level constraint with optional `CONSTRAINT name` prefix.
-#[derive(recursa::Node, Debug)]
-pub struct TableConstraint<'input> {
-    pub name: Option<ConstraintNamePrefix<'input>>,
-    pub kind: TableConstraintKind<'input>,
+recursa::ast_node! {
+    /// Parenthesized, non-empty list of exclusion-constraint elements.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct ExclusionConstraintList(
+        #[sep(COMMA)]
+        #[deref]
+        pub one_or_many!(ExclusionConstraintElem),
+    );
 }
 
-/// A single `INCLUDING` / `EXCLUDING` option on a `LIKE` source table clause.
-#[derive(recursa::Node, Debug)]
-pub enum LikeOptionKind {
-    #[tok(ALL)]
-    All,
-    #[tok(DEFAULTS)]
-    Defaults,
-    #[tok(CONSTRAINTS)]
-    Constraints,
-    #[tok(INDEXES)]
-    Indexes,
-    #[tok(STORAGE)]
-    Storage,
-    #[tok(COMMENTS)]
-    Comments,
-    #[tok(STATISTICS)]
-    Statistics,
-    #[tok(GENERATED)]
-    Generated,
-    #[tok(IDENTITY)]
-    Identity,
-    #[tok(COMPRESSION)]
-    Compression,
+recursa::ast_node! {
+    /// `EXCLUDE [USING method] (index_elem WITH op [, ...]) [INCLUDE (...)]
+    ///         [WITH (storage_params)] [USING INDEX TABLESPACE name] [WHERE (expr)]
+    ///         [DEFERRABLE/INITIALLY ...]` table-level constraint.
+    ///
+    /// Per `gram.y::ConstraintElem`:
+    /// ```text
+    /// EXCLUDE access_method_clause '(' ExclusionConstraintList ')'
+    ///     opt_c_include opt_definition OptConsTableSpace OptWhereClause
+    ///     ConstraintAttributeSpec
+    /// ```
+    #[derive(Debug)]
+    #[tok(EXCLUDE, this)]
+    pub struct TableExclude {
+        /// `access_method_clause` — `USING method` is optional (defaults to gist).
+        pub using: Option<crate::ast::ddl::index::UsingMethod>,
+        pub exclusions: ExclusionConstraintList,
+        /// `INCLUDE (col, ...)` covering-index clause.
+        pub include: Option<IncludeColumns>,
+        /// `WITH (param = value, ...)` storage parameters (`opt_definition`).
+        pub with_storage: Option<crate::ast::ddl::index::WithStorage>,
+        /// `USING INDEX TABLESPACE name` (`OptConsTableSpace`).
+        pub index_tablespace: Option<UsingIndexTablespace>,
+        /// `WHERE (expr)` partial-constraint predicate (parens mandatory).
+        pub where_clause: Option<ExclusionWhereClause>,
+        /// gram.y `ConstraintAttributeSpec`.
+        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+    }
 }
 
-/// `INCLUDING what`.
-#[derive(recursa::Node, Debug)]
-pub struct IncludingOption {
-    #[tok(INCLUDING, this)]
-    pub what: LikeOptionKind,
+recursa::ast_node! {
+    /// A table-level constraint kind.
+    ///
+    /// Variant ordering: `PRIMARY KEY` (PRIMARY), `FOREIGN KEY` (FOREIGN),
+    /// `UNIQUE`, `CHECK`, `EXCLUDE` — all start with distinct unique keywords
+    /// so order is not strictly required for disambiguation.
+    #[derive(Debug)]
+    pub enum TableConstraintKind {
+        PrimaryKey(TablePrimaryKey),
+        ForeignKey(TableForeignKey),
+        Unique(TableUnique),
+        Check(TableCheck),
+        Exclude(TableExclude),
+    }
 }
 
-/// `EXCLUDING what`.
-#[derive(recursa::Node, Debug)]
-pub struct ExcludingOption {
-    #[tok(EXCLUDING, this)]
-    pub what: LikeOptionKind,
+recursa::ast_node! {
+    /// A table-level constraint with optional `CONSTRAINT name` prefix.
+    #[derive(Debug)]
+    pub struct TableConstraint {
+        pub name: Option<ConstraintNamePrefix>,
+        pub kind: TableConstraintKind,
+    }
 }
 
-/// One option on a `LIKE table` clause.
-#[derive(recursa::Node, Debug)]
-pub enum LikeOption {
-    Including(IncludingOption),
-    Excluding(ExcludingOption),
+recursa::ast_node! {
+    /// A single `INCLUDING` / `EXCLUDING` option on a `LIKE` source table clause.
+    #[derive(Debug)]
+    pub enum LikeOptionKind {
+        #[tok(ALL)]
+        All,
+        #[tok(DEFAULTS)]
+        Defaults,
+        #[tok(CONSTRAINTS)]
+        Constraints,
+        #[tok(INDEXES)]
+        Indexes,
+        #[tok(STORAGE)]
+        Storage,
+        #[tok(COMMENTS)]
+        Comments,
+        #[tok(STATISTICS)]
+        Statistics,
+        #[tok(GENERATED)]
+        Generated,
+        #[tok(IDENTITY)]
+        Identity,
+        #[tok(COMPRESSION)]
+        Compression,
+    }
 }
 
-/// `LIKE source_table [INCLUDING/EXCLUDING option ...]` clause in a column
-/// list body. Copies column definitions (and optionally other properties)
-/// from an existing table.
-#[derive(recursa::Node, Debug)]
-pub struct LikeClause<'input> {
-    #[tok(LIKE, this)]
-    pub source: crate::ast::shared::names::QualifiedName<'input>,
-    pub options: recursa::ArenaVec<'input, LikeOption>,
+recursa::ast_node! {
+    /// `INCLUDING what`.
+    #[derive(Debug)]
+    pub struct IncludingOption {
+        #[tok(INCLUDING, this)]
+        pub what: LikeOptionKind,
+    }
 }
 
-/// One item in a CREATE TABLE column list: a `LIKE table` clause, a
-/// table-level constraint, or a column definition.
-///
-/// Variant ordering: the `Like` variant starts with the `LIKE` keyword and
-/// must come first (its leading token is otherwise an infix operator in
-/// expressions, so it can't collide with `Column` which starts with an
-/// ident). `Constraint` must come before `Column` because its leading
-/// tokens (`CONSTRAINT`, `PRIMARY`, `UNIQUE`, `FOREIGN`, `CHECK`) are
-/// keywords, while a `Column` starts with an identifier.
-#[derive(recursa::Node, Debug)]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "keep the public parser AST variants inline and source-compatible"
-)]
-pub enum ColumnOrConstraint<'input> {
-    Like(LikeClause<'input>),
-    Constraint(TableConstraint<'input>),
-    Column(ColumnDef<'input>),
+recursa::ast_node! {
+    /// `EXCLUDING what`.
+    #[derive(Debug)]
+    pub struct ExcludingOption {
+        #[tok(EXCLUDING, this)]
+        pub what: LikeOptionKind,
+    }
 }
 
-/// Optional TEMP or TEMPORARY keyword.
-#[derive(recursa::Node, Debug)]
-pub enum TempKw {
-    #[tok(TEMP)]
-    Temp,
-    #[tok(TEMPORARY)]
-    Temporary,
+recursa::ast_node! {
+    /// One option on a `LIKE table` clause.
+    #[derive(Debug)]
+    pub enum LikeOption {
+        Including(IncludingOption),
+        Excluding(ExcludingOption),
+    }
 }
 
-/// INHERITS clause: `INHERITS (parent, ...)`
-#[derive(recursa::Node, Debug)]
-#[tok(INHERITS, LPAREN, this, RPAREN)]
-pub struct InheritsClause<'input> {
-    #[sep(COMMA)]
-    pub parents: recursa::ArenaVec<'input, crate::tokens::ColId<'input>>,
+recursa::ast_node! {
+    /// `LIKE source_table [INCLUDING/EXCLUDING option ...]` clause in a column
+    /// list body. Copies column definitions (and optionally other properties)
+    /// from an existing table.
+    #[derive(Debug)]
+    pub struct LikeClause {
+        #[tok(LIKE, this)]
+        pub source: crate::ast::shared::names::QualifiedName,
+        pub options: zero_or_many!(LikeOption),
+    }
 }
 
-/// `TABLESPACE name` clause on CREATE TABLE / CREATE INDEX, placing the
-/// relation into a non-default tablespace.
-#[derive(recursa::Node, Debug)]
-pub struct TablespaceClause<'input> {
-    #[tok(TABLESPACE, this)]
-    pub name: literal::Ident<'input>,
+recursa::ast_node! {
+    /// One item in a CREATE TABLE column list: a `LIKE table` clause, a
+    /// table-level constraint, or a column definition.
+    ///
+    /// Variant ordering: the `Like` variant starts with the `LIKE` keyword and
+    /// must come first (its leading token is otherwise an infix operator in
+    /// expressions, so it can't collide with `Column` which starts with an
+    /// ident). `Constraint` must come before `Column` because its leading
+    /// tokens (`CONSTRAINT`, `PRIMARY`, `UNIQUE`, `FOREIGN`, `CHECK`) are
+    /// keywords, while a `Column` starts with an identifier.
+    #[derive(Debug)]
+    #[allow(
+        clippy::large_enum_variant,
+        reason = "keep the public parser AST variants inline and source-compatible"
+    )]
+    pub enum ColumnOrConstraint {
+        Like(LikeClause),
+        Constraint(TableConstraint),
+        Column(ColumnDef),
+    }
+}
+
+recursa::ast_node! {
+    /// Optional TEMP or TEMPORARY keyword.
+    #[derive(Debug)]
+    pub enum TempKw {
+        #[tok(TEMP)]
+        Temp,
+        #[tok(TEMPORARY)]
+        Temporary,
+    }
+}
+
+recursa::ast_node! {
+    /// INHERITS clause: `INHERITS (parent, ...)`
+    #[derive(Debug)]
+    #[tok(INHERITS, LPAREN, this, RPAREN)]
+    pub struct InheritsClause {
+        #[sep(COMMA)]
+        pub parents: zero_or_many!(crate::tokens::ColId),
+    }
+}
+
+recursa::ast_node! {
+    /// `TABLESPACE name` clause on CREATE TABLE / CREATE INDEX, placing the
+    /// relation into a non-default tablespace.
+    #[derive(Debug)]
+    pub struct TablespaceClause {
+        #[tok(TABLESPACE, this)]
+        pub name: literal::Ident,
+    }
 }
 
 /// Legacy OIDS choice exposed by [`ColumnsBody::with_oids`].
@@ -808,54 +944,64 @@ pub enum WithOidsClause {
     WithoutOids,
 }
 
-/// Parenthesized storage parameters following `WITH` on CREATE TABLE.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct ColumnsStorageParams<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec<'input, crate::ast::ddl::index::StorageParam<'input>>,
-);
-
-/// Payload after the common CREATE TABLE `WITH` prefix.
-#[derive(recursa::Node, Debug)]
-pub enum ColumnsWithValue<'input> {
-    #[tok(OIDS)]
-    Oids,
-    Storage(ColumnsStorageParams<'input>),
+recursa::ast_node! {
+    /// Parenthesized storage parameters following `WITH` on CREATE TABLE.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct ColumnsStorageParams(
+        #[sep(COMMA)]
+        #[deref]
+        pub zero_or_many!(crate::ast::ddl::index::StorageParam),
+    );
 }
 
-/// CREATE TABLE's mutually exclusive `WITH OIDS`, `WITH (...)`, and
-/// `WITHOUT OIDS` clauses.
-///
-/// Factoring `WITH` before choosing `OIDS` or `(` lets the parser use the
-/// second token for disambiguation instead of committing one optional field
-/// before it can try the other.
-#[derive(recursa::Node, Debug)]
-pub enum ColumnsWithClause<'input> {
-    With(#[tok(WITH, this)] ColumnsWithValue<'input>),
-    #[tok(WITHOUT, OIDS)]
-    WithoutOids,
+recursa::ast_node! {
+    /// Payload after the common CREATE TABLE `WITH` prefix.
+    #[derive(Debug)]
+    pub enum ColumnsWithValue {
+        #[tok(OIDS)]
+        Oids,
+        Storage(ColumnsStorageParams),
+    }
 }
 
-/// `USING access_method` clause on CREATE TABLE, selecting a non-default
-/// table access method (e.g. `heap`, `heap2`).
-#[derive(recursa::Node, Debug)]
-pub struct UsingAccessMethodClause<'input> {
-    #[tok(USING, this)]
-    pub method: literal::Ident<'input>,
+recursa::ast_node! {
+    /// CREATE TABLE's mutually exclusive `WITH OIDS`, `WITH (...)`, and
+    /// `WITHOUT OIDS` clauses.
+    ///
+    /// Factoring `WITH` before choosing `OIDS` or `(` lets the parser use the
+    /// second token for disambiguation instead of committing one optional field
+    /// before it can try the other.
+    #[derive(Debug)]
+    pub enum ColumnsWithClause {
+        With(#[tok(WITH, this)] ColumnsWithValue),
+        #[tok(WITHOUT, OIDS)]
+        WithoutOids,
+    }
 }
 
-/// Column-based table body: `(cols_and_constraints) [INHERITS (...)] [PARTITION BY ...]`
-#[derive(recursa::Node, Debug)]
-pub struct ColumnsBody<'input> {
-    pub columns: TableElementList<'input>,
-    pub inherits: Option<InheritsClause<'input>>,
-    pub partition_by: Option<PartitionByClause<'input>>,
-    pub using: Option<UsingAccessMethodClause<'input>>,
-    pub with: Option<ColumnsWithClause<'input>>,
-    pub on_commit: Option<OnCommitClause>,
-    pub tablespace: Option<TablespaceClause<'input>>,
+recursa::ast_node! {
+    /// `USING access_method` clause on CREATE TABLE, selecting a non-default
+    /// table access method (e.g. `heap`, `heap2`).
+    #[derive(Debug)]
+    pub struct UsingAccessMethodClause {
+        #[tok(USING, this)]
+        pub method: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// Column-based table body: `(cols_and_constraints) [INHERITS (...)] [PARTITION BY ...]`
+    #[derive(Debug)]
+    pub struct ColumnsBody {
+        pub columns: TableElementList,
+        pub inherits: Option<InheritsClause>,
+        pub partition_by: Option<PartitionByClause>,
+        pub using: Option<UsingAccessMethodClause>,
+        pub with: Option<ColumnsWithClause>,
+        pub on_commit: Option<OnCommitClause>,
+        pub tablespace: Option<TablespaceClause>,
+    }
 }
 
 impl<'input> ColumnsBody<'input> {
@@ -881,206 +1027,236 @@ impl<'input> ColumnsBody<'input> {
     }
 }
 
-/// Parenthesized list of zero or more table elements.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct TableElementList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec<'input, ColumnOrConstraint<'input>>,
-);
-
-/// `ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP }` for temp tables.
-///
-/// Variant ordering: distinct first tokens (`PRESERVE` / `DELETE` / `DROP`),
-/// so order is for clarity.
-#[derive(recursa::Node, Debug)]
-pub struct OnCommitClause {
-    #[tok(ON, COMMIT, this)]
-    pub action: OnCommitAction,
+recursa::ast_node! {
+    /// Parenthesized list of zero or more table elements.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct TableElementList(
+        #[sep(COMMA)]
+        #[deref]
+        pub zero_or_many!(ColumnOrConstraint),
+    );
 }
 
-#[derive(recursa::Node, Debug)]
-pub enum OnCommitAction {
-    #[tok(PRESERVE, ROWS)]
-    PreserveRows,
-    #[tok(DELETE, ROWS)]
-    DeleteRows,
-    #[tok(DROP)]
-    Drop,
+recursa::ast_node! {
+    /// `ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP }` for temp tables.
+    ///
+    /// Variant ordering: distinct first tokens (`PRESERVE` / `DELETE` / `DROP`),
+    /// so order is for clarity.
+    #[derive(Debug)]
+    pub struct OnCommitClause {
+        #[tok(ON, COMMIT, this)]
+        pub action: OnCommitAction,
+    }
 }
 
-/// One entry inside a `PARTITION OF parent (...)` column-option list.
-///
-/// Unlike a full column definition, a partition column option omits the
-/// column type — the type is inherited from the parent table. It is just
-/// `name [WITH OPTIONS] [COLLATE "..."] [constraints...]`, or alternatively
-/// a full table-level constraint (e.g. `CONSTRAINT c CHECK (...)`).
-///
-/// Variant ordering: `Constraint` (leading `CONSTRAINT` / `CHECK` /
-/// `PRIMARY` / `UNIQUE` / `FOREIGN` keywords) comes before `Column` (a
-/// bare identifier), so keyword-leading forms win.
-#[derive(recursa::Node, Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum PartitionColumnOption<'input> {
-    Constraint(TableConstraint<'input>),
-    Column(PartitionColumnOptionDef<'input>),
+recursa::ast_node! {
+    #[derive(Debug)]
+    pub enum OnCommitAction {
+        #[tok(PRESERVE, ROWS)]
+        PreserveRows,
+        #[tok(DELETE, ROWS)]
+        DeleteRows,
+        #[tok(DROP)]
+        Drop,
+    }
 }
 
-/// Per-partition column option: `name [WITH OPTIONS] [COLLATE "..."]
-/// [constraints...]`. Overrides constraints/collation for a column
-/// inherited from the partitioned parent table.
-#[derive(recursa::Node, Debug)]
-pub struct PartitionColumnOptionDef<'input> {
-    pub name: literal::Ident<'input>,
-    #[presence(WITH, OPTIONS)]
-    pub with_options: bool,
-    pub collate: Option<CollateClause<'input>>,
-    pub constraints: recursa::ArenaVec<'input, ColumnConstraint<'input>>,
+recursa::ast_node! {
+    /// One entry inside a `PARTITION OF parent (...)` column-option list.
+    ///
+    /// Unlike a full column definition, a partition column option omits the
+    /// column type — the type is inherited from the parent table. It is just
+    /// `name [WITH OPTIONS] [COLLATE "..."] [constraints...]`, or alternatively
+    /// a full table-level constraint (e.g. `CONSTRAINT c CHECK (...)`).
+    ///
+    /// Variant ordering: `Constraint` (leading `CONSTRAINT` / `CHECK` /
+    /// `PRIMARY` / `UNIQUE` / `FOREIGN` keywords) comes before `Column` (a
+    /// bare identifier), so keyword-leading forms win.
+    #[derive(Debug)]
+    #[allow(clippy::large_enum_variant)]
+    pub enum PartitionColumnOption {
+        Constraint(TableConstraint),
+        Column(PartitionColumnOptionDef),
+    }
 }
 
-/// Optional parenthesized column-option list on typed and partition tables.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct PartitionColumnOptionList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec<'input, PartitionColumnOption<'input>>,
-);
-
-/// Partition-of table body: `PARTITION OF parent [(col_options, ...)] FOR VALUES IN (...) [PARTITION BY ...]`
-///
-/// The optional `(col_options, ...)` list is a per-partition override of
-/// column constraints (e.g. `b NOT NULL`, `b DEFAULT 1`, `CONSTRAINT c CHECK
-/// (...)`), reusing the same `ColumnOrConstraint` grammar as a columns-based
-/// table body.
-#[derive(recursa::Node, Debug)]
-pub struct PartitionOfBody<'input> {
-    #[tok(PARTITION, OF, this)]
-    pub parent: crate::ast::shared::names::QualifiedName<'input>,
-    pub column_options: Option<PartitionColumnOptionList<'input>>,
-    pub for_values: Option<ForValuesClause<'input>>,
-    #[presence(DEFAULT)]
-    pub default: bool,
-    pub partition_by: Option<PartitionByClause<'input>>,
-    pub using: Option<UsingAccessMethodClause<'input>>,
-    pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
-    pub on_commit: Option<OnCommitClause>,
-    pub tablespace: Option<TablespaceClause<'input>>,
+recursa::ast_node! {
+    /// Per-partition column option: `name [WITH OPTIONS] [COLLATE "..."]
+    /// [constraints...]`. Overrides constraints/collation for a column
+    /// inherited from the partitioned parent table.
+    #[derive(Debug)]
+    pub struct PartitionColumnOptionDef {
+        pub name: literal::Ident,
+        #[presence(WITH, OPTIONS)]
+        pub with_options: bool,
+        pub collate: Option<CollateClause>,
+        pub constraints: zero_or_many!(ColumnConstraint),
+    }
 }
 
-/// `OF type_name [(column_options)]` — typed-table body.
-///
-/// Creates a table whose columns are derived from a composite type.
-/// Optional column options override constraints/defaults from the type.
-#[derive(recursa::Node, Debug)]
-pub struct OfTypeBody<'input> {
-    #[tok(OF, this)]
-    pub type_name: crate::ast::shared::names::QualifiedName<'input>,
-    pub column_options: Option<PartitionColumnOptionList<'input>>,
+recursa::ast_node! {
+    /// Optional parenthesized column-option list on typed and partition tables.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct PartitionColumnOptionList(
+        #[sep(COMMA)]
+        #[deref]
+        pub zero_or_many!(PartitionColumnOption),
+    );
 }
 
-/// The source of a CTAS body after `AS` — a query, or a prepared statement
-/// invoked with `EXECUTE name [(args)]`.
-///
-/// gram.y routes the second spelling through its own production
-/// (`ExecuteStmt: CREATE OptTemp TABLE create_as_target AS EXECUTE name
-/// execute_param_clause opt_with_data`), but on the surface it is a plain
-/// alternative in the same position, sharing the `WITH [NO] DATA` tail. The
-/// argument list is the same `execute_param_clause` as the standalone
-/// `EXECUTE` statement, so [`ExecuteStmt`] is reused whole.
-///
-/// Variant ordering: `Execute` begins with the `EXECUTE` keyword while
-/// `Query` begins with `SELECT` / `TABLE` / `VALUES` / `WITH` / `(`, so the
-/// first-token sets are disjoint and order is for clarity.
-///
-/// [`ExecuteStmt`]: crate::ast::tcl::prepared::ExecuteStmt
-#[derive(recursa::Node, Debug)]
-pub enum CtasSource<'input> {
-    Execute(recursa::ArenaBox<'input, crate::ast::tcl::prepared::ExecuteStmt<'input>>),
-    Query(recursa::ArenaBox<'input, crate::ast::dml::values::Subquery<'input>>),
+recursa::ast_node! {
+    /// Partition-of table body: `PARTITION OF parent [(col_options, ...)] FOR VALUES IN (...) [PARTITION BY ...]`
+    ///
+    /// The optional `(col_options, ...)` list is a per-partition override of
+    /// column constraints (e.g. `b NOT NULL`, `b DEFAULT 1`, `CONSTRAINT c CHECK
+    /// (...)`), reusing the same `ColumnOrConstraint` grammar as a columns-based
+    /// table body.
+    #[derive(Debug)]
+    pub struct PartitionOfBody {
+        #[tok(PARTITION, OF, this)]
+        pub parent: crate::ast::shared::names::QualifiedName,
+        pub column_options: Option<PartitionColumnOptionList>,
+        pub for_values: Option<ForValuesClause>,
+        #[presence(DEFAULT)]
+        pub default: bool,
+        pub partition_by: Option<PartitionByClause>,
+        pub using: Option<UsingAccessMethodClause>,
+        pub with_storage: Option<crate::ast::ddl::index::WithStorage>,
+        pub on_commit: Option<OnCommitClause>,
+        pub tablespace: Option<TablespaceClause>,
+    }
 }
 
-/// AS-query table body: `AS { SELECT ... | EXECUTE name [(args)] } [WITH [NO] DATA]`.
-#[derive(recursa::Node, Debug)]
-pub struct AsQueryBody<'input> {
-    /// Optional `WITH (param = value, ...)` storage parameters before `AS`.
-    pub with_storage: Option<crate::ast::ddl::index::WithStorage<'input>>,
-    /// Optional `TABLESPACE name` before `AS`.
-    pub tablespace: Option<TablespaceClause<'input>>,
-    #[tok(AS, this)]
-    pub source: CtasSource<'input>,
-    pub with_data: Option<WithDataClause>,
+recursa::ast_node! {
+    /// `OF type_name [(column_options)]` — typed-table body.
+    ///
+    /// Creates a table whose columns are derived from a composite type.
+    /// Optional column options override constraints/defaults from the type.
+    #[derive(Debug)]
+    pub struct OfTypeBody {
+        #[tok(OF, this)]
+        pub type_name: crate::ast::shared::names::QualifiedName,
+        pub column_options: Option<PartitionColumnOptionList>,
+    }
 }
 
-/// `WITH DATA` or `WITH NO DATA` modifier on a CTAS query.
-///
-/// Variant ordering: `NoData` (`WITH NO DATA`, longer) before `Data`.
-#[derive(recursa::Node, Debug)]
-pub enum WithDataClause {
-    #[tok(WITH, NO, DATA)]
-    NoData,
-    #[tok(WITH, DATA)]
-    Data,
+recursa::ast_node! {
+    /// The source of a CTAS body after `AS` — a query, or a prepared statement
+    /// invoked with `EXECUTE name [(args)]`.
+    ///
+    /// gram.y routes the second spelling through its own production
+    /// (`ExecuteStmt: CREATE OptTemp TABLE create_as_target AS EXECUTE name
+    /// execute_param_clause opt_with_data`), but on the surface it is a plain
+    /// alternative in the same position, sharing the `WITH [NO] DATA` tail. The
+    /// argument list is the same `execute_param_clause` as the standalone
+    /// `EXECUTE` statement, so [`ExecuteStmt`] is reused whole.
+    ///
+    /// Variant ordering: `Execute` begins with the `EXECUTE` keyword while
+    /// `Query` begins with `SELECT` / `TABLE` / `VALUES` / `WITH` / `(`, so the
+    /// first-token sets are disjoint and order is for clarity.
+    ///
+    /// [`ExecuteStmt`]: crate::ast::tcl::prepared::ExecuteStmt
+    #[derive(Debug)]
+    pub enum CtasSource {
+        Execute(boxed!(crate::ast::tcl::prepared::ExecuteStmt)),
+        Query(boxed!(crate::ast::dml::values::Subquery)),
+    }
 }
 
-/// `(col, col, ...) [ON COMMIT ...] AS source [WITH [NO] DATA]` — CTAS with
-/// column list. The source is a query or an `EXECUTE` of a prepared
-/// statement, as in `CREATE TABLE t (a) AS EXECUTE data_sel WITH DATA`.
-#[derive(recursa::Node, Debug)]
-pub struct ColumnsAsQueryBody<'input> {
-    pub columns: CtasColumnList<'input>,
-    pub on_commit: Option<OnCommitClause>,
-    #[tok(AS, this)]
-    pub source: CtasSource<'input>,
-    pub with_data: Option<WithDataClause>,
+recursa::ast_node! {
+    /// AS-query table body: `AS { SELECT ... | EXECUTE name [(args)] } [WITH [NO] DATA]`.
+    #[derive(Debug)]
+    pub struct AsQueryBody {
+        /// Optional `WITH (param = value, ...)` storage parameters before `AS`.
+        pub with_storage: Option<crate::ast::ddl::index::WithStorage>,
+        /// Optional `TABLESPACE name` before `AS`.
+        pub tablespace: Option<TablespaceClause>,
+        #[tok(AS, this)]
+        pub source: CtasSource,
+        pub with_data: Option<WithDataClause>,
+    }
 }
 
-/// Required, non-empty CTAS output-column list.
-#[derive(recursa::Node, Debug)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct CtasColumnList<'input> {
-    #[sep(COMMA)]
-    pub columns: recursa::ArenaVec1<'input, crate::tokens::ColId<'input>>,
+recursa::ast_node! {
+    /// `WITH DATA` or `WITH NO DATA` modifier on a CTAS query.
+    ///
+    /// Variant ordering: `NoData` (`WITH NO DATA`, longer) before `Data`.
+    #[derive(Debug)]
+    pub enum WithDataClause {
+        #[tok(WITH, NO, DATA)]
+        NoData,
+        #[tok(WITH, DATA)]
+        Data,
+    }
 }
 
-/// The body of a CREATE TABLE statement after `CREATE [TEMP] TABLE name`.
-///
-/// Variant ordering: AsQuery (`AS`) and PartitionOf (`PARTITION`) start with
-/// keywords; Columns starts with `(`. Longest-match-wins disambiguates.
-#[derive(recursa::Node, Debug)]
-pub enum CreateTableBody<'input> {
-    AsQuery(AsQueryBody<'input>),
-    PartitionOf(PartitionOfBody<'input>),
-    /// `OF type_name [(column_options)]` — typed table.
-    /// Distinct first token `OF`, no ambiguity with other variants.
-    OfType(OfTypeBody<'input>),
-    /// `(col, ...) AS query` — CTAS with explicit column list.
-    /// Listed before `Columns` so the `( ... ) AS` form wins over the
-    /// columns-only `( ... )` form via longer match.
-    ColumnsAsQuery(ColumnsAsQueryBody<'input>),
-    Columns(ColumnsBody<'input>),
+recursa::ast_node! {
+    /// `(col, col, ...) [ON COMMIT ...] AS source [WITH [NO] DATA]` — CTAS with
+    /// column list. The source is a query or an `EXECUTE` of a prepared
+    /// statement, as in `CREATE TABLE t (a) AS EXECUTE data_sel WITH DATA`.
+    #[derive(Debug)]
+    pub struct ColumnsAsQueryBody {
+        pub columns: CtasColumnList,
+        pub on_commit: Option<OnCommitClause>,
+        #[tok(AS, this)]
+        pub source: CtasSource,
+        pub with_data: Option<WithDataClause>,
+    }
 }
 
-/// ```sql
-/// CREATE [TEMP] TABLE statement.
-/// ```
-#[derive(recursa::Node, Debug)]
-#[tok(CREATE, this)]
-pub struct CreateTableStmt<'input> {
-    pub temp: Option<TempKw>,
-    #[tok(this, TABLE)]
-    #[presence(UNLOGGED)]
-    pub unlogged: bool,
-    #[presence(IF, NOT, EXISTS)]
-    pub if_not_exists: bool,
-    pub name: crate::ast::shared::names::QualifiedName<'input>,
-    /// `USING am` between the table name and an `AS query` body, e.g.
-    /// `CREATE TABLE t USING heap2 AS SELECT ...`. When the body starts
-    /// with `(`, this clause is absent and `USING` appears after the
-    /// column list inside `ColumnsBody`.
-    pub using: Option<UsingAccessMethodClause<'input>>,
-    pub body: CreateTableBody<'input>,
+recursa::ast_node! {
+    /// Required, non-empty CTAS output-column list.
+    #[derive(Debug)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct CtasColumnList {
+        #[sep(COMMA)]
+        pub columns: one_or_many!(crate::tokens::ColId),
+    }
+}
+
+recursa::ast_node! {
+    /// The body of a CREATE TABLE statement after `CREATE [TEMP] TABLE name`.
+    ///
+    /// Variant ordering: AsQuery (`AS`) and PartitionOf (`PARTITION`) start with
+    /// keywords; Columns starts with `(`. Longest-match-wins disambiguates.
+    #[derive(Debug)]
+    pub enum CreateTableBody {
+        AsQuery(AsQueryBody),
+        PartitionOf(PartitionOfBody),
+        /// `OF type_name [(column_options)]` — typed table.
+        /// Distinct first token `OF`, no ambiguity with other variants.
+        OfType(OfTypeBody),
+        /// `(col, ...) AS query` — CTAS with explicit column list.
+        /// Listed before `Columns` so the `( ... ) AS` form wins over the
+        /// columns-only `( ... )` form via longer match.
+        ColumnsAsQuery(ColumnsAsQueryBody),
+        Columns(ColumnsBody),
+    }
+}
+
+recursa::ast_node! {
+    /// ```sql
+    /// CREATE [TEMP] TABLE statement.
+    /// ```
+    #[derive(Debug)]
+    #[tok(CREATE, this)]
+    pub struct CreateTableStmt {
+        pub temp: Option<TempKw>,
+        #[tok(this, TABLE)]
+        #[presence(UNLOGGED)]
+        pub unlogged: bool,
+        #[presence(IF, NOT, EXISTS)]
+        pub if_not_exists: bool,
+        pub name: crate::ast::shared::names::QualifiedName,
+        /// `USING am` between the table name and an `AS query` body, e.g.
+        /// `CREATE TABLE t USING heap2 AS SELECT ...`. When the body starts
+        /// with `(`, this clause is absent and `USING` appears after the
+        /// column list inside `ColumnsBody`.
+        pub using: Option<UsingAccessMethodClause>,
+        pub body: CreateTableBody,
+    }
 }
 
 impl<'input> CreateTableStmt<'input> {
@@ -1116,940 +1292,1116 @@ impl<'input> CreateTableStmt<'input> {
 // `CREATE TABLE ... PARTITION OF parent FOR VALUES IN (val, ...)`
 // -----------------------------------------------------------------------
 
-/// One partition key item: `{ column_name | ( expr ) } [COLLATE collation] [opclass_name]`.
-///
-/// The `opclass` operator class name is a trailing identifier (e.g.
-/// `point_ops`, `int4_ops`) that binds the column/expression to a specific
-/// operator class for the partition strategy.
-#[derive(recursa::Node, Debug)]
-pub struct PartitionKeyItem<'input> {
-    pub target: crate::ast::ddl::index::IndexTarget<'input>,
-    #[tok(COLLATE, this)]
-    pub collate: Option<literal::AliasName<'input>>,
-    pub opclass: Option<literal::AliasName<'input>>,
+recursa::ast_node! {
+    /// One partition key item: `{ column_name | ( expr ) } [COLLATE collation] [opclass_name]`.
+    ///
+    /// The `opclass` operator class name is a trailing identifier (e.g.
+    /// `point_ops`, `int4_ops`) that binds the column/expression to a specific
+    /// operator class for the partition strategy.
+    #[derive(Debug)]
+    pub struct PartitionKeyItem {
+        pub target: crate::ast::ddl::index::IndexTarget,
+        #[tok(COLLATE, this)]
+        pub collate: Option<literal::AliasName>,
+        pub opclass: Option<literal::AliasName>,
+    }
 }
 
-/// PARTITION BY LIST (col) clause.
-#[derive(recursa::Node, Debug)]
-pub struct PartitionByClause<'input> {
-    #[tok(PARTITION, BY, this)]
-    pub strategy: literal::AliasName<'input>,
-    /// Partition key items — may be plain column names or expressions like
-    /// `((a+b)/2)`, optionally followed by a trailing opclass name.
-    pub columns: PartitionKeyList<'input>,
+recursa::ast_node! {
+    /// PARTITION BY LIST (col) clause.
+    #[derive(Debug)]
+    pub struct PartitionByClause {
+        #[tok(PARTITION, BY, this)]
+        pub strategy: literal::AliasName,
+        /// Partition key items — may be plain column names or expressions like
+        /// `((a+b)/2)`, optionally followed by a trailing opclass name.
+        pub columns: PartitionKeyList,
+    }
 }
 
-/// Parenthesized, comma-separated partition key list (`part_params`).
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct PartitionKeyList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec<'input, PartitionKeyItem<'input>>,
-);
-
-/// FOR VALUES IN (val, ...) clause — legacy name kept for backward compat
-/// with partition.rs own tests; the general form lives in `ForValuesClause`.
-#[derive(recursa::Node, Debug)]
-#[tok(FOR, VALUES, IN, LPAREN, this, RPAREN)]
-pub struct ForValuesInClause<'input> {
-    #[sep(COMMA)]
-    pub values: recursa::ArenaVec<'input, Expr<'input>>,
+recursa::ast_node! {
+    /// Parenthesized, comma-separated partition key list (`part_params`).
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct PartitionKeyList(
+        #[sep(COMMA)]
+        #[deref]
+        pub zero_or_many!(PartitionKeyItem),
+    );
 }
 
-/// `FROM (...) TO (...)` range partition spec.
-#[derive(recursa::Node, Debug)]
-pub struct FromToSpec<'input> {
-    #[tok(FROM, this)]
-    pub from_values: PartitionValues<'input>,
-    #[tok(TO, this)]
-    pub to_values: PartitionValues<'input>,
+recursa::ast_node! {
+    /// FOR VALUES IN (val, ...) clause — legacy name kept for backward compat
+    /// with partition.rs own tests; the general form lives in `ForValuesClause`.
+    #[derive(Debug)]
+    #[tok(FOR, VALUES, IN, LPAREN, this, RPAREN)]
+    pub struct ForValuesInClause {
+        #[sep(COMMA)]
+        pub values: zero_or_many!(Expr),
+    }
 }
 
-/// Parenthesized value list in a partition bound.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct PartitionValues<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec<'input, Expr<'input>>,
-);
-
-/// `IN (val, ...)` list partition spec.
-#[derive(recursa::Node, Debug)]
-#[tok(IN, LPAREN, this, RPAREN)]
-pub struct InListSpec<'input> {
-    #[sep(COMMA)]
-    pub values: recursa::ArenaVec<'input, Expr<'input>>,
+recursa::ast_node! {
+    /// `FROM (...) TO (...)` range partition spec.
+    #[derive(Debug)]
+    pub struct FromToSpec {
+        #[tok(FROM, this)]
+        pub from_values: PartitionValues,
+        #[tok(TO, this)]
+        pub to_values: PartitionValues,
+    }
 }
 
-/// `MODULUS n` entry.
-#[derive(recursa::Node, Debug)]
-pub struct ModulusEntry<'input> {
-    #[tok(MODULUS, this)]
-    pub value: Expr<'input>,
+recursa::ast_node! {
+    /// Parenthesized value list in a partition bound.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct PartitionValues(
+        #[sep(COMMA)]
+        #[deref]
+        pub zero_or_many!(Expr),
+    );
 }
 
-/// `REMAINDER n` entry.
-#[derive(recursa::Node, Debug)]
-pub struct RemainderEntry<'input> {
-    #[tok(REMAINDER, this)]
-    pub value: Expr<'input>,
+recursa::ast_node! {
+    /// `IN (val, ...)` list partition spec.
+    #[derive(Debug)]
+    #[tok(IN, LPAREN, this, RPAREN)]
+    pub struct InListSpec {
+        #[sep(COMMA)]
+        pub values: zero_or_many!(Expr),
+    }
 }
 
-/// One item in `WITH (...)` for hash partitioning: MODULUS n or REMAINDER n.
-#[derive(recursa::Node, Debug)]
-pub enum HashPartItem<'input> {
-    Modulus(ModulusEntry<'input>),
-    Remainder(RemainderEntry<'input>),
+recursa::ast_node! {
+    /// `MODULUS n` entry.
+    #[derive(Debug)]
+    pub struct ModulusEntry {
+        #[tok(MODULUS, this)]
+        pub value: Expr,
+    }
 }
 
-/// `WITH (MODULUS n, REMAINDER m)` hash partition spec.
-#[derive(recursa::Node, Debug)]
-#[tok(WITH, LPAREN, this, RPAREN)]
-pub struct WithModulusSpec<'input> {
-    #[sep(COMMA)]
-    pub items: recursa::ArenaVec<'input, HashPartItem<'input>>,
+recursa::ast_node! {
+    /// `REMAINDER n` entry.
+    #[derive(Debug)]
+    pub struct RemainderEntry {
+        #[tok(REMAINDER, this)]
+        pub value: Expr,
+    }
 }
 
-/// Body after `FOR VALUES` in a PARTITION OF clause. Variant ordering:
-/// `From` starts with `FROM`, `In` starts with `IN`, `With` starts with `WITH` —
-/// all distinct keywords, so peek disambiguation is trivial.
-#[derive(recursa::Node, Debug)]
-pub enum ForValuesSpec<'input> {
-    From(FromToSpec<'input>),
-    In(InListSpec<'input>),
-    With(WithModulusSpec<'input>),
+recursa::ast_node! {
+    /// One item in `WITH (...)` for hash partitioning: MODULUS n or REMAINDER n.
+    #[derive(Debug)]
+    pub enum HashPartItem {
+        Modulus(ModulusEntry),
+        Remainder(RemainderEntry),
+    }
 }
 
-/// Full `FOR VALUES ...` clause in a `PARTITION OF ...` body.
-#[derive(recursa::Node, Debug)]
-pub struct ForValuesClause<'input> {
-    #[tok(FOR, VALUES, this)]
-    pub spec: ForValuesSpec<'input>,
+recursa::ast_node! {
+    /// `WITH (MODULUS n, REMAINDER m)` hash partition spec.
+    #[derive(Debug)]
+    #[tok(WITH, LPAREN, this, RPAREN)]
+    pub struct WithModulusSpec {
+        #[sep(COMMA)]
+        pub items: zero_or_many!(HashPartItem),
+    }
 }
 
-/// Column definition in partition table: `name type`.
-#[derive(recursa::Node, Debug)]
-pub struct PartitionColumnDef<'input> {
-    pub name: literal::Ident<'input>,
-    pub type_name: TypeName<'input>,
+recursa::ast_node! {
+    /// Body after `FOR VALUES` in a PARTITION OF clause. Variant ordering:
+    /// `From` starts with `FROM`, `In` starts with `IN`, `With` starts with `WITH` —
+    /// all distinct keywords, so peek disambiguation is trivial.
+    #[derive(Debug)]
+    pub enum ForValuesSpec {
+        From(FromToSpec),
+        In(InListSpec),
+        With(WithModulusSpec),
+    }
 }
 
-/// Parenthesized column-definition list of a standalone partitioned table.
-#[derive(recursa::Node, Debug, derive_more::Deref)]
-#[tok(LPAREN, this, RPAREN)]
-pub struct PartitionColumnDefList<'input>(
-    #[sep(COMMA)]
-    #[deref]
-    pub recursa::ArenaVec<'input, PartitionColumnDef<'input>>,
-);
-
-/// CREATE TABLE with PARTITION BY: `CREATE TABLE name (cols) PARTITION BY strategy (cols)`.
-#[derive(recursa::Node, Debug)]
-pub struct CreatePartitionedTableStmt<'input> {
-    #[tok(CREATE, TABLE, this)]
-    pub name: literal::Ident<'input>,
-    pub columns: PartitionColumnDefList<'input>,
-    pub partition_by: PartitionByClause<'input>,
+recursa::ast_node! {
+    /// Full `FOR VALUES ...` clause in a `PARTITION OF ...` body.
+    #[derive(Debug)]
+    pub struct ForValuesClause {
+        #[tok(FOR, VALUES, this)]
+        pub spec: ForValuesSpec,
+    }
 }
 
-/// CREATE TABLE ... PARTITION OF parent FOR VALUES IN (...) [PARTITION BY ...].
-#[derive(recursa::Node, Debug)]
-pub struct CreatePartitionOfStmt<'input> {
-    #[tok(CREATE, TABLE, this)]
-    pub name: literal::Ident<'input>,
-    #[tok(PARTITION, OF, this)]
-    pub parent: literal::Ident<'input>,
-    pub for_values: ForValuesInClause<'input>,
-    pub partition_by: Option<PartitionByClause<'input>>,
+recursa::ast_node! {
+    /// Column definition in partition table: `name type`.
+    #[derive(Debug)]
+    pub struct PartitionColumnDef {
+        pub name: literal::Ident,
+        pub type_name: TypeName,
+    }
+}
+
+recursa::ast_node! {
+    /// Parenthesized column-definition list of a standalone partitioned table.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct PartitionColumnDefList(
+        #[sep(COMMA)]
+        #[deref]
+        pub zero_or_many!(PartitionColumnDef),
+    );
+}
+
+recursa::ast_node! {
+    /// CREATE TABLE with PARTITION BY: `CREATE TABLE name (cols) PARTITION BY strategy (cols)`.
+    #[derive(Debug)]
+    pub struct CreatePartitionedTableStmt {
+        #[tok(CREATE, TABLE, this)]
+        pub name: literal::Ident,
+        pub columns: PartitionColumnDefList,
+        pub partition_by: PartitionByClause,
+    }
+}
+
+recursa::ast_node! {
+    /// CREATE TABLE ... PARTITION OF parent FOR VALUES IN (...) [PARTITION BY ...].
+    #[derive(Debug)]
+    pub struct CreatePartitionOfStmt {
+        #[tok(CREATE, TABLE, this)]
+        pub name: literal::Ident,
+        #[tok(PARTITION, OF, this)]
+        pub parent: literal::Ident,
+        pub for_values: ForValuesInClause,
+        pub partition_by: Option<PartitionByClause>,
+    }
 }
 
 // -----------------------------------------------------------------------
 // DROP TABLE — folded in from the former `ast/drop_table.rs`.
 // -----------------------------------------------------------------------
 
-/// ```sql
-/// DROP TABLE [IF EXISTS] name [, name ...] [CASCADE | RESTRICT]
-/// ```
-#[derive(recursa::Node, Debug)]
-#[tok(DROP, TABLE, this)]
-pub struct DropTableStmt<'input> {
-    #[presence(IF, EXISTS)]
-    pub if_exists: bool,
-    #[sep(COMMA)]
-    /// gram.y `any_name_list`: one or more names.
-    pub names: recursa::ArenaVec1<'input, QualifiedName<'input>>,
-    pub behavior: Option<DropBehavior>,
+recursa::ast_node! {
+    /// ```sql
+    /// DROP TABLE [IF EXISTS] name [, name ...] [CASCADE | RESTRICT]
+    /// ```
+    #[derive(Debug)]
+    #[tok(DROP, TABLE, this)]
+    pub struct DropTableStmt {
+        #[presence(IF, EXISTS)]
+        pub if_exists: bool,
+        #[sep(COMMA)]
+        /// gram.y `any_name_list`: one or more names.
+        pub names: one_or_many!(QualifiedName),
+        pub behavior: Option<DropBehavior>,
+    }
 }
 
 // =========================================================================
 // ALTER/DROP TABLE — appended from simple_stmts.rs during physical extraction.
 // =========================================================================
 
-/// `ALTER TABLE ...` — Postgres' `AlterTableStmt` (table object kind), plus
-/// the table-shaped branches of `RenameStmt` and `AlterObjectSchemaStmt`.
-///
-/// pg-sql keeps one LR production family for `ALTER TABLE`, so this one struct
-/// covers every shape that begins with those two keywords:
-///
-/// - `ALTER TABLE [IF EXISTS] [ONLY] name [*] alter_table_cmds`
-/// - `ALTER TABLE [IF EXISTS] [ONLY] name [*] partition_cmd`
-/// - `ALTER TABLE [IF EXISTS] name RENAME TO new`
-/// - `ALTER TABLE [IF EXISTS] [ONLY] name [*] RENAME [COLUMN] old TO new`
-/// - `ALTER TABLE [IF EXISTS] [ONLY] name [*] RENAME CONSTRAINT old TO new`
-/// - `ALTER TABLE [IF EXISTS] name SET SCHEMA new`
-/// - `ALTER TABLE ALL IN TABLESPACE name [OWNED BY roles] SET TABLESPACE new
-///    [NOWAIT]`
-///
-/// The two top-level shapes — the bulk `ALL IN TABLESPACE …` form and the
-/// per-relation form — are split into an enum body.
-#[derive(recursa::Node, Debug)]
-pub struct AlterTableStmt<'input> {
-    #[tok(ALTER, TABLE, this)]
-    pub body: AlterTableBody<'input>,
-}
-
-/// Body of `ALTER TABLE ...` — either the bulk-relocate `ALL IN TABLESPACE`
-/// form or a per-relation form.
-///
-/// Variant ordering: `All` (starts with `ALL`) before `Single` (starts with
-/// `IF` / `ONLY` / `qualified_name`, never `ALL`).
-#[derive(recursa::Node, Debug)]
-pub enum AlterTableBody<'input> {
-    All(AllInTablespaceBody<'input>),
-    Single(AlterTableSingle<'input>),
-}
-
-/// Per-relation `ALTER TABLE` body: `[IF EXISTS] [ONLY] name [*] action`.
-///
-/// The relation reference is Postgres' `relation_expr`: a `qualified_name`
-/// optionally prefixed by `ONLY` and/or suffixed by `*`. The `ONLY (name)`
-/// parenthesised form is not exercised by any corpus statement, so it is
-/// not modelled.
-#[derive(recursa::Node, Debug)]
-pub struct AlterTableSingle<'input> {
-    pub if_exists: Option<IfExists>,
-    #[presence(ONLY)]
-    pub only: bool,
-    pub name: QualifiedName<'input>,
-    #[presence(STAR)]
-    pub star: bool,
-    pub action: AlterTableSingleAction<'input>,
-}
-
-/// One action on a per-relation `ALTER TABLE` body — covers Postgres'
-/// `alter_table_cmds`, `partition_cmd`, `RenameStmt` (table/column/constraint
-/// rename), and `AlterObjectSchemaStmt` (SET SCHEMA) for tables.
-///
-/// Variant ordering:
-/// - `RenameConstraint` (`RENAME CONSTRAINT …`) before `RenameColumn`
-///   (`RENAME [COLUMN] …`) before `Rename` (`RENAME TO …`) — all start with
-///   `RENAME`; `Rename` succeeds only when the second token is `TO`,
-///   `RenameColumn` only when the second is `COLUMN` or an ident, and
-///   `RenameConstraint` only when the second is `CONSTRAINT`.
-/// - `SetSchema` (`SET SCHEMA name`) before `Cmds` — both can begin with
-///   `SET`, but `SET SCHEMA` is not in `alter_table_cmd` so the parser must
-///   try it first.
-/// - `Partition` (`ATTACH PARTITION` / `DETACH PARTITION`) before `Cmds` —
-///   `alter_table_cmd` does not begin with `ATTACH`/`DETACH`, but listing
-///   the partition cmd first is clearer.
-/// - `Cmds` last — the catch-all for the comma-separated `alter_table_cmds`.
-#[derive(recursa::Node, Debug)]
-pub enum AlterTableSingleAction<'input> {
-    RenameConstraint(AlterTableRenameConstraint<'input>),
-    RenameColumn(RenameColumnClause<'input>),
-    Rename(RenameTo<'input>),
-    SetSchema(SetSchemaClause<'input>),
-    Partition(PartitionCmd<'input>),
-    Cmds(AlterTableCmds<'input>),
-}
-
-/// `RENAME CONSTRAINT old TO new` — Postgres' `RenameStmt` branch for table
-/// constraints.
-#[derive(recursa::Node, Debug)]
-pub struct AlterTableRenameConstraint<'input> {
-    #[tok(RENAME, CONSTRAINT, this)]
-    pub old_name: literal::Ident<'input>,
-    #[tok(TO, this)]
-    pub new_name: literal::Ident<'input>,
-}
-
-/// Comma-separated `alter_table_cmds` on ALTER TABLE.
-#[derive(recursa::Node, Debug)]
-pub struct AlterTableCmds<'input> {
-    #[sep(COMMA)]
-    pub cmds: recursa::ArenaVec1<'input, AlterTableCmd<'input>>,
-}
-
-/// Postgres' `partition_cmd`: a single `ATTACH PARTITION` or `DETACH
-/// PARTITION` action on a partitioned table.
-///
-/// Variant ordering: `Attach` (ATTACH) and `Detach` (DETACH) have disjoint
-/// first tokens, so order is for clarity.
-#[derive(recursa::Node, Debug)]
-pub enum PartitionCmd<'input> {
-    Attach(AttachPartitionCmd<'input>),
-    Detach(DetachPartitionCmd<'input>),
-}
-
-/// `ATTACH PARTITION qualified_name partition_bound_spec` — adds an existing
-/// table as a partition of the target partitioned table.
-#[derive(recursa::Node, Debug)]
-pub struct AttachPartitionCmd<'input> {
-    #[tok(ATTACH, PARTITION, this)]
-    pub name: QualifiedName<'input>,
-    pub bound: PartitionBoundSpec<'input>,
-}
-
-/// `DETACH PARTITION qualified_name [CONCURRENTLY | FINALIZE]` — removes a
-/// partition from its parent.
-#[derive(recursa::Node, Debug)]
-pub struct DetachPartitionCmd<'input> {
-    #[tok(DETACH, PARTITION, this)]
-    pub name: QualifiedName<'input>,
-    pub mode: Option<DetachPartitionMode>,
-}
-
-/// Trailing mode keyword on `DETACH PARTITION`: `CONCURRENTLY` (the default
-/// nonblocking detach) or `FINALIZE` (completes a previously-CONCURRENTLY
-/// detached partition).
-#[derive(recursa::Node, Debug)]
-pub enum DetachPartitionMode {
-    #[tok(CONCURRENTLY)]
-    Concurrently,
-    #[tok(FINALIZE)]
-    Finalize,
-}
-
-/// Postgres' `PartitionBoundSpec` — the partition bound used by `ATTACH
-/// PARTITION`. One of:
-///
-/// - `DEFAULT` (the catch-all partition)
-/// - `FOR VALUES IN (val, ...)` (list)
-/// - `FOR VALUES FROM (...) TO (...)` (range)
-/// - `FOR VALUES WITH (MODULUS n, REMAINDER m)` (hash)
-///
-/// Variant ordering: `Default` (one keyword, distinct first token) before
-/// `ForValues` (begins with `FOR`).
-#[derive(recursa::Node, Debug)]
-pub enum PartitionBoundSpec<'input> {
-    #[tok(DEFAULT)]
-    Default,
-    ForValues(crate::ast::ddl::table::ForValuesClause<'input>),
-}
-
-/// A single `alter_table_cmd` — one comma-separated entry in `alter_table_cmds`.
-///
-/// Variant ordering:
-/// - `ADD …` family: longer-prefix variants first. `AddColumnIfNotExists`
-///   (4 keywords `ADD COLUMN IF NOT EXISTS`) before `AddIfNotExists`
-///   (`ADD IF NOT EXISTS`) before `AddColumn` (`ADD COLUMN`) before
-///   `AddConstraint` (`ADD …` table-constraint) before `AddColumnBare`
-///   (`ADD coldef`).
-/// - `ALTER …` family: `AlterColumnCmd` (matches `ALTER [COLUMN] colname …`).
-/// - `ALTER CONSTRAINT name …` is a separate top-level variant, listed
-///   before `AlterColumnCmd` so the `CONSTRAINT` keyword wins.
-/// - `DROP …` family: `DropConstraintIfExists` (5 tokens), `DropConstraint`,
-///   `DropColumnIfExists` (with optional COLUMN), `DropColumn`.
-/// - `ENABLE`/`DISABLE`: multi-token `ENABLE REPLICA TRIGGER` / `ENABLE
-///   ALWAYS TRIGGER` before `ENABLE TRIGGER`; same for RULE; `ENABLE ROW
-///   LEVEL SECURITY` and `DISABLE ROW LEVEL SECURITY`.
-/// - `SET WITHOUT CLUSTER` / `SET WITHOUT OIDS` / `SET LOGGED` /
-///   `SET UNLOGGED` / `SET ACCESS METHOD` / `SET TABLESPACE` /
-///   `SET (reloptions)` — all start with `SET` but each disambiguates on
-///   the second token.
-/// - `RESET (reloptions)` — disjoint from `SET …`.
-/// - `CLUSTER ON name`, `INHERIT name`, `NO INHERIT name`, `OF type_name`,
-///   `NOT OF`, `OWNER TO role`, `REPLICA IDENTITY …`, `FORCE ROW LEVEL
-///   SECURITY`, `NO FORCE ROW LEVEL SECURITY`, `VALIDATE CONSTRAINT name`,
-///   `DEPENDS ON EXTENSION name` / `NO DEPENDS ON EXTENSION name` — each
-///   commits on a unique leading keyword (with `NO …` and `NOT …` carefully
-///   placed against single-keyword variants).
-/// - `GenericOptions` (FOREIGN-TABLE OPTIONS clause) last — `OPTIONS` is a
-///   unique leading keyword.
-#[derive(recursa::Node, Debug)]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "keep the public parser AST variants inline and source-compatible"
-)]
-pub enum AlterTableCmd<'input> {
-    // ADD ... — longer prefixes first.
-    AddColumnIfNotExists(AddColumnIfNotExistsCmd<'input>),
-    AddIfNotExists(AddIfNotExistsCmd<'input>),
-    AddColumn(AddColumnCmd<'input>),
-    AddConstraint(AddTableConstraintCmd<'input>),
-    AddColumnBare(AddColumnBareCmd<'input>),
-    // ALTER CONSTRAINT ...
-    AlterConstraint(AlterConstraintCmd<'input>),
-    // ALTER [COLUMN] colname ...
-    AlterColumn(AlterColumnCmd<'input>),
-    // DROP ... — longer prefixes first.
-    DropConstraintIfExists(DropConstraintIfExistsCmd<'input>),
-    DropConstraint(DropConstraintCmd<'input>),
-    DropColumnIfExists(DropColumnIfExistsCmd<'input>),
-    DropColumn(DropColumnCmd<'input>),
-    // ENABLE / DISABLE variants — longer prefixes first.
-    EnableReplicaTrigger(EnableReplicaTriggerCmd<'input>),
-    EnableAlwaysTrigger(EnableAlwaysTriggerCmd<'input>),
-    EnableReplicaRule(EnableReplicaRuleCmd<'input>),
-    EnableAlwaysRule(EnableAlwaysRuleCmd<'input>),
-    EnableTrigger(EnableTriggerCmd<'input>),
-    EnableRule(EnableRuleCmd<'input>),
-    EnableRowSecurity(EnableRowSecurityCmd),
-    DisableTrigger(DisableTriggerCmd<'input>),
-    DisableRule(DisableRuleCmd<'input>),
-    DisableRowSecurity(DisableRowSecurityCmd),
-    // FORCE / NO FORCE ROW LEVEL SECURITY — NO FORCE listed first.
-    NoForceRowSecurity(NoForceRowSecurityCmd),
-    ForceRowSecurity(ForceRowSecurityCmd),
-    // CLUSTER ON / SET WITHOUT CLUSTER.
-    ClusterOn(ClusterOnCmd<'input>),
-    // SET ... variants — longest prefixes first.
-    SetWithoutCluster(SetWithoutClusterCmd),
-    SetWithoutOids(SetWithoutOidsCmd),
-    SetLogged(SetLoggedCmd),
-    SetUnlogged(SetUnloggedCmd),
-    SetAccessMethod(SetAccessMethodClause<'input>),
-    SetTablespace(SetTablespaceClause<'input>),
-    SetReloptions(SetReloptions<'input>),
-    ResetReloptions(ResetReloptions<'input>),
-    // REPLICA IDENTITY ...
-    ReplicaIdentity(ReplicaIdentityCmd<'input>),
-    // INHERIT / NO INHERIT — NO INHERIT listed first.
-    NoInherit(NoInheritCmd<'input>),
-    Inherit(InheritCmd<'input>),
-    // OF / NOT OF.
-    NotOf(NotOfCmd),
-    Of(OfCmd<'input>),
-    // OWNER TO role.
-    Owner(OwnerTo<'input>),
-    // VALIDATE CONSTRAINT name.
-    ValidateConstraint(ValidateConstraintCmd<'input>),
-    // [NO] DEPENDS ON EXTENSION name.
-    DependsOnExtension(DependsOnExtension<'input>),
-    // OPTIONS (...)  — foreign-table alter_generic_options. Listed last so
-    // every keyword-led variant above wins first.
-    GenericOptions(AlterGenericOptions<'input>),
-}
-
-/// `ADD COLUMN IF NOT EXISTS columnDef`.
-#[derive(recursa::Node, Debug)]
-pub struct AddColumnIfNotExistsCmd<'input> {
-    #[tok(ADD, COLUMN, this)]
-    pub if_not_exists: IfNotExists,
-    pub column_def: crate::ast::ddl::table::ColumnDef<'input>,
-}
-
-/// `ADD IF NOT EXISTS columnDef`.
-#[derive(recursa::Node, Debug)]
-pub struct AddIfNotExistsCmd<'input> {
-    #[tok(ADD, this)]
-    pub if_not_exists: IfNotExists,
-    pub column_def: crate::ast::ddl::table::ColumnDef<'input>,
-}
-
-/// `ADD COLUMN columnDef`.
-#[derive(recursa::Node, Debug)]
-pub struct AddColumnCmd<'input> {
-    #[tok(ADD, COLUMN, this)]
-    pub column_def: crate::ast::ddl::table::ColumnDef<'input>,
-}
-
-/// `ADD TableConstraint [NOT VALID]` — table-level constraint with optional
-/// `NOT VALID` marker (Postgres routes this through `ConstraintAttributeSpec`
-/// on the constraint).
-///
-/// The `NOT VALID` modifier is part of the constraint's attribute list in
-/// gram.y; pg-sql models it as a trailing `Option` on this `AlterTableCmd`
-/// variant for symmetry with the corpus' usage (it only ever sits at the end).
-#[derive(recursa::Node, Debug)]
-pub struct AddTableConstraintCmd<'input> {
-    /// gram.y `ADD_P TableConstraint`: `NOT VALID` is an entry of the
-    /// constraint's own `ConstraintAttributeSpec`, not a suffix of the
-    /// command.
-    #[tok(ADD, this)]
-    pub constraint: crate::ast::ddl::table::TableConstraint<'input>,
-}
-
-/// `ADD columnDef` (no `COLUMN` keyword, no `IF NOT EXISTS`).
-///
-/// Listed last in the ADD family because every column definition begins with
-/// a bareword (the column name), which would otherwise greedily swallow
-/// `COLUMN`, `IF`, `CONSTRAINT`, etc.
-#[derive(recursa::Node, Debug)]
-pub struct AddColumnBareCmd<'input> {
-    #[tok(ADD, this)]
-    pub column_def: crate::ast::ddl::table::ColumnDef<'input>,
-}
-
-/// `ALTER CONSTRAINT name [DEFERRABLE | NOT DEFERRABLE] [INITIALLY {DEFERRED
-/// | IMMEDIATE}]` — Postgres' `AT_AlterConstraint` action.
-#[derive(recursa::Node, Debug)]
-pub struct AlterConstraintCmd<'input> {
-    #[tok(ALTER, CONSTRAINT, this)]
-    pub name: literal::Ident<'input>,
-    /// gram.y `ConstraintAttributeSpec`.
-    pub attrs: recursa::ArenaVec<'input, crate::ast::ddl::trigger::ConstraintAttributeElem>,
-}
-
-/// `ALTER [COLUMN] colname …` — the big `ALTER COLUMN` cmd. The `colname`
-/// can also be a numeric column index for `SET STATISTICS` (used on indexes,
-/// not on tables — but accepted here for symmetry).
-#[derive(recursa::Node, Debug)]
-pub struct AlterColumnCmd<'input> {
-    #[tok(ALTER, optional(COLUMN), this)]
-    pub col_ref: ColumnRef<'input>,
-    pub action: AlterColumnAction<'input>,
-}
-
-/// One action on `ALTER [COLUMN] colname …` — the full per-column command
-/// space.
-///
-/// Variant ordering: longer/more-specific prefixes first.
-/// - `SET …` family: `SET EXPRESSION AS (expr)` (3 keywords before `(`),
-///   `SET DATA TYPE Typename …` (SET DATA TYPE), `SET STATISTICS value`,
-///   `SET COMPRESSION`, `SET STORAGE`, `SET DEFAULT expr` (followed by an
-///   expression), `SET NOT NULL`, `SET (reloptions)`. Each disambiguates on
-///   the second token after `SET`.
-/// - `DROP …` family: `DROP EXPRESSION [IF EXISTS]`, `DROP IDENTITY [IF
-///   EXISTS]`, `DROP NOT NULL`, `DROP DEFAULT`. Each disambiguates on the
-///   second token after `DROP`.
-/// - `ADD GENERATED … AS IDENTITY [(opts)]` — `ADD` is unique.
-/// - `RESET (reloptions)` — `RESET` is unique.
-/// - `TYPE Typename [COLLATE …] [USING expr]` — bare `TYPE` form (the
-///   `SET DATA` is optional in gram.y).
-/// - `IdentityOpts` — `alter_identity_column_option_list` (one or more of
-///   `SET GENERATED {ALWAYS|BY DEFAULT}` / `SET seq_option` /
-///   `RESTART [WITH n]`). Chained via the no-separator `Seq1` shape; covers
-///   both the single-element form (e.g. `SET GENERATED ALWAYS` alone) and
-///   the multi-element form (`SET GENERATED BY DEFAULT SET INCREMENT BY 2
-///   RESTART`). Listed last in the SET/RESTART family so the longer-prefix
-///   SET variants commit first; the bare `RESTART` keyword is unique and
-///   only matched here.
-/// - `GenericOptions` (`OPTIONS (...)`) — foreign-table column options.
-#[derive(recursa::Node, Debug)]
-pub enum AlterColumnAction<'input> {
-    // SET ... — longest prefixes first.
-    SetExpressionAs(AlterColSetExpression<'input>),
-    SetDataType(AlterColSetDataType<'input>),
-    SetStatistics(AlterColSetStatistics<'input>),
-    SetCompression(AlterColSetCompression<'input>),
-    SetStorage(AlterColSetStorage),
-    SetNotNull(AlterColSetNotNull),
-    SetDefault(AlterColSetDefault<'input>),
-    SetReloptions(SetReloptions<'input>),
-    // DROP ... — longest prefixes first.
-    DropExpression(AlterColDropExpression),
-    DropIdentity(AlterColDropIdentity),
-    DropNotNull(AlterColDropNotNull),
-    DropDefault(AlterColDropDefault),
-    // ADD GENERATED ... AS IDENTITY [(opts)]
-    AddIdentity(AlterColAddIdentity<'input>),
-    // RESET (reloptions)
-    ResetReloptions(ResetReloptions<'input>),
-    // TYPE Typename [COLLATE …] [USING expr] — without leading SET DATA.
-    Type(AlterColTypeBare<'input>),
-    // alter_identity_column_option_list — chained SET GENERATED / SET
-    // seq_option / RESTART [WITH n] items (single- or multi-element).
-    IdentityOpts(AlterIdentityOpts<'input>),
-    // FOREIGN-TABLE column OPTIONS (...).
-    GenericOptions(AlterGenericOptions<'input>),
-}
-
-/// One element of `alter_identity_column_option_list` (gram.y):
-/// `SET GENERATED {ALWAYS|BY DEFAULT}` | `SET seq_option` | `RESTART [WITH n]`.
-///
-/// Variant ordering: `SetGenerated` (`SET GENERATED …`) before
-/// `SetSeqOption` (`SET …seq_option`) so the more specific `SET GENERATED`
-/// 2-token peek commits first; both share the leading `SET`. `Restart`
-/// has a disjoint leading `RESTART` token.
-#[derive(recursa::Node, Debug)]
-pub enum AlterIdentityOption<'input> {
-    SetGenerated(AlterColSetGenerated),
-    SetSeqOption(AlterColSetSeqOption<'input>),
-    Restart(AlterColRestart<'input>),
-}
-
-/// `alter_identity_column_option_list` — one or more
-/// [`AlterIdentityOption`] items in sequence, no separator.
-#[derive(recursa::Node, Debug)]
-pub struct AlterIdentityOpts<'input> {
-    pub items: recursa::ArenaVec1<'input, AlterIdentityOption<'input>>,
-}
-
-/// `SET EXPRESSION AS (expr)` — adjust a generated column's expression.
-#[derive(recursa::Node, Debug)]
-pub struct AlterColSetExpression<'input> {
-    #[tok(SET, EXPRESSION, AS, LPAREN, this, RPAREN)]
-    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
-}
-
-/// `[SET DATA] TYPE Typename [COLLATE name] [USING expr]` — change a column's
-/// type. The `SET DATA` is mandatory in this variant (the leading-`SET` form);
-/// the bare `TYPE …` form is `AlterColTypeBare`.
-#[derive(recursa::Node, Debug)]
-pub struct AlterColSetDataType<'input> {
-    #[tok(SET, DATA, TYPE, this)]
-    pub type_name: CastType<'input>,
-    pub collate: Option<crate::ast::ddl::table::CollateClause<'input>>,
-    pub using: Option<AlterColUsing<'input>>,
-}
-
-/// `SET STATISTICS { SignedIconst | DEFAULT }` — adjust per-column statistics
-/// target.
-#[derive(recursa::Node, Debug)]
-pub struct AlterColSetStatistics<'input> {
-    #[tok(SET, STATISTICS, this)]
-    pub value: SetStatisticsValue<'input>,
-}
-
-/// `SET COMPRESSION { name | DEFAULT }` — change a column's compression
-/// method.
-#[derive(recursa::Node, Debug)]
-pub struct AlterColSetCompression<'input> {
-    #[tok(SET, COMPRESSION, this)]
-    pub target: ColumnCompressionTarget<'input>,
-}
-
-/// `SET DEFAULT expr` — set a column's default expression.
-#[derive(recursa::Node, Debug)]
-pub struct AlterColSetDefault<'input> {
-    #[tok(SET, DEFAULT, this)]
-    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
-}
-
-/// `DROP DEFAULT` — drop a column's default expression.
-#[derive(recursa::Node, Debug)]
-pub enum AlterColDropDefault {
-    #[tok(DROP, DEFAULT)]
-    Value,
-}
-
-/// `USING expr` clause on `ALTER COLUMN … TYPE …`.
-#[derive(recursa::Node, Debug)]
-pub struct AlterColUsing<'input> {
-    #[tok(USING, this)]
-    pub expr: recursa::ArenaBox<'input, Expr<'input>>,
-}
-
-/// `TYPE Typename [COLLATE name] [USING expr]` — change a column's type
-/// without the leading `SET DATA`. Postgres accepts both spellings.
-#[derive(recursa::Node, Debug)]
-pub struct AlterColTypeBare<'input> {
-    #[tok(TYPE, this)]
-    pub type_name: CastType<'input>,
-    pub collate: Option<crate::ast::ddl::table::CollateClause<'input>>,
-    pub using: Option<AlterColUsing<'input>>,
-}
-
-/// `SET GENERATED { ALWAYS | BY DEFAULT }` — change the identity column
-/// generation mode.
-#[derive(recursa::Node, Debug)]
-pub struct AlterColSetGenerated {
-    #[tok(SET, GENERATED, this)]
-    pub mode: crate::ast::ddl::table::GeneratedIdentityMode,
-}
-
-/// `SET STORAGE { PLAIN | EXTERNAL | EXTENDED | MAIN | DEFAULT }` — adjust a
-/// column's TOAST storage strategy.
-#[derive(recursa::Node, Debug)]
-pub struct AlterColSetStorage {
-    #[tok(SET, STORAGE, this)]
-    pub mode: crate::ast::ddl::table::ColumnStorageMode,
-}
-
-/// `SET NOT NULL` — add a NOT NULL marker on the column.
-#[derive(recursa::Node, Debug)]
-pub enum AlterColSetNotNull {
-    #[tok(SET, NOT, NULL)]
-    Value,
-}
-
-/// One `SET seqOpt` action on an identity column —
-/// `SET { START WITH | INCREMENT BY | MINVALUE | MAXVALUE | CACHE | CYCLE |
-/// NO MINVALUE | NO MAXVALUE | NO CYCLE }`.
-///
-/// Reuses `IdentitySeqOption` from `create_table.rs` so the full sequence-
-/// option set is supported (and the formatter is shared).
-#[derive(recursa::Node, Debug)]
-pub struct AlterColSetSeqOption<'input> {
-    #[tok(SET, this)]
-    pub option: crate::ast::ddl::table::IdentitySeqOption<'input>,
-}
-
-/// `DROP EXPRESSION [IF EXISTS]` — remove a generated column's expression,
-/// turning it into a regular column.
-#[derive(recursa::Node, Debug)]
-#[tok(DROP, EXPRESSION, this)]
-pub struct AlterColDropExpression {
-    pub if_exists: Option<IfExists>,
-}
-
-/// `DROP IDENTITY [IF EXISTS]` — remove an identity-column property.
-#[derive(recursa::Node, Debug)]
-#[tok(DROP, IDENTITY, this)]
-pub struct AlterColDropIdentity {
-    pub if_exists: Option<IfExists>,
-}
-
-/// `DROP NOT NULL` — remove a NOT NULL marker.
-#[derive(recursa::Node, Debug)]
-pub enum AlterColDropNotNull {
-    #[tok(DROP, NOT, NULL)]
-    Value,
-}
-
-/// `ADD GENERATED { ALWAYS | BY DEFAULT } AS IDENTITY [(seq_options)]` —
-/// add an identity property to an existing column.
-#[derive(recursa::Node, Debug)]
-pub struct AlterColAddIdentity<'input> {
-    #[tok(ADD, this)]
-    pub identity: crate::ast::ddl::table::GeneratedIdentityConstraint<'input>,
-}
-
-/// `RESTART [WITH NumericOnly]` — restart an identity column's sequence.
-#[derive(recursa::Node, Debug)]
-#[tok(RESTART, this)]
-pub struct AlterColRestart<'input> {
-    pub value: Option<RestartWith<'input>>,
-}
-
-/// `[WITH] NumericOnly` — the value portion of `RESTART`.
-#[derive(recursa::Node, Debug)]
-pub struct RestartWith<'input> {
-    #[tok(optional(WITH), this)]
-    pub value: NumericOnly<'input>,
-}
-
-/// `DROP CONSTRAINT IF EXISTS name [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug)]
-pub struct DropConstraintIfExistsCmd<'input> {
-    #[tok(DROP, CONSTRAINT, this)]
-    pub if_exists: IfExists,
-    pub name: literal::Ident<'input>,
-    pub behavior: Option<DropBehavior>,
-}
-
-/// `DROP CONSTRAINT name [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug)]
-pub struct DropConstraintCmd<'input> {
-    #[tok(DROP, CONSTRAINT, this)]
-    pub name: literal::Ident<'input>,
-    pub behavior: Option<DropBehavior>,
-}
-
-/// `DROP [COLUMN] IF EXISTS colname [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug)]
-pub struct DropColumnIfExistsCmd<'input> {
-    #[tok(DROP, optional(COLUMN), this)]
-    pub if_exists: IfExists,
-    pub name: literal::Ident<'input>,
-    pub behavior: Option<DropBehavior>,
-}
-
-/// `DROP [COLUMN] colname [CASCADE | RESTRICT]`.
-#[derive(recursa::Node, Debug)]
-pub struct DropColumnCmd<'input> {
-    #[tok(DROP, optional(COLUMN), this)]
-    pub name: literal::Ident<'input>,
-    pub behavior: Option<DropBehavior>,
-}
-
-/// `ENABLE TRIGGER { name | ALL | USER }`.
-#[derive(recursa::Node, Debug)]
-pub struct EnableTriggerCmd<'input> {
-    #[tok(ENABLE, TRIGGER, this)]
-    pub target: TriggerOrRuleTarget<'input>,
-}
-
-/// `ENABLE ALWAYS TRIGGER name`.
-#[derive(recursa::Node, Debug)]
-pub struct EnableAlwaysTriggerCmd<'input> {
-    #[tok(ENABLE, ALWAYS, TRIGGER, this)]
-    pub name: literal::Ident<'input>,
-}
-
-/// `ENABLE REPLICA TRIGGER name`.
-#[derive(recursa::Node, Debug)]
-pub struct EnableReplicaTriggerCmd<'input> {
-    #[tok(ENABLE, REPLICA, TRIGGER, this)]
-    pub name: literal::Ident<'input>,
-}
-
-/// `DISABLE TRIGGER { name | ALL | USER }`.
-#[derive(recursa::Node, Debug)]
-pub struct DisableTriggerCmd<'input> {
-    #[tok(DISABLE, TRIGGER, this)]
-    pub target: TriggerOrRuleTarget<'input>,
-}
-
-/// `ENABLE RULE name`.
-#[derive(recursa::Node, Debug)]
-pub struct EnableRuleCmd<'input> {
-    #[tok(ENABLE, RULE, this)]
-    pub name: literal::Ident<'input>,
-}
-
-/// `ENABLE ALWAYS RULE name`.
-#[derive(recursa::Node, Debug)]
-pub struct EnableAlwaysRuleCmd<'input> {
-    #[tok(ENABLE, ALWAYS, RULE, this)]
-    pub name: literal::Ident<'input>,
-}
-
-/// `ENABLE REPLICA RULE name`.
-#[derive(recursa::Node, Debug)]
-pub struct EnableReplicaRuleCmd<'input> {
-    #[tok(ENABLE, REPLICA, RULE, this)]
-    pub name: literal::Ident<'input>,
-}
-
-/// `DISABLE RULE name`.
-#[derive(recursa::Node, Debug)]
-pub struct DisableRuleCmd<'input> {
-    #[tok(DISABLE, RULE, this)]
-    pub name: literal::Ident<'input>,
-}
-
-/// Trigger-action target on `ENABLE TRIGGER` / `DISABLE TRIGGER`:
-/// `ALL` (every trigger), `USER` (every non-internal trigger), or a named
-/// trigger.
-///
-/// Variant ordering: keyword variants (`All` / `User`) before `Name` (ident),
-/// since `ALL` and `USER` are hard keywords that won't lex as `Ident`.
-#[derive(recursa::Node, Debug)]
-pub enum TriggerOrRuleTarget<'input> {
-    #[tok(ALL)]
-    All,
-    #[tok(USER)]
-    User,
-    Name(literal::Ident<'input>),
-}
-
-/// `ENABLE ROW LEVEL SECURITY`.
-#[derive(recursa::Node, Debug)]
-pub enum EnableRowSecurityCmd {
-    #[tok(ENABLE, ROW, LEVEL, SECURITY)]
-    Value,
-}
-
-/// `DISABLE ROW LEVEL SECURITY`.
-#[derive(recursa::Node, Debug)]
-pub enum DisableRowSecurityCmd {
-    #[tok(DISABLE, ROW, LEVEL, SECURITY)]
-    Value,
-}
-
-/// `FORCE ROW LEVEL SECURITY`.
-#[derive(recursa::Node, Debug)]
-pub enum ForceRowSecurityCmd {
-    #[tok(FORCE, ROW, LEVEL, SECURITY)]
-    Value,
-}
-
-/// `NO FORCE ROW LEVEL SECURITY`.
-#[derive(recursa::Node, Debug)]
-pub enum NoForceRowSecurityCmd {
-    #[tok(NO, FORCE, ROW, LEVEL, SECURITY)]
-    Value,
-}
-
-/// `CLUSTER ON indexname`.
-#[derive(recursa::Node, Debug)]
-pub struct ClusterOnCmd<'input> {
-    #[tok(CLUSTER, ON, this)]
-    pub name: literal::Ident<'input>,
-}
-
-/// `SET WITHOUT CLUSTER`.
-#[derive(recursa::Node, Debug)]
-pub enum SetWithoutClusterCmd {
-    #[tok(SET, WITHOUT, CLUSTER)]
-    Value,
-}
-
-/// `SET WITHOUT OIDS`.
-#[derive(recursa::Node, Debug)]
-pub enum SetWithoutOidsCmd {
-    #[tok(SET, WITHOUT, OIDS)]
-    Value,
-}
-
-/// `SET LOGGED`.
-#[derive(recursa::Node, Debug)]
-pub enum SetLoggedCmd {
-    #[tok(SET, LOGGED)]
-    Value,
-}
-
-/// `SET UNLOGGED`.
-#[derive(recursa::Node, Debug)]
-pub enum SetUnloggedCmd {
-    #[tok(SET, UNLOGGED)]
-    Value,
-}
-
-/// `REPLICA IDENTITY { DEFAULT | NOTHING | FULL | USING INDEX name }`.
-#[derive(recursa::Node, Debug)]
-pub struct ReplicaIdentityCmd<'input> {
-    #[tok(REPLICA, IDENTITY, this)]
-    pub kind: ReplicaIdentityKind<'input>,
-}
-
-/// One of `DEFAULT`, `NOTHING`, `FULL`, or `USING INDEX name`.
-///
-/// Variant ordering: keyword-only variants (single tokens, disjoint) first;
-/// `UsingIndex` (`USING INDEX`) last — it has a unique `USING` prefix.
-#[derive(recursa::Node, Debug)]
-pub enum ReplicaIdentityKind<'input> {
-    #[tok(DEFAULT)]
-    Default,
-    #[tok(NOTHING)]
-    Nothing,
-    #[tok(FULL)]
-    Full,
-    UsingIndex(ReplicaIdentityUsingIndex<'input>),
-}
-
-/// `USING INDEX name` — the index-backed REPLICA IDENTITY.
-#[derive(recursa::Node, Debug)]
-pub struct ReplicaIdentityUsingIndex<'input> {
-    #[tok(USING, INDEX, this)]
-    pub name: literal::Ident<'input>,
-}
-
-/// `INHERIT parent`.
-#[derive(recursa::Node, Debug)]
-pub struct InheritCmd<'input> {
-    #[tok(INHERIT, this)]
-    pub parent: QualifiedName<'input>,
-}
-
-/// `NO INHERIT parent`.
-#[derive(recursa::Node, Debug)]
-pub struct NoInheritCmd<'input> {
-    #[tok(NO, INHERIT, this)]
-    pub parent: QualifiedName<'input>,
-}
-
-/// `OF type_name`.
-#[derive(recursa::Node, Debug)]
-pub struct OfCmd<'input> {
-    #[tok(OF, this)]
-    pub type_name: QualifiedName<'input>,
-}
-
-/// `NOT OF` — drop the typed-table relationship.
-#[derive(recursa::Node, Debug)]
-pub enum NotOfCmd {
-    #[tok(NOT, OF)]
-    Value,
-}
-
-/// `VALIDATE CONSTRAINT name`.
-#[derive(recursa::Node, Debug)]
-pub struct ValidateConstraintCmd<'input> {
-    #[tok(VALIDATE, CONSTRAINT, this)]
-    pub name: literal::Ident<'input>,
+recursa::ast_node! {
+    /// `ALTER TABLE ...` — Postgres' `AlterTableStmt` (table object kind), plus
+    /// the table-shaped branches of `RenameStmt` and `AlterObjectSchemaStmt`.
+    ///
+    /// pg-sql keeps one LR production family for `ALTER TABLE`, so this one struct
+    /// covers every shape that begins with those two keywords:
+    ///
+    /// - `ALTER TABLE [IF EXISTS] [ONLY] name [*] alter_table_cmds`
+    /// - `ALTER TABLE [IF EXISTS] [ONLY] name [*] partition_cmd`
+    /// - `ALTER TABLE [IF EXISTS] name RENAME TO new`
+    /// - `ALTER TABLE [IF EXISTS] [ONLY] name [*] RENAME [COLUMN] old TO new`
+    /// - `ALTER TABLE [IF EXISTS] [ONLY] name [*] RENAME CONSTRAINT old TO new`
+    /// - `ALTER TABLE [IF EXISTS] name SET SCHEMA new`
+    /// - `ALTER TABLE ALL IN TABLESPACE name [OWNED BY roles] SET TABLESPACE new
+    ///    [NOWAIT]`
+    ///
+    /// The two top-level shapes — the bulk `ALL IN TABLESPACE …` form and the
+    /// per-relation form — are split into an enum body.
+    #[derive(Debug)]
+    pub struct AlterTableStmt {
+        #[tok(ALTER, TABLE, this)]
+        pub body: AlterTableBody,
+    }
+}
+
+recursa::ast_node! {
+    /// Body of `ALTER TABLE ...` — either the bulk-relocate `ALL IN TABLESPACE`
+    /// form or a per-relation form.
+    ///
+    /// Variant ordering: `All` (starts with `ALL`) before `Single` (starts with
+    /// `IF` / `ONLY` / `qualified_name`, never `ALL`).
+    #[derive(Debug)]
+    pub enum AlterTableBody {
+        All(AllInTablespaceBody),
+        Single(AlterTableSingle),
+    }
+}
+
+recursa::ast_node! {
+    /// Per-relation `ALTER TABLE` body: `[IF EXISTS] [ONLY] name [*] action`.
+    ///
+    /// The relation reference is Postgres' `relation_expr`: a `qualified_name`
+    /// optionally prefixed by `ONLY` and/or suffixed by `*`. The `ONLY (name)`
+    /// parenthesised form is not exercised by any corpus statement, so it is
+    /// not modelled.
+    #[derive(Debug)]
+    pub struct AlterTableSingle {
+        pub if_exists: Option<IfExists>,
+        #[presence(ONLY)]
+        pub only: bool,
+        pub name: QualifiedName,
+        #[presence(STAR)]
+        pub star: bool,
+        pub action: AlterTableSingleAction,
+    }
+}
+
+recursa::ast_node! {
+    /// One action on a per-relation `ALTER TABLE` body — covers Postgres'
+    /// `alter_table_cmds`, `partition_cmd`, `RenameStmt` (table/column/constraint
+    /// rename), and `AlterObjectSchemaStmt` (SET SCHEMA) for tables.
+    ///
+    /// Variant ordering:
+    /// - `RenameConstraint` (`RENAME CONSTRAINT …`) before `RenameColumn`
+    ///   (`RENAME [COLUMN] …`) before `Rename` (`RENAME TO …`) — all start with
+    ///   `RENAME`; `Rename` succeeds only when the second token is `TO`,
+    ///   `RenameColumn` only when the second is `COLUMN` or an ident, and
+    ///   `RenameConstraint` only when the second is `CONSTRAINT`.
+    /// - `SetSchema` (`SET SCHEMA name`) before `Cmds` — both can begin with
+    ///   `SET`, but `SET SCHEMA` is not in `alter_table_cmd` so the parser must
+    ///   try it first.
+    /// - `Partition` (`ATTACH PARTITION` / `DETACH PARTITION`) before `Cmds` —
+    ///   `alter_table_cmd` does not begin with `ATTACH`/`DETACH`, but listing
+    ///   the partition cmd first is clearer.
+    /// - `Cmds` last — the catch-all for the comma-separated `alter_table_cmds`.
+    #[derive(Debug)]
+    pub enum AlterTableSingleAction {
+        RenameConstraint(AlterTableRenameConstraint),
+        RenameColumn(RenameColumnClause),
+        Rename(RenameTo),
+        SetSchema(SetSchemaClause),
+        Partition(PartitionCmd),
+        Cmds(AlterTableCmds),
+    }
+}
+
+recursa::ast_node! {
+    /// `RENAME CONSTRAINT old TO new` — Postgres' `RenameStmt` branch for table
+    /// constraints.
+    #[derive(Debug)]
+    pub struct AlterTableRenameConstraint {
+        #[tok(RENAME, CONSTRAINT, this)]
+        pub old_name: literal::Ident,
+        #[tok(TO, this)]
+        pub new_name: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// Comma-separated `alter_table_cmds` on ALTER TABLE.
+    #[derive(Debug)]
+    pub struct AlterTableCmds {
+        #[sep(COMMA)]
+        pub cmds: one_or_many!(AlterTableCmd),
+    }
+}
+
+recursa::ast_node! {
+    /// Postgres' `partition_cmd`: a single `ATTACH PARTITION` or `DETACH
+    /// PARTITION` action on a partitioned table.
+    ///
+    /// Variant ordering: `Attach` (ATTACH) and `Detach` (DETACH) have disjoint
+    /// first tokens, so order is for clarity.
+    #[derive(Debug)]
+    pub enum PartitionCmd {
+        Attach(AttachPartitionCmd),
+        Detach(DetachPartitionCmd),
+    }
+}
+
+recursa::ast_node! {
+    /// `ATTACH PARTITION qualified_name partition_bound_spec` — adds an existing
+    /// table as a partition of the target partitioned table.
+    #[derive(Debug)]
+    pub struct AttachPartitionCmd {
+        #[tok(ATTACH, PARTITION, this)]
+        pub name: QualifiedName,
+        pub bound: PartitionBoundSpec,
+    }
+}
+
+recursa::ast_node! {
+    /// `DETACH PARTITION qualified_name [CONCURRENTLY | FINALIZE]` — removes a
+    /// partition from its parent.
+    #[derive(Debug)]
+    pub struct DetachPartitionCmd {
+        #[tok(DETACH, PARTITION, this)]
+        pub name: QualifiedName,
+        pub mode: Option<DetachPartitionMode>,
+    }
+}
+
+recursa::ast_node! {
+    /// Trailing mode keyword on `DETACH PARTITION`: `CONCURRENTLY` (the default
+    /// nonblocking detach) or `FINALIZE` (completes a previously-CONCURRENTLY
+    /// detached partition).
+    #[derive(Debug)]
+    pub enum DetachPartitionMode {
+        #[tok(CONCURRENTLY)]
+        Concurrently,
+        #[tok(FINALIZE)]
+        Finalize,
+    }
+}
+
+recursa::ast_node! {
+    /// Postgres' `PartitionBoundSpec` — the partition bound used by `ATTACH
+    /// PARTITION`. One of:
+    ///
+    /// - `DEFAULT` (the catch-all partition)
+    /// - `FOR VALUES IN (val, ...)` (list)
+    /// - `FOR VALUES FROM (...) TO (...)` (range)
+    /// - `FOR VALUES WITH (MODULUS n, REMAINDER m)` (hash)
+    ///
+    /// Variant ordering: `Default` (one keyword, distinct first token) before
+    /// `ForValues` (begins with `FOR`).
+    #[derive(Debug)]
+    pub enum PartitionBoundSpec {
+        #[tok(DEFAULT)]
+        Default,
+        ForValues(crate::ast::ddl::table::ForValuesClause),
+    }
+}
+
+recursa::ast_node! {
+    /// A single `alter_table_cmd` — one comma-separated entry in `alter_table_cmds`.
+    ///
+    /// Variant ordering:
+    /// - `ADD …` family: longer-prefix variants first. `AddColumnIfNotExists`
+    ///   (4 keywords `ADD COLUMN IF NOT EXISTS`) before `AddIfNotExists`
+    ///   (`ADD IF NOT EXISTS`) before `AddColumn` (`ADD COLUMN`) before
+    ///   `AddConstraint` (`ADD …` table-constraint) before `AddColumnBare`
+    ///   (`ADD coldef`).
+    /// - `ALTER …` family: `AlterColumnCmd` (matches `ALTER [COLUMN] colname …`).
+    /// - `ALTER CONSTRAINT name …` is a separate top-level variant, listed
+    ///   before `AlterColumnCmd` so the `CONSTRAINT` keyword wins.
+    /// - `DROP …` family: `DropConstraintIfExists` (5 tokens), `DropConstraint`,
+    ///   `DropColumnIfExists` (with optional COLUMN), `DropColumn`.
+    /// - `ENABLE`/`DISABLE`: multi-token `ENABLE REPLICA TRIGGER` / `ENABLE
+    ///   ALWAYS TRIGGER` before `ENABLE TRIGGER`; same for RULE; `ENABLE ROW
+    ///   LEVEL SECURITY` and `DISABLE ROW LEVEL SECURITY`.
+    /// - `SET WITHOUT CLUSTER` / `SET WITHOUT OIDS` / `SET LOGGED` /
+    ///   `SET UNLOGGED` / `SET ACCESS METHOD` / `SET TABLESPACE` /
+    ///   `SET (reloptions)` — all start with `SET` but each disambiguates on
+    ///   the second token.
+    /// - `RESET (reloptions)` — disjoint from `SET …`.
+    /// - `CLUSTER ON name`, `INHERIT name`, `NO INHERIT name`, `OF type_name`,
+    ///   `NOT OF`, `OWNER TO role`, `REPLICA IDENTITY …`, `FORCE ROW LEVEL
+    ///   SECURITY`, `NO FORCE ROW LEVEL SECURITY`, `VALIDATE CONSTRAINT name`,
+    ///   `DEPENDS ON EXTENSION name` / `NO DEPENDS ON EXTENSION name` — each
+    ///   commits on a unique leading keyword (with `NO …` and `NOT …` carefully
+    ///   placed against single-keyword variants).
+    /// - `GenericOptions` (FOREIGN-TABLE OPTIONS clause) last — `OPTIONS` is a
+    ///   unique leading keyword.
+    #[derive(Debug)]
+    #[allow(
+        clippy::large_enum_variant,
+        reason = "keep the public parser AST variants inline and source-compatible"
+    )]
+    pub enum AlterTableCmd {
+        // ADD ... — longer prefixes first.
+        AddColumnIfNotExists(AddColumnIfNotExistsCmd),
+        AddIfNotExists(AddIfNotExistsCmd),
+        AddColumn(AddColumnCmd),
+        AddConstraint(AddTableConstraintCmd),
+        AddColumnBare(AddColumnBareCmd),
+        // ALTER CONSTRAINT ...
+        AlterConstraint(AlterConstraintCmd),
+        // ALTER [COLUMN] colname ...
+        AlterColumn(AlterColumnCmd),
+        // DROP ... — longer prefixes first.
+        DropConstraintIfExists(DropConstraintIfExistsCmd),
+        DropConstraint(DropConstraintCmd),
+        DropColumnIfExists(DropColumnIfExistsCmd),
+        DropColumn(DropColumnCmd),
+        // ENABLE / DISABLE variants — longer prefixes first.
+        EnableReplicaTrigger(EnableReplicaTriggerCmd),
+        EnableAlwaysTrigger(EnableAlwaysTriggerCmd),
+        EnableReplicaRule(EnableReplicaRuleCmd),
+        EnableAlwaysRule(EnableAlwaysRuleCmd),
+        EnableTrigger(EnableTriggerCmd),
+        EnableRule(EnableRuleCmd),
+        EnableRowSecurity(EnableRowSecurityCmd),
+        DisableTrigger(DisableTriggerCmd),
+        DisableRule(DisableRuleCmd),
+        DisableRowSecurity(DisableRowSecurityCmd),
+        // FORCE / NO FORCE ROW LEVEL SECURITY — NO FORCE listed first.
+        NoForceRowSecurity(NoForceRowSecurityCmd),
+        ForceRowSecurity(ForceRowSecurityCmd),
+        // CLUSTER ON / SET WITHOUT CLUSTER.
+        ClusterOn(ClusterOnCmd),
+        // SET ... variants — longest prefixes first.
+        SetWithoutCluster(SetWithoutClusterCmd),
+        SetWithoutOids(SetWithoutOidsCmd),
+        SetLogged(SetLoggedCmd),
+        SetUnlogged(SetUnloggedCmd),
+        SetAccessMethod(SetAccessMethodClause),
+        SetTablespace(SetTablespaceClause),
+        SetReloptions(SetReloptions),
+        ResetReloptions(ResetReloptions),
+        // REPLICA IDENTITY ...
+        ReplicaIdentity(ReplicaIdentityCmd),
+        // INHERIT / NO INHERIT — NO INHERIT listed first.
+        NoInherit(NoInheritCmd),
+        Inherit(InheritCmd),
+        // OF / NOT OF.
+        NotOf(NotOfCmd),
+        Of(OfCmd),
+        // OWNER TO role.
+        Owner(OwnerTo),
+        // VALIDATE CONSTRAINT name.
+        ValidateConstraint(ValidateConstraintCmd),
+        // [NO] DEPENDS ON EXTENSION name.
+        DependsOnExtension(DependsOnExtension),
+        // OPTIONS (...)  — foreign-table alter_generic_options. Listed last so
+        // every keyword-led variant above wins first.
+        GenericOptions(AlterGenericOptions),
+    }
+}
+
+recursa::ast_node! {
+    /// `ADD COLUMN IF NOT EXISTS columnDef`.
+    #[derive(Debug)]
+    pub struct AddColumnIfNotExistsCmd {
+        #[tok(ADD, COLUMN, this)]
+        pub if_not_exists: IfNotExists,
+        pub column_def: crate::ast::ddl::table::ColumnDef,
+    }
+}
+
+recursa::ast_node! {
+    /// `ADD IF NOT EXISTS columnDef`.
+    #[derive(Debug)]
+    pub struct AddIfNotExistsCmd {
+        #[tok(ADD, this)]
+        pub if_not_exists: IfNotExists,
+        pub column_def: crate::ast::ddl::table::ColumnDef,
+    }
+}
+
+recursa::ast_node! {
+    /// `ADD COLUMN columnDef`.
+    #[derive(Debug)]
+    pub struct AddColumnCmd {
+        #[tok(ADD, COLUMN, this)]
+        pub column_def: crate::ast::ddl::table::ColumnDef,
+    }
+}
+
+recursa::ast_node! {
+    /// `ADD TableConstraint [NOT VALID]` — table-level constraint with optional
+    /// `NOT VALID` marker (Postgres routes this through `ConstraintAttributeSpec`
+    /// on the constraint).
+    ///
+    /// The `NOT VALID` modifier is part of the constraint's attribute list in
+    /// gram.y; pg-sql models it as a trailing `Option` on this `AlterTableCmd`
+    /// variant for symmetry with the corpus' usage (it only ever sits at the end).
+    #[derive(Debug)]
+    pub struct AddTableConstraintCmd {
+        /// gram.y `ADD_P TableConstraint`: `NOT VALID` is an entry of the
+        /// constraint's own `ConstraintAttributeSpec`, not a suffix of the
+        /// command.
+        #[tok(ADD, this)]
+        pub constraint: crate::ast::ddl::table::TableConstraint,
+    }
+}
+
+recursa::ast_node! {
+    /// `ADD columnDef` (no `COLUMN` keyword, no `IF NOT EXISTS`).
+    ///
+    /// Listed last in the ADD family because every column definition begins with
+    /// a bareword (the column name), which would otherwise greedily swallow
+    /// `COLUMN`, `IF`, `CONSTRAINT`, etc.
+    #[derive(Debug)]
+    pub struct AddColumnBareCmd {
+        #[tok(ADD, this)]
+        pub column_def: crate::ast::ddl::table::ColumnDef,
+    }
+}
+
+recursa::ast_node! {
+    /// `ALTER CONSTRAINT name [DEFERRABLE | NOT DEFERRABLE] [INITIALLY {DEFERRED
+    /// | IMMEDIATE}]` — Postgres' `AT_AlterConstraint` action.
+    #[derive(Debug)]
+    pub struct AlterConstraintCmd {
+        #[tok(ALTER, CONSTRAINT, this)]
+        pub name: literal::Ident,
+        /// gram.y `ConstraintAttributeSpec`.
+        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+    }
+}
+
+recursa::ast_node! {
+    /// `ALTER [COLUMN] colname …` — the big `ALTER COLUMN` cmd. The `colname`
+    /// can also be a numeric column index for `SET STATISTICS` (used on indexes,
+    /// not on tables — but accepted here for symmetry).
+    #[derive(Debug)]
+    pub struct AlterColumnCmd {
+        #[tok(ALTER, optional(COLUMN), this)]
+        pub col_ref: ColumnRef,
+        pub action: AlterColumnAction,
+    }
+}
+
+recursa::ast_node! {
+    /// One action on `ALTER [COLUMN] colname …` — the full per-column command
+    /// space.
+    ///
+    /// Variant ordering: longer/more-specific prefixes first.
+    /// - `SET …` family: `SET EXPRESSION AS (expr)` (3 keywords before `(`),
+    ///   `SET DATA TYPE Typename …` (SET DATA TYPE), `SET STATISTICS value`,
+    ///   `SET COMPRESSION`, `SET STORAGE`, `SET DEFAULT expr` (followed by an
+    ///   expression), `SET NOT NULL`, `SET (reloptions)`. Each disambiguates on
+    ///   the second token after `SET`.
+    /// - `DROP …` family: `DROP EXPRESSION [IF EXISTS]`, `DROP IDENTITY [IF
+    ///   EXISTS]`, `DROP NOT NULL`, `DROP DEFAULT`. Each disambiguates on the
+    ///   second token after `DROP`.
+    /// - `ADD GENERATED … AS IDENTITY [(opts)]` — `ADD` is unique.
+    /// - `RESET (reloptions)` — `RESET` is unique.
+    /// - `TYPE Typename [COLLATE …] [USING expr]` — bare `TYPE` form (the
+    ///   `SET DATA` is optional in gram.y).
+    /// - `IdentityOpts` — `alter_identity_column_option_list` (one or more of
+    ///   `SET GENERATED {ALWAYS|BY DEFAULT}` / `SET seq_option` /
+    ///   `RESTART [WITH n]`). Chained via the no-separator `Seq1` shape; covers
+    ///   both the single-element form (e.g. `SET GENERATED ALWAYS` alone) and
+    ///   the multi-element form (`SET GENERATED BY DEFAULT SET INCREMENT BY 2
+    ///   RESTART`). Listed last in the SET/RESTART family so the longer-prefix
+    ///   SET variants commit first; the bare `RESTART` keyword is unique and
+    ///   only matched here.
+    /// - `GenericOptions` (`OPTIONS (...)`) — foreign-table column options.
+    #[derive(Debug)]
+    pub enum AlterColumnAction {
+        // SET ... — longest prefixes first.
+        SetExpressionAs(AlterColSetExpression),
+        SetDataType(AlterColSetDataType),
+        SetStatistics(AlterColSetStatistics),
+        SetCompression(AlterColSetCompression),
+        SetStorage(AlterColSetStorage),
+        SetNotNull(AlterColSetNotNull),
+        SetDefault(AlterColSetDefault),
+        SetReloptions(SetReloptions),
+        // DROP ... — longest prefixes first.
+        DropExpression(AlterColDropExpression),
+        DropIdentity(AlterColDropIdentity),
+        DropNotNull(AlterColDropNotNull),
+        DropDefault(AlterColDropDefault),
+        // ADD GENERATED ... AS IDENTITY [(opts)]
+        AddIdentity(AlterColAddIdentity),
+        // RESET (reloptions)
+        ResetReloptions(ResetReloptions),
+        // TYPE Typename [COLLATE …] [USING expr] — without leading SET DATA.
+        Type(AlterColTypeBare),
+        // alter_identity_column_option_list — chained SET GENERATED / SET
+        // seq_option / RESTART [WITH n] items (single- or multi-element).
+        IdentityOpts(AlterIdentityOpts),
+        // FOREIGN-TABLE column OPTIONS (...).
+        GenericOptions(AlterGenericOptions),
+    }
+}
+
+recursa::ast_node! {
+    /// One element of `alter_identity_column_option_list` (gram.y):
+    /// `SET GENERATED {ALWAYS|BY DEFAULT}` | `SET seq_option` | `RESTART [WITH n]`.
+    ///
+    /// Variant ordering: `SetGenerated` (`SET GENERATED …`) before
+    /// `SetSeqOption` (`SET …seq_option`) so the more specific `SET GENERATED`
+    /// 2-token peek commits first; both share the leading `SET`. `Restart`
+    /// has a disjoint leading `RESTART` token.
+    #[derive(Debug)]
+    pub enum AlterIdentityOption {
+        SetGenerated(AlterColSetGenerated),
+        SetSeqOption(AlterColSetSeqOption),
+        Restart(AlterColRestart),
+    }
+}
+
+recursa::ast_node! {
+    /// `alter_identity_column_option_list` — one or more
+    /// [`AlterIdentityOption`] items in sequence, no separator.
+    #[derive(Debug)]
+    pub struct AlterIdentityOpts {
+        pub items: one_or_many!(AlterIdentityOption),
+    }
+}
+
+recursa::ast_node! {
+    /// `SET EXPRESSION AS (expr)` — adjust a generated column's expression.
+    #[derive(Debug)]
+    pub struct AlterColSetExpression {
+        #[tok(SET, EXPRESSION, AS, LPAREN, this, RPAREN)]
+        pub expr: boxed!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `[SET DATA] TYPE Typename [COLLATE name] [USING expr]` — change a column's
+    /// type. The `SET DATA` is mandatory in this variant (the leading-`SET` form);
+    /// the bare `TYPE …` form is `AlterColTypeBare`.
+    #[derive(Debug)]
+    pub struct AlterColSetDataType {
+        #[tok(SET, DATA, TYPE, this)]
+        pub type_name: CastType,
+        pub collate: Option<crate::ast::ddl::table::CollateClause>,
+        pub using: Option<AlterColUsing>,
+    }
+}
+
+recursa::ast_node! {
+    /// `SET STATISTICS { SignedIconst | DEFAULT }` — adjust per-column statistics
+    /// target.
+    #[derive(Debug)]
+    pub struct AlterColSetStatistics {
+        #[tok(SET, STATISTICS, this)]
+        pub value: SetStatisticsValue,
+    }
+}
+
+recursa::ast_node! {
+    /// `SET COMPRESSION { name | DEFAULT }` — change a column's compression
+    /// method.
+    #[derive(Debug)]
+    pub struct AlterColSetCompression {
+        #[tok(SET, COMPRESSION, this)]
+        pub target: ColumnCompressionTarget,
+    }
+}
+
+recursa::ast_node! {
+    /// `SET DEFAULT expr` — set a column's default expression.
+    #[derive(Debug)]
+    pub struct AlterColSetDefault {
+        #[tok(SET, DEFAULT, this)]
+        pub expr: boxed!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `DROP DEFAULT` — drop a column's default expression.
+    #[derive(Debug)]
+    pub enum AlterColDropDefault {
+        #[tok(DROP, DEFAULT)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `USING expr` clause on `ALTER COLUMN … TYPE …`.
+    #[derive(Debug)]
+    pub struct AlterColUsing {
+        #[tok(USING, this)]
+        pub expr: boxed!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `TYPE Typename [COLLATE name] [USING expr]` — change a column's type
+    /// without the leading `SET DATA`. Postgres accepts both spellings.
+    #[derive(Debug)]
+    pub struct AlterColTypeBare {
+        #[tok(TYPE, this)]
+        pub type_name: CastType,
+        pub collate: Option<crate::ast::ddl::table::CollateClause>,
+        pub using: Option<AlterColUsing>,
+    }
+}
+
+recursa::ast_node! {
+    /// `SET GENERATED { ALWAYS | BY DEFAULT }` — change the identity column
+    /// generation mode.
+    #[derive(Debug)]
+    pub struct AlterColSetGenerated {
+        #[tok(SET, GENERATED, this)]
+        pub mode: crate::ast::ddl::table::GeneratedIdentityMode,
+    }
+}
+
+recursa::ast_node! {
+    /// `SET STORAGE { PLAIN | EXTERNAL | EXTENDED | MAIN | DEFAULT }` — adjust a
+    /// column's TOAST storage strategy.
+    #[derive(Debug)]
+    pub struct AlterColSetStorage {
+        #[tok(SET, STORAGE, this)]
+        pub mode: crate::ast::ddl::table::ColumnStorageMode,
+    }
+}
+
+recursa::ast_node! {
+    /// `SET NOT NULL` — add a NOT NULL marker on the column.
+    #[derive(Debug)]
+    pub enum AlterColSetNotNull {
+        #[tok(SET, NOT, NULL)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// One `SET seqOpt` action on an identity column —
+    /// `SET { START WITH | INCREMENT BY | MINVALUE | MAXVALUE | CACHE | CYCLE |
+    /// NO MINVALUE | NO MAXVALUE | NO CYCLE }`.
+    ///
+    /// Reuses `IdentitySeqOption` from `create_table.rs` so the full sequence-
+    /// option set is supported (and the formatter is shared).
+    #[derive(Debug)]
+    pub struct AlterColSetSeqOption {
+        #[tok(SET, this)]
+        pub option: crate::ast::ddl::table::IdentitySeqOption,
+    }
+}
+
+recursa::ast_node! {
+    /// `DROP EXPRESSION [IF EXISTS]` — remove a generated column's expression,
+    /// turning it into a regular column.
+    #[derive(Debug)]
+    #[tok(DROP, EXPRESSION, this)]
+    pub struct AlterColDropExpression {
+        pub if_exists: Option<IfExists>,
+    }
+}
+
+recursa::ast_node! {
+    /// `DROP IDENTITY [IF EXISTS]` — remove an identity-column property.
+    #[derive(Debug)]
+    #[tok(DROP, IDENTITY, this)]
+    pub struct AlterColDropIdentity {
+        pub if_exists: Option<IfExists>,
+    }
+}
+
+recursa::ast_node! {
+    /// `DROP NOT NULL` — remove a NOT NULL marker.
+    #[derive(Debug)]
+    pub enum AlterColDropNotNull {
+        #[tok(DROP, NOT, NULL)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `ADD GENERATED { ALWAYS | BY DEFAULT } AS IDENTITY [(seq_options)]` —
+    /// add an identity property to an existing column.
+    #[derive(Debug)]
+    pub struct AlterColAddIdentity {
+        #[tok(ADD, this)]
+        pub identity: crate::ast::ddl::table::GeneratedIdentityConstraint,
+    }
+}
+
+recursa::ast_node! {
+    /// `RESTART [WITH NumericOnly]` — restart an identity column's sequence.
+    #[derive(Debug)]
+    #[tok(RESTART, this)]
+    pub struct AlterColRestart {
+        pub value: Option<RestartWith>,
+    }
+}
+
+recursa::ast_node! {
+    /// `[WITH] NumericOnly` — the value portion of `RESTART`.
+    #[derive(Debug)]
+    pub struct RestartWith {
+        #[tok(optional(WITH), this)]
+        pub value: NumericOnly,
+    }
+}
+
+recursa::ast_node! {
+    /// `DROP CONSTRAINT IF EXISTS name [CASCADE | RESTRICT]`.
+    #[derive(Debug)]
+    pub struct DropConstraintIfExistsCmd {
+        #[tok(DROP, CONSTRAINT, this)]
+        pub if_exists: IfExists,
+        pub name: literal::Ident,
+        pub behavior: Option<DropBehavior>,
+    }
+}
+
+recursa::ast_node! {
+    /// `DROP CONSTRAINT name [CASCADE | RESTRICT]`.
+    #[derive(Debug)]
+    pub struct DropConstraintCmd {
+        #[tok(DROP, CONSTRAINT, this)]
+        pub name: literal::Ident,
+        pub behavior: Option<DropBehavior>,
+    }
+}
+
+recursa::ast_node! {
+    /// `DROP [COLUMN] IF EXISTS colname [CASCADE | RESTRICT]`.
+    #[derive(Debug)]
+    pub struct DropColumnIfExistsCmd {
+        #[tok(DROP, optional(COLUMN), this)]
+        pub if_exists: IfExists,
+        pub name: literal::Ident,
+        pub behavior: Option<DropBehavior>,
+    }
+}
+
+recursa::ast_node! {
+    /// `DROP [COLUMN] colname [CASCADE | RESTRICT]`.
+    #[derive(Debug)]
+    pub struct DropColumnCmd {
+        #[tok(DROP, optional(COLUMN), this)]
+        pub name: literal::Ident,
+        pub behavior: Option<DropBehavior>,
+    }
+}
+
+recursa::ast_node! {
+    /// `ENABLE TRIGGER { name | ALL | USER }`.
+    #[derive(Debug)]
+    pub struct EnableTriggerCmd {
+        #[tok(ENABLE, TRIGGER, this)]
+        pub target: TriggerOrRuleTarget,
+    }
+}
+
+recursa::ast_node! {
+    /// `ENABLE ALWAYS TRIGGER name`.
+    #[derive(Debug)]
+    pub struct EnableAlwaysTriggerCmd {
+        #[tok(ENABLE, ALWAYS, TRIGGER, this)]
+        pub name: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// `ENABLE REPLICA TRIGGER name`.
+    #[derive(Debug)]
+    pub struct EnableReplicaTriggerCmd {
+        #[tok(ENABLE, REPLICA, TRIGGER, this)]
+        pub name: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// `DISABLE TRIGGER { name | ALL | USER }`.
+    #[derive(Debug)]
+    pub struct DisableTriggerCmd {
+        #[tok(DISABLE, TRIGGER, this)]
+        pub target: TriggerOrRuleTarget,
+    }
+}
+
+recursa::ast_node! {
+    /// `ENABLE RULE name`.
+    #[derive(Debug)]
+    pub struct EnableRuleCmd {
+        #[tok(ENABLE, RULE, this)]
+        pub name: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// `ENABLE ALWAYS RULE name`.
+    #[derive(Debug)]
+    pub struct EnableAlwaysRuleCmd {
+        #[tok(ENABLE, ALWAYS, RULE, this)]
+        pub name: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// `ENABLE REPLICA RULE name`.
+    #[derive(Debug)]
+    pub struct EnableReplicaRuleCmd {
+        #[tok(ENABLE, REPLICA, RULE, this)]
+        pub name: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// `DISABLE RULE name`.
+    #[derive(Debug)]
+    pub struct DisableRuleCmd {
+        #[tok(DISABLE, RULE, this)]
+        pub name: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// Trigger-action target on `ENABLE TRIGGER` / `DISABLE TRIGGER`:
+    /// `ALL` (every trigger), `USER` (every non-internal trigger), or a named
+    /// trigger.
+    ///
+    /// Variant ordering: keyword variants (`All` / `User`) before `Name` (ident),
+    /// since `ALL` and `USER` are hard keywords that won't lex as `Ident`.
+    #[derive(Debug)]
+    pub enum TriggerOrRuleTarget {
+        #[tok(ALL)]
+        All,
+        #[tok(USER)]
+        User,
+        Name(literal::Ident),
+    }
+}
+
+recursa::ast_node! {
+    /// `ENABLE ROW LEVEL SECURITY`.
+    #[derive(Debug)]
+    pub enum EnableRowSecurityCmd {
+        #[tok(ENABLE, ROW, LEVEL, SECURITY)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `DISABLE ROW LEVEL SECURITY`.
+    #[derive(Debug)]
+    pub enum DisableRowSecurityCmd {
+        #[tok(DISABLE, ROW, LEVEL, SECURITY)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `FORCE ROW LEVEL SECURITY`.
+    #[derive(Debug)]
+    pub enum ForceRowSecurityCmd {
+        #[tok(FORCE, ROW, LEVEL, SECURITY)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `NO FORCE ROW LEVEL SECURITY`.
+    #[derive(Debug)]
+    pub enum NoForceRowSecurityCmd {
+        #[tok(NO, FORCE, ROW, LEVEL, SECURITY)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `CLUSTER ON indexname`.
+    #[derive(Debug)]
+    pub struct ClusterOnCmd {
+        #[tok(CLUSTER, ON, this)]
+        pub name: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// `SET WITHOUT CLUSTER`.
+    #[derive(Debug)]
+    pub enum SetWithoutClusterCmd {
+        #[tok(SET, WITHOUT, CLUSTER)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `SET WITHOUT OIDS`.
+    #[derive(Debug)]
+    pub enum SetWithoutOidsCmd {
+        #[tok(SET, WITHOUT, OIDS)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `SET LOGGED`.
+    #[derive(Debug)]
+    pub enum SetLoggedCmd {
+        #[tok(SET, LOGGED)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `SET UNLOGGED`.
+    #[derive(Debug)]
+    pub enum SetUnloggedCmd {
+        #[tok(SET, UNLOGGED)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `REPLICA IDENTITY { DEFAULT | NOTHING | FULL | USING INDEX name }`.
+    #[derive(Debug)]
+    pub struct ReplicaIdentityCmd {
+        #[tok(REPLICA, IDENTITY, this)]
+        pub kind: ReplicaIdentityKind,
+    }
+}
+
+recursa::ast_node! {
+    /// One of `DEFAULT`, `NOTHING`, `FULL`, or `USING INDEX name`.
+    ///
+    /// Variant ordering: keyword-only variants (single tokens, disjoint) first;
+    /// `UsingIndex` (`USING INDEX`) last — it has a unique `USING` prefix.
+    #[derive(Debug)]
+    pub enum ReplicaIdentityKind {
+        #[tok(DEFAULT)]
+        Default,
+        #[tok(NOTHING)]
+        Nothing,
+        #[tok(FULL)]
+        Full,
+        UsingIndex(ReplicaIdentityUsingIndex),
+    }
+}
+
+recursa::ast_node! {
+    /// `USING INDEX name` — the index-backed REPLICA IDENTITY.
+    #[derive(Debug)]
+    pub struct ReplicaIdentityUsingIndex {
+        #[tok(USING, INDEX, this)]
+        pub name: literal::Ident,
+    }
+}
+
+recursa::ast_node! {
+    /// `INHERIT parent`.
+    #[derive(Debug)]
+    pub struct InheritCmd {
+        #[tok(INHERIT, this)]
+        pub parent: QualifiedName,
+    }
+}
+
+recursa::ast_node! {
+    /// `NO INHERIT parent`.
+    #[derive(Debug)]
+    pub struct NoInheritCmd {
+        #[tok(NO, INHERIT, this)]
+        pub parent: QualifiedName,
+    }
+}
+
+recursa::ast_node! {
+    /// `OF type_name`.
+    #[derive(Debug)]
+    pub struct OfCmd {
+        #[tok(OF, this)]
+        pub type_name: QualifiedName,
+    }
+}
+
+recursa::ast_node! {
+    /// `NOT OF` — drop the typed-table relationship.
+    #[derive(Debug)]
+    pub enum NotOfCmd {
+        #[tok(NOT, OF)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `VALIDATE CONSTRAINT name`.
+    #[derive(Debug)]
+    pub struct ValidateConstraintCmd {
+        #[tok(VALIDATE, CONSTRAINT, this)]
+        pub name: literal::Ident,
+    }
 }

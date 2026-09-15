@@ -2,90 +2,110 @@
 use crate::ast::ddl::index::{StorageParam, WithStorage};
 use crate::tokens::literal;
 
-/// `OWNER role` optional clause.
-#[derive(recursa::Node, Debug)]
-pub struct OwnerClause<'input> {
-    #[tok(OWNER, this)]
-    pub role: crate::tokens::NonReservedWord<'input>,
+recursa::ast_node! {
+    /// `OWNER role` optional clause.
+    #[derive(Debug)]
+    pub struct OwnerClause {
+        #[tok(OWNER, this)]
+        pub role: crate::tokens::NonReservedWord,
+    }
 }
 
-/// `LOCATION 'path'` clause.
-#[derive(recursa::Node, Debug)]
-pub struct LocationClause<'input> {
-    #[tok(LOCATION, this)]
-    pub path: literal::StringLit<'input>,
+recursa::ast_node! {
+    /// `LOCATION 'path'` clause.
+    #[derive(Debug)]
+    pub struct LocationClause {
+        #[tok(LOCATION, this)]
+        pub path: literal::StringLit,
+    }
 }
 
-/// `CREATE TABLESPACE name [OWNER role] LOCATION 'path' [WITH (params)]`
-#[derive(recursa::Node, Debug)]
-pub struct CreateTablespaceStmt<'input> {
-    #[tok(CREATE, TABLESPACE, this)]
-    pub name: crate::tokens::ColId<'input>,
-    pub owner: Option<OwnerClause<'input>>,
-    pub location: LocationClause<'input>,
-    pub with_options: Option<WithStorage<'input>>,
+recursa::ast_node! {
+    /// `CREATE TABLESPACE name [OWNER role] LOCATION 'path' [WITH (params)]`
+    #[derive(Debug)]
+    pub struct CreateTablespaceStmt {
+        #[tok(CREATE, TABLESPACE, this)]
+        pub name: crate::tokens::ColId,
+        pub owner: Option<OwnerClause>,
+        pub location: LocationClause,
+        pub with_options: Option<WithStorage>,
+    }
 }
 
-/// `RENAME TO new_name` action on ALTER TABLESPACE.
-#[derive(recursa::Node, Debug)]
-pub struct AlterTablespaceRename<'input> {
-    #[tok(RENAME, TO, this)]
-    pub new_name: crate::tokens::ColId<'input>,
+recursa::ast_node! {
+    /// `RENAME TO new_name` action on ALTER TABLESPACE.
+    #[derive(Debug)]
+    pub struct AlterTablespaceRename {
+        #[tok(RENAME, TO, this)]
+        pub new_name: crate::tokens::ColId,
+    }
 }
 
-/// `OWNER TO new_owner` action on ALTER TABLESPACE.
-#[derive(recursa::Node, Debug)]
-pub struct AlterTablespaceOwner<'input> {
-    #[tok(OWNER, TO, this)]
-    pub new_owner: crate::tokens::NonReservedWord<'input>,
+recursa::ast_node! {
+    /// `OWNER TO new_owner` action on ALTER TABLESPACE.
+    #[derive(Debug)]
+    pub struct AlterTablespaceOwner {
+        #[tok(OWNER, TO, this)]
+        pub new_owner: crate::tokens::NonReservedWord,
+    }
 }
 
-/// `SET (param = value, ...)` action on ALTER TABLESPACE.
-#[derive(recursa::Node, Debug)]
-#[tok(SET, LPAREN, this, RPAREN)]
-pub struct AlterTablespaceSetAction<'input> {
-    #[sep(COMMA)]
-    pub params: recursa::ArenaVec<'input, StorageParam<'input>>,
+recursa::ast_node! {
+    /// `SET (param = value, ...)` action on ALTER TABLESPACE.
+    #[derive(Debug)]
+    #[tok(SET, LPAREN, this, RPAREN)]
+    pub struct AlterTablespaceSetAction {
+        #[sep(COMMA)]
+        pub params: zero_or_many!(StorageParam),
+    }
 }
 
-/// `RESET (param [= value] [, ...])` action on ALTER TABLESPACE.
-///
-/// Postgres accepts the same `reloptions` payload here as for `SET`, even
-/// though the `= value` half is ignored: `gram.y`'s `AlterTblSpcStmt` uses
-/// the `reloptions` rule for both branches.
-#[derive(recursa::Node, Debug)]
-#[tok(RESET, LPAREN, this, RPAREN)]
-pub struct AlterTablespaceResetAction<'input> {
-    #[sep(COMMA)]
-    pub params: recursa::ArenaVec<'input, StorageParam<'input>>,
+recursa::ast_node! {
+    /// `RESET (param [= value] [, ...])` action on ALTER TABLESPACE.
+    ///
+    /// Postgres accepts the same `reloptions` payload here as for `SET`, even
+    /// though the `= value` half is ignored: `gram.y`'s `AlterTblSpcStmt` uses
+    /// the `reloptions` rule for both branches.
+    #[derive(Debug)]
+    #[tok(RESET, LPAREN, this, RPAREN)]
+    pub struct AlterTablespaceResetAction {
+        #[sep(COMMA)]
+        pub params: zero_or_many!(StorageParam),
+    }
 }
 
-/// One of the supported ALTER TABLESPACE actions.
-///
-/// Variant ordering: all variants start with distinct keywords (SET, RESET,
-/// RENAME, OWNER), so order is for clarity only.
-#[derive(recursa::Node, Debug)]
-pub enum AlterTablespaceAction<'input> {
-    Set(AlterTablespaceSetAction<'input>),
-    Reset(AlterTablespaceResetAction<'input>),
-    Rename(AlterTablespaceRename<'input>),
-    Owner(AlterTablespaceOwner<'input>),
+recursa::ast_node! {
+    /// One of the supported ALTER TABLESPACE actions.
+    ///
+    /// Variant ordering: all variants start with distinct keywords (SET, RESET,
+    /// RENAME, OWNER), so order is for clarity only.
+    #[derive(Debug)]
+    pub enum AlterTablespaceAction {
+        Set(AlterTablespaceSetAction),
+        Reset(AlterTablespaceResetAction),
+        Rename(AlterTablespaceRename),
+        Owner(AlterTablespaceOwner),
+    }
 }
 
-/// `ALTER TABLESPACE name { RENAME TO new_name | OWNER TO new_owner
-///                         | SET (params) | RESET (params) }`
-#[derive(recursa::Node, Debug)]
-pub struct AlterTablespaceStmt<'input> {
-    #[tok(ALTER, TABLESPACE, this)]
-    pub name: crate::tokens::ColId<'input>,
-    pub action: AlterTablespaceAction<'input>,
+recursa::ast_node! {
+    /// `ALTER TABLESPACE name { RENAME TO new_name | OWNER TO new_owner
+    ///                         | SET (params) | RESET (params) }`
+    #[derive(Debug)]
+    pub struct AlterTablespaceStmt {
+        #[tok(ALTER, TABLESPACE, this)]
+        pub name: crate::tokens::ColId,
+        pub action: AlterTablespaceAction,
+    }
 }
 
-/// `DROP TABLESPACE [IF EXISTS] name`
-#[derive(recursa::Node, Debug)]
-#[tok(DROP, TABLESPACE, this)]
-pub struct DropTablespaceStmt<'input> {
-    #[presence(IF, EXISTS)]
-    pub if_exists: bool,
-    pub name: crate::tokens::ColId<'input>,
+recursa::ast_node! {
+    /// `DROP TABLESPACE [IF EXISTS] name`
+    #[derive(Debug)]
+    #[tok(DROP, TABLESPACE, this)]
+    pub struct DropTablespaceStmt {
+        #[presence(IF, EXISTS)]
+        pub if_exists: bool,
+        pub name: crate::tokens::ColId,
+    }
 }

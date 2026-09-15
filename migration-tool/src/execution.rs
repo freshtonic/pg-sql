@@ -471,6 +471,8 @@ fn verify_live_semantic_destination(
     let syntax = syn::parse_file(&source)
         .map_err(|error| fail(format!("parse {}: {error}", source_path.display())))?;
     let items = inline_module_items(&syntax.items, nested_module)?;
+    let live_items = expanded_ast_node_items(items);
+    let items = live_items.as_slice();
     let exists = items.iter().any(|item| match item {
         syn::Item::Struct(item) if item.ident == destination.item => match destination.kind {
             LiveSemanticKind::Type => destination.member.is_none(),
@@ -534,6 +536,26 @@ fn verify_live_semantic_destination(
         )));
     }
     Ok(())
+}
+
+fn expanded_ast_node_items(items: &[syn::Item]) -> Vec<syn::Item> {
+    let mut expanded = Vec::new();
+    for item in items {
+        if let syn::Item::Macro(invocation) = item
+            && invocation
+                .mac
+                .path
+                .segments
+                .last()
+                .is_some_and(|segment| segment.ident == "ast_node")
+            && let Ok(declarations) = syn::parse2::<syn::File>(invocation.mac.tokens.clone())
+        {
+            expanded.extend(declarations.items);
+        } else {
+            expanded.push(item.clone());
+        }
+    }
+    expanded
 }
 
 fn inline_module_items<'a>(
@@ -1800,4 +1822,39 @@ fn read_text(path: &Path) -> Result<String, ExecutionError> {
 
 fn fail(message: String) -> ExecutionError {
     ExecutionError(message)
+}
+
+#[cfg(test)]
+mod ast_node_destination_tests {
+    use super::*;
+
+    #[test]
+    fn live_destination_validation_resolves_macro_variants_and_fields() {
+        let repository = tempfile::tempdir().unwrap();
+        let path = repository.path().join("src/ast/sample.rs");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "recursa::ast_node! { pub enum Choice { One } pub struct Record { value: Name } }",
+        )
+        .unwrap();
+        for destination in [
+            LiveSemanticDestination {
+                id: "ast::sample::Choice::One".into(),
+                path: "src/ast/sample.rs".into(),
+                kind: LiveSemanticKind::Variant,
+                item: "Choice".into(),
+                member: Some("One".into()),
+            },
+            LiveSemanticDestination {
+                id: "ast::sample::Record.value".into(),
+                path: "src/ast/sample.rs".into(),
+                kind: LiveSemanticKind::Field,
+                item: "Record".into(),
+                member: Some("value".into()),
+            },
+        ] {
+            verify_live_semantic_destination(repository.path(), &destination).unwrap();
+        }
+    }
 }

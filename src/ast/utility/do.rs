@@ -4,19 +4,23 @@ use crate::tokens::literal;
 
 // --- DO ---
 
-/// `DO [LANGUAGE lang] $$ ... $$` anonymous code block.
-#[derive(recursa::Node, Debug)]
-#[tok(DO, this)]
-pub struct DoStmt<'input> {
-    pub language: Option<DoLanguage<'input>>,
-    #[lex(matcher)]
-    pub body: literal::DollarStringLit<'input>,
-    pub trailing_language: Option<DoLanguage<'input>>,
+recursa::ast_node! {
+    /// `DO [LANGUAGE lang] $$ ... $$` anonymous code block.
+    #[derive(Debug)]
+    #[tok(DO, this)]
+    pub struct DoStmt {
+        pub language: Option<DoLanguage>,
+        #[lex(matcher)]
+        pub body: literal::DollarStringLit,
+        pub trailing_language: Option<DoLanguage>,
+    }
 }
 
-/// `LANGUAGE lang` clause on a `DO` block (may appear before or after body).
-#[derive(recursa::Node, Debug)]
-pub struct DoLanguage<'input> {
-    #[tok(LANGUAGE, this)]
-    pub name: crate::tokens::ColId<'input>,
+recursa::ast_node! {
+    /// `LANGUAGE lang` clause on a `DO` block (may appear before or after body).
+    #[derive(Debug)]
+    pub struct DoLanguage {
+        #[tok(LANGUAGE, this)]
+        pub name: crate::tokens::ColId,
+    }
 }
