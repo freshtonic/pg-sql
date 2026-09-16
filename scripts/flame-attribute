@@ -9,6 +9,13 @@ bucket.
 Buckets (docs/plans/2026-09-01-performance-parity.md, Track P):
 
   lex/classify        generated lexing, matcher compilation, regex execution
+  drop/teardown       destruction of either result representation
+  nested arena        the nested AST's bump arena and arena containers
+  flat store          Flat AST construction: the generated flat reduce
+                      actions and the tiered store they fill (typed pools,
+                      the shared pool, the list scratch/store, the text pool)
+  nested reduce       the generated nested (arena) reduce actions
+  LR loop             the table-driven LR driver itself
   dispatch/decision   FOLLOW-set transport, frozen dispatch tables, Pratt
                       selection, peeks
   value construction  AST/provenance construction: occurrences, spans,
@@ -23,7 +30,21 @@ memory-primitive frames (`nanov2_*`, `_malloc*`, `_free`, `_platform_mem*`,
 `__rust_alloc*`, ...) are not a phase: each allocator sample is attributed to
 the nearest classifiable ancestor frame, and the table also reports how much
 of every bucket was allocator time (the `alloc%` column), so "who allocates"
-stays visible.
+stays visible. `--alloc-bucket` instead gives allocator leaves a bucket of
+their own (`alloc/memory`), which is what a nested-vs-flat comparison needs:
+a store that grows by reallocation shows its growth cost as allocator time,
+not as reduce logic. Each such frame is still labelled with the nearest
+classifiable caller, so both readings are available from one folded file.
+
+`/usr/bin/sample` does not demangle Rust v0 symbols, and the bucket patterns
+match module paths (`recursa_core::lr`, `pg_sql::...::lex`) that only exist in
+the demangled spelling. Demangle the folded file first when a demangler is
+available:
+
+  rustfilt < run-dir/bool_chain.folded > run-dir/bool_chain.demangled.folded
+
+Both spellings are matched where a bucket can be told apart in the mangled
+form, but the mangled reading over-counts `dispatch/decision`.
 
 Usage:
   scripts/flame-attribute run-dir/bool_chain.folded [more.folded ...]
@@ -52,6 +73,49 @@ BUCKETS = [
             r"recursa_core::lex|CompiledLexMatcher|regex_automata|regex_syntax"
             r"|aho_corasick|\bmemchr|memmem|pg_sql::lex\b|::lex\b|Lexed|logos"
             r"|determinize|lazy::|hybrid::|meta::regex|Regex"
+        ),
+    ),
+    (
+        # The table-driven LR driver: shift/reduce stepping, the state and
+        # value stacks, goto lookup. It must precede the two reduce buckets:
+        # the driver is monomorphised over the reduce entry point, so its own
+        # frame name mentions `__recursa_reduce_flat` / `__recursa_reduce`,
+        # and matching those first would file the shared driver under
+        # whichever representation was being profiled.
+        "LR loop",
+        re.compile(r"recursa_core::lr|recursa_core2lr|lr::run|lr::drive|LrTables|LrStack"),
+    ),
+    (
+        # Destruction of either representation, so "what does dropping the
+        # result cost" is one row and not split between the two construction
+        # buckets. After "LR loop", which owns the value stack's own `Drop`.
+        "drop/teardown",
+        re.compile(r"drop_glue|drop_in_place|ArenaParseCell|::drop\b"),
+    ),
+    (
+        # The nested AST's arena: the bump allocator and the arena containers
+        # its reduce actions fill. The flat bucket's other counterpart, so a
+        # nested-versus-flat table compares like with like.
+        "nested arena",
+        re.compile(r"bumpalo|ArenaParsed|parse_arena|ArenaVec|ArenaBox|arena::"),
+    ),
+    (
+        # Flat AST: the generated flat reduce actions and every tiered-store
+        # primitive they call. Ahead of "value construction" because the
+        # store's `push`/`finish` entry points would otherwise match it.
+        "flat store",
+        re.compile(
+            r"recursa_core::flat|recursa_core4flat|FlatAst|FlatAstBuilder"
+            r"|__recursa_reduce_flat|TypedPool|SharedPool|ListStore|ListScratch"
+            r"|TextPool|OpenList|flat_owner|flat_visit|flat_pretty"
+        ),
+    ),
+    (
+        # The nested (arena) reduce actions, the flat bucket's counterpart.
+        "nested reduce",
+        re.compile(
+            r"__recursa_reduce_lr|__recursa_reduce_root|__recursa_reduce_action"
+            r"|__recursa_lr::__recursa_reduce"
         ),
     ),
     (
@@ -104,7 +168,7 @@ def classify(frame: str):
     return None
 
 
-def attribute(path: str, top: int):
+def attribute(path: str, top: int, alloc_bucket: bool = False):
     bucket_weight = defaultdict(int)
     bucket_alloc_weight = defaultdict(int)
     bucket_frames = defaultdict(lambda: defaultdict(int))
@@ -137,22 +201,28 @@ def attribute(path: str, top: int):
             if bucket is None:
                 bucket = "other"
                 chosen = leaf
+            if carried_alloc and alloc_bucket:
+                # Allocator leaves become their own bucket, still labelled
+                # with the caller they were attributed to.
+                chosen = f"{leaf} << {chosen}"
+                bucket = "alloc/memory"
             bucket_weight[bucket] += count
             if carried_alloc:
                 bucket_alloc_weight[bucket] += count
-                chosen = f"{chosen} [alloc]"
+                if not alloc_bucket:
+                    chosen = f"{chosen} [alloc]"
             bucket_frames[bucket][chosen] += count
     return total, bucket_weight, bucket_alloc_weight, bucket_frames
 
 
-def report(path: str, top: int):
-    total, weights, alloc_weights, frames = attribute(path, top)
+def report(path: str, top: int, alloc_bucket: bool = False):
+    total, weights, alloc_weights, frames = attribute(path, top, alloc_bucket)
     print(f"== {path} ({total} samples) ==")
-    print(f"{'bucket':<20} {'self%':>7} {'alloc%':>7}")
+    print(f"{'bucket':<20} {'self%':>7} {'alloc%':>7} {'samples':>9}")
     for bucket, weight in sorted(weights.items(), key=lambda kv: -kv[1]):
         print(
             f"{bucket:<20} {100 * weight / total:>6.1f}% "
-            f"{100 * alloc_weights[bucket] / total:>6.1f}%"
+            f"{100 * alloc_weights[bucket] / total:>6.1f}% {weight:>9}"
         )
     for bucket, weight in sorted(weights.items(), key=lambda kv: -kv[1]):
         print(f"\n-- {bucket} ({100 * weight / total:.1f}%)")
@@ -166,9 +236,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folded", nargs="+", help=".folded stack files")
     parser.add_argument("--top", type=int, default=8, help="frames per bucket")
+    parser.add_argument(
+        "--alloc-bucket",
+        action="store_true",
+        help="give allocator leaves their own bucket instead of carrying them",
+    )
     args = parser.parse_args()
     for path in args.folded:
-        report(path, args.top)
+        report(path, args.top, args.alloc_bucket)
     return 0
 
 
