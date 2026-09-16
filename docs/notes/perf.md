@@ -9,6 +9,18 @@ recursa-old's journal:
   numbers.
 - Diagnostic-result sections are append-only and read **newest last**.
 
+> **2026-09-16, declared precedence.** `Expr` no longer has a Pratt body.
+> `#[pratt]` and its roles are gone from the grammar; operator shape is decided
+> by the `precedence { ... }` block in `src/tokens.rs`, which mirrors
+> `gram.y:829-908`, and by `#[parse(prec = ...)]` overrides. Every figure in
+> this journal that names a Pratt hot path -- `ParseContext::select_pratt`,
+> `Expr::__recursa_parse_bpu`, `Expr::__recursa_parse_pratt_led_*`,
+> `__recursa_decode_pratt_*`, the Pratt ambiguity guard, the Pratt attachment
+> audit and Pratt value staging -- predates that change and describes code that
+> no longer exists. The `bool_chain` workload still stresses the same input; it
+> now exercises the LR loop over left-recursive `Expr` rules instead. Nothing
+> below has been re-measured.
+
 ## Canonical workloads
 
 Three named workloads (CONTEXT.md). Every journal entry and every profile
@@ -18,7 +30,7 @@ names one of them.
 |---|---|---|
 | `corpus` | All 43,474 frozen corpus statements (the differential-baseline membership, `tests/support/baseline.rs`) | Real statement mix, small statements, error/expected-set paths for the 262 statements pg-sql rejects |
 | `select_list_10000` | `fixtures/stress/select_list_10000.sql` | One SELECT with a 10,000-item select list; repetition and value construction |
-| `bool_chain` | `fixtures/stress/bool_chain_1000.sql` | One WHERE clause with 1,000 `AND` terms; the Pratt loop |
+| `bool_chain` | `fixtures/stress/bool_chain_1000.sql` | One WHERE clause with 1,000 `AND` terms; left-recursive `Expr` reduction (the Pratt loop, before 2026-09-16) |
 
 A fourth, document-level workload is tracked as issue #61; see the blind-spot
 subsection below for why it is not defined here.
