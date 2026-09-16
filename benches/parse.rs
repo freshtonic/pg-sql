@@ -1,9 +1,16 @@
 //! pg-sql interim benchmark harness (statement-level).
 //!
-//! A self-contained harness (no criterion): it times `pg-sql` against
-//! `sqlparser` and PostgreSQL 17.9's raw parser (via `pg-oracle`) on the
-//! PostgreSQL regression corpus and the generated stress fixtures, then
-//! writes a per-run report directory under `docs/benchmarks/`.
+//! A self-contained harness (no criterion): it times `pg-sql` (the nested
+//! arena AST), `pg-sql-flat` (the same grammar's Flat AST), `sqlparser` and
+//! PostgreSQL 17.9's raw parser (via `pg-oracle`) on the PostgreSQL
+//! regression corpus and the generated stress fixtures, then writes a per-run
+//! report directory under `docs/benchmarks/`.
+//!
+//! `pg-sql-flat` runs the same lex pass and the same LR automaton as `pg-sql`;
+//! only the reduce actions differ, building the tiered flat store instead of
+//! the nested arena tree. Both entries are timed under the identical boundary
+//! — lexing, parsing and destruction inside each call — so the pair isolates
+//! the representation.
 //!
 //! This harness measures **statement-level** parsing. A file-level seam
 //! now exists (`pg_sql::document::parse_sql`, #10 closed), but it is a
@@ -11,11 +18,14 @@
 //! for each corpus
 //! file it takes the frozen per-file statement list that the differential
 //! suite pins (`tests/support/baseline.rs`, `FrozenStatements::pinned()`)
-//! and times each engine over the statement items that *all three* engines
+//! and times each engine over the statement items that *all four* engines
 //! accept. Deliberate parse-error items are removed before probing; a
 //! statement rejected by any engine is excluded for every engine, and those
-//! two kinds of exclusion are counted separately in the report. The full
-//! Criterion port and file-level corpus parsing are #20.
+//! two kinds of exclusion are counted separately in the report. Because
+//! filtering could otherwise hide a flat-only rejection, the probe also
+//! asserts that the nested and flat entries agree on every statement it
+//! looked at, and aborts with a listing if they do not. The full Criterion
+//! port and file-level corpus parsing are #20.
 //!
 //! Each run writes its own subdirectory `docs/benchmarks/<timestamp>-<commit>/`
 //! containing `report.md` (the human report), `time.svg` and `throughput.svg`
@@ -90,6 +100,26 @@ fn parse_with_pg_sql(sql: &str) -> bool {
     }
 }
 
+/// Strict statement-level parse with pg-sql's **Flat AST**: the same lex pass
+/// and the same LR automaton as `parse_with_pg_sql`, with the flat reduce
+/// actions building the tiered flat store instead of the nested arena tree.
+/// The timing boundary is identical — lex, parse, and drop the whole store
+/// inside the call — so the pair measures only the representation.
+fn parse_with_pg_sql_flat(sql: &str) -> bool {
+    let lexed = lex_statement_source(sql);
+    if lexed.errors().next().is_some() {
+        return false;
+    }
+    let mut input = lexed.input();
+    match Statement::parse_flat_without_spans(&mut input) {
+        Ok(flat) => {
+            std::hint::black_box(&flat);
+            input.is_eof()
+        }
+        Err(_) => false,
+    }
+}
+
 fn parse_with_sqlparser(sql: &str) -> bool {
     SqlParser::parse_sql(&PostgreSqlDialect {}, sql).is_ok()
 }
@@ -117,6 +147,7 @@ fn parse_with_postgres(sql: &str) -> bool {
 #[derive(Clone, Copy, Default)]
 struct Rejections {
     pg_sql: usize,
+    pg_sql_flat: usize,
     sqlparser: usize,
     postgres: usize,
 }
@@ -124,6 +155,7 @@ struct Rejections {
 impl Rejections {
     fn add(&mut self, other: Rejections) {
         self.pg_sql += other.pg_sql;
+        self.pg_sql_flat += other.pg_sql_flat;
         self.sqlparser += other.sqlparser;
         self.postgres += other.postgres;
     }
@@ -152,7 +184,7 @@ impl Bench {
     }
 }
 
-/// The timing result for the three parsers on one benchmark.
+/// The timing result for the four parsers on one benchmark.
 struct Row {
     name: String,
     bytes: u64,
@@ -160,6 +192,7 @@ struct Row {
     parse_errors_stripped: usize,
     engine_excluded: usize,
     pg_sql: Duration,
+    pg_sql_flat: Duration,
     sqlparser: Duration,
     postgres: Duration,
 }
@@ -191,12 +224,22 @@ fn measure(mut f: impl FnMut()) -> Duration {
 
 fn run_bench(b: &Bench) -> Row {
     // A workload whose statements were all excluded has nothing to time.
-    let (pg_sql, sqlparser, postgres) = if b.inputs.is_empty() {
-        (Duration::ZERO, Duration::ZERO, Duration::ZERO)
+    let (pg_sql, pg_sql_flat, sqlparser, postgres) = if b.inputs.is_empty() {
+        (
+            Duration::ZERO,
+            Duration::ZERO,
+            Duration::ZERO,
+            Duration::ZERO,
+        )
     } else {
         let pg_sql = measure(|| {
             for sql in &b.inputs {
                 std::hint::black_box(parse_with_pg_sql(sql));
+            }
+        });
+        let pg_sql_flat = measure(|| {
+            for sql in &b.inputs {
+                std::hint::black_box(parse_with_pg_sql_flat(sql));
             }
         });
         let sqlparser = measure(|| {
@@ -209,15 +252,16 @@ fn run_bench(b: &Bench) -> Row {
                 std::hint::black_box(parse_with_postgres(sql));
             }
         });
-        (pg_sql, sqlparser, postgres)
+        (pg_sql, pg_sql_flat, sqlparser, postgres)
     };
     println!(
-        "  {:<28} {:>4} stmts ({:>3} parse-fail, {:>3} engine-excl)   pg-sql {:>9.3} ms   sqlparser {:>9.3} ms   postgres {:>9.3} ms",
+        "  {:<28} {:>4} stmts ({:>3} parse-fail, {:>3} engine-excl)   pg-sql {:>9.3} ms   pg-sql-flat {:>9.3} ms   sqlparser {:>9.3} ms   postgres {:>9.3} ms",
         b.name,
         b.inputs.len(),
         b.parse_errors_stripped,
         b.engine_excluded(),
         ms(pg_sql),
+        ms(pg_sql_flat),
         ms(sqlparser),
         ms(postgres),
     );
@@ -228,6 +272,7 @@ fn run_bench(b: &Bench) -> Row {
         parse_errors_stripped: b.parse_errors_stripped,
         engine_excluded: b.engine_excluded(),
         pg_sql,
+        pg_sql_flat,
         sqlparser,
         postgres,
     }
@@ -284,25 +329,56 @@ fn stress_shapes() -> Vec<(&'static str, Vec<(usize, &'static str)>)> {
     ]
 }
 
-/// Partition `statements` into the subset every engine accepts (returned as
-/// owned inputs plus their byte volume) and per-engine rejection counts.
-fn probe_statements(statements: &[&str]) -> (Vec<String>, u64, Rejections) {
-    let mut inputs = Vec::new();
-    let mut bytes = 0u64;
-    let mut rejections = Rejections::default();
+/// What one workload's probe found: the subset every engine accepts (owned
+/// inputs plus their byte volume), the per-engine rejection counts, and every
+/// statement on which pg-sql's two representations disagreed.
+struct Probe {
+    inputs: Vec<String>,
+    bytes: u64,
+    rejections: Rejections,
+    /// Statements the nested parser accepted and the flat parser rejected, or
+    /// the other way round. Filtering would hide these — a flat-only rejection
+    /// would just shrink the timed set — so they are reported separately and
+    /// abort the run.
+    disagreements: Vec<Disagreement>,
+}
+
+/// One statement on which the nested and flat representations disagreed.
+struct Disagreement {
+    nested_accepted: bool,
+    source: String,
+}
+
+/// Partition `statements` into the subset every engine accepts, count the
+/// per-engine rejections, and record every nested/flat disagreement.
+fn probe_statements(statements: &[&str]) -> Probe {
+    let mut probe = Probe {
+        inputs: Vec::new(),
+        bytes: 0,
+        rejections: Rejections::default(),
+        disagreements: Vec::new(),
+    };
     for source in statements {
         let a = parse_with_pg_sql(source);
+        let flat = parse_with_pg_sql_flat(source);
         let b = parse_with_sqlparser(source);
         let c = parse_with_postgres(source);
-        rejections.pg_sql += usize::from(!a);
-        rejections.sqlparser += usize::from(!b);
-        rejections.postgres += usize::from(!c);
-        if a && b && c {
-            bytes += source.len() as u64;
-            inputs.push((*source).to_owned());
+        probe.rejections.pg_sql += usize::from(!a);
+        probe.rejections.pg_sql_flat += usize::from(!flat);
+        probe.rejections.sqlparser += usize::from(!b);
+        probe.rejections.postgres += usize::from(!c);
+        if a != flat {
+            probe.disagreements.push(Disagreement {
+                nested_accepted: a,
+                source: (*source).to_owned(),
+            });
+        }
+        if a && flat && b && c {
+            probe.bytes += source.len() as u64;
+            probe.inputs.push((*source).to_owned());
         }
     }
-    (inputs, bytes, rejections)
+    probe
 }
 
 /// Remove deliberate legacy parse-error items before any parser is probed.
@@ -334,12 +410,39 @@ fn strip_parse_errors<'source>(
     (statement_items, parse_errors_stripped)
 }
 
+/// Append one line per nested/flat disagreement found in `probe`, tagged with
+/// the workload it came from, shortened so a long corpus statement stays
+/// readable in the abort message.
+fn report_disagreements(into: &mut Vec<String>, workload: &str, probe: &Probe) {
+    for disagreement in &probe.disagreements {
+        let (accepted, rejected) = if disagreement.nested_accepted {
+            ("pg-sql", "pg-sql-flat")
+        } else {
+            ("pg-sql-flat", "pg-sql")
+        };
+        let source: String = disagreement
+            .source
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let source = if source.chars().count() > 160 {
+            format!("{}…", source.chars().take(160).collect::<String>())
+        } else {
+            source
+        };
+        into.push(format!(
+            "  {workload}: {accepted} accepted, {rejected} rejected — {source:?}"
+        ));
+    }
+}
+
 /// Build the benchmark set: one `corpus/<file>` benchmark per frozen corpus
 /// file (the exact membership the differential baseline pins), plus one
 /// `stress/<file>` benchmark per generated stress fixture (each is a single
 /// statement, so the statement-level model applies unchanged).
 fn build_benches() -> Vec<Bench> {
     let mut benches = Vec::new();
+    let mut disagreements: Vec<String> = Vec::new();
 
     let frozen = FrozenStatements::pinned();
     let corpus_dir = corpus_sql_dir();
@@ -353,15 +456,16 @@ fn build_benches() -> Vec<Bench> {
             .unwrap_or_else(|error| panic!("{name}: cannot load frozen statements: {error}"));
         let (statement_items, parse_errors_stripped) =
             strip_parse_errors(&statements, frozen.file(name).legacy_item_kinds());
-        let (inputs, bytes, rejections) = probe_statements(&statement_items);
+        let probe = probe_statements(&statement_items);
         let stem = name.strip_suffix(".sql").unwrap_or(name);
+        report_disagreements(&mut disagreements, &format!("corpus/{stem}"), &probe);
         benches.push(Bench {
             name: format!("corpus/{stem}"),
             stmts_total: statements.len(),
             parse_errors_stripped,
-            inputs,
-            bytes,
-            rejections,
+            inputs: probe.inputs,
+            bytes: probe.bytes,
+            rejections: probe.rejections,
         });
     }
 
@@ -373,18 +477,30 @@ fn build_benches() -> Vec<Bench> {
         for (_, file) in sizes {
             let sql = fs::read_to_string(stress.join(file))
                 .unwrap_or_else(|e| panic!("read stress fixture {file}: {e}"));
-            let (inputs, bytes, rejections) = probe_statements(&[sql.as_str()]);
+            let probe = probe_statements(&[sql.as_str()]);
             let stem = file.strip_suffix(".sql").unwrap_or(file);
+            report_disagreements(&mut disagreements, &format!("stress/{stem}"), &probe);
             benches.push(Bench {
                 name: format!("stress/{stem}"),
                 stmts_total: 1,
                 parse_errors_stripped: 0,
-                inputs,
-                bytes,
-                rejections,
+                inputs: probe.inputs,
+                bytes: probe.bytes,
+                rejections: probe.rejections,
             });
         }
     }
+
+    // A flat-only rejection must never be silently filtered away: the two
+    // representations run the same automaton, so any disagreement is a bug and
+    // the run stops before a single timing is reported.
+    assert!(
+        disagreements.is_empty(),
+        "pg-sql's nested and flat parsers disagreed on {} statement(s); \
+         the benchmark cannot report timings over a set the two do not share:\n{}",
+        disagreements.len(),
+        disagreements.join("\n"),
+    );
 
     let totals = benches.iter().fold(
         (0usize, 0usize, 0usize, 0usize, Rejections::default()),
@@ -402,10 +518,10 @@ fn build_benches() -> Vec<Bench> {
     let (total, parse_errors, timed, engine_excluded, rejections) = totals;
     eprintln!(
         "statement probe: {total} frozen items — {parse_errors} deliberate parse-fail \
-         items stripped, {timed} accepted by all three engines and timed, \
-         {engine_excluded} engine-excluded (rejections: pg-sql {}, sqlparser {}, \
-         postgres {}).",
-        rejections.pg_sql, rejections.sqlparser, rejections.postgres,
+         items stripped, {timed} accepted by all four engines and timed, \
+         {engine_excluded} engine-excluded (rejections: pg-sql {}, pg-sql-flat {}, \
+         sqlparser {}, postgres {}).",
+        rejections.pg_sql, rejections.pg_sql_flat, rejections.sqlparser, rejections.postgres,
     );
 
     benches
@@ -438,8 +554,9 @@ fn command_stdout(prog: &str, args: &[&str]) -> Option<String> {
 
 // --- Report generation ---
 
-/// Colours for the three parsers — used by the SVG charts and named in prose.
-const PG_COLOUR: &str = "#3b82f6"; // blue   — pg-sql
+/// Colours for the four parsers — used by the SVG charts and named in prose.
+const PG_COLOUR: &str = "#3b82f6"; // blue   — pg-sql (nested arena AST)
+const PF_COLOUR: &str = "#8b5cf6"; // violet — pg-sql-flat (Flat AST)
 const SP_COLOUR: &str = "#f59e0b"; // amber  — sqlparser
 const PO_COLOUR: &str = "#10b981"; // green  — postgres (pg-oracle)
 
@@ -452,11 +569,11 @@ fn xml_escape(s: &str) -> String {
         .replace('\'', "&apos;")
 }
 
-/// Render a standalone SVG grouped-bar chart comparing pg-sql, sqlparser,
-/// and the PostgreSQL raw parser. Each benchmark contributes three
-/// side-by-side bars in distinct colours (`PG_COLOUR`, `SP_COLOUR`,
-/// `PO_COLOUR`); x-axis labels are rotated 90° counter-clockwise so they
-/// read vertically (bottom-to-top, matplotlib `rotation=90` style).
+/// Render a standalone SVG grouped-bar chart comparing pg-sql, pg-sql-flat,
+/// sqlparser, and the PostgreSQL raw parser. Each benchmark contributes four
+/// side-by-side bars in distinct colours (`PG_COLOUR`, `PF_COLOUR`,
+/// `SP_COLOUR`, `PO_COLOUR`); x-axis labels are rotated 90° counter-clockwise
+/// so they read vertically (bottom-to-top, matplotlib `rotation=90` style).
 /// Returned as a complete `<svg>` document for writing to a sidecar `.svg`
 /// file — GitHub strips inline SVG from markdown, but renders an SVG
 /// referenced as an image.
@@ -465,12 +582,14 @@ fn svg_chart(
     y_label: &str,
     labels: &[String],
     pg_sql: &[f64],
+    pg_sql_flat: &[f64],
     sqlparser: &[f64],
     postgres: &[f64],
 ) -> String {
     let n = labels.len();
     let max = pg_sql
         .iter()
+        .chain(pg_sql_flat)
         .chain(sqlparser)
         .chain(postgres)
         .copied()
@@ -482,7 +601,7 @@ fn svg_chart(
     let bar_w = 10.0_f64;
     let bar_gap = 2.0; // between a group's bars
     let group_gap = 14.0; // between groups
-    let group_w = bar_w * 3.0 + bar_gap * 2.0;
+    let group_w = bar_w * 4.0 + bar_gap * 3.0;
     let pitch = group_w + group_gap;
     let plot_w = pitch * n as f64;
     let plot_h = 280.0;
@@ -505,6 +624,7 @@ fn svg_chart(
     let tick = "#6b7280"; // y-tick numbers
     let axis = "#9ca3af";
     let pg = PG_COLOUR;
+    let pf = PF_COLOUR;
     let sp = SP_COLOUR;
     let po = PO_COLOUR;
 
@@ -523,25 +643,20 @@ fn svg_chart(
         xml_escape(title)
     );
 
-    // Legend — three swatches centred under the title.
-    let _ = writeln!(
-        s,
-        r#"<rect x="{lx:.1}" y="34" width="11" height="11" fill="{pg}"/><text x="{tx:.1}" y="43" font-size="11" fill="{txt}">pg-sql</text>"#,
-        lx = mid_x - 140.0,
-        tx = mid_x - 125.0,
-    );
-    let _ = writeln!(
-        s,
-        r#"<rect x="{lx:.1}" y="34" width="11" height="11" fill="{sp}"/><text x="{tx:.1}" y="43" font-size="11" fill="{txt}">sqlparser</text>"#,
-        lx = mid_x - 40.0,
-        tx = mid_x - 25.0,
-    );
-    let _ = writeln!(
-        s,
-        r#"<rect x="{lx:.1}" y="34" width="11" height="11" fill="{po}"/><text x="{tx:.1}" y="43" font-size="11" fill="{txt}">postgres</text>"#,
-        lx = mid_x + 60.0,
-        tx = mid_x + 75.0,
-    );
+    // Legend — four swatches centred under the title, 105px apart.
+    for (offset, colour, label) in [
+        (-215.0_f64, pg, "pg-sql"),
+        (-110.0, pf, "pg-sql-flat"),
+        (-5.0, sp, "sqlparser"),
+        (100.0, po, "postgres"),
+    ] {
+        let _ = writeln!(
+            s,
+            r#"<rect x="{lx:.1}" y="34" width="11" height="11" fill="{colour}"/><text x="{tx:.1}" y="43" font-size="11" fill="{txt}">{label}</text>"#,
+            lx = mid_x + offset,
+            tx = mid_x + offset + 15.0,
+        );
+    }
 
     // Y gridlines + tick labels (5 ticks).
     for i in 0..=4 {
@@ -577,30 +692,20 @@ fn svg_chart(
     // Bars and rotated x-axis labels.
     for i in 0..n {
         let gx = x0 + i as f64 * pitch;
-        let h_pg = (pg_sql[i] / ceiling) * plot_h;
-        let h_sp = (sqlparser[i] / ceiling) * plot_h;
-        let h_po = (postgres[i] / ceiling) * plot_h;
-        let _ = writeln!(
-            s,
-            r#"<rect x="{x:.1}" y="{y:.1}" width="{bar_w:.0}" height="{h:.2}" fill="{pg}"/>"#,
-            x = gx,
-            y = base_y - h_pg,
-            h = h_pg,
-        );
-        let _ = writeln!(
-            s,
-            r#"<rect x="{x:.1}" y="{y:.1}" width="{bar_w:.0}" height="{h:.2}" fill="{sp}"/>"#,
-            x = gx + bar_w + bar_gap,
-            y = base_y - h_sp,
-            h = h_sp,
-        );
-        let _ = writeln!(
-            s,
-            r#"<rect x="{x:.1}" y="{y:.1}" width="{bar_w:.0}" height="{h:.2}" fill="{po}"/>"#,
-            x = gx + (bar_w + bar_gap) * 2.0,
-            y = base_y - h_po,
-            h = h_po,
-        );
+        for (slot, colour, value) in [
+            (0.0_f64, pg, pg_sql[i]),
+            (1.0, pf, pg_sql_flat[i]),
+            (2.0, sp, sqlparser[i]),
+            (3.0, po, postgres[i]),
+        ] {
+            let h = (value / ceiling) * plot_h;
+            let _ = writeln!(
+                s,
+                r#"<rect x="{x:.1}" y="{y:.1}" width="{bar_w:.0}" height="{h:.2}" fill="{colour}"/>"#,
+                x = gx + (bar_w + bar_gap) * slot,
+                y = base_y - h,
+            );
+        }
         // Label, rotated 90° counter-clockwise: reads bottom-to-top with its
         // last character against the axis (`text-anchor="end"`).
         let lx = gx + group_w / 2.0;
@@ -628,40 +733,49 @@ struct Report {
 fn write_results_table(md: &mut String, rows: &[&Row]) {
     let _ = writeln!(
         md,
-        "| Benchmark | Stmts | Parse-fail stripped | Engine excluded | Bytes | pg-sql time | sqlparser time \
-         | postgres time | pg-sql throughput | sqlparser throughput \
-         | postgres throughput | pg-sql vs sqlparser | pg-sql vs postgres |\n\
-         |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|"
+        "| Benchmark | Stmts | Parse-fail stripped | Engine excluded | Bytes | pg-sql time \
+         | pg-sql-flat time | sqlparser time | postgres time | pg-sql throughput \
+         | pg-sql-flat throughput | sqlparser throughput | postgres throughput \
+         | pg-sql vs sqlparser | pg-sql vs postgres | pg-sql-flat vs pg-sql |\n\
+         |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|"
     );
     for r in rows {
-        let sp_speedup = if r.pg_sql.as_secs_f64() > 0.0 {
-            r.sqlparser.as_secs_f64() / r.pg_sql.as_secs_f64()
-        } else {
-            0.0
-        };
-        let po_speedup = if r.pg_sql.as_secs_f64() > 0.0 {
-            r.postgres.as_secs_f64() / r.pg_sql.as_secs_f64()
-        } else {
-            0.0
-        };
+        let sp_speedup = ratio(r.sqlparser, r.pg_sql);
+        let po_speedup = ratio(r.postgres, r.pg_sql);
+        // How many times faster the Flat AST is than the nested arena AST: the
+        // nested time over the flat time, so below 1.00× means flat is slower.
+        let flat_speedup = ratio(r.pg_sql, r.pg_sql_flat);
         let _ = writeln!(
             md,
-            "| {} | {} | {} | {} | {} | {:.3} ms | {:.3} ms | {:.3} ms \
-             | {:.1} MiB/s | {:.1} MiB/s | {:.1} MiB/s | {:.2}× | {:.2}× |",
+            "| {} | {} | {} | {} | {} | {:.3} ms | {:.3} ms | {:.3} ms | {:.3} ms \
+             | {:.1} MiB/s | {:.1} MiB/s | {:.1} MiB/s | {:.1} MiB/s | {:.2}× | {:.2}× | {:.2}× |",
             r.name,
             r.stmts_timed,
             r.parse_errors_stripped,
             r.engine_excluded,
             r.bytes,
             ms(r.pg_sql),
+            ms(r.pg_sql_flat),
             ms(r.sqlparser),
             ms(r.postgres),
             mib_per_s(r.bytes, r.pg_sql),
+            mib_per_s(r.bytes, r.pg_sql_flat),
             mib_per_s(r.bytes, r.sqlparser),
             mib_per_s(r.bytes, r.postgres),
             sp_speedup,
             po_speedup,
+            flat_speedup,
         );
+    }
+}
+
+/// `slower / faster` as a speedup factor, or 0.0 when there is nothing to
+/// divide by (a workload whose statements were all excluded).
+fn ratio(numerator: Duration, denominator: Duration) -> f64 {
+    if denominator.as_secs_f64() > 0.0 {
+        numerator.as_secs_f64() / denominator.as_secs_f64()
+    } else {
+        0.0
     }
 }
 
@@ -676,9 +790,14 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
 
     let chart_labels: Vec<String> = timed.iter().map(|r| r.name.clone()).collect();
     let pg_time: Vec<f64> = timed.iter().map(|r| ms(r.pg_sql)).collect();
+    let pf_time: Vec<f64> = timed.iter().map(|r| ms(r.pg_sql_flat)).collect();
     let sp_time: Vec<f64> = timed.iter().map(|r| ms(r.sqlparser)).collect();
     let po_time: Vec<f64> = timed.iter().map(|r| ms(r.postgres)).collect();
     let pg_tput: Vec<f64> = timed.iter().map(|r| mib_per_s(r.bytes, r.pg_sql)).collect();
+    let pf_tput: Vec<f64> = timed
+        .iter()
+        .map(|r| mib_per_s(r.bytes, r.pg_sql_flat))
+        .collect();
     let sp_tput: Vec<f64> = timed
         .iter()
         .map(|r| mib_per_s(r.bytes, r.sqlparser))
@@ -698,7 +817,8 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
     let _ = writeln!(md, "- **Commit:** `{commit}`");
     let _ = writeln!(
         md,
-        "- **Parsers:** pg-sql (this crate) vs \
+        "- **Parsers:** pg-sql (this crate, nested arena AST) vs pg-sql-flat \
+         (the same grammar's Flat AST) vs \
          [`sqlparser`](https://crates.io/crates/sqlparser) vs PostgreSQL's \
          raw parser (via [`pg-oracle`](../../../pg-oracle/), linking the \
          vendored PostgreSQL 17.9 source)"
@@ -717,7 +837,7 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
     md.push('\n');
     let _ = writeln!(
         md,
-        "All three engines time the **same statement set**: deliberate corpus \
+        "All four engines time the **same statement set**: deliberate corpus \
          parse-error items are stripped before any engine probe, then a \
          statement rejected by any engine (or carrying a NUL byte, which the \
          PostgreSQL C bridge cannot accept) is excluded for every engine, \
@@ -730,14 +850,20 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
          allocation and a global-mutex acquisition on top of the underlying \
          `raw_parser()` invocation — these overheads count toward the \
          measured times, mirroring the end-to-end \"parse one SQL string \
-         from scratch\" model used for all engines."
+         from scratch\" model used for all engines. The pg-sql-flat column \
+         runs the same lex pass and the same LR automaton as pg-sql, with the \
+         flat reduce actions building the tiered flat store instead of the \
+         nested arena tree, and drops the whole store inside the timed call; \
+         the probe asserts the two representations accept exactly the same \
+         statements before any timing is taken, so a flat-only rejection \
+         cannot hide behind the exclusion filter."
     );
     md.push('\n');
 
     let _ = writeln!(md, "- **Benchmarks:** {}", rows.len());
     let _ = writeln!(
         md,
-        "- **Frozen items:** {} ({} timed by all three engines, {} deliberate \
+        "- **Frozen items:** {} ({} timed by all four engines, {} deliberate \
          parse-fail items stripped, {} engine-excluded)",
         totals.stmts_total,
         totals.stmts_timed,
@@ -747,8 +873,11 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
     let _ = writeln!(
         md,
         "- **Per-engine rejections (causes of exclusion):** pg-sql {}, \
-         sqlparser {}, postgres {}",
-        totals.rejections.pg_sql, totals.rejections.sqlparser, totals.rejections.postgres,
+         pg-sql-flat {}, sqlparser {}, postgres {}",
+        totals.rejections.pg_sql,
+        totals.rejections.pg_sql_flat,
+        totals.rejections.sqlparser,
+        totals.rejections.postgres,
     );
     md.push('\n');
 
@@ -758,7 +887,7 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
     if !empty.is_empty() {
         let _ = writeln!(
             md,
-            "## Workloads with no statement accepted by all three engines\n"
+            "## Workloads with no statement accepted by all four engines\n"
         );
         write_results_table(&mut md, &empty);
         md.push('\n');
@@ -771,6 +900,7 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
         "Time (ms)",
         &chart_labels,
         &pg_time,
+        &pf_time,
         &sp_time,
         &po_time,
     );
@@ -779,6 +909,7 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
         "MiB/s",
         &chart_labels,
         &pg_tput,
+        &pf_tput,
         &sp_tput,
         &po_tput,
     );
@@ -791,10 +922,10 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
     let _ = writeln!(md, "![Throughput per benchmark](throughput.svg)\n");
     let _ = writeln!(
         md,
-        "_Each benchmark shows three side-by-side bars — blue = **pg-sql**, \
-         amber = **sqlparser**, green = **postgres** (PostgreSQL 17.9 raw \
-         parser via pg-oracle). All bars cover the same accepted-by-all \
-         statement set._"
+        "_Each benchmark shows four side-by-side bars — blue = **pg-sql** \
+         (nested arena AST), violet = **pg-sql-flat** (Flat AST), amber = \
+         **sqlparser**, green = **postgres** (PostgreSQL 17.9 raw parser via \
+         pg-oracle). All bars cover the same accepted-by-all statement set._"
     );
 
     Report {
@@ -840,8 +971,11 @@ fn main() {
     let rows: Vec<Row> = benches.iter().map(run_bench).collect();
 
     // Aggregate engine totals over every timed benchmark, for a headline.
+    let pg_sql_total: Duration = rows.iter().map(|r| r.pg_sql).sum();
+    let pg_sql_flat_total: Duration = rows.iter().map(|r| r.pg_sql_flat).sum();
     let sums: BTreeMap<&str, Duration> = [
-        ("pg-sql", rows.iter().map(|r| r.pg_sql).sum()),
+        ("pg-sql", pg_sql_total),
+        ("pg-sql-flat", pg_sql_flat_total),
         ("sqlparser", rows.iter().map(|r| r.sqlparser).sum()),
         ("postgres", rows.iter().map(|r| r.postgres).sum()),
     ]
@@ -850,6 +984,13 @@ fn main() {
     for (engine, total) in &sums {
         println!("total median time, {engine}: {:.3} ms", ms(*total));
     }
+    // The representation headline: above 1.00× the Flat AST is faster than the
+    // nested arena AST over the whole timed set, below it the Flat AST is
+    // slower. A speedup is not an acceptance condition.
+    println!(
+        "pg-sql-flat vs pg-sql, whole timed set: {:.2}×",
+        ratio(pg_sql_total, pg_sql_flat_total),
+    );
 
     // Identify the run: an ISO-8601 UTC timestamp (`:` swapped for `-` so it is
     // a safe filename) and the short commit SHA.
@@ -889,6 +1030,7 @@ fn main() {
         .map(|r| BenchRecord {
             name: r.name.clone(),
             pg_sql_ns: r.pg_sql.as_nanos(),
+            pg_sql_flat_ns: r.pg_sql_flat.as_nanos(),
             sqlparser_ns: r.sqlparser.as_nanos(),
             postgres_ns: r.postgres.as_nanos(),
             bytes: r.bytes,

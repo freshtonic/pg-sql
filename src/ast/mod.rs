@@ -88,6 +88,7 @@ recursa::ast_node! {
     /// - `Query` is the single shared-prefix type for `WITH`, `SELECT`, `VALUES`,
     ///   `TABLE`, parenthesized queries, and their set-operation continuations.
     #[derive(Debug)]
+    #[flat(pool)]
     pub enum Statement {
         // --- Multi-keyword statements (longest first_pattern first) ---
         Explain(boxed!(ExplainStmt)),

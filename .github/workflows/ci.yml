@@ -44,6 +44,17 @@ jobs:
           --ledger migration/reviewed-semantic-changes.json
       - name: Test frozen statement-span contracts
         run: cargo test --locked --package pg-sql-migrate --test statement_spans
+      - name: Check nested/flat AST parity over the pinned corpus
+        run: cargo test --locked --package pg-sql --test flat_parity
+      - name: Check nested/flat AST parity with spans captured
+        run: >-
+          cargo test --locked --package pg-sql
+          --features spans --test flat_parity
+      - name: Reject warnings in the flat-parity target
+        run: >-
+          cargo clippy --locked --package pg-sql
+          --test flat_parity
+          -- -D warnings
       - name: Reject warnings in migration tooling
         run: cargo clippy --locked --package pg-sql-migrate --all-targets -- -D warnings
 

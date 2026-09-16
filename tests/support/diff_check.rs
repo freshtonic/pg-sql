@@ -1,8 +1,15 @@
+// The oracle comparison needs PostgreSQL itself; the lexing and formatting
+// helpers do not. Gating only the oracle half lets an oracle-free suite — the
+// nested/flat parity suite — mount this module for `lex_statement_source`
+// without pulling in the `pg-oracle` FFI bridge.
+#[cfg(feature = "postgres-oracle")]
 use crate::support::Stmt;
+#[cfg(feature = "postgres-oracle")]
 use pg_oracle::{Equal, parse_equal, parse_ok};
 use std::fmt;
 use std::ops::Range;
 
+#[cfg(feature = "postgres-oracle")]
 #[derive(Debug, PartialEq, Eq)]
 pub enum Outcome {
     Pass,
@@ -135,6 +142,7 @@ pub(crate) fn pgsql_format(source: &str) -> Result<String, StrictStatementFailur
     ))
 }
 
+#[cfg(feature = "postgres-oracle")]
 pub fn check_statement(stmt: &Stmt) -> Outcome {
     let src = &stmt.source;
 
@@ -180,17 +188,20 @@ pub fn check_statement(stmt: &Stmt) -> Outcome {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "postgres-oracle")]
     fn check(sql: &str) -> Outcome {
         super::check_statement(&Stmt {
             source: sql.to_string(),
         })
     }
 
+    #[cfg(feature = "postgres-oracle")]
     #[test]
     fn faithful_statement_passes() {
         assert_eq!(check("SELECT 1 AS one"), Outcome::Pass);
     }
 
+    #[cfg(feature = "postgres-oracle")]
     #[test]
     fn pg_rejected_input_passes_when_pgsql_also_rejects() {
         // PostgreSQL rejects trailing junk; pg-sql must not "fix" it into

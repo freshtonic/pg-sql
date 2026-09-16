@@ -2,10 +2,11 @@
 mod tests {
     use super::*;
 
-    fn rec(name: &str, pg: u128, sp: u128, pgo: u128, bytes: u64) -> BenchRecord {
+    fn rec(name: &str, pg: u128, flat: u128, sp: u128, pgo: u128, bytes: u64) -> BenchRecord {
         BenchRecord {
             name: name.to_string(),
             pg_sql_ns: pg,
+            pg_sql_flat_ns: flat,
             sqlparser_ns: sp,
             postgres_ns: pgo,
             bytes,
@@ -17,13 +18,13 @@ mod tests {
         let json = serialize_data_json(
             "2026-05-22T06-14-17Z",
             "099f339",
-            &[rec("corpus/boolean", 123456, 98765, 54321, 2048)],
+            &[rec("corpus/boolean", 123456, 111111, 98765, 54321, 2048)],
         );
         assert_eq!(
             json,
             "{\n  \"timestamp\": \"2026-05-22T06-14-17Z\",\n  \"commit\": \"099f339\",\n  \
              \"benchmarks\": [\n    \
-             { \"name\": \"corpus/boolean\", \"pg_sql_ns\": 123456, \"sqlparser_ns\": 98765, \"postgres_ns\": 54321, \"bytes\": 2048 }\n  \
+             { \"name\": \"corpus/boolean\", \"pg_sql_ns\": 123456, \"pg_sql_flat_ns\": 111111, \"sqlparser_ns\": 98765, \"postgres_ns\": 54321, \"bytes\": 2048 }\n  \
              ]\n}\n"
         );
     }
@@ -34,8 +35,8 @@ mod tests {
             "2026-05-22T06-14-17Z",
             "099f339",
             &[
-                rec("corpus/boolean", 100, 200, 50, 10),
-                rec("stress/in_list_100", 300, 400, 250, 20),
+                rec("corpus/boolean", 100, 90, 200, 50, 10),
+                rec("stress/in_list_100", 300, 280, 400, 250, 20),
             ],
         );
         let bench_lines: Vec<&str> = json
@@ -61,8 +62,8 @@ mod tests {
             "2026-05-22T06-14-17Z",
             "099f339",
             &[
-                rec("corpus/boolean", 123456, 98765, 54321, 2048),
-                rec("stress/bool_chain_10", 4242, 9001, 3030, 64),
+                rec("corpus/boolean", 123456, 111111, 98765, 54321, 2048),
+                rec("stress/bool_chain_10", 4242, 4040, 9001, 3030, 64),
             ],
         );
         let value: serde_json::Value =
@@ -73,7 +74,9 @@ mod tests {
         assert_eq!(benches.len(), 2);
         assert_eq!(benches[0]["name"], "corpus/boolean");
         assert_eq!(benches[0]["pg_sql_ns"], 123456);
+        assert_eq!(benches[0]["pg_sql_flat_ns"], 111111);
         assert_eq!(benches[0]["postgres_ns"], 54321);
+        assert_eq!(benches[1]["pg_sql_flat_ns"], 4040);
         assert_eq!(benches[1]["sqlparser_ns"], 9001);
         assert_eq!(benches[1]["postgres_ns"], 3030);
         assert_eq!(benches[1]["bytes"], 64);
