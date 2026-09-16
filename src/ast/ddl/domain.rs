@@ -48,41 +48,10 @@ recursa::ast_node! {
     /// `DEFAULT expr` clause — domain default value.
     #[derive(Debug)]
     pub struct DomainDefault {
-        /// gram.y `ColConstraintElem: DEFAULT b_expr` (the restricted expression
-        /// grammar; exclusions as in `PositionInner`), so `DEFAULT 1 NOT NULL`
-        /// ends the default at `NOT`.
-        #[parse(pratt(exclude(
-            Default,
-            Collate,
-            QuantifiedComparisonCmp,
-            QuantifiedComparisonLike,
-            QuantifiedComparisonOp,
-            QuantifiedComparisonAdd,
-            QuantifiedComparisonMul,
-            QuantifiedComparisonPow,
-            IsJson,
-            IsNormalized,
-            BoolTest,
-            Notnull,
-            Isnull,
-            AtLocal,
-            AtTimeZone,
-            NotInExpr,
-            NotIlike,
-            NotSimilarTo,
-            NotLike,
-            SimilarTo,
-            Ilike,
-            Like,
-            Overlaps,
-            InExpr,
-            NotBetweenExpr,
-            BetweenExpr,
-            Or,
-            And
-        )))]
+        /// gram.y `ColConstraintElem: DEFAULT b_expr`, the restricted
+        /// expression, so `DEFAULT 1 NOT NULL` ends the default at `NOT`.
         #[tok(DEFAULT, this)]
-        pub expr: boxed!(Expr),
+        pub expr: boxed!(BExpr),
     }
 }
 

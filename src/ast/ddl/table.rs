@@ -397,41 +397,11 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct DefaultConstraint {
         /// gram.y `ColConstraintElem: DEFAULT b_expr`: the restricted
-        /// expression grammar, which has no `AND`, `OR`, `LIKE`, `BETWEEN`,
-        /// `IN`, `IS NULL` or subquery extender, so `DEFAULT 1 NOT NULL` ends
-        /// the default at `NOT`. The exclusions are those of `PositionInner`.
-        #[parse(pratt(exclude(
-            Default,
-            Collate,
-            QuantifiedComparisonCmp,
-            QuantifiedComparisonLike,
-            QuantifiedComparisonOp,
-            QuantifiedComparisonAdd,
-            QuantifiedComparisonMul,
-            QuantifiedComparisonPow,
-            IsJson,
-            IsNormalized,
-            BoolTest,
-            Notnull,
-            Isnull,
-            AtLocal,
-            AtTimeZone,
-            NotInExpr,
-            NotIlike,
-            NotSimilarTo,
-            NotLike,
-            SimilarTo,
-            Ilike,
-            Like,
-            Overlaps,
-            InExpr,
-            NotBetweenExpr,
-            BetweenExpr,
-            Or,
-            And
-        )))]
+        /// expression, which has no `AND`, `OR`, `LIKE`, `BETWEEN`, `IN` or
+        /// `IS NULL` extender, so `DEFAULT 1 NOT NULL` ends the default at
+        /// `NOT`.
         #[tok(DEFAULT, this)]
-        pub expr: crate::ast::shared::expr::Expr,
+        pub expr: crate::ast::shared::expr::BExpr,
     }
 }
 
