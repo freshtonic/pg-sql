@@ -23,6 +23,12 @@ reports zero conflicts and zero warnings. The automaton is 17,881 states,
 same grammar before the migration; the snapshot is
 `docs/metrics/lr-statistics-v2.txt`.
 
+Re-measured on 2026-09-16 against Recursa `9876fa8`, the revision that removes
+Pratt completely: generation reports zero conflicts and zero warnings, the
+PostgreSQL differential passes 234/234, a forced generation takes 6.87 seconds
+and reuse takes 38 milliseconds. The automaton does not move: 17,881 states,
+12,070 rules and 3,437 nonterminals.
+
 Measured on 2026-09-07 after the LR-only cleanup, and not re-measured since:
 an edit to `recursa-codegen` followed by the pg-sql release rebuild takes 56.66
 seconds, and a pg-sql-only rustc pass takes 30.6 seconds.
