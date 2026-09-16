@@ -54,6 +54,25 @@
 //!   over the quick suite's three-way membership. `--engine postgres` runs
 //!   PostgreSQL's raw parser over either suite for generated-parser profiles.
 //!
+//! Flat AST additions:
+//!
+//! - `--engine pg-sql-flat` times `Statement::parse_flat_without_spans` over
+//!   the same workloads through the same lex seam, so the pair
+//!   `--engine pg-sql` / `--engine pg-sql-flat` isolates the representation
+//!   exactly as `benches/parse.rs` does for its `pg-sql` / `pg-sql-flat`
+//!   entries. `--count-allocs` accepts either engine.
+//! - `short_statements` is a corpus-shaped workload of many short statements
+//!   read from a directory of `.sql` files named by `FLAME_SHORT_SQL_DIR`
+//!   (default `fixtures/short`). It exists so the short-statement fixed cost
+//!   can be profiled where the vendored regression corpus is unavailable (a
+//!   worktree without the `vendor/postgres` submodule). Statements are split
+//!   on top-level semicolons, so the workload is a profiling shape, not the
+//!   frozen differential membership.
+//!
+//! The `postgres-oracle` feature is optional for this target. Without it the
+//! PostgreSQL membership probe is a no-op (workloads keep whatever pg-sql
+//! accepts) and `--engine postgres` is rejected.
+//!
 //! See `docs/notes/perf.md` for the profiling recipes built on top of this
 //! target (macOS `sample`/`xctrace`, Linux `perf`).
 
@@ -82,6 +101,10 @@ use support::diff_check::lex_statement_source;
 static ALLOC_COUNT: AtomicU64 = AtomicU64::new(0);
 /// Full requested size of those successful allocation or reallocation calls.
 static ALLOC_BYTES: AtomicU64 = AtomicU64::new(0);
+/// Successful `realloc` calls alone — the growth half of the count above.
+/// Reported separately because a growing store's reallocation count per parse
+/// is what distinguishes a presized vector from one that doubles.
+static REALLOC_COUNT: AtomicU64 = AtomicU64::new(0);
 /// Whether the wrapper counts. Off by default so profiling runs pay only a
 /// relaxed load and branch per allocation.
 static COUNTING: AtomicBool = AtomicBool::new(false);
@@ -123,6 +146,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
         if !pointer.is_null() {
             if COUNTING.load(Ordering::Relaxed) {
                 ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+                REALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
                 ALLOC_BYTES.fetch_add(new_size as u64, Ordering::Relaxed);
             }
         }
@@ -133,11 +157,12 @@ unsafe impl GlobalAlloc for CountingAllocator {
 #[global_allocator]
 static ALLOCATOR: CountingAllocator = CountingAllocator;
 
-/// Reads the counters once.
-fn alloc_snapshot() -> (u64, u64) {
+/// Reads the counters once: (calls, bytes, realloc calls).
+fn alloc_snapshot() -> (u64, u64, u64) {
     (
         ALLOC_COUNT.load(Ordering::Relaxed),
         ALLOC_BYTES.load(Ordering::Relaxed),
+        REALLOC_COUNT.load(Ordering::Relaxed),
     )
 }
 
@@ -154,7 +179,7 @@ const QUICK_WORKLOADS: [(&str, &str); 3] = [
 ];
 
 /// Broader workloads used to discover grammar- and mechanism-specific costs.
-const DISCOVERY_WORKLOADS: [(&str, &str); 14] = [
+const DISCOVERY_WORKLOADS: [(&str, &str); 15] = [
     (
         "corpus_pg_postgres",
         "aggregate corpus accepted by pg-sql and PostgreSQL",
@@ -187,7 +212,14 @@ const DISCOVERY_WORKLOADS: [(&str, &str); 14] = [
         "errors_pg_postgres",
         "corpus parse-error items rejected by pg-sql and PostgreSQL",
     ),
+    (
+        "short_statements",
+        "short statements from $FLAME_SHORT_SQL_DIR (default fixtures/short)",
+    ),
 ];
+
+/// Directory of `.sql` files backing the `short_statements` workload.
+const SHORT_SQL_DIR_VAR: &str = "FLAME_SHORT_SQL_DIR";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExpectedOutcome {
@@ -235,6 +267,120 @@ fn load_corpus_items(kind: LegacyItemKind) -> Result<Vec<String>, String> {
         );
     }
     Ok(inputs)
+}
+
+/// Split a `.sql` file into statements on top-level semicolons.
+///
+/// A deliberately small splitter for the `short_statements` profiling shape:
+/// it tracks single quotes, double quotes, dollar-quoted tags, line comments
+/// and block comments, which is enough for the plain DDL/DCL corpus files the
+/// workload is pointed at. It is **not** the frozen statement extractor
+/// (`tests/support/baseline.rs`); statements it mis-splits are simply
+/// dropped by the acceptance probe below.
+fn split_statements(text: &str) -> Vec<String> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut start = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'-' if bytes.get(i + 1) == Some(&b'-') => {
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                i += 2;
+                let mut depth = 1usize;
+                while i < bytes.len() && depth > 0 {
+                    if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') {
+                        depth += 1;
+                        i += 2;
+                    } else if bytes[i] == b'*' && bytes.get(i + 1) == Some(&b'/') {
+                        depth -= 1;
+                        i += 2;
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            quote @ (b'\'' | b'"') => {
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == quote {
+                        if bytes.get(i + 1) == Some(&quote) {
+                            i += 2;
+                            continue;
+                        }
+                        i += 1;
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            b'$' => {
+                // A dollar-quote tag is `$`, an optional identifier, `$`.
+                let tag_end = text[i + 1..]
+                    .find('$')
+                    .map(|offset| i + 1 + offset)
+                    .filter(|end| {
+                        text[i + 1..*end]
+                            .chars()
+                            .all(|c| c.is_alphanumeric() || c == '_')
+                    });
+                match tag_end {
+                    Some(end) => {
+                        let tag = &text[i..=end];
+                        match text[end + 1..].find(tag) {
+                            Some(offset) => i = end + 1 + offset + tag.len(),
+                            None => i = bytes.len(),
+                        }
+                    }
+                    None => i += 1,
+                }
+            }
+            b';' => {
+                i += 1;
+                let statement = text[start..i].trim();
+                if !statement.is_empty() {
+                    out.push(statement.to_owned());
+                }
+                start = i;
+            }
+            _ => i += 1,
+        }
+    }
+    let tail = text[start.min(text.len())..].trim();
+    if !tail.is_empty() {
+        out.push(tail.to_owned());
+    }
+    out
+}
+
+/// Every statement of every `.sql` file in the `short_statements` directory,
+/// in sorted file order so the workload is deterministic.
+fn load_short_statements() -> Result<Vec<String>, String> {
+    let dir = match std::env::var_os(SHORT_SQL_DIR_VAR) {
+        Some(value) => PathBuf::from(value),
+        None => manifest_dir().join("fixtures/short"),
+    };
+    let mut files: Vec<PathBuf> = fs::read_dir(&dir)
+        .map_err(|e| format!("read {SHORT_SQL_DIR_VAR} directory {}: {e}", dir.display()))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "sql"))
+        .collect();
+    files.sort();
+    if files.is_empty() {
+        return Err(format!("no .sql files in {}", dir.display()));
+    }
+    let mut out = Vec::new();
+    for path in files {
+        let text =
+            fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        out.extend(split_statements(&text));
+    }
+    Ok(out)
 }
 
 /// A stable top-level dispatch partition. It intentionally follows the first
@@ -331,6 +477,14 @@ fn load_workload(name: &str) -> Result<LoadedWorkload, String> {
         "in_list_10000" => stress("in_list_10000.sql", false),
         "nested_subquery_15" => stress("nested_subquery_15.sql", false),
         "lexical_mix_1000" => stress("lexical_mix_1000.sql", false),
+        "short_statements" => {
+            let inputs = load_short_statements()?;
+            Ok(LoadedWorkload {
+                inputs: accepted_inputs(inputs, false),
+                expected: ExpectedOutcome::Accept,
+                supports_sqlparser: false,
+            })
+        }
         other => Err(format!("unknown workload: {other}")),
     }
 }
@@ -357,6 +511,27 @@ fn parse_with_pg_sql(sql: &str) -> bool {
     }
 }
 
+/// Strict statement-level parse with pg-sql's **Flat AST**. The same lex
+/// pass, the same `Input`, and the same LR automaton as `parse_with_pg_sql`;
+/// only the reduce actions differ, building the tiered flat store instead of
+/// the nested arena tree. Byte-for-byte the seam that
+/// `parse_with_pg_sql_flat` in `benches/parse.rs` times, including dropping
+/// the whole store inside the call.
+fn parse_with_pg_sql_flat(sql: &str) -> bool {
+    let lexed = lex_statement_source(sql);
+    if lexed.errors().next().is_some() {
+        return false;
+    }
+    let mut input = lexed.input();
+    match Statement::parse_flat_without_spans(&mut input) {
+        Ok(flat) => {
+            std::hint::black_box(&flat);
+            input.is_eof()
+        }
+        Err(_) => false,
+    }
+}
+
 /// Strict statement-level parse with sqlparser 0.52, exactly as
 /// `parse_with_sqlparser` in `benches/parse.rs` does it: the parity-gate
 /// reference engine over the same statement text.
@@ -372,11 +547,21 @@ fn parse_with_sqlparser(sql: &str) -> bool {
 /// matching `parse_with_postgres` in `benches/parse.rs`. This is a workload
 /// membership probe only; it runs once during loading and never in the
 /// profiled loop.
+#[cfg(feature = "postgres-oracle")]
 fn parse_with_postgres(sql: &str) -> bool {
     if sql.as_bytes().contains(&0) {
         return false;
     }
     pg_oracle::parse_ok(sql)
+}
+
+/// Without `postgres-oracle` there is no PostgreSQL to probe (a worktree
+/// without the `vendor/postgres` submodule cannot build the FFI bridge), so
+/// the membership probe passes everything and each workload keeps whatever
+/// pg-sql itself accepts. `--engine postgres` is rejected in that build.
+#[cfg(not(feature = "postgres-oracle"))]
+fn parse_with_postgres(_sql: &str) -> bool {
+    true
 }
 
 /// Accumulated allocation counts for one phase of the accepted seam.
@@ -388,24 +573,28 @@ struct PhaseAllocs {
     allocs: u64,
     /// Full sizes requested by those calls.
     bytes: u64,
+    /// The `realloc` subset of `allocs` — in-place or copying growth.
+    reallocs: u64,
 }
 
 impl PhaseAllocs {
-    fn add(&mut self, before: (u64, u64), after: (u64, u64)) {
+    fn add(&mut self, before: (u64, u64, u64), after: (u64, u64, u64)) {
         self.statements += 1;
         self.allocs += after.0 - before.0;
         self.bytes += after.1 - before.1;
+        self.reallocs += after.2 - before.2;
     }
 
     fn report(&self, label: &str) {
         let per = |value: u64| value as f64 / self.statements.max(1) as f64;
         println!(
             "{label:<28} statements={:<8} allocs={:<12} bytes={:<14} \
-             allocs/stmt={:.1} bytes/stmt={:.0}",
+             allocs/stmt={:.1} reallocs/stmt={:.1} bytes/stmt={:.0}",
             self.statements,
             self.allocs,
             self.bytes,
             per(self.allocs),
+            per(self.reallocs),
             per(self.bytes),
         );
     }
@@ -415,7 +604,7 @@ impl PhaseAllocs {
 /// counted separately. Deliberate parse-error entries and statements
 /// rejected by any parity engine were removed while loading the workload, so
 /// this pass intentionally does not measure error/expected-set paths.
-fn run_alloc_count(inputs: &[String], expected: ExpectedOutcome) {
+fn run_alloc_count(inputs: &[String], expected: ExpectedOutcome, engine: Engine) {
     let mut lex = PhaseAllocs::default();
     let mut input_setup = PhaseAllocs::default();
     let mut parse = PhaseAllocs::default();
@@ -433,16 +622,28 @@ fn run_alloc_count(inputs: &[String], expected: ExpectedOutcome) {
             let mut input = lexed.input();
             let after_input = alloc_snapshot();
             input_setup.add(before_input, after_input);
+            // Both representations are constructed and dropped inside the
+            // counted window, so the two counts differ only by the reduce
+            // actions and the store they fill.
             let before_parse = alloc_snapshot();
-            let outcome = Statement::parse_without_spans(&mut input);
-            let after_parse = alloc_snapshot();
-            let accepted = match outcome {
-                Ok(parsed) => {
-                    std::hint::black_box(&parsed);
-                    input.is_eof()
+            let accepted = if engine == Engine::PgSqlFlat {
+                match Statement::parse_flat_without_spans(&mut input) {
+                    Ok(flat) => {
+                        std::hint::black_box(&flat);
+                        input.is_eof()
+                    }
+                    Err(_) => false,
                 }
-                Err(_) => false,
+            } else {
+                match Statement::parse_without_spans(&mut input) {
+                    Ok(parsed) => {
+                        std::hint::black_box(&parsed);
+                        input.is_eof()
+                    }
+                    Err(_) => false,
+                }
             };
+            let after_parse = alloc_snapshot();
             parse.add(before_parse, after_parse);
             accepted
         };
@@ -454,7 +655,7 @@ fn run_alloc_count(inputs: &[String], expected: ExpectedOutcome) {
     }
     COUNTING.store(false, Ordering::Relaxed);
 
-    println!("allocation counts (counting global allocator, one pass):");
+    println!("allocation counts (counting global allocator, one pass, engine {engine:?}):");
     println!(
         "metric convention: successful alloc/alloc_zeroed/realloc calls; full requested bytes"
     );
@@ -487,11 +688,7 @@ struct LoopStats {
 /// corpus is ~50 s per pass at the 2026-09-01 baseline) still stops close
 /// to the requested duration; at least one statement always runs.
 fn run_loop(inputs: &[String], duration: Duration, engine: Engine) -> LoopStats {
-    let parse: fn(&str) -> bool = match engine {
-        Engine::PgSql => parse_with_pg_sql,
-        Engine::Sqlparser => parse_with_sqlparser,
-        Engine::Postgres => parse_with_postgres,
-    };
+    let parse = engine.parse_fn();
     let start = Instant::now();
     let deadline = start + duration;
     let mut stats = LoopStats {
@@ -522,8 +719,40 @@ fn run_loop(inputs: &[String], duration: Duration, engine: Engine) -> LoopStats 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Engine {
     PgSql,
+    PgSqlFlat,
     Sqlparser,
     Postgres,
+}
+
+impl Engine {
+    /// The parse seam this engine loops over.
+    fn parse_fn(self) -> fn(&str) -> bool {
+        match self {
+            Engine::PgSql => parse_with_pg_sql,
+            Engine::PgSqlFlat => parse_with_pg_sql_flat,
+            Engine::Sqlparser => parse_with_sqlparser,
+            Engine::Postgres => parse_with_postgres_engine,
+        }
+    }
+
+    /// Whether the engine is one of pg-sql's two AST representations, the
+    /// only engines `--count-allocs` can attribute.
+    fn is_pg_sql(self) -> bool {
+        matches!(self, Engine::PgSql | Engine::PgSqlFlat)
+    }
+}
+
+/// `--engine postgres`, kept distinct from the membership probe so the probe
+/// can be a no-op in an oracle-free build while the timing loop still
+/// refuses to pretend it measured PostgreSQL.
+#[cfg(feature = "postgres-oracle")]
+fn parse_with_postgres_engine(sql: &str) -> bool {
+    parse_with_postgres(sql)
+}
+
+#[cfg(not(feature = "postgres-oracle"))]
+fn parse_with_postgres_engine(_sql: &str) -> bool {
+    unreachable!("--engine postgres is rejected without the postgres-oracle feature")
 }
 
 struct Args {
@@ -555,8 +784,17 @@ fn parse_args(args: &[String]) -> Result<Option<Args>, String> {
                 let v = args.get(i).ok_or("--engine needs a value")?;
                 engine = match v.as_str() {
                     "pg-sql" => Engine::PgSql,
+                    "pg-sql-flat" => Engine::PgSqlFlat,
                     "sqlparser" => Engine::Sqlparser,
-                    "postgres" => Engine::Postgres,
+                    "postgres" => {
+                        if cfg!(feature = "postgres-oracle") {
+                            Engine::Postgres
+                        } else {
+                            return Err(
+                                "--engine postgres needs the postgres-oracle feature".into()
+                            );
+                        }
+                    }
                     other => return Err(format!("bad --engine: {other}")),
                 };
             }
@@ -572,8 +810,8 @@ fn parse_args(args: &[String]) -> Result<Option<Args>, String> {
         i += 1;
     }
     let workload = workload.ok_or("missing workload name")?;
-    if count_allocs && engine != Engine::PgSql {
-        return Err("--count-allocs counts the pg-sql seam only".into());
+    if count_allocs && !engine.is_pg_sql() {
+        return Err("--count-allocs counts the pg-sql and pg-sql-flat seams only".into());
     }
     Ok(Some(Args {
         workload,
@@ -640,7 +878,7 @@ fn main() -> ExitCode {
     println!("pid: {}", std::process::id());
 
     if args.count_allocs {
-        run_alloc_count(&loaded.inputs, loaded.expected);
+        run_alloc_count(&loaded.inputs, loaded.expected, args.engine);
         return ExitCode::SUCCESS;
     }
 

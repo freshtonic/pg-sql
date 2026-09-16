@@ -67,7 +67,6 @@ required-features = ["postgres-oracle"]
 [[bench]]
 name = "flame"
 harness = false
-required-features = ["postgres-oracle"]
 
 # Bench binaries keep debug symbols so sampling profilers resolve parser
 # frames in the flame harness.
