@@ -22,7 +22,7 @@
 //! (the charts, referenced from `report.md` by bare filename), and `data.json`
 //! (the run's raw benchmark data, serialized by `pg_sql::bench_data`).
 //!
-//! Run with `cargo bench -p pg-sql --features postgres-oracle`. The feature
+//! Run with `cargo bench -p pg-sql --features postgres-oracle --bench parse`. The feature
 //! flag is required: the bench target declares
 //! `required-features = ["postgres-oracle"]`, and without the flag cargo
 //! silently skips the target. The report path is printed on completion.

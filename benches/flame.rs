@@ -44,10 +44,10 @@
 //! Track P additions:
 //!
 //! - `--count-allocs` runs one complete pass over the accepted workload with a
-//!   counting global allocator and reports allocation counts and bytes,
-//!   split by phase (lex vs parse), instead of the timing loop. The counter is
-//!   two relaxed atomic adds per
-//!   allocation and is disabled outside this mode, so ordinary profiling
+//!   counting global allocator and reports successful allocation calls and their full requested
+//!   bytes, split by phase (lex, input setup, and parse), instead of the timing loop. The counter
+//!   uses two relaxed atomic adds per successful call and is disabled outside this mode, so
+//!   ordinary profiling
 //!   runs are unperturbed; the allocator itself still forwards to the
 //!   system allocator either way.
 //! - `--engine sqlparser` times sqlparser 0.52 (the parity-gate reference)
@@ -78,9 +78,9 @@ use support::diff_check::lex_statement_source;
 
 // --- Counting allocator (Track P allocation attribution) ---
 
-/// Number of allocations observed while counting is enabled.
+/// Number of successful allocation or reallocation calls observed while counting is enabled.
 static ALLOC_COUNT: AtomicU64 = AtomicU64::new(0);
-/// Bytes requested by those allocations.
+/// Full requested size of those successful allocation or reallocation calls.
 static ALLOC_BYTES: AtomicU64 = AtomicU64::new(0);
 /// Whether the wrapper counts. Off by default so profiling runs pay only a
 /// relaxed load and branch per allocation.
@@ -93,11 +93,25 @@ struct CountingAllocator;
 // relaxed atomics with no allocation of their own.
 unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        if COUNTING.load(Ordering::Relaxed) {
-            ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-            ALLOC_BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
+        let pointer = unsafe { System.alloc(layout) };
+        if !pointer.is_null() {
+            if COUNTING.load(Ordering::Relaxed) {
+                ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+                ALLOC_BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
+            }
         }
-        unsafe { System.alloc(layout) }
+        pointer
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        let pointer = unsafe { System.alloc_zeroed(layout) };
+        if !pointer.is_null() {
+            if COUNTING.load(Ordering::Relaxed) {
+                ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+                ALLOC_BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
+            }
+        }
+        pointer
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
@@ -105,11 +119,14 @@ unsafe impl GlobalAlloc for CountingAllocator {
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        if COUNTING.load(Ordering::Relaxed) && new_size > layout.size() {
-            ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-            ALLOC_BYTES.fetch_add((new_size - layout.size()) as u64, Ordering::Relaxed);
+        let pointer = unsafe { System.realloc(ptr, layout, new_size) };
+        if !pointer.is_null() {
+            if COUNTING.load(Ordering::Relaxed) {
+                ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+                ALLOC_BYTES.fetch_add(new_size as u64, Ordering::Relaxed);
+            }
         }
-        unsafe { System.realloc(ptr, layout, new_size) }
+        pointer
     }
 }
 
@@ -367,9 +384,9 @@ fn parse_with_postgres(sql: &str) -> bool {
 struct PhaseAllocs {
     /// Statements that went through this phase.
     statements: u64,
-    /// Allocations observed.
+    /// Successful allocation or reallocation calls observed.
     allocs: u64,
-    /// Bytes requested.
+    /// Full sizes requested by those calls.
     bytes: u64,
 }
 
@@ -394,12 +411,13 @@ impl PhaseAllocs {
     }
 }
 
-/// One complete counted pass over the accepted workload, with lex and parse
-/// phases counted separately. Deliberate parse-error entries and statements
+/// One complete counted pass over the accepted workload, with lex, input setup, and parse phases
+/// counted separately. Deliberate parse-error entries and statements
 /// rejected by any parity engine were removed while loading the workload, so
 /// this pass intentionally does not measure error/expected-set paths.
 fn run_alloc_count(inputs: &[String], expected: ExpectedOutcome) {
     let mut lex = PhaseAllocs::default();
+    let mut input_setup = PhaseAllocs::default();
     let mut parse = PhaseAllocs::default();
 
     COUNTING.store(true, Ordering::Relaxed);
@@ -411,7 +429,10 @@ fn run_alloc_count(inputs: &[String], expected: ExpectedOutcome) {
         let accepted = if lexed.errors().next().is_some() {
             false
         } else {
+            let before_input = alloc_snapshot();
             let mut input = lexed.input();
+            let after_input = alloc_snapshot();
+            input_setup.add(before_input, after_input);
             let before_parse = alloc_snapshot();
             let outcome = Statement::parse_without_spans(&mut input);
             let after_parse = alloc_snapshot();
@@ -434,10 +455,14 @@ fn run_alloc_count(inputs: &[String], expected: ExpectedOutcome) {
     COUNTING.store(false, Ordering::Relaxed);
 
     println!("allocation counts (counting global allocator, one pass):");
+    println!(
+        "metric convention: successful alloc/alloc_zeroed/realloc calls; full requested bytes"
+    );
     lex.report("lex (accepted workload)");
+    input_setup.report("input setup (accepted)");
     parse.report("parse (accepted workload)");
-    let total_allocs = lex.allocs + parse.allocs;
-    let total_bytes = lex.bytes + parse.bytes;
+    let total_allocs = lex.allocs + input_setup.allocs + parse.allocs;
+    let total_bytes = lex.bytes + input_setup.bytes + parse.bytes;
     println!(
         "alloc_total statements={} allocs={} bytes={}",
         lex.statements, total_allocs, total_bytes,
