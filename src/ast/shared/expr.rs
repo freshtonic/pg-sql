@@ -3802,7 +3802,6 @@ recursa::ast_node! {
     }
 }
 
-
 recursa::ast_node! {
     /// gram.y `b_expr` (gram.y:15290-15345): `a_expr` without the
     /// boolean-keyword productions.
