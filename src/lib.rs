@@ -11,6 +11,7 @@
 recursa::grammar! {
     module = crate,
     arena_ast,
+    flat,
     derives(Arbitrary, Pretty, Visit, VisitMut),
     keyword_matching = ascii_insensitive,
     diagrams,
@@ -21,6 +22,7 @@ recursa::grammar! {
 recursa::grammar! {
     module = crate,
     arena_ast,
+    flat,
     derives(Pretty, Visit, VisitMut),
     keyword_matching = ascii_insensitive,
     diagrams,

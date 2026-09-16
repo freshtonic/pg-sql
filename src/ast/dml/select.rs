@@ -1720,6 +1720,7 @@ recursa::ast_node! {
     /// forced to take — after `SELECT`, between target items, and before the
     /// trailing clauses — lands one level in from column zero.
     #[derive(Debug)]
+    #[flat(pool)]
     #[pretty(group = consistent, indent)]
     #[tok(SELECT, this)]
     pub struct SelectStmt {

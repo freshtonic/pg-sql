@@ -304,6 +304,7 @@ recursa::ast_node! {
     /// `PARAM`, `'(' a_expr ')'` and `select_with_parens`, so `x::int[1]` is a
     /// cast to an array type and `f(x)[1]` is rejected, as PostgreSQL has it.
     #[derive(Debug)]
+    #[flat(pool)]
     pub struct ColumnRef {
         pub name: crate::tokens::ColId,
         pub subscripts: zero_or_many!(SubscriptIndirection),
@@ -800,6 +801,7 @@ recursa::ast_node! {
     /// Dotted function calls are represented by [`QualifiedRef`], which owns the
     /// common unbounded dotted prefix shared with qualified column references.
     #[derive(Debug)]
+    #[flat(pool)]
     pub struct FuncCall {
         pub name: crate::tokens::type_function_name,
         pub tail: FunctionCallTail,
@@ -3214,6 +3216,11 @@ recursa::ast_node! {
     /// variants. Its operator conflicts are decided by the declared precedence
     /// of `crate::tokens`.
     #[derive(Debug)]
+    // `FlatExpr` measures 16 bytes (a discriminant word plus three handle
+    // words); the bound is that size, so any widening of a variant's payload
+    // fails to compile rather than silently growing the hottest typed pool.
+    // Raising it is a measured decision, not a reflex.
+    #[flat(pool, max_size = 16)]
     pub enum Expr {
         // --- Prefix ---
         /// gram.y:14853 `NOT a_expr` and gram.y:14855 `NOT_LA a_expr %prec NOT`:

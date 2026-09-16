@@ -11,7 +11,8 @@ Postgres-flavoured SQL parser based on `recursa`.
 - [x] Support quickcheck-style testing: optional Arbitrary impl feature
 - [ ] PGPLSQL support behind feature flag
 - [x] Benchmark (runnable in CI to catch regressions)
-- [ ] Support "super flat" ASTs https://jhwlr.io/super-flat-ast/
+- [x] Support "super flat" ASTs https://jhwlr.io/super-flat-ast/ — see
+      [Flat AST](#flat-ast)
 
 ## Toolchain
 
@@ -21,10 +22,36 @@ generated grammar with the parallel rustc front end (`-Z threads` in
 exports `RUSTUP_TOOLCHAIN`, it overrides the file; unset it in this
 workspace.
 
+## Flat AST
+
+The grammar root selects Recursa's `flat` flag, so every `ast_node!`
+declaration has a second concrete representation beside the nested arena AST:
+one contiguous, handle-addressed store per parse. `Statement::parse_flat` and
+`Statement::parse_flat_without_spans` sit beside `parse` and
+`parse_without_spans`, run the same lexer and the same LR automaton, and
+return a `FlatAst` that renders exactly what the detached nested AST renders.
+
+`Expr`, `ColumnRef`, `FuncCall`, `SelectStmt` and `Statement` carry
+`#[flat(pool)]`, which gives each its own typed pool; every other declaration
+reaches the shared word pool. `tests/flat_parity.rs` proves nested/flat
+recognition and rendering parity over every statement the differential
+baseline pins, with no PostgreSQL oracle needed:
+
+```bash
+cargo test -p pg-sql --test flat_parity
+cargo test -p pg-sql --features spans --test flat_parity
+```
+
+The design lives in Recursa's `docs/flat-ast-design.md`.
+
 ## Benchmarks
 
-The `parse` Criterion bench measures pg-sql parser throughput and compares
-against `sqlparser-rs` (`PostgreSqlDialect`).
+The `parse` bench measures pg-sql parser throughput and compares it against
+its own Flat AST (the `pg-sql-flat` engine), `sqlparser-rs`
+(`PostgreSqlDialect`), and PostgreSQL 17.9's raw parser. `pg-sql` and
+`pg-sql-flat` share the lex pass and the automaton, so the pair isolates the
+representation; the harness refuses to report timings unless the two accept
+exactly the same statements.
 
 Run everything:
 
