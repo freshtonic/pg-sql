@@ -116,7 +116,7 @@ recursa::ast_node! {
     /// A dotted name: `name`, `schema.name`, or `catalog.schema.name`.
     ///
     /// This is the usual shape for table/view/sequence/type references in SQL.
-    /// Must NOT collide with `Expr::QualRef` at the Pratt level because
+    /// Must NOT collide with `Expr::QualRef` because
     /// `QualifiedName` is only used in non-expression positions (FROM targets,
     /// DROP targets, ALTER targets, etc.).
     #[derive(Debug, PartialEq, Eq, Hash)]

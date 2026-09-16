@@ -1,8 +1,12 @@
-/// SQL expression AST whose Pratt declarations lower to LR precedence rules.
-///
-/// Handles atoms, prefix (NOT, unary minus), infix (AND, OR, comparisons,
-/// arithmetic), and postfix operators (::type cast, IS [NOT] TRUE/FALSE/UNKNOWN/NULL,
-/// IN (list)).
+//! SQL expression AST: gram.y's `a_expr` as an ordinary left-recursive enum,
+//! plus `b_expr` as the restricted expression [`BExpr`].
+//!
+//! Holds atoms, prefix operators (`NOT`, unary minus, the prefix operator
+//! spellings), infix operators (`AND`, `OR`, comparisons, arithmetic) and
+//! postfix operators (`::` cast, `IS [NOT] TRUE/FALSE/UNKNOWN/NULL`,
+//! `IN (list)`). Which of two operators binds tighter is decided only by the
+//! `precedence { ... }` block of [`crate::tokens`], which mirrors
+//! `gram.y:829-908`.
 use crate::ast::dml::values::Subquery;
 use crate::tokens::literal;
 
@@ -215,7 +219,7 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// Tail of `expr IS [NOT] [NFx] NORMALIZED` — the `[NOT] [NFx] NORMALIZED`
-    /// part after the leading `IS`. Modelled as an enum so the postfix-Pratt
+    /// part after the leading `IS`. Modelled as an enum so that
     /// `IsNormalized(_, IS, IsNormalizedTail)` can dispatch on the second token.
     ///
     /// Variant ordering: NOT-leading forms first (longer prefix), and within
@@ -996,17 +1000,19 @@ recursa::ast_node! {
     }
 }
 
-// Operators of PostgreSQL's `subquery_Op` production, one enum per
-// precedence level of pg-sql's `Expr`: gram.y decides the shift before a
-// quantified comparison by the operator token's own precedence, so each
-// `Expr::QuantifiedComparison*` variant carries the level of the same
-// token's infix variant. Together the six enums cover `OperatorName`,
-// `OPERATOR(...)` and the LIKE family exactly once.
+// Operators of PostgreSQL's `subquery_Op` production, split into six enums.
+// gram.y writes one production, `a_expr subquery_Op sub_type ... %prec Op`
+// (gram.y:15152, 15164), and every `Expr::QuantifiedComparison*` variant
+// takes that same `Op` level through `#[parse(prec = Op)]`. The split is an
+// AST commitment, not a precedence one: each suffix names the operator family
+// its variant holds, and collapsing them would change the public AST. Together
+// the six enums cover `OperatorName`, `OPERATOR(...)` and the LIKE family
+// exactly once.
 
 recursa::ast_node! {
-    /// `subquery_Op` at the level of pg-sql's comparison operators (binding
-    /// power 5): gram.y `MathOp`'s `< > = <= >= <>` and the operators pg-sql's
-    /// `Expr` parses at that level.
+    /// `subquery_Op`'s comparison spellings: gram.y `MathOp`'s
+    /// `< > = <= >= <>` and the operator spellings pg-sql parses as
+    /// comparisons.
     #[derive(Debug)]
     pub enum QuantifiedCmpOperator {
         #[tok(STARLTE)]
@@ -1115,8 +1121,7 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `subquery_Op`'s `LIKE | NOT_LA LIKE | ILIKE | NOT_LA ILIKE`, at the level
-    /// of `Expr::Like` (binding power 60).
+    /// `subquery_Op`'s `LIKE | NOT_LA LIKE | ILIKE | NOT_LA ILIKE`.
     #[derive(Debug)]
     pub enum QuantifiedLikeOperator {
         #[tok(NOT, LIKE)]
@@ -1131,10 +1136,10 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `subquery_Op` at gram.y's generic `Op` level (binding power 80): `||`,
-    /// `^@`, every spelling that is only a prefix operator elsewhere in `Expr`,
-    /// the multi-character custom operators, and `OPERATOR(any_operator)`
-    /// (`%left Op OPERATOR`).
+    /// `subquery_Op`'s generic operator spellings: `||`, `^@`, every spelling
+    /// that is only a prefix operator elsewhere in `Expr`, the multi-character
+    /// custom operators, and `OPERATOR(any_operator)` (gram.y:889
+    /// `%left Op OPERATOR`).
     #[derive(Debug)]
     pub enum QuantifiedOpOperator {
         #[tok(CONCAT)]
@@ -1161,8 +1166,8 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `subquery_Op` at the level of `+` and `-` (binding power 100), which in
-    /// pg-sql also holds the bitwise and JSON operators.
+    /// `subquery_Op`'s `+` and `-`, and the bitwise and JSON operator
+    /// spellings PostgreSQL's scanner returns as `Op`.
     #[derive(Debug)]
     pub enum QuantifiedAddOperator {
         #[tok(LTMINUSGT)]
@@ -1203,7 +1208,7 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `subquery_Op` at the level of `*`, `/` and `%` (binding power 110).
+    /// `subquery_Op`'s `*`, `/` and `%`.
     #[derive(Debug)]
     pub enum QuantifiedMulOperator {
         #[tok(STAR)]
@@ -1216,7 +1221,7 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `subquery_Op` at the level of `^` (binding power 130).
+    /// `subquery_Op`'s `^`.
     #[derive(Debug)]
     pub enum QuantifiedPowOperator {
         #[tok(CARET)]
@@ -2441,43 +2446,10 @@ recursa::ast_node! {
     /// rule that `(a_expr)` is itself a `b_expr` atom.
     #[derive(Debug)]
     pub struct PositionInner {
-        #[parse(pratt(exclude(
-        // gram.y's `b_expr` reaches no `DEFAULT`: the keyword is not a
-        // `c_expr`, only pg-sql's `INSERT`/`UPDATE` value placeholder.
-        // recursa #122 lets an exclusion name an atom variant. Every other
-        // `b_expr` operand excludes it too, citing this site.
-        Default,
-        Collate,
-        QuantifiedComparisonCmp,
-        QuantifiedComparisonLike,
-        QuantifiedComparisonOp,
-        QuantifiedComparisonAdd,
-        QuantifiedComparisonMul,
-        QuantifiedComparisonPow,
-        IsJson,
-        IsNormalized,
-        BoolTest,
-        Notnull,
-        Isnull,
-        AtLocal,
-        AtTimeZone,
-        NotInExpr,
-        NotIlike,
-        NotSimilarTo,
-        NotLike,
-        SimilarTo,
-        Ilike,
-        Like,
-        Overlaps,
-        InExpr,
-        NotBetweenExpr,
-        BetweenExpr,
-        Or,
-        And
-    )))]
-        // No acceptance: the exclusion list already stops this operand before
-        // `IN`, so analysis finds no overlap here (recursa #126).
-        pub needle: boxed!(Expr),
+        // gram.y `position_list: b_expr IN_P b_expr`: the restricted
+        // expression stops the needle before `IN`, so `IN` can only be the
+        // delimiter here.
+        pub needle: boxed!(BExpr),
         #[tok(IN, this)]
         pub haystack: boxed!(Expr),
     }
@@ -2573,7 +2545,7 @@ recursa::ast_node! {
 // productions. Their syntax — `FORMAT JSON`, `RETURNING`, `key : value`,
 // `KEY`/`VALUE`, `{WITH|WITHOUT} UNIQUE [KEYS]`, `{NULL|ABSENT} ON NULL` —
 // cannot be expressed as a function-argument list, so each is modeled as a
-// dedicated Pratt atom declared before `Func`.
+// dedicated `Expr` atom declared before `Func`.
 //
 // Legacy lowercase calls (`json_object(text[])`, `json_build_array(...)`)
 // are unaffected: the soft keyword classifies as a token, but `FuncCall`
@@ -3192,8 +3164,8 @@ recursa::ast_node! {
     /// Any value-producing SQL/JSON function — the constructors and query
     /// functions grouped into one peekable type. Each variant leads with a
     /// distinct soft keyword, so this peeks `true` only for a JSON function.
-    /// Lets non-Pratt contexts (e.g. a `CREATE INDEX` expression element)
-    /// accept the whole family. Aggregates and `JSON_TABLE` are excluded:
+    /// Lets a context outside `Expr` (for instance a `CREATE INDEX`
+    /// expression element) accept the whole family. Aggregates and `JSON_TABLE` are excluded:
     /// neither is a plain value expression usable as an index element.
     #[derive(Debug)]
     pub enum JsonFuncExpr {
@@ -3208,72 +3180,98 @@ recursa::ast_node! {
     }
 }
 
-// --- Pratt expression enum ---
+// --- The expression enum ---
 //
-// Binding powers on this enum are gram.y's precedence order times ten. The
-// scale is shared with the `precedence { ... }` block in `crate::tokens`,
-// which needs room for the two keyword levels gram.y puts between `ESCAPE`
-// and `Op`; that block names the gram.y line each level comes from. A left
-// associative infix variant is `lbp = N, rbp = N + 1`, which is the only
-// shape a rule precedence reproduces (`RCA0402`).
+// `Expr` is an ordinary left-recursive enum, as gram.y's `a_expr` is an
+// ordinary left-recursive nonterminal. Every operator token attaches to the
+// operand field it precedes or follows, and the shape of a variant is the
+// shape of the gram.y production it mirrors.
+//
+// Operator conflicts are decided by one model: the `precedence { ... }` block
+// in `crate::tokens`, which mirrors `gram.y:829-908` level for level. A rule
+// takes the level of its last terminal that has one; a
+// `#[parse(prec = NAME)]` on the variant overrides that, exactly as bison
+// reads `%prec`.
+//
+// The overrides below are the ones gram.y needs, for the reason gram.y states
+// at gram.y:14774-14778: a production with more than one terminal takes the
+// level of its *last* terminal, which is almost never the one you want. Every
+// override cites its gram.y line.
+//
+// gram.y also writes `%prec Op` on `a_expr qual_Op a_expr` (gram.y:14844) and
+// on `b_expr qual_Op b_expr` (gram.y:15322) because `qual_Op` is a
+// nonterminal, so those rules hold no terminal of their own. pg-sql spells
+// each operator as its own token, so an infix operator variant already ends
+// in a terminal at gram.y's `Op` level and needs no override; the prefix
+// forms carry one anyway, because gram.y annotates `qual_Op a_expr`
+// (gram.y:14846) and the annotation is where a reader looks for it. The
+// variants that genuinely have no terminal -- the `QuantifiedComparison*`
+// family and `NotInExpr`, whose operators live in a suffix Node -- carry the
+// override because nothing else can give them a level.
 
 recursa::ast_node! {
-    /// SQL expression whose Pratt declarations lower into LR productions.
+    /// SQL expression: gram.y's `a_expr`, with `c_expr`'s atoms inlined as
+    /// variants. Its operator conflicts are decided by the declared precedence
+    /// of `crate::tokens`.
     #[derive(Debug)]
-    #[pratt]
     pub enum Expr {
         // --- Prefix ---
-        #[parse(prefix, bp = 150)]
+        /// gram.y:14853 `NOT a_expr` and gram.y:14855 `NOT_LA a_expr %prec NOT`:
+        /// the `NOT_LA` twin sits at `BETWEEN`'s level as a token, so the override
+        /// is what keeps both spellings at `NOT`'s own level.
+        #[parse(prec = NOT)]
         Not(#[tok(NOT, this)] boxed!(Self)),
-        #[parse(prefix, bp = 120)]
+        /// gram.y:14817 `'-' a_expr %prec UMINUS`.
+        #[parse(prec = UMINUS)]
         Neg(#[tok(MINUS, this)] boxed!(Self)),
         /// Unary plus: `+expr` — identity operator on numeric types.
-        #[parse(prefix, bp = 120)]
+        /// gram.y:14815 `'+' a_expr %prec UMINUS`.
+        #[parse(prec = UMINUS)]
         Pos(#[tok(PLUS, this)] boxed!(Self)),
         /// Unary geometric "center point": `@@ expr`. Postgres uses `@@` as
         /// a prefix operator on box / polygon / etc. (in addition to the
         /// text-search infix form).
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         GeomCenter(#[tok(ATAT, this)] boxed!(Self)),
         /// Bitwise NOT: `~ expr` (e.g. inet / bit / int bitwise complement).
         /// Must come before any infix `~` variant so the prefix form wins when
         /// `~` appears at the start of an operand.
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         BitNot(#[tok(TILDE, this)] boxed!(Self)),
         /// Geometric path/lseg length: `@-@ expr`. Must come before `Abs` (`@`)
         /// since `@-@` is longer.
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         PathLength(#[tok(ATMINUSAT, this)] boxed!(Self)),
         /// User-defined prefix: `@#@ expr` (e.g. factorial).
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         AtHashAtPrefix(#[tok(ATHASHAT, this)] boxed!(Self)),
         /// Geometric point-count: `# path` — number of points in a path.
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         PointCount(#[tok(POUND, this)] boxed!(Self)),
         /// Absolute value: `@ expr` (Postgres unary `@` operator).
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         Abs(#[tok(ATSIGN, this)] boxed!(Self)),
         /// User-defined prefix: `!=- expr`.
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         BangEqMinusPrefix(#[tok(BANGEQMINUS, this)] boxed!(Self)),
         /// Square root: `|/ expr` (Postgres unary `|/` operator).
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         Sqrt(#[tok(PIPESLASH, this)] boxed!(Self)),
         /// Cube root: `||/ expr` (Postgres unary `||/` operator).
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         Cbrt(#[tok(PIPEPIPESLASH, this)] boxed!(Self)),
 
         /// Catch-all prefix: any user-defined prefix operator not matched by a
         /// specific token. Declared LAST among prefixes.
         ///
-        /// gram.y `qual_Op a_expr %prec Op` (gram.y:889 `%left Op OPERATOR`):
-        /// the operand extends over the operators above `Op` (`@# a + b` is
-        /// `@# (a + b)`) and stops at `Op` and below (`@# a = b` is
-        /// `(@# a) = b`, `@# a @# b` is `(@# a) @# b`), which is the binding
-        /// power one step above `Op`'s level. recursa #124 admits a content
-        /// token as a Pratt prefix operator, so this is a real prefix variant
-        /// rather than an atom with a hand-written exclusion list.
-        #[parse(prefix, bp = 81)]
+        /// gram.y:14846 `qual_Op a_expr %prec Op` (gram.y:889
+        /// `%left Op OPERATOR`): the operand extends over the operators above
+        /// `Op` (`@# a + b` is `@# (a + b)`) and stops at `Op` and below
+        /// (`@# a = b` is `(@# a) = b`, `@# a @# b` is `(@# a) @# b`).
+        /// `CustomOp` is the content token gram.y calls `qual_Op`, and like
+        /// gram.y's nonterminal it gives the rule no level of its own, so the
+        /// override is what carries `Op` here.
+        #[parse(prec = Op)]
         CustomPrefix(
             literal::CustomOp,
             #[pretty(break_before = soft)] boxed!(Self),
@@ -3281,115 +3279,109 @@ recursa::ast_node! {
 
         // --- Postfix ---
         /// Postgres-style cast: `expr::type`
-        #[parse(postfix, bp = 200)]
         Cast(boxed!(Self), #[tok(COLONCOLON, this)] boxed!(CastType)),
         /// `expr COLLATE "collation"` — collation specifier. Binds tighter than
         /// comparisons (bp 5) but looser than `::` cast (bp 20).
-        #[parse(postfix, bp = 180)]
         Collate(boxed!(Self), #[tok(COLLATE, this)] crate::tokens::ColId),
         /// `lhs operator {ANY|SOME|ALL} (expr-or-query)`: gram.y `a_expr
         /// subquery_Op sub_type '(' a_expr ')' %prec Op` and its
         /// `select_with_parens` twin. gram.y decides the shift before the
-        /// operator by the operator token's own precedence, so `1 + 2 / ANY (x)`
-        /// is `1 + (2 / ANY (x))` and `a = b + ANY (x)` is `a = (b + ANY (x))`;
-        /// one postfix variant per precedence level of `subquery_Op`, each at
-        /// the level of the same token's infix variant, reproduces that.
+        /// gram.y gives every such production one level, `%prec Op`, and so
+        /// does pg-sql: the six variants differ only in which operator family
+        /// their suffix holds, which is an AST commitment, not a precedence
+        /// one.
         ///
         /// PostgreSQL does not admit the quantified right-hand side as a
         /// standalone expression. Keeping the operator and quantifier in one
-        /// Pratt continuation also makes `f(ALL(x))` unambiguously the function
+        /// suffix also makes `f(ALL(x))` unambiguously the function
         /// application's ALL-qualified argument production.
-        #[parse(postfix, bp = 50)]
+        #[parse(prec = Op)]
         QuantifiedComparisonCmp(boxed!(Self), QuantifiedComparisonCmpSuffix),
-        /// `subquery_Op`'s `LIKE` family, at the level of `Like`.
-        #[parse(postfix, bp = 60)]
+        /// `subquery_Op`'s `LIKE` family.
+        #[parse(prec = Op)]
         QuantifiedComparisonLike(boxed!(Self), QuantifiedComparisonLikeSuffix),
-        /// `subquery_Op` at gram.y's generic `Op` level.
-        #[parse(postfix, bp = 80)]
+        /// `subquery_Op`'s generic operator spellings.
+        #[parse(prec = Op)]
         QuantifiedComparisonOp(boxed!(Self), QuantifiedComparisonOpSuffix),
-        /// `subquery_Op` at the level of `Add` / `Sub`.
-        #[parse(postfix, bp = 100)]
+        /// `subquery_Op`'s `+` and `-` and the operator spellings beside them.
+        #[parse(prec = Op)]
         QuantifiedComparisonAdd(boxed!(Self), QuantifiedComparisonAddSuffix),
-        /// `subquery_Op` at the level of `Mul` / `Div` / `Mod`.
-        #[parse(postfix, bp = 110)]
+        /// `subquery_Op`'s `*`, `/` and `%`.
+        #[parse(prec = Op)]
         QuantifiedComparisonMul(boxed!(Self), QuantifiedComparisonMulSuffix),
-        /// `subquery_Op` at the level of `Pow`.
-        #[parse(postfix, bp = 130)]
+        /// `subquery_Op`'s `^`.
+        #[parse(prec = Op)]
         QuantifiedComparisonPow(boxed!(Self), QuantifiedComparisonPowSuffix),
-        // The `IS` family sits at one level below the comparison operators, gram.y
-        // `%nonassoc IS ISNULL NOTNULL` (`a = b IS NULL` is `(a = b) IS NULL`);
-        // one level for every `IS` form is also what lets the LR parser
-        // settle `IS` by precedence. Binding power 4.
+        // The `IS` family sits one level below the comparison operators,
+        // gram.y:835 `%nonassoc IS ISNULL NOTNULL` (`a = b IS NULL` is
+        // `(a = b) IS NULL`). Every `IS` form whose rule ends in `IS` takes
+        // that level from the token; the two `DISTINCT FROM` forms end in
+        // `FROM` and carry `%prec IS` as gram.y does.
         /// `expr IS NOT DISTINCT FROM expr`. Declared before `IsDistinctFrom` so
         /// the longer `NOT` prefix wins disambiguation.
-        #[parse(infix, lbp = 40, rbp = 41)]
+        /// gram.y:15072 `a_expr IS NOT DISTINCT FROM a_expr %prec IS`: the rule
+        /// ends in `FROM`, which has no level of its own.
+        #[parse(prec = IS)]
         IsNotDistinctFrom(
             boxed!(Self),
             #[tok(IS, NOT, DISTINCT, FROM, this)] boxed!(Self),
         ),
         /// `expr IS DISTINCT FROM expr`.
-        #[parse(infix, lbp = 40, rbp = 41)]
+        /// gram.y:15068 `a_expr IS DISTINCT FROM a_expr %prec IS`.
+        #[parse(prec = IS)]
         IsDistinctFrom(boxed!(Self), #[tok(IS, DISTINCT, FROM, this)] boxed!(Self)),
         /// `expr IS [NOT] JSON [{VALUE|SCALAR|ARRAY|OBJECT}] [{WITH|WITHOUT}
         /// UNIQUE [KEYS]]` — the SQL/JSON type predicate. Declared before
         /// `BoolTest` (both lead with `IS`); `BoolTest` rejects `JSON` as a
         /// `BoolTestKind`, so order is not load-bearing, only tidy.
-        #[parse(postfix, bp = 40)]
         IsJson(boxed!(Self), #[tok(IS, this)] IsJsonTail),
         /// `expr IS [NOT] [NFC|NFD|NFKC|NFKD] NORMALIZED` — the Unicode
         /// normalisation predicate (gram.y rules 15198/15205/15212/15220).
         /// Declared before `BoolTest` (both lead with `IS`); `BoolTest` rejects
         /// `NORMALIZED`/`NFx` as a `BoolTestKind`, so order is not load-bearing.
-        #[parse(postfix, bp = 40)]
         IsNormalized(boxed!(Self), #[tok(IS, this)] IsNormalizedTail),
         /// `expr IS [NOT] DOCUMENT` — the XML document predicate.
-        #[parse(postfix, bp = 40)]
         IsDocument(boxed!(Self), #[tok(IS, this)] IsDocumentTail),
         /// Boolean test: `expr IS [NOT] TRUE/FALSE/UNKNOWN/NULL`
-        #[parse(postfix, bp = 40)]
         BoolTest(boxed!(Self), #[tok(IS, this)] BoolTestKind),
         /// Postgres `expr NOTNULL` postfix null test (synonym for `IS NOT NULL`).
-        #[parse(postfix, bp = 40)]
         Notnull(#[tok(this, NOTNULL)] boxed!(Self)),
         /// Postgres `expr ISNULL` postfix null test (synonym for `IS NULL`).
-        #[parse(postfix, bp = 40)]
         Isnull(#[tok(this, ISNULL)] boxed!(Self)),
         /// `expr AT LOCAL` — convert to session timezone. Listed before
         /// `AtTimeZone` so `AT LOCAL` wins (distinct second token `LOCAL` vs `TIME`).
-        #[parse(postfix, bp = 90)]
+        /// gram.y:14799 `a_expr AT LOCAL %prec AT`.
+        #[parse(prec = AT)]
         AtLocal(#[tok(this, AT, LOCAL)] boxed!(Self)),
         /// `expr AT TIME ZONE zone_expr` — convert to specified timezone.
-        #[parse(infix, lbp = 90, rbp = 91)]
+        /// gram.y:14792 `a_expr AT TIME ZONE a_expr %prec AT`.
+        #[parse(prec = AT)]
         AtTimeZone(boxed!(Self), #[tok(AT, TIME, ZONE, this)] boxed!(Self)),
         /// NOT IN list: `expr NOT IN (val, ...)`
-        #[parse(postfix, bp = 60)]
+        /// gram.y:15129 `a_expr NOT_LA IN_P in_expr %prec NOT_LA`: the suffix is
+        /// its own Node, so the rule has no terminal to take a level from.
+        #[parse(prec = NOT_LA)]
         NotInExpr(boxed!(Self), NotInSuffix),
-        // The LIKE family shares one level with `BETWEEN` and `IN`, gram.y
-        // `%nonassoc BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA`, one step above the
-        // comparison operators: `a = b LIKE c` is `a = (b LIKE c)`. Binding
-        // power 6; the pattern operand is the infix right operand at 7, so a
-        // LIKE never nests in a LIKE's pattern (gram.y makes the level
-        // non-associative) and an `ESCAPE` belongs to the LIKE it follows.
+        // The LIKE family shares one level with `BETWEEN` and `IN`, gram.y:837
+        // `%nonassoc BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA`, one step above
+        // the comparison operators: `a = b LIKE c` is `a = (b LIKE c)`. The
+        // level is non-associative, so a LIKE never nests in a LIKE's pattern
+        // and an `ESCAPE` belongs to the LIKE it follows.
         //
-        // gram.y `a_expr LIKE a_expr ESCAPE a_expr %prec LIKE` with
-        // `%nonassoc ESCAPE` one level above `LIKE`. The `ESCAPE` operand is
-        // an attached optional operand on the variant itself (recursa #123),
-        // so it is a Pratt right operand at `ESCAPE`'s level and carries that
-        // precedence into the generated parser: it takes every operator above
-        // `ESCAPE` (`'$'::bytea`, `'$' || 'x'`) and stops at `LIKE`'s level
-        // and below. The first pass had to spell this as a separate
-        // `EscapeClause` struct with an exclusion list, which no rule
-        // precedence reproduced.
-        //
-        // Each `ESCAPE` operand accepts `all`. It keeps extending on every
-        // operator above `ESCAPE`'s level, and every one of those may also
-        // follow the whole LIKE expression, so the overlap is that entire set.
-        // Naming it as a list would say no more and would need an edit for each
-        // operator added.
+        // gram.y writes each `ESCAPE` form as its own production,
+        // `a_expr LIKE a_expr ESCAPE a_expr %prec LIKE` (gram.y:14863). pg-sql
+        // writes one variant with an attached optional operand, which lowers to
+        // the same pair of rules; `%nonassoc ESCAPE` one level above `LIKE`
+        // (gram.y:838) is what makes the parser shift the clause rather than
+        // end the expression, so the escape operand takes every operator above
+        // `ESCAPE` (`'$'::bytea`, `'$' || 'x'`) and stops at `LIKE`'s level and
+        // below.
         /// `expr NOT ILIKE pattern [ESCAPE char]`. Declared before `NotLike` so the longer
         /// `NOT ILIKE` is tried first (matters only if any rule shares a prefix;
         /// here `NOT ILIKE` vs `NOT LIKE` differ on the second token).
-        #[parse(infix, lbp = 60, rbp = 61)]
+        /// gram.y:14900 `a_expr NOT_LA ILIKE a_expr %prec NOT_LA` and gram.y:14905
+        /// with `ESCAPE`.
+        #[parse(prec = NOT_LA)]
         NotIlike(
             boxed!(Self),
             #[tok(NOT, ILIKE, this)] boxed!(Self),
@@ -3397,7 +3389,9 @@ recursa::ast_node! {
         ),
         /// `expr NOT SIMILAR TO pattern [ESCAPE char]`. Declared before `NotLike` so the longer
         /// `NOT SIMILAR TO` form wins longest-match-wins disambiguation.
-        #[parse(infix, lbp = 60, rbp = 61)]
+        /// gram.y:14933 `a_expr NOT_LA SIMILAR TO a_expr %prec NOT_LA` and
+        /// gram.y:14942 with `ESCAPE`: the rule ends in `TO`, which has no level.
+        #[parse(prec = NOT_LA)]
         NotSimilarTo(
             boxed!(Self),
             #[tok(NOT, SIMILAR, TO, this)] boxed!(Self),
@@ -3405,28 +3399,34 @@ recursa::ast_node! {
         ),
         /// `expr NOT LIKE pattern [ESCAPE char]`. Must come before the `Not` prefix atom so
         /// longest-match-wins prefers the postfix form.
-        #[parse(infix, lbp = 60, rbp = 61)]
+        /// gram.y:14872 `a_expr NOT_LA LIKE a_expr %prec NOT_LA` and gram.y:14877
+        /// with `ESCAPE`.
+        #[parse(prec = NOT_LA)]
         NotLike(
             boxed!(Self),
             #[tok(NOT, LIKE, this)] boxed!(Self),
             #[tok(ESCAPE, this)] Option<boxed!(Self)>,
         ),
         /// `expr SIMILAR TO pattern [ESCAPE char]` — SQL standard similar-to pattern match.
-        #[parse(infix, lbp = 60, rbp = 61)]
+        /// gram.y:14915 `a_expr SIMILAR TO a_expr %prec SIMILAR` and gram.y:14924
+        /// with `ESCAPE`: the rule ends in `TO`, which has no level.
+        #[parse(prec = SIMILAR)]
         SimilarTo(
             boxed!(Self),
             #[tok(SIMILAR, TO, this)] boxed!(Self),
             #[tok(ESCAPE, this)] Option<boxed!(Self)>,
         ),
         /// `expr ILIKE pattern [ESCAPE char]`
-        #[parse(infix, lbp = 60, rbp = 61)]
+        /// gram.y:14891 `a_expr ILIKE a_expr ESCAPE a_expr %prec ILIKE`.
+        #[parse(prec = ILIKE)]
         Ilike(
             boxed!(Self),
             #[tok(ILIKE, this)] boxed!(Self),
             #[tok(ESCAPE, this)] Option<boxed!(Self)>,
         ),
         /// `expr LIKE pattern [ESCAPE char]`
-        #[parse(infix, lbp = 60, rbp = 61)]
+        /// gram.y:14863 `a_expr LIKE a_expr ESCAPE a_expr %prec LIKE`.
+        #[parse(prec = LIKE)]
         Like(
             boxed!(Self),
             #[tok(LIKE, this)] boxed!(Self),
@@ -3434,84 +3434,69 @@ recursa::ast_node! {
         ),
         // --- Locale-aware text comparison operators (4-char before 3-char) ---
         /// `expr ~<=~ expr` — locale-aware less-or-equal.
-        #[parse(infix, lbp = 50, rbp = 51)]
         TildeLeqTilde(boxed!(Self), #[tok(TILDELEQTILDE, this)] boxed!(Self)),
         /// `expr ~>=~ expr` — locale-aware greater-or-equal.
-        #[parse(infix, lbp = 50, rbp = 51)]
         TildeGeqTilde(boxed!(Self), #[tok(TILDEGEQTILDE, this)] boxed!(Self)),
         /// `expr ~<~ expr` — locale-aware less-than.
-        #[parse(infix, lbp = 50, rbp = 51)]
         TildeLtTilde(boxed!(Self), #[tok(TILDELTTILDE, this)] boxed!(Self)),
         /// `expr ~>~ expr` — locale-aware greater-than.
-        #[parse(infix, lbp = 50, rbp = 51)]
         TildeGtTilde(boxed!(Self), #[tok(TILDEGTTILDE, this)] boxed!(Self)),
         /// `expr !~* pattern` — POSIX case-insensitive negated regex match.
-        #[parse(infix, lbp = 50, rbp = 51)]
         RegexNotIMatch(boxed!(Self), #[tok(BANGTILDESTAR, this)] boxed!(Self)),
         /// `expr ~* pattern` — POSIX case-insensitive regex match.
-        #[parse(infix, lbp = 50, rbp = 51)]
         RegexIMatch(boxed!(Self), #[tok(TILDESTAR, this)] boxed!(Self)),
         /// `expr !~ pattern` — POSIX negated regex match.
-        #[parse(infix, lbp = 50, rbp = 51)]
         RegexNotMatch(boxed!(Self), #[tok(BANGTILDE, this)] boxed!(Self)),
         /// `expr ~= expr` — geometric "same as" operator. Declared before `RegexMatch`
         /// so the longer `~=` wins longest-match.
-        #[parse(infix, lbp = 50, rbp = 51)]
         GeomSame(boxed!(Self), #[tok(TILDEEQ, this)] boxed!(Self)),
         /// `expr ~ pattern` — POSIX regex match.
-        #[parse(infix, lbp = 50, rbp = 51)]
         RegexMatch(boxed!(Self), #[tok(TILDE, this)] boxed!(Self)),
         /// `expr !~~* pattern` — operator-form `NOT ILIKE` (gram.y 14897).
         /// Declared before `LikeOpINeg` (`!~~`) so the longer `!~~*` wins.
-        #[parse(infix, lbp = 50, rbp = 51)]
         LikeOpINeg(boxed!(Self), #[tok(BANGTILDETILDESTAR, this)] boxed!(Self)),
         /// `expr ~~* pattern` — operator-form `ILIKE` (gram.y 14888).
         /// Declared before `LikeOpI` would be (no `~~*` longer prefix).
-        #[parse(infix, lbp = 50, rbp = 51)]
         LikeOpI(boxed!(Self), #[tok(TILDETILDESTAR, this)] boxed!(Self)),
         /// `expr !~~ pattern` — operator-form `NOT LIKE` (gram.y 14874).
-        #[parse(infix, lbp = 50, rbp = 51)]
         LikeOpNeg(boxed!(Self), #[tok(BANGTILDETILDE, this)] boxed!(Self)),
         /// `expr ~~ pattern` — operator-form `LIKE` (gram.y 14860).
-        #[parse(infix, lbp = 50, rbp = 51)]
         LikeOp(boxed!(Self), #[tok(TILDETILDE, this)] boxed!(Self)),
         /// `(start, end) OVERLAPS (start, end)` — SQL time-period overlap test.
         /// Each operand is an ordinary parenthesized expression to the parser.
-        #[parse(infix, lbp = 50, rbp = 51)]
         Overlaps(boxed!(Self), #[tok(OVERLAPS, this)] boxed!(Self)),
         /// Record comparison operators: `expr *= expr`, `*<>`, `*<`, `*<=`,
         /// `*>`, `*>=` — compare ROW/composite values field by field.
-        #[parse(infix, lbp = 50, rbp = 51)]
         RecordLte(boxed!(Self), #[tok(STARLTE, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         RecordGte(boxed!(Self), #[tok(STARGTE, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         RecordNeq(boxed!(Self), #[tok(STARNEQ, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         RecordLt(boxed!(Self), #[tok(STARLT, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         RecordGt(boxed!(Self), #[tok(STARGT, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         RecordEq(boxed!(Self), #[tok(STAREQ, this)] boxed!(Self)),
         /// IN list: `expr IN (val, ...)`
-        #[parse(postfix, bp = 60)]
         InExpr(boxed!(Self), #[tok(IN, this)] InList),
-        /// `expr NOT BETWEEN low AND high`. Declared before `BetweenExpr` so
-        /// the longer `NOT BETWEEN` prefix wins disambiguation. Recursive fields
-        /// in this postfix tail inherit `bp = 60`, so the low/high operands stop
-        /// before the literal `AND` infix at `bp = 20`.
-        #[parse(postfix, bp = 60)]
+        /// `expr NOT BETWEEN low AND high`. The low operand is the restricted
+        /// expression [`BExpr`], which is how gram.y stops it before the `AND`
+        /// that closes the clause.
+        ///
+        /// gram.y:15084 `a_expr NOT_LA BETWEEN opt_asymmetric b_expr AND a_expr
+        /// %prec NOT_LA`: the rule ends in `AND`, whose own level would make the
+        /// whole form bind looser than a boolean operand.
+        #[parse(prec = NOT_LA)]
         NotBetweenExpr(
             boxed!(Self),
-            #[tok(NOT, BETWEEN, this)] boxed!(Self),
+            #[tok(NOT, BETWEEN, this)] boxed!(BExpr),
             #[tok(AND, this)] boxed!(Self),
         ),
-        /// `expr BETWEEN low AND high`. See `NotBetweenExpr` for the recursive
-        /// postfix-tail binding-power rationale.
-        #[parse(postfix, bp = 60)]
+        /// `expr BETWEEN low AND high`. The low operand is the restricted
+        /// expression [`BExpr`], as in `NotBetweenExpr`.
+        ///
+        /// gram.y:15076 `a_expr BETWEEN opt_asymmetric b_expr AND a_expr
+        /// %prec BETWEEN`: the rule ends in `AND`, as above.
+        #[parse(prec = BETWEEN)]
         BetweenExpr(
             boxed!(Self),
-            #[tok(BETWEEN, this)] boxed!(Self),
+            #[tok(BETWEEN, this)] boxed!(BExpr),
             #[tok(AND, this)] boxed!(Self),
         ),
 
@@ -3520,61 +3505,47 @@ recursa::ast_node! {
         //
         // JSON / JSONB operators are listed FIRST among infix so that their
         // longer tokens are peeked before conflicting shorter ones
-        // (e.g. `<@` before `<`, `->` before `-`). These dedicated operators use
-        // bp = 100; generic `Op` spellings such as `||` use the lower bp = 80 tier.
+        // (e.g. `<@` before `<`, `->` before `-`). Every one of them is a
+        // spelling PostgreSQL's scanner returns as `Op`, so they all sit at
+        // gram.y's single `Op` level (gram.y:889).
         /// JSON path as text: `expr #>> path`
-        #[parse(infix, lbp = 100, rbp = 101)]
         JsonPathText(boxed!(Self), #[tok(HASHARROWARROW, this)] boxed!(Self)),
         /// JSON path: `expr #> path`
-        #[parse(infix, lbp = 100, rbp = 101)]
         JsonPath(boxed!(Self), #[tok(HASHARROW, this)] boxed!(Self)),
         /// JSON field as text: `expr ->> field`
-        #[parse(infix, lbp = 100, rbp = 101)]
         JsonFieldText(boxed!(Self), #[tok(ARROWARROW, this)] boxed!(Self)),
         /// JSON field: `expr -> field`
-        #[parse(infix, lbp = 100, rbp = 101)]
         JsonField(boxed!(Self), #[tok(ARROW, this)] boxed!(Self)),
         /// Geometric parallel: `a ?|| b`. Must precede `JsonAnyKey` (`?|`)
         /// so the 3-char token wins over the 2-char token.
-        #[parse(infix, lbp = 50, rbp = 51)]
         Parallel(boxed!(Self), #[tok(QUESTIONPIPEPIPE, this)] boxed!(Self)),
         /// JSON any-key-exists: `expr ?| keys`
-        #[parse(infix, lbp = 100, rbp = 101)]
         JsonAnyKey(boxed!(Self), #[tok(QUESTIONPIPE, this)] boxed!(Self)),
         /// JSON all-keys-exist: `expr ?& keys`
-        #[parse(infix, lbp = 100, rbp = 101)]
         JsonAllKeys(boxed!(Self), #[tok(QUESTIONAMP, this)] boxed!(Self)),
         /// Geometric intersect: `a ?# b`. Must precede `JsonKey` (`?`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         Intersect(boxed!(Self), #[tok(QUESTIONHASH, this)] boxed!(Self)),
         /// Geometric perpendicular: `a ?-| b`. Must precede `Horizontal` (`?-`)
         /// so the 3-char token wins over the 2-char token.
-        #[parse(infix, lbp = 50, rbp = 51)]
         Perpendicular(boxed!(Self), #[tok(QUESTIONDASHPIPE, this)] boxed!(Self)),
         /// Geometric horizontal: `a ?- b`. Must precede `JsonKey` (`?`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         Horizontal(boxed!(Self), #[tok(QUESTIONDASH, this)] boxed!(Self)),
         /// Geometric "is horizontal" prefix: `?- s` — tests whether the
         /// LSEG/LINE `s` is horizontal. PG's geometry.sql uses this in WHERE.
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         IsHorizontal(#[tok(QUESTIONDASH, this)] boxed!(Self)),
         /// Geometric "is vertical" prefix: `?| s`.
-        #[parse(prefix, bp = 120)]
+        #[parse(prec = Op)]
         IsVertical(#[tok(QUESTIONPIPE, this)] boxed!(Self)),
         /// Geometric "below": `a <^ b`.
-        #[parse(infix, lbp = 50, rbp = 51)]
         Below(boxed!(Self), #[tok(LTCARET, this)] boxed!(Self)),
         /// Geometric "above": `a >^ b`.
-        #[parse(infix, lbp = 50, rbp = 51)]
         Above(boxed!(Self), #[tok(GTCARET, this)] boxed!(Self)),
         /// JSON key-exists: `expr ? key`
-        #[parse(infix, lbp = 100, rbp = 101)]
         JsonKey(boxed!(Self), #[tok(QUESTION, this)] boxed!(Self)),
         /// JSONB contains: `expr @> expr`
-        #[parse(infix, lbp = 100, rbp = 101)]
         JsonContains(boxed!(Self), #[tok(ATGT, this)] boxed!(Self)),
         /// JSONB contained-by: `expr <@ expr`
-        #[parse(infix, lbp = 100, rbp = 101)]
         JsonContainedBy(boxed!(Self), #[tok(LTAT, this)] boxed!(Self)),
 
         // --- Postgres text-search / jsonpath / range / geometric 3-char operators ---
@@ -3586,100 +3557,70 @@ recursa::ast_node! {
         // mirrors the lexical declaration and makes the precedence table easier
         // to compare with it.
         /// Text-search / jsonb path match: `expr @@@ expr`.
-        #[parse(infix, lbp = 50, rbp = 51)]
         TsMatch3(boxed!(Self), #[tok(ATATAT, this)] boxed!(Self)),
         /// User-defined triple-less-than: `a <<< b`. Before `StrictlyLeft` (`<<`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         TripleLt(boxed!(Self), #[tok(LTLTLT, this)] boxed!(Self)),
         /// Geometric strictly-below: `a <<| b`. Before `StrictlyLeft` (`<<`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         StrictlyBelow(boxed!(Self), #[tok(LTLTPIPE, this)] boxed!(Self)),
         /// Inet is-subset-or-equal: `a <<= b`. Before `StrictlyLeft` (`<<`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         SubsetEq(boxed!(Self), #[tok(LTLTEQ, this)] boxed!(Self)),
         /// Distance: `a <-> b`. Before any `<` variant.
-        #[parse(infix, lbp = 100, rbp = 101)]
         Distance(boxed!(Self), #[tok(LTMINUSGT, this)] boxed!(Self)),
         /// User-defined triple-greater-than: `a >>> b`. Before `StrictlyRight` (`>>`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         TripleGt(boxed!(Self), #[tok(GTGTGT, this)] boxed!(Self)),
         /// Inet is-superset-or-equal: `a >>= b`. Before `StrictlyRight` (`>>`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         SupersetEq(boxed!(Self), #[tok(GTGTEQ, this)] boxed!(Self)),
         /// Range adjacent: `a -|- b`. Before `Sub` (`-`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         Adjacent(boxed!(Self), #[tok(MINUSPIPEMINUS, this)] boxed!(Self)),
         /// Geometric strictly-above: `a |>> b`. Before `Concat` (`||`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         StrictlyAbove(boxed!(Self), #[tok(PIPEGTGT, this)] boxed!(Self)),
         /// Geometric no-extend-below: `a |&> b`. Before `Concat` (`||`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         NoExtendBelow(boxed!(Self), #[tok(PIPEAMPGT, this)] boxed!(Self)),
         /// Geometric no-extend-above: `a &<| b`. Before `NoExtendRight` (`&<`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         NoExtendAbove(boxed!(Self), #[tok(AMPLTPIPE, this)] boxed!(Self)),
 
         // --- 2-char operators ---
         /// Text-search / jsonb path match: `expr @@ expr`.
-        #[parse(infix, lbp = 50, rbp = 51)]
         TsMatch(boxed!(Self), #[tok(ATAT, this)] boxed!(Self)),
         /// Jsonpath exists: `expr @? path`.
-        #[parse(infix, lbp = 50, rbp = 51)]
         JsonPathExists(boxed!(Self), #[tok(ATQUESTION, this)] boxed!(Self)),
         /// Range / array overlap: `a && b`.
-        #[parse(infix, lbp = 100, rbp = 101)]
         Overlap(boxed!(Self), #[tok(AMPAMP, this)] boxed!(Self)),
         /// Range does-not-extend-right: `a &< b`.
-        #[parse(infix, lbp = 50, rbp = 51)]
         NoExtendRight(boxed!(Self), #[tok(AMPLT, this)] boxed!(Self)),
         /// Range does-not-extend-left: `a &> b`.
-        #[parse(infix, lbp = 50, rbp = 51)]
         NoExtendLeft(boxed!(Self), #[tok(AMPGT, this)] boxed!(Self)),
         /// Range strictly-left-of: `a << b`.
-        #[parse(infix, lbp = 50, rbp = 51)]
         StrictlyLeft(boxed!(Self), #[tok(LTLT, this)] boxed!(Self)),
         /// Range strictly-right-of: `a >> b`.
-        #[parse(infix, lbp = 50, rbp = 51)]
         StrictlyRight(boxed!(Self), #[tok(GTGT, this)] boxed!(Self)),
 
         // --- User-defined / custom infix operators ---
         /// `expr === expr` — user-defined triple-equal. Must come before `Eq` (`=`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         TripleEq(boxed!(Self), #[tok(TRIPLEEQ, this)] boxed!(Self)),
         /// `expr !== expr` — user-defined not-equal. Must come before `BangEq` (`!=`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         BangEqEq(boxed!(Self), #[tok(BANGEQEQ, this)] boxed!(Self)),
         /// `expr ## expr` — geometric closest-point / path intersection.
         /// Must come before `BitXor` (`#`).
-        #[parse(infix, lbp = 50, rbp = 51)]
         GeomClosest(boxed!(Self), #[tok(HASHHASH, this)] boxed!(Self)),
 
-        #[parse(infix, lbp = 10, rbp = 11)]
         Or(boxed!(Self), #[tok(OR, this)] boxed!(Self)),
-        #[parse(infix, lbp = 20, rbp = 21)]
         And(boxed!(Self), #[tok(AND, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         BangEq(boxed!(Self), #[tok(BANGEQ, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         Neq(boxed!(Self), #[tok(NEQ, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         Lte(boxed!(Self), #[tok(LTE, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         Gte(boxed!(Self), #[tok(GTE, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         Eq(boxed!(Self), #[tok(EQ, this)] boxed!(Self)),
 
         /// Text starts-with: `expr ^@ expr` (PostgreSQL `starts_with` operator).
         /// `^@` is a single token (see `punct::CaretAt`); declared before
         /// `CustomInfix` so it wins the declaration-order tiebreak. bp=8 matches
         /// Postgres's generic `Op` precedence.
-        #[parse(infix, lbp = 80, rbp = 81)]
         StartsWith(boxed!(Self), #[tok(CARETAT, this)] boxed!(Self)),
         /// JSONB delete-path: `expr #- path` (PostgreSQL jsonb delete-at-path
         /// operator). `#-` is a single token (see `punct::HashMinus`); declared
         /// before `CustomInfix` so it wins the declaration-order tiebreak. bp=10
         /// matches the neighbouring `#>`/`#>>` JSON path operators.
-        #[parse(infix, lbp = 100, rbp = 101)]
         JsonDeletePath(boxed!(Self), #[tok(HASHMINUS, this)] boxed!(Self)),
 
         /// Catch-all infix: any user-defined operator not matched by a specific
@@ -3689,46 +3630,34 @@ recursa::ast_node! {
         /// single-char operators still fall through to the variants below.
         /// bp=8 matches Postgres's generic `Op` precedence (between comparison
         /// bp=5 and additive bp=10).
-        #[parse(infix, lbp = 80, rbp = 81)]
+        #[parse(prec = Op)]
         CustomInfix(
             boxed!(Self),
             #[pretty(break_before = soft, break_after = soft)] literal::CustomOp,
             boxed!(Self),
         ),
 
-        #[parse(infix, lbp = 50, rbp = 51)]
         Lt(boxed!(Self), #[tok(LT, this)] boxed!(Self)),
-        #[parse(infix, lbp = 50, rbp = 51)]
         Gt(boxed!(Self), #[tok(GT, this)] boxed!(Self)),
         /// String concatenation: `expr || expr`. PostgreSQL scans `||` as a
         /// generic `Op`, below additive operators in the precedence hierarchy.
-        #[parse(infix, lbp = 80, rbp = 81)]
         Concat(boxed!(Self), #[tok(CONCAT, this)] boxed!(Self)),
         /// Bitwise OR: `expr | expr`. Must come after `Concat` (`||`) so the
         /// longer token matches first at the punctuation level.
-        #[parse(infix, lbp = 100, rbp = 101)]
         BitOr(boxed!(Self), #[tok(PIPE, this)] boxed!(Self)),
         /// Bitwise AND: `expr & expr`.
-        #[parse(infix, lbp = 100, rbp = 101)]
         BitAnd(boxed!(Self), #[tok(AMP, this)] boxed!(Self)),
         /// Bitwise XOR: `expr # expr` (Postgres bit-string / integer operator).
-        #[parse(infix, lbp = 100, rbp = 101)]
         BitXor(boxed!(Self), #[tok(POUND, this)] boxed!(Self)),
-        #[parse(infix, lbp = 100, rbp = 101)]
         Add(boxed!(Self), #[tok(PLUS, this)] boxed!(Self)),
-        #[parse(infix, lbp = 100, rbp = 101)]
         Sub(boxed!(Self), #[tok(MINUS, this)] boxed!(Self)),
         /// Multiplication: `expr * expr`
-        #[parse(infix, lbp = 110, rbp = 111)]
         Mul(boxed!(Self), #[tok(STAR, this)] boxed!(Self)),
         /// Division: `expr / expr`
-        #[parse(infix, lbp = 110, rbp = 111)]
         Div(boxed!(Self), #[tok(SLASH, this)] boxed!(Self)),
         /// Modulo: `expr % expr`
-        #[parse(infix, lbp = 110, rbp = 111)]
         Mod(boxed!(Self), #[tok(PERCENT, this)] boxed!(Self)),
         /// Exponentiation: `expr ^ expr` (Postgres numeric power operator).
-        #[parse(infix, lbp = 130, rbp = 131)]
         Pow(boxed!(Self), #[tok(CARET, this)] boxed!(Self)),
 
         // --- Atoms ---
@@ -3870,5 +3799,194 @@ recursa::ast_node! {
         PositionalParam(PositionalParam),
         /// Unqualified column reference: `f1` or `"Foo"`, with its subscripts
         ColumnRef(ColumnRef),
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `b_expr` (gram.y:15290-15345): `a_expr` without the
+    /// boolean-keyword productions.
+    ///
+    /// gram.y:15285-15288 states why it exists: "AND, NOT, IS, and IN are the
+    /// a_expr keywords that would cause trouble in the places where b_expr is
+    /// used. For simplicity, we just eliminate all the boolean-keyword-operator
+    /// productions from b_expr." Declared precedence cannot express that, and
+    /// gram.y does not try; the restriction is written by hand here, variant by
+    /// variant, against gram.y's own production list.
+    ///
+    /// A restricted expression is not an AST type: every rule it lowers builds
+    /// an [`Expr`], so a field typed `BExpr` holds an `Expr`. Its rules are the
+    /// admitted [`Expr`] variants with one substitution -- a recursive operand
+    /// that is the first or the last symbol of the rule becomes a `BExpr`,
+    /// every other operand stays an `Expr`. That is gram.y's own shape:
+    /// `b_expr '+' b_expr`, but `'(' a_expr ')'` through the parenthesized
+    /// atom (gram.y:14768-14769).
+    ///
+    /// The admitted list below is gram.y's `b_expr` production list:
+    ///
+    /// - `c_expr` (gram.y:15290, 15355+): every atom of [`Expr`] except
+    ///   `Default`, which gram.y reaches only through `a_expr: DEFAULT`
+    ///   (gram.y:15264).
+    /// - `b_expr TYPECAST Typename` (gram.y:15292): `Cast`.
+    /// - `'+' b_expr` and `'-' b_expr` (gram.y:15294-15296): `Pos`, `Neg`.
+    /// - `b_expr '+' '-' '*' '/' '%' '^' b_expr` (gram.y:15298-15308).
+    /// - `b_expr '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS b_expr`
+    ///   (gram.y:15310-15320).
+    /// - `b_expr qual_Op b_expr` and `qual_Op b_expr` (gram.y:15322-15324):
+    ///   every operator spelling PostgreSQL's scanner returns as `Op`, which
+    ///   pg-sql names one token at a time, in both its infix and its prefix
+    ///   form.
+    /// - `b_expr IS [NOT] DISTINCT FROM b_expr` (gram.y:15326-15330).
+    /// - `b_expr IS [NOT] DOCUMENT_P` (gram.y:15334-15339): `IsDocument`.
+    ///
+    /// Everything else `a_expr` has is absent: `AND`, `OR`, `NOT`, the `LIKE`
+    /// family, `BETWEEN`, `IN`, the rest of the `IS` family, `ISNULL`,
+    /// `NOTNULL`, `OVERLAPS`, `AT TIME ZONE`, `AT LOCAL`, `COLLATE`, the
+    /// quantified comparisons and `DEFAULT`.
+    #[restricts(Expr)]
+    pub enum BExpr {
+        Neg,
+        Pos,
+        GeomCenter,
+        BitNot,
+        PathLength,
+        AtHashAtPrefix,
+        PointCount,
+        Abs,
+        BangEqMinusPrefix,
+        Sqrt,
+        Cbrt,
+        CustomPrefix,
+        Cast,
+        IsNotDistinctFrom,
+        IsDistinctFrom,
+        IsDocument,
+        TildeLeqTilde,
+        TildeGeqTilde,
+        TildeLtTilde,
+        TildeGtTilde,
+        RegexNotIMatch,
+        RegexIMatch,
+        RegexNotMatch,
+        GeomSame,
+        RegexMatch,
+        LikeOpINeg,
+        LikeOpI,
+        LikeOpNeg,
+        LikeOp,
+        RecordLte,
+        RecordGte,
+        RecordNeq,
+        RecordLt,
+        RecordGt,
+        RecordEq,
+        JsonPathText,
+        JsonPath,
+        JsonFieldText,
+        JsonField,
+        Parallel,
+        JsonAnyKey,
+        JsonAllKeys,
+        Intersect,
+        Perpendicular,
+        Horizontal,
+        IsHorizontal,
+        IsVertical,
+        Below,
+        Above,
+        JsonKey,
+        JsonContains,
+        JsonContainedBy,
+        TsMatch3,
+        TripleLt,
+        StrictlyBelow,
+        SubsetEq,
+        Distance,
+        TripleGt,
+        SupersetEq,
+        Adjacent,
+        StrictlyAbove,
+        NoExtendBelow,
+        NoExtendAbove,
+        TsMatch,
+        JsonPathExists,
+        Overlap,
+        NoExtendRight,
+        NoExtendLeft,
+        StrictlyLeft,
+        StrictlyRight,
+        TripleEq,
+        BangEqEq,
+        GeomClosest,
+        BangEq,
+        Neq,
+        Lte,
+        Gte,
+        Eq,
+        StartsWith,
+        JsonDeletePath,
+        CustomInfix,
+        Lt,
+        Gt,
+        Concat,
+        BitOr,
+        BitAnd,
+        BitXor,
+        Add,
+        Sub,
+        Mul,
+        Div,
+        Mod,
+        Pow,
+        Exists,
+        Array,
+        RowExpr,
+        Grouping,
+        Case,
+        UnicodeStringLit,
+        EscapeStringLit,
+        TimestampLit,
+        TimeLit,
+        IntervalLit,
+        CastFunc,
+        XmlElement,
+        XmlForest,
+        XmlAttributes,
+        XmlPi,
+        XmlSerialize,
+        XmlParse,
+        XmlRoot,
+        XmlExists,
+        Trim,
+        CastCall,
+        CollationFor,
+        Substring,
+        Position,
+        Overlay,
+        Extract,
+        JsonCtor,
+        JsonScalar,
+        JsonSerialize,
+        JsonObject,
+        JsonArray,
+        JsonExists,
+        JsonValue,
+        JsonQuery,
+        JsonObjectAgg,
+        JsonArrayAgg,
+        Func,
+        User,
+        QualRef,
+        Parenthesized,
+        NumericLit,
+        IntegerLit,
+        DollarStringLit,
+        BitStringLit,
+        HexStringLit,
+        StringLit,
+        BoolTrue,
+        BoolFalse,
+        Null,
+        PositionalParam,
+        ColumnRef,
     }
 }

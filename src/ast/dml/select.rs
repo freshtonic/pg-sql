@@ -632,37 +632,7 @@ recursa::ast_node! {
     pub struct XmlNamespaceNamed {
         /// gram.y `xml_namespace_el: b_expr AS ColLabel` (exclusions as in
         /// `PositionInner`).
-        #[parse(pratt(exclude(
-            Default,
-            Collate,
-            QuantifiedComparisonCmp,
-            QuantifiedComparisonLike,
-            QuantifiedComparisonOp,
-            QuantifiedComparisonAdd,
-            QuantifiedComparisonMul,
-            QuantifiedComparisonPow,
-            IsJson,
-            IsNormalized,
-            BoolTest,
-            Notnull,
-            Isnull,
-            AtLocal,
-            AtTimeZone,
-            NotInExpr,
-            NotIlike,
-            NotSimilarTo,
-            NotLike,
-            SimilarTo,
-            Ilike,
-            Like,
-            Overlaps,
-            InExpr,
-            NotBetweenExpr,
-            BetweenExpr,
-            Or,
-            And
-        )))]
-        pub uri: boxed!(Expr),
+        pub uri: boxed!(crate::ast::shared::expr::BExpr),
         #[tok(AS, this)]
         pub prefix: literal::AliasName,
     }
@@ -673,38 +643,8 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct XmlNamespaceDefault {
         /// gram.y `xml_namespace_el: DEFAULT b_expr`.
-        #[parse(pratt(exclude(
-            Default,
-            Collate,
-            QuantifiedComparisonCmp,
-            QuantifiedComparisonLike,
-            QuantifiedComparisonOp,
-            QuantifiedComparisonAdd,
-            QuantifiedComparisonMul,
-            QuantifiedComparisonPow,
-            IsJson,
-            IsNormalized,
-            BoolTest,
-            Notnull,
-            Isnull,
-            AtLocal,
-            AtTimeZone,
-            NotInExpr,
-            NotIlike,
-            NotSimilarTo,
-            NotLike,
-            SimilarTo,
-            Ilike,
-            Like,
-            Overlaps,
-            InExpr,
-            NotBetweenExpr,
-            BetweenExpr,
-            Or,
-            And
-        )))]
         #[tok(DEFAULT, this)]
-        pub uri: boxed!(Expr),
+        pub uri: boxed!(crate::ast::shared::expr::BExpr),
     }
 }
 
@@ -734,38 +674,8 @@ recursa::ast_node! {
     pub struct XmlTableColumnPath {
         /// gram.y `xmltable_column_option_el: PATH b_expr` (exclusions as in
         /// `PositionInner`), so the path ends before a following `NOT NULL`.
-        #[parse(pratt(exclude(
-            Default,
-            Collate,
-            QuantifiedComparisonCmp,
-            QuantifiedComparisonLike,
-            QuantifiedComparisonOp,
-            QuantifiedComparisonAdd,
-            QuantifiedComparisonMul,
-            QuantifiedComparisonPow,
-            IsJson,
-            IsNormalized,
-            BoolTest,
-            Notnull,
-            Isnull,
-            AtLocal,
-            AtTimeZone,
-            NotInExpr,
-            NotIlike,
-            NotSimilarTo,
-            NotLike,
-            SimilarTo,
-            Ilike,
-            Like,
-            Overlaps,
-            InExpr,
-            NotBetweenExpr,
-            BetweenExpr,
-            Or,
-            And
-        )))]
         #[tok(PATH, this)]
-        pub xpath: boxed!(Expr),
+        pub xpath: boxed!(crate::ast::shared::expr::BExpr),
     }
 }
 
@@ -775,38 +685,8 @@ recursa::ast_node! {
     pub struct XmlTableColumnDefault {
         /// gram.y `xmltable_column_option_el: DEFAULT b_expr` (exclusions as in
         /// `PositionInner`), so the default ends before a following `NOT NULL`.
-        #[parse(pratt(exclude(
-            Default,
-            Collate,
-            QuantifiedComparisonCmp,
-            QuantifiedComparisonLike,
-            QuantifiedComparisonOp,
-            QuantifiedComparisonAdd,
-            QuantifiedComparisonMul,
-            QuantifiedComparisonPow,
-            IsJson,
-            IsNormalized,
-            BoolTest,
-            Notnull,
-            Isnull,
-            AtLocal,
-            AtTimeZone,
-            NotInExpr,
-            NotIlike,
-            NotSimilarTo,
-            NotLike,
-            SimilarTo,
-            Ilike,
-            Like,
-            Overlaps,
-            InExpr,
-            NotBetweenExpr,
-            BetweenExpr,
-            Or,
-            And
-        )))]
         #[tok(DEFAULT, this)]
-        pub value: boxed!(Expr),
+        pub value: boxed!(crate::ast::shared::expr::BExpr),
     }
 }
 
