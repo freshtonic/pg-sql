@@ -7,61 +7,67 @@
 //! models no more than that: the SQL inside a text run is not parsed here,
 //! because psql does not parse it either.
 
-/// One complete psql source document.
-///
-/// The item list covers the whole source: the repetition ends only at end of
-/// input, so an empty document is an empty list.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
-pub struct PsqlDocument<'input> {
-    #[deref]
-    pub items: Vec<PsqlItem<'input>>,
-}
-
-/// One item of a psql document.
-#[derive(recursa::Node, Debug, Clone)]
-pub enum PsqlItem<'input> {
-    /// A variable interpolation, which substitution rewrites.
-    Interpolation(Interpolation<'input>),
-    /// A terminator, which submits the query buffer.
-    Terminator(Terminator<'input>),
-    /// A run of text psql forwards to the server unchanged.
-    Sql(SqlText<'input>),
-}
-
-/// A psql variable interpolation.
-///
-/// Each form is one lexical token, exactly as `psqlscan.l` scans it. That
-/// matters: pg-sql previously lexed the colon and the name separately and
-/// joined them in the SQL grammar, which made `SELECT int :'x'` ambiguous
-/// against the SQL/JSON `int : value` entry and cost 8 LALR conflicts.
-///
-/// Every form shares one name class, `psqlscan.l:376` `variable_char`,
-/// written there as `[A-Za-z\200-\377_0-9]`. The high-byte range covers
-/// every non-ASCII byte, which in UTF-8 source is every non-ASCII scalar.
-/// Unlike an identifier it has no separate start class, so `:1` is a
-/// variable reference.
-///
-/// An incomplete form falls back to a bare colon followed by ordinary text,
-/// which is what `psqlscan.l:775-796` does with `yyless(1)`: `:'a b'` is a
-/// colon and a string literal, not an interpolation, because a space is not
-/// a `variable_char`.
-#[derive(recursa::Node, Debug, Clone)]
-pub enum Interpolation<'input> {
-    /// `:'name'` — psqlscan.l:756. Substituted as a SQL string literal.
-    Literal(#[lex(pattern = r":'[A-Za-z0-9_\u{0080}-\u{10FFFF}]+'")] LiteralInterpolation<'input>),
-    /// `:"name"` — psqlscan.l:761. Substituted as a quoted identifier.
-    Identifier(
-        #[lex(pattern = r#":"[A-Za-z0-9_\u{0080}-\u{10FFFF}]+""#)] IdentifierInterpolation<'input>,
-    ),
-    /// `:{?name}` — psqlscan.l:766. Substituted as `TRUE` or `FALSE`
-    /// according to whether the variable is set.
-    Test(#[lex(pattern = r":\{\?[A-Za-z0-9_\u{0080}-\u{10FFFF}]+\}")] TestInterpolation<'input>),
-    /// `:name` — psqlscan.l:710. Substituted as raw text.
+recursa::ast_node! {
+    /// One complete psql source document.
     ///
-    /// Listed last so the three punctuated forms are tried first; they are
-    /// separate token kinds, so the order records intent rather than
-    /// resolving a conflict.
-    Raw(#[lex(pattern = r":[A-Za-z0-9_\u{0080}-\u{10FFFF}]+")] RawInterpolation<'input>),
+    /// The item list covers the whole source: the repetition ends only at end of
+    /// input, so an empty document is an empty list.
+    #[derive(Debug, Clone, derive_more :: Deref)]
+    pub struct PsqlDocument {
+        #[deref]
+        pub items: zero_or_many!(PsqlItem),
+    }
+}
+
+recursa::ast_node! {
+    /// One item of a psql document.
+    #[derive(Debug, Clone)]
+    pub enum PsqlItem {
+        /// A variable interpolation, which substitution rewrites.
+        Interpolation(Interpolation),
+        /// A terminator, which submits the query buffer.
+        Terminator(Terminator),
+        /// A run of text psql forwards to the server unchanged.
+        Sql(SqlText),
+    }
+}
+
+recursa::ast_node! {
+    /// A psql variable interpolation.
+    ///
+    /// Each form is one lexical token, exactly as `psqlscan.l` scans it. That
+    /// matters: pg-sql previously lexed the colon and the name separately and
+    /// joined them in the SQL grammar, which made `SELECT int :'x'` ambiguous
+    /// against the SQL/JSON `int : value` entry and cost 8 LALR conflicts.
+    ///
+    /// Every form shares one name class, `psqlscan.l:376` `variable_char`,
+    /// written there as `[A-Za-z\200-\377_0-9]`. The high-byte range covers
+    /// every non-ASCII byte, which in UTF-8 source is every non-ASCII scalar.
+    /// Unlike an identifier it has no separate start class, so `:1` is a
+    /// variable reference.
+    ///
+    /// An incomplete form falls back to a bare colon followed by ordinary text,
+    /// which is what `psqlscan.l:775-796` does with `yyless(1)`: `:'a b'` is a
+    /// colon and a string literal, not an interpolation, because a space is not
+    /// a `variable_char`.
+    #[derive(Debug, Clone)]
+    pub enum Interpolation {
+        /// `:'name'` — psqlscan.l:756. Substituted as a SQL string literal.
+        Literal(#[lex(pattern = r":'[A-Za-z0-9_\u{0080}-\u{10FFFF}]+'")] LiteralInterpolation),
+        /// `:"name"` — psqlscan.l:761. Substituted as a quoted identifier.
+        Identifier(
+            #[lex(pattern = r#":"[A-Za-z0-9_\u{0080}-\u{10FFFF}]+""#)] IdentifierInterpolation,
+        ),
+        /// `:{?name}` — psqlscan.l:766. Substituted as `TRUE` or `FALSE`
+        /// according to whether the variable is set.
+        Test(#[lex(pattern = r":\{\?[A-Za-z0-9_\u{0080}-\u{10FFFF}]+\}")] TestInterpolation),
+        /// `:name` — psqlscan.l:710. Substituted as raw text.
+        ///
+        /// Listed last so the three punctuated forms are tried first; they are
+        /// separate token kinds, so the order records intent rather than
+        /// resolving a conflict.
+        Raw(#[lex(pattern = r":[A-Za-z0-9_\u{0080}-\u{10FFFF}]+")] RawInterpolation),
+    }
 }
 
 impl<'input> Interpolation<'input> {
@@ -92,49 +98,53 @@ impl<'input> Interpolation<'input> {
     }
 }
 
-/// A terminator: psql submits the current query buffer and starts a new one.
-#[derive(recursa::Node, Debug, Clone)]
-pub enum Terminator<'input> {
-    /// `;` — psqlscan.l:681, the only terminator `psqlscan.l` itself
-    /// returns. The server sees it unchanged, so rendering copies it.
-    ///
-    /// psql suppresses the boundary inside parentheses and inside a tracked
-    /// `BEGIN ... END` block; this crate does not track either, because it
-    /// renders one SQL string for the whole document rather than splitting
-    /// it into submissions. The distinction is invisible to the rendered
-    /// text, which pg-sql then frames on its own semicolons.
-    #[tok(SEMI)]
-    Semi,
-    /// `\g`, `\gx`, `\gset`, `\gexec`, `\crosstabview` — client syntax the
-    /// server never sees, so rendering replaces one with `;`.
-    Send(SendCommand<'input>),
+recursa::ast_node! {
+    /// A terminator: psql submits the current query buffer and starts a new one.
+    #[derive(Debug, Clone)]
+    pub enum Terminator {
+        /// `;` — psqlscan.l:681, the only terminator `psqlscan.l` itself
+        /// returns. The server sees it unchanged, so rendering copies it.
+        ///
+        /// psql suppresses the boundary inside parentheses and inside a tracked
+        /// `BEGIN ... END` block; this crate does not track either, because it
+        /// renders one SQL string for the whole document rather than splitting
+        /// it into submissions. The distinction is invisible to the rendered
+        /// text, which pg-sql then frames on its own semicolons.
+        #[tok(SEMI)]
+        Semi,
+        /// `\g`, `\gx`, `\gset`, `\gexec`, `\crosstabview` — client syntax the
+        /// server never sees, so rendering replaces one with `;`.
+        Send(SendCommand),
+    }
 }
 
-/// A psql send command.
-///
-/// These are read by `psqlscanslash.l`, not `psqlscan.l`, which returns
-/// `LEXRES_BACKSLASH` and hands off. They are modelled here, and the rest of
-/// that scanner is not, because a send command terminates a statement and so
-/// changes where SQL text begins and ends; `\set` and its kin do not.
-///
-/// Each carries an explicit priority so it wins the tie against the
-/// [`SqlAtom::MetaCommand`] catch-all, which matches the same text. Where
-/// the catch-all matches *more* text it wins on length instead, which is
-/// what makes `\gsetfoo` one unknown command rather than `\gset` followed
-/// by `foo` — `psqlscanslash.l` reads a whole command name before looking it
-/// up.
-#[derive(recursa::Node, Debug, Clone)]
-pub enum SendCommand<'input> {
-    /// `\crosstabview`
-    Crosstabview(#[lex(pattern = r"\\crosstabview", priority = 2)] SendCrosstabview<'input>),
-    /// `\gexec`
-    Gexec(#[lex(pattern = r"\\gexec", priority = 2)] SendGexec<'input>),
-    /// `\gset`
-    Gset(#[lex(pattern = r"\\gset", priority = 2)] SendGset<'input>),
-    /// `\gx`
-    Gx(#[lex(pattern = r"\\gx", priority = 2)] SendGx<'input>),
-    /// `\g`
-    G(#[lex(pattern = r"\\g", priority = 2)] SendG<'input>),
+recursa::ast_node! {
+    /// A psql send command.
+    ///
+    /// These are read by `psqlscanslash.l`, not `psqlscan.l`, which returns
+    /// `LEXRES_BACKSLASH` and hands off. They are modelled here, and the rest of
+    /// that scanner is not, because a send command terminates a statement and so
+    /// changes where SQL text begins and ends; `\set` and its kin do not.
+    ///
+    /// Each carries an explicit priority so it wins the tie against the
+    /// [`SqlAtom::MetaCommand`] catch-all, which matches the same text. Where
+    /// the catch-all matches *more* text it wins on length instead, which is
+    /// what makes `\gsetfoo` one unknown command rather than `\gset` followed
+    /// by `foo` — `psqlscanslash.l` reads a whole command name before looking it
+    /// up.
+    #[derive(Debug, Clone)]
+    pub enum SendCommand {
+        /// `\crosstabview`
+        Crosstabview(#[lex(pattern = r"\\crosstabview", priority = 2)] SendCrosstabview),
+        /// `\gexec`
+        Gexec(#[lex(pattern = r"\\gexec", priority = 2)] SendGexec),
+        /// `\gset`
+        Gset(#[lex(pattern = r"\\gset", priority = 2)] SendGset),
+        /// `\gx`
+        Gx(#[lex(pattern = r"\\gx", priority = 2)] SendGx),
+        /// `\g`
+        G(#[lex(pattern = r"\\g", priority = 2)] SendG),
+    }
 }
 
 impl<'input> SendCommand<'input> {
@@ -150,14 +160,15 @@ impl<'input> SendCommand<'input> {
     }
 }
 
-/// A maximal run of source that psql forwards to the server unchanged.
-///
-/// An atom lookahead can either extend this run or begin another `SqlText`
-/// item in the document repetition. Extending the current run is the psql
-/// scanner's maximal-match behaviour, so resolve that exact family of cells
-/// as shifts.
-#[derive(recursa::Node, Debug, Clone, derive_more::Deref)]
-#[parse(lr_conflict(
+recursa::ast_node! {
+    /// A maximal run of source that psql forwards to the server unchanged.
+    ///
+    /// An atom lookahead can either extend this run or begin another `SqlText`
+    /// item in the document repetition. Extending the current run is the psql
+    /// scanner's maximal-match behaviour, so resolve that exact family of cells
+    /// as shifts.
+    #[derive(Debug, Clone, derive_more :: Deref)]
+    #[parse(lr_conflict(
     action = shift,
     against = ast::SqlAtom,
     lookahead = {
@@ -185,93 +196,94 @@ impl<'input> SendCommand<'input> {
     },
     expect = 21
 ))]
-pub struct SqlText<'input> {
-    #[deref]
-    pub atoms: recursa::Vec1<SqlAtom<'input>>,
+    pub struct SqlText {
+        #[deref]
+        pub atoms: one_or_many!(SqlAtom),
+    }
 }
 
-/// One lexical unit of a forwarded text run.
-///
-/// The quoted and dollar-quoted forms are here for one reason: they are the
-/// states in which `psqlscan.l` does *not* recognise an interpolation. A
-/// colon inside a string, a dollar-quoted body, a quoted identifier or a
-/// comment is ordinary content, and it stays ordinary content because the
-/// whole construct is one token. Comments reach the same end by being
-/// ignored trivia, which rendering preserves because it copies source.
-#[derive(recursa::Node, Debug, Clone)]
-pub enum SqlAtom<'input> {
-    /// `'...'` — psqlscan.l:485-491 `xq`, with `''` doubling. psql's
-    /// default `standard_conforming_strings` is on, so a backslash here is
-    /// an ordinary character.
-    String(#[lex(pattern = r"'[^']*(?:''[^']*)*'")] StringText<'input>),
-    /// `E'...'` — psqlscan.l:492-495 `xe`, where a backslash escapes.
+recursa::ast_node! {
+    /// One lexical unit of a forwarded text run.
     ///
-    /// The escape is `[\s\S]` rather than `.`: psqlscan.l:213 spells it
-    /// `xeescape [\\][^0-7]`, a negated class that matches a newline, while
-    /// `.` here does not.
-    EscapeString(#[lex(pattern = r"(?i:E)'(?:[^'\\]|\\[\s\S]|'')*'")] EscapeStringText<'input>),
-    /// `U&'...'` — psqlscan.l `xus`.
-    UnicodeString(#[lex(pattern = r"(?i:U)&'[^']*(?:''[^']*)*'")] UnicodeStringText<'input>),
-    /// `B'...'` — psqlscan.l `xb`.
-    BitString(#[lex(pattern = r"(?i:B)'[^']*'")] BitStringText<'input>),
-    /// `X'...'` — psqlscan.l `xh`.
-    HexString(#[lex(pattern = r"(?i:X)'[^']*'")] HexStringText<'input>),
-    /// `U&"..."` — psqlscan.l `xui`.
-    UnicodeIdentifier(
-        #[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*""#)] UnicodeIdentifierText<'input>,
-    ),
-    /// `"..."` — psqlscan.l:622-624 `xd`, with `""` doubling.
-    QuotedIdentifier(#[lex(pattern = r#""[^"]*(?:""[^"]*)*""#)] QuotedIdentifierText<'input>),
-    /// `$tag$...$tag$` — psqlscan.l:564-601 `xdolq`.
-    DollarString(#[lex(matcher)] DollarString<'input>),
-    /// `$1` — psqlscan.l:352 `param`, which is `\${decdigit}+` and carries
-    /// no exclusion: `$1a` is a param and an identifier, and psql forwards
-    /// both for the server to object to.
-    DollarNumber(#[lex(pattern = r"\$[0-9]+")] DollarNumber<'input>),
-    /// `\;` and `\:` — psqlscan.l:697-702, whose rule is `"\\"[;:]` and
-    /// whose body emits `yytext + 1`. Neither is a submission boundary: each
-    /// forces its second character into the query buffer, so the server
-    /// receives one byte where the user wrote two.
-    ///
-    /// `\:` is how a psql user writes a colon that must *not* be
-    /// interpolated, so this token is what stops `\:name` becoming a
-    /// variable reference. It has to be one token to do that: a bare
-    /// backslash followed by a separate colon would leave `:name` to the
-    /// interpolation rule.
-    Escaped(#[lex(pattern = r"\\[;:]")] EscapedText<'input>),
-    /// An identifier-shaped run, `psqlscan.l:340` `identifier`. `$` is a
-    /// continuation character there, so `a$$b$$` is one identifier and not
-    /// an identifier followed by a dollar-quoted string.
-    Word(
-        #[lex(pattern = r"[A-Za-z_\u{0080}-\u{10FFFF}][A-Za-z0-9_$\u{0080}-\u{10FFFF}]*")]
-        WordText<'input>,
-    ),
-    /// A run of digits. psql's numeric rules are finer, but nothing here
-    /// interprets a number, and no numeric spelling can contain or start an
-    /// interpolation.
-    Digits(#[lex(pattern = r"[0-9]+")] DigitsText<'input>),
-    /// Any other run of operator and delimiter characters. The excluded
-    /// characters are exactly those that can begin a longer token above.
-    Punct(#[lex(pattern = r#"[^\s\-/:;'"$\\A-Za-z0-9_\u{0080}-\u{10FFFF}]+"#)] PunctText<'input>),
-    #[tok(COLONCOLON)]
-    Cast,
-    #[tok(COLONEQUALS)]
-    ColonEquals,
-    #[tok(COLON)]
-    Colon,
-    #[tok(MINUS)]
-    Minus,
-    #[tok(SLASH)]
-    Slash,
-    #[tok(DOLLAR)]
-    Dollar,
-    /// A backslash command that is not a send command: an unmodelled psql
-    /// meta-command such as `\set` or `\getenv`, forwarded verbatim. The
-    /// whole name is one token, as `psqlscanslash.l` reads it, so a longer
-    /// name always beats a send-command prefix. See freshtonic/pg-sql#11,
-    /// #12, #13.
-    MetaCommand(#[lex(pattern = r"\\[A-Za-z][A-Za-z0-9_]*")] MetaCommandText<'input>),
-    /// A backslash starting no command name at all.
-    #[tok(BACKSLASH)]
-    Backslash,
+    /// The quoted and dollar-quoted forms are here for one reason: they are the
+    /// states in which `psqlscan.l` does *not* recognise an interpolation. A
+    /// colon inside a string, a dollar-quoted body, a quoted identifier or a
+    /// comment is ordinary content, and it stays ordinary content because the
+    /// whole construct is one token. Comments reach the same end by being
+    /// ignored trivia, which rendering preserves because it copies source.
+    #[derive(Debug, Clone)]
+    pub enum SqlAtom {
+        /// `'...'` — psqlscan.l:485-491 `xq`, with `''` doubling. psql's
+        /// default `standard_conforming_strings` is on, so a backslash here is
+        /// an ordinary character.
+        String(#[lex(pattern = r"'[^']*(?:''[^']*)*'")] StringText),
+        /// `E'...'` — psqlscan.l:492-495 `xe`, where a backslash escapes.
+        ///
+        /// The escape is `[\s\S]` rather than `.`: psqlscan.l:213 spells it
+        /// `xeescape [\\][^0-7]`, a negated class that matches a newline, while
+        /// `.` here does not.
+        EscapeString(#[lex(pattern = r"(?i:E)'(?:[^'\\]|\\[\s\S]|'')*'")] EscapeStringText),
+        /// `U&'...'` — psqlscan.l `xus`.
+        UnicodeString(#[lex(pattern = r"(?i:U)&'[^']*(?:''[^']*)*'")] UnicodeStringText),
+        /// `B'...'` — psqlscan.l `xb`.
+        BitString(#[lex(pattern = r"(?i:B)'[^']*'")] BitStringText),
+        /// `X'...'` — psqlscan.l `xh`.
+        HexString(#[lex(pattern = r"(?i:X)'[^']*'")] HexStringText),
+        /// `U&"..."` — psqlscan.l `xui`.
+        UnicodeIdentifier(#[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*""#)] UnicodeIdentifierText),
+        /// `"..."` — psqlscan.l:622-624 `xd`, with `""` doubling.
+        QuotedIdentifier(#[lex(pattern = r#""[^"]*(?:""[^"]*)*""#)] QuotedIdentifierText),
+        /// `$tag$...$tag$` — psqlscan.l:564-601 `xdolq`.
+        DollarString(#[lex(matcher)] DollarString),
+        /// `$1` — psqlscan.l:352 `param`, which is `\${decdigit}+` and carries
+        /// no exclusion: `$1a` is a param and an identifier, and psql forwards
+        /// both for the server to object to.
+        DollarNumber(#[lex(pattern = r"\$[0-9]+")] DollarNumber),
+        /// `\;` and `\:` — psqlscan.l:697-702, whose rule is `"\\"[;:]` and
+        /// whose body emits `yytext + 1`. Neither is a submission boundary: each
+        /// forces its second character into the query buffer, so the server
+        /// receives one byte where the user wrote two.
+        ///
+        /// `\:` is how a psql user writes a colon that must *not* be
+        /// interpolated, so this token is what stops `\:name` becoming a
+        /// variable reference. It has to be one token to do that: a bare
+        /// backslash followed by a separate colon would leave `:name` to the
+        /// interpolation rule.
+        Escaped(#[lex(pattern = r"\\[;:]")] EscapedText),
+        /// An identifier-shaped run, `psqlscan.l:340` `identifier`. `$` is a
+        /// continuation character there, so `a$$b$$` is one identifier and not
+        /// an identifier followed by a dollar-quoted string.
+        Word(
+            #[lex(pattern = r"[A-Za-z_\u{0080}-\u{10FFFF}][A-Za-z0-9_$\u{0080}-\u{10FFFF}]*")]
+            WordText,
+        ),
+        /// A run of digits. psql's numeric rules are finer, but nothing here
+        /// interprets a number, and no numeric spelling can contain or start an
+        /// interpolation.
+        Digits(#[lex(pattern = r"[0-9]+")] DigitsText),
+        /// Any other run of operator and delimiter characters. The excluded
+        /// characters are exactly those that can begin a longer token above.
+        Punct(#[lex(pattern = r#"[^\s\-/:;'"$\\A-Za-z0-9_\u{0080}-\u{10FFFF}]+"#)] PunctText),
+        #[tok(COLONCOLON)]
+        Cast,
+        #[tok(COLONEQUALS)]
+        ColonEquals,
+        #[tok(COLON)]
+        Colon,
+        #[tok(MINUS)]
+        Minus,
+        #[tok(SLASH)]
+        Slash,
+        #[tok(DOLLAR)]
+        Dollar,
+        /// A backslash command that is not a send command: an unmodelled psql
+        /// meta-command such as `\set` or `\getenv`, forwarded verbatim. The
+        /// whole name is one token, as `psqlscanslash.l` reads it, so a longer
+        /// name always beats a send-command prefix. See freshtonic/pg-sql#11,
+        /// #12, #13.
+        MetaCommand(#[lex(pattern = r"\\[A-Za-z][A-Za-z0-9_]*")] MetaCommandText),
+        /// A backslash starting no command name at all.
+        #[tok(BACKSLASH)]
+        Backslash,
+    }
 }
