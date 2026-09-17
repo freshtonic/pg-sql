@@ -117,22 +117,18 @@ struct CountingAllocator;
 unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let pointer = unsafe { System.alloc(layout) };
-        if !pointer.is_null() {
-            if COUNTING.load(Ordering::Relaxed) {
-                ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-                ALLOC_BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
-            }
+        if !pointer.is_null() && COUNTING.load(Ordering::Relaxed) {
+            ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+            ALLOC_BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
         }
         pointer
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         let pointer = unsafe { System.alloc_zeroed(layout) };
-        if !pointer.is_null() {
-            if COUNTING.load(Ordering::Relaxed) {
-                ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-                ALLOC_BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
-            }
+        if !pointer.is_null() && COUNTING.load(Ordering::Relaxed) {
+            ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+            ALLOC_BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
         }
         pointer
     }
@@ -143,12 +139,10 @@ unsafe impl GlobalAlloc for CountingAllocator {
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         let pointer = unsafe { System.realloc(ptr, layout, new_size) };
-        if !pointer.is_null() {
-            if COUNTING.load(Ordering::Relaxed) {
-                ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-                REALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-                ALLOC_BYTES.fetch_add(new_size as u64, Ordering::Relaxed);
-            }
+        if !pointer.is_null() && COUNTING.load(Ordering::Relaxed) {
+            ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+            REALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+            ALLOC_BYTES.fetch_add(new_size as u64, Ordering::Relaxed);
         }
         pointer
     }
