@@ -1,5 +1,5 @@
 //! SQL expression AST: gram.y's `a_expr` as an ordinary left-recursive enum,
-//! plus `b_expr` as the restricted expression [`BExpr`].
+//! plus `b_expr` as the restricted expression `BExpr`.
 //!
 //! Holds atoms, prefix operators (`NOT`, unary minus, the prefix operator
 //! spellings), infix operators (`AND`, `OR`, comparisons, arithmetic) and
@@ -3483,7 +3483,7 @@ recursa::ast_node! {
         /// IN list: `expr IN (val, ...)`
         InExpr(boxed!(Self), #[tok(IN, this)] InList),
         /// `expr NOT BETWEEN low AND high`. The low operand is the restricted
-        /// expression [`BExpr`], which is how gram.y stops it before the `AND`
+        /// expression `BExpr`, which is how gram.y stops it before the `AND`
         /// that closes the clause.
         ///
         /// gram.y:15084 `a_expr NOT_LA BETWEEN opt_asymmetric b_expr AND a_expr
@@ -3496,7 +3496,7 @@ recursa::ast_node! {
             #[tok(AND, this)] boxed!(Self),
         ),
         /// `expr BETWEEN low AND high`. The low operand is the restricted
-        /// expression [`BExpr`], as in `NotBetweenExpr`.
+        /// expression `BExpr`, as in `NotBetweenExpr`.
         ///
         /// gram.y:15076 `a_expr BETWEEN opt_asymmetric b_expr AND a_expr
         /// %prec BETWEEN`: the rule ends in `AND`, as above.
