@@ -647,6 +647,10 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_collate_postfix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_collation_for	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_column_ref	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_date_literal_as_castfunc	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_infix_operator_at_op_precedence	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_operator_in_b_expr_and_beside_quantified_form	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_operator_with_every_math_op	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_prefix_operator_at_op_precedence	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_default_atom	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_direct_parenthesized_set_limit_offset_orders_roundtrip	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_distance	false

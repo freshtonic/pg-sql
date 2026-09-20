@@ -49,6 +49,10 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_cast_parenthesized_field_access	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_coalesce_as_its_own_variant	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_coalesce_family_words_as_names	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_infix_operator_at_op_precedence	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_operator_in_b_expr_and_beside_quantified_form	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_operator_with_every_math_op	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_prefix_operator_at_op_precedence	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_direct_parenthesized_set_limit_offset_orders_roundtrip	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_empty_array_constructor	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_empty_row_constructor	issue-9-generated-expression

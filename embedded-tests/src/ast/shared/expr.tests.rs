@@ -3893,4 +3893,119 @@ mod tests {
         assert!(qualified.call.is_some());
     }
 
+    /// gram.y:14844 `a_expr qual_Op a_expr %prec Op` with `qual_Op:
+    /// OPERATOR '(' any_operator ')'` (gram.y:16494). The level is `Op`
+    /// whatever operator the parentheses name.
+    #[test]
+    fn parse_decorated_infix_operator_at_op_precedence() {
+        use crate::ast::shared::names::QualifiedOperatorName;
+
+        // `(1 OPERATOR(pg_catalog.=) 2) = 3`: a decorated `=` is above `=`.
+        let parsed = parse_expr_classified("1 OPERATOR(pg_catalog.=) 2 = 3");
+        let Expr::Eq(left, right) = parsed.ast() else {
+            panic!("expected Eq at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**right, Expr::IntegerLit(_)));
+        let Expr::DecoratedInfix(one, operator, two) = &**left else {
+            panic!("expected DecoratedInfix on the left, got {left:?}");
+        };
+        assert!(matches!(&**one, Expr::IntegerLit(_)));
+        assert!(matches!(&**two, Expr::IntegerLit(_)));
+        assert!(matches!(operator.name, QualifiedOperatorName::Qualified(_)));
+
+        // `a OPERATOR(pg_catalog.+) (b * c)`: a decorated `+` is below `*`.
+        let parsed = parse_expr_classified("a OPERATOR(pg_catalog.+) b * c");
+        let Expr::DecoratedInfix(left, _, right) = parsed.ast() else {
+            panic!("expected DecoratedInfix at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**left, Expr::ColumnRef(_)));
+        assert!(matches!(&**right, Expr::Mul(..)));
+
+        // gram.y:889 `%left Op OPERATOR`.
+        let parsed = parse_expr_classified("a OPERATOR(+) b OPERATOR(-) c");
+        let Expr::DecoratedInfix(left, operator, right) = parsed.ast() else {
+            panic!("expected DecoratedInfix at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**left, Expr::DecoratedInfix(..)));
+        assert!(matches!(&**right, Expr::ColumnRef(_)));
+        assert!(matches!(operator.name, QualifiedOperatorName::Plain(_)));
+    }
+
+    /// `any_operator` is `all_Op` behind any number of `ColId '.'` parts
+    /// (gram.y:9004), and `all_Op` is `Op | MathOp`: every `MathOp` spelling
+    /// (gram.y:16478) must be a decorated operator, as must an `Op`.
+    #[test]
+    fn parse_decorated_operator_with_every_math_op() {
+        for op in [
+            "+", "-", "*", "/", "%", "^", "<", ">", "=", "<=", ">=", "<>", "||", "@>", "~~", "<->",
+            "!=", "&&&",
+        ] {
+            for path in ["", "pg_catalog.", "a.b."] {
+                let src: &'static str = format!("x OPERATOR({path}{op}) y").leak();
+                assert!(
+                    matches!(parse_expr_classified(src).ast(), Expr::DecoratedInfix(..)),
+                    "expected DecoratedInfix for {src:?}",
+                );
+            }
+        }
+    }
+
+    /// gram.y:14846 `qual_Op a_expr %prec Op`.
+    #[test]
+    fn parse_decorated_prefix_operator_at_op_precedence() {
+        let parsed = parse_expr_classified("OPERATOR(pg_catalog.-) a * b");
+        let Expr::DecoratedPrefix(_, operand) = parsed.ast() else {
+            panic!("expected DecoratedPrefix at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**operand, Expr::Mul(..)));
+
+        let parsed = parse_expr_classified("OPERATOR(pg_catalog.-) a = b");
+        let Expr::Eq(left, _) = parsed.ast() else {
+            panic!("expected Eq at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**left, Expr::DecoratedPrefix(..)));
+
+        let parsed = parse_expr_classified("a OPERATOR(pg_catalog.+) OPERATOR(pg_catalog.-) b");
+        let Expr::DecoratedInfix(_, _, right) = parsed.ast() else {
+            panic!("expected DecoratedInfix at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**right, Expr::DecoratedPrefix(..)));
+    }
+
+    /// gram.y:15322-15324 `b_expr qual_Op b_expr` and `qual_Op b_expr`: both
+    /// forms are in `b_expr`, so they stand as the low bound of `BETWEEN`.
+    /// The quantified form keeps its own production (gram.y `subquery_Op`).
+    #[test]
+    fn parse_decorated_operator_in_b_expr_and_beside_quantified_form() {
+        let parsed = parse_expr_classified("x BETWEEN 1 OPERATOR(pg_catalog.+) 2 AND 5");
+        let Expr::BetweenExpr(_, low, _) = parsed.ast() else {
+            panic!("expected BetweenExpr, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**low, Expr::DecoratedInfix(..)));
+
+        let parsed = parse_expr_classified("x BETWEEN OPERATOR(pg_catalog.-) 2 AND 5");
+        let Expr::BetweenExpr(_, low, _) = parsed.ast() else {
+            panic!("expected BetweenExpr, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**low, Expr::DecoratedPrefix(..)));
+
+        assert!(matches!(
+            parse_expr_classified("a OPERATOR(pg_catalog.=) ANY (ARRAY[1])").ast(),
+            Expr::QuantifiedComparisonOp(..)
+                | Expr::QuantifiedComparisonCmp(..)
+                | Expr::QuantifiedComparisonAdd(..)
+        ));
+
+        // `=>` is not an operator name, and the parentheses are not optional.
+        for src in ["a OPERATOR(pg_catalog.=>) b", "a OPERATOR pg_catalog.= b", "a OPERATOR() b"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                lexed.errors().count() > 0 || parsed.is_err() || !input.is_eof(),
+                "invalid decorated operator parsed completely: {src:?}",
+            );
+        }
+    }
+
 }

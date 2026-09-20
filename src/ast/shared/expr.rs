@@ -1163,7 +1163,7 @@ recursa::ast_node! {
         #[tok(ATSIGN)]
         At,
         Custom(literal::CustomOp),
-        Decorated(QuantifiedDecoratedOperator),
+        Decorated(DecoratedOperator),
     }
 }
 
@@ -1232,9 +1232,11 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `OPERATOR(any_operator)` in a quantified comparison.
+    /// gram.y:16494 `OPERATOR '(' any_operator ')'`, the explicit spelling
+    /// that `qual_Op`, `qual_all_Op` and `subquery_Op` share. It names any
+    /// operator, a `MathOp` included, with an optional schema path.
     #[derive(Debug)]
-    pub struct QuantifiedDecoratedOperator {
+    pub struct DecoratedOperator {
         #[tok(OPERATOR, LPAREN, this, RPAREN)]
         pub name: crate::ast::shared::names::QualifiedOperatorName,
     }
@@ -3354,6 +3356,15 @@ recursa::ast_node! {
             literal::CustomOp,
             #[pretty(break_before = soft)] boxed!(Self),
         ),
+        /// `OPERATOR(schema.op) expr`: gram.y:14846 `qual_Op a_expr %prec Op`
+        /// with `qual_Op`'s second alternative. The level is `Op` whatever
+        /// operator the parentheses name: `OPERATOR(pg_catalog.-) a * b` is
+        /// `OPERATOR(pg_catalog.-) (a * b)`.
+        #[parse(prec = Op)]
+        DecoratedPrefix(
+            DecoratedOperator,
+            #[pretty(break_before = soft)] boxed!(Self),
+        ),
 
         // --- Postfix ---
         /// Postgres-style cast: `expr::type`
@@ -3714,6 +3725,21 @@ recursa::ast_node! {
             #[pretty(break_before = soft, break_after = soft)] literal::CustomOp,
             boxed!(Self),
         ),
+        /// `expr OPERATOR(schema.op) expr`: gram.y:14844 `a_expr qual_Op a_expr
+        /// %prec Op` with `qual_Op`'s second alternative.
+        ///
+        /// The level is `Op` whatever operator the parentheses name, and it is
+        /// left-associative (gram.y:889 `%left Op OPERATOR`). So `1
+        /// OPERATOR(pg_catalog.=) 2 = 3` is `(1 OPERATOR(pg_catalog.=) 2) = 3`,
+        /// and `a OPERATOR(pg_catalog.+) b * c` is `a OPERATOR(pg_catalog.+)
+        /// (b * c)`. The rule ends in `)`, which has no level, so the override
+        /// is what carries `Op`.
+        #[parse(prec = Op)]
+        DecoratedInfix(
+            boxed!(Self),
+            #[pretty(break_before = soft, break_after = soft)] DecoratedOperator,
+            boxed!(Self),
+        ),
 
         Lt(boxed!(Self), #[tok(LT, this)] boxed!(Self)),
         Gt(boxed!(Self), #[tok(GT, this)] boxed!(Self)),
@@ -3922,7 +3948,8 @@ recursa::ast_node! {
     /// - `b_expr qual_Op b_expr` and `qual_Op b_expr` (gram.y:15322-15324):
     ///   every operator spelling PostgreSQL's scanner returns as `Op`, which
     ///   pg-sql names one token at a time, in both its infix and its prefix
-    ///   form.
+    ///   form, and `qual_Op`'s `OPERATOR(...)` spelling: `DecoratedInfix` and
+    ///   `DecoratedPrefix`.
     /// - `b_expr IS [NOT] DISTINCT FROM b_expr` (gram.y:15326-15330).
     /// - `b_expr IS [NOT] DOCUMENT_P` (gram.y:15334-15339): `IsDocument`.
     ///
@@ -3944,6 +3971,7 @@ recursa::ast_node! {
         Sqrt,
         Cbrt,
         CustomPrefix,
+        DecoratedPrefix,
         Cast,
         IsNotDistinctFrom,
         IsDistinctFrom,
@@ -4013,6 +4041,7 @@ recursa::ast_node! {
         StartsWith,
         JsonDeletePath,
         CustomInfix,
+        DecoratedInfix,
         Lt,
         Gt,
         Concat,
