@@ -34,6 +34,7 @@ pub mod bench_data;
 #[cfg(feature = "spans")]
 pub mod document;
 pub mod formatter;
+pub mod ident;
 pub mod tokens;
 
 #[cfg(feature = "spans")]

@@ -1145,6 +1145,12 @@ impl ColId<'_> {
             Self::Text(text) => text.text(),
         }
     }
+
+    /// The name PostgreSQL's scanner gives this identifier: see
+    /// [`crate::ident::fold_identifier`].
+    pub fn folded(&self) -> Result<crate::ident::Folded<'_>, crate::ident::FoldError> {
+        crate::ident::fold_identifier(self.text())
+    }
 }
 
 // gram.y `ColLabel`: every keyword class, the `attr_name` after a dot in
@@ -1173,6 +1179,12 @@ impl ColLabel<'_> {
             Self::Text(text) => text.text(),
         }
     }
+
+    /// The name PostgreSQL's scanner gives this identifier: see
+    /// [`crate::ident::fold_identifier`].
+    pub fn folded(&self) -> Result<crate::ident::Folded<'_>, crate::ident::FoldError> {
+        crate::ident::fold_identifier(self.text())
+    }
 }
 
 recursa::ast_node! {
@@ -1194,6 +1206,12 @@ impl NonReservedWord<'_> {
             Self::Text(text) => text.text(),
         }
     }
+
+    /// The name PostgreSQL's scanner gives this identifier: see
+    /// [`crate::ident::fold_identifier`].
+    pub fn folded(&self) -> Result<crate::ident::Folded<'_>, crate::ident::FoldError> {
+        crate::ident::fold_identifier(self.text())
+    }
 }
 
 recursa::ast_node! {
@@ -1207,6 +1225,20 @@ recursa::ast_node! {
             )]
             TypeFunctionNameText,
         ),
+    }
+}
+
+impl type_function_name<'_> {
+    pub fn text(&self) -> &str {
+        match self {
+            Self::Text(text) => text.text(),
+        }
+    }
+
+    /// The name PostgreSQL's scanner gives this identifier: see
+    /// [`crate::ident::fold_identifier`].
+    pub fn folded(&self) -> Result<crate::ident::Folded<'_>, crate::ident::FoldError> {
+        crate::ident::fold_identifier(self.text())
     }
 }
 
@@ -1263,6 +1295,20 @@ recursa::ast_node! {
             )]
             BareColLabelText,
         ),
+    }
+}
+
+impl BareColLabel<'_> {
+    pub fn text(&self) -> &str {
+        match self {
+            Self::Text(text) => text.text(),
+        }
+    }
+
+    /// The name PostgreSQL's scanner gives this identifier: see
+    /// [`crate::ident::fold_identifier`].
+    pub fn folded(&self) -> Result<crate::ident::Folded<'_>, crate::ident::FoldError> {
+        crate::ident::fold_identifier(self.text())
     }
 }
 
@@ -1390,6 +1436,12 @@ pub mod literal {
             match self {
                 Ident::Text(text) => text.text(),
             }
+        }
+
+        /// The name PostgreSQL's scanner gives this identifier: see
+        /// [`crate::ident::fold_identifier`].
+        pub fn folded(&self) -> Result<crate::ident::Folded<'_>, crate::ident::FoldError> {
+            crate::ident::fold_identifier(self.text())
         }
     }
 
