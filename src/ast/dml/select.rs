@@ -430,8 +430,9 @@ recursa::ast_node! {
     /// atoms (`CastCall`, `CollationForCall`, …); a `FROM`-clause variant
     /// re-uses those types so the special forms can appear as table sources.
     ///
-    /// Currently covers the forms exercised by the create_view regression
-    /// corpus: `CAST(expr AS type)` and `COLLATION FOR (expr)`. Extend this
+    /// Currently covers the forms exercised by the regression corpus:
+    /// `CAST(expr AS type)`, `COLLATION FOR (expr)` and the `COALESCE` family
+    /// (create_view, rangefuncs). Extend this
     /// enum as new corpus statements demand additional special forms.
     ///
     /// Each keyword-led form has a distinct leading token.
@@ -441,6 +442,8 @@ recursa::ast_node! {
         Cast(crate::ast::shared::expr::CastCall),
         /// `COLLATION FOR (expr)`.
         CollationFor(crate::ast::shared::expr::CollationForCall),
+        /// `COALESCE(...)`, `GREATEST(...)`, `LEAST(...)` or `NULLIF(a, b)`.
+        Common(crate::ast::shared::expr::CommonSubexprCall),
         #[tok(USER)]
         /// `USER` — the reserved-keyword spelling of `CURRENT_USER`. Used as a
         /// zero-arg function reference in FROM (`SELECT * FROM USER`). The
@@ -795,11 +798,22 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// The function of a `rowsfrom_item`: gram.y:13891 `func_expr_windowless
+    /// opt_col_def_list`. The two variants lead with disjoint words: a
+    /// `COL_NAME` keyword is never a `func_application` name.
+    #[derive(Debug)]
+    pub enum RowsFromFunc {
+        Common(crate::ast::shared::expr::CommonSubexprCall),
+        Func(FunctionApplicationExpr),
+    }
+}
+
+recursa::ast_node! {
     /// One function entry of a `ROWS FROM (...)` list: a function call with an
     /// optional `AS (coldef, ...)` column-definition list.
     #[derive(Debug)]
     pub struct RowsFromItem {
-        pub func: FunctionApplicationExpr,
+        pub func: RowsFromFunc,
         pub coldef: Option<RowsFromColDef>,
     }
 }
@@ -979,6 +993,14 @@ recursa::ast_node! {
         Extract,
         #[tok(GROUPING)]
         Grouping,
+        #[tok(COALESCE)]
+        Coalesce,
+        #[tok(GREATEST)]
+        Greatest,
+        #[tok(LEAST)]
+        Least,
+        #[tok(NULLIF)]
+        NullIf,
         #[tok(INTERVAL)]
         Interval,
         #[tok(PRECISION)]

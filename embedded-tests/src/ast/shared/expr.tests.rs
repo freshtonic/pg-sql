@@ -3749,4 +3749,148 @@ mod tests {
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
     }
+    /// `COALESCE`, `GREATEST`, `LEAST` and `NULLIF` are gram.y
+    /// `func_expr_common_subexpr` productions with nodes of their own
+    /// (gram.y:15844-15865), not function calls. The differential oracle
+    /// compares PostgreSQL's parse of two texts that both say `COALESCE(...)`,
+    /// so it cannot see which variant pg-sql built; these tests can.
+    #[test]
+    fn parse_coalesce_as_its_own_variant() {
+        for src in ["COALESCE(a, b)", "coalesce(a)", "Coalesce(a, b + 1, NULL)"] {
+            let parsed = parse_expr_classified(src);
+            assert!(
+                matches!(parsed.ast(), Expr::Coalesce(_)),
+                "expected Coalesce for {src:?}, got {:?}",
+                parsed.ast(),
+            );
+        }
+        let parsed = parse_expr_classified("COALESCE(a, b, c)");
+        let Expr::Coalesce(coalesce) = parsed.ast() else {
+            panic!("expected Coalesce, got {:?}", parsed.ast());
+        };
+        assert_eq!(coalesce.args.len(), 3);
+    }
+
+    #[test]
+    fn parse_greatest_as_its_own_variant() {
+        for src in ["GREATEST(a, b)", "greatest(a)", "greatest(1, 2, 3)"] {
+            let parsed = parse_expr_classified(src);
+            assert!(
+                matches!(parsed.ast(), Expr::Greatest(_)),
+                "expected Greatest for {src:?}, got {:?}",
+                parsed.ast(),
+            );
+        }
+    }
+
+    #[test]
+    fn parse_least_as_its_own_variant() {
+        for src in ["LEAST(a, b)", "least(a)", "least(1, 2, 3)"] {
+            let parsed = parse_expr_classified(src);
+            assert!(
+                matches!(parsed.ast(), Expr::Least(_)),
+                "expected Least for {src:?}, got {:?}",
+                parsed.ast(),
+            );
+        }
+    }
+
+    /// gram.y:15844 `NULLIF '(' a_expr ',' a_expr ')'`: exactly two arguments.
+    #[test]
+    fn parse_nullif_as_its_own_variant() {
+        let parsed = parse_expr_classified("NULLIF(a, b + 1)");
+        let Expr::NullIf(nullif) = parsed.ast() else {
+            panic!("expected NullIf, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&*nullif.left, Expr::ColumnRef(_)));
+        assert!(matches!(&*nullif.right, Expr::Add(..)));
+        for src in ["nullif(a)", "nullif(a, b, c)", "nullif()"] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "NULLIF without exactly two arguments parsed completely: {src:?}",
+            );
+        }
+    }
+
+    /// `expr_list` is not `func_arg_list`: no `*`, no `DISTINCT`, no
+    /// `VARIADIC`, no named argument, and never empty. PostgreSQL 17.9's
+    /// `raw_parser` rejects every one of these.
+    #[test]
+    fn reject_function_call_syntax_in_coalesce_greatest_least() {
+        for src in [
+            "coalesce(*)",
+            "coalesce(DISTINCT a)",
+            "coalesce(ALL a)",
+            "coalesce(VARIADIC a)",
+            "coalesce(x => a)",
+            "coalesce()",
+            "coalesce(a ORDER BY a)",
+            "greatest(*)",
+            "greatest(DISTINCT a)",
+            "greatest()",
+            "least(*)",
+            "least(DISTINCT a)",
+            "least()",
+            "coalesce(a) OVER ()",
+            "coalesce(a) FILTER (WHERE true)",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "function-call syntax parsed completely in a special form: {src:?}",
+            );
+        }
+    }
+
+    /// The four words are `col_name_keyword` and `bare_label_keyword`
+    /// (gram.y:17875-17904, 18120-18323): a column name, a label with or
+    /// without `AS`, and an `attr_name` after a dot, but never an unqualified
+    /// function name.
+    #[test]
+    fn parse_coalesce_family_words_as_names() {
+        for word in ["coalesce", "greatest", "least", "nullif"] {
+            assert!(
+                matches!(parse_expr_classified(word).ast(), Expr::ColumnRef(_)),
+                "expected ColumnRef for {word:?}",
+            );
+        }
+        for src in [
+            "SELECT coalesce FROM t",
+            "SELECT nullif, greatest, least FROM t",
+            "SELECT 1 AS coalesce",
+            "SELECT 1 coalesce",
+            "SELECT t.coalesce FROM t",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = crate::ast::Statement::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+            let tree = format!("{:?}", parsed.ast());
+            assert!(!tree.contains("CoalesceExpr"), "{src:?} built the special form");
+        }
+    }
+
+    /// `pg_catalog.coalesce(a, b)` is not the special form. gram.y's
+    /// `func_name: ColId indirection` takes `coalesce` as an `attr_name`
+    /// (`ColLabel`), so PostgreSQL's raw parser accepts it as an ordinary
+    /// function call and fails later, in parse analysis, because no such
+    /// function exists.
+    #[test]
+    fn parse_qualified_coalesce_as_an_ordinary_call() {
+        let parsed = parse_expr_classified("pg_catalog.coalesce(a, b)");
+        let Expr::QualRef(qualified) = parsed.ast() else {
+            panic!("expected QualRef, got {:?}", parsed.ast());
+        };
+        assert!(qualified.call.is_some());
+    }
+
 }

@@ -359,6 +359,13 @@ recursa::tokens! {
         POSITION        => r"POSITION" in COL_NAME + bare_label,
         OVERLAY         => r"OVERLAY" in COL_NAME + bare_label,
         EXTRACT         => r"EXTRACT" in COL_NAME + bare_label,
+        // gram.y `func_expr_common_subexpr` heads (gram.y:15844-15865): all four
+        // are `col_name_keyword` (gram.y:17875, 17881, 17898, 17904) and
+        // `bare_label_keyword` (gram.y:18120, 18220, 18278, 18323).
+        COALESCE        => r"COALESCE" in COL_NAME + bare_label,
+        GREATEST        => r"GREATEST" in COL_NAME + bare_label,
+        LEAST           => r"LEAST" in COL_NAME + bare_label,
+        NULLIF          => r"NULLIF" in COL_NAME + bare_label,
         PRESERVE        => r"PRESERVE" in UNRESERVED + bare_label,
         INCREMENT       => r"INCREMENT" in UNRESERVED + bare_label,
         MINVALUE        => r"MINVALUE" in UNRESERVED + bare_label,

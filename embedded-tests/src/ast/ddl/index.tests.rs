@@ -419,4 +419,33 @@ mod tests {
         assert!(stmt.behavior.is_some());
         assert!(input.is_eof());
     }
+    /// gram.y:8211 `index_elem: func_expr_windowless index_elem_options`
+    /// reaches `COALESCE`, `GREATEST`, `LEAST` and `NULLIF` through
+    /// `func_expr_common_subexpr`; insert_conflict's `ON CONFLICT
+    /// (coalesce(key, ...))` uses the same element. A bare `coalesce` is a
+    /// column.
+    #[test]
+    fn parse_create_index_on_bare_coalesce_family() {
+        for (src, node) in [
+            ("CREATE INDEX i ON t (coalesce(a, b))", "CoalesceExpr"),
+            ("CREATE INDEX i ON t (greatest(a, b) DESC, c)", "GreatestExpr"),
+            ("CREATE INDEX i ON t (least(a, b) int4_ops)", "LeastExpr"),
+            ("CREATE INDEX i ON t (nullif(a, 0))", "NullIfExpr"),
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = CreateIndexStmt::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+            let tree = format!("{:?}", parsed.ast());
+            assert!(tree.contains(node), "{src:?} did not build {node}: {tree}");
+        }
+        let lexed = crate::lex("CREATE INDEX i ON t (coalesce)");
+        let mut input = lexed.input();
+        let parsed = CreateIndexStmt::parse(&mut input).unwrap();
+        assert!(input.is_eof());
+        assert!(!format!("{:?}", parsed.ast()).contains("CoalesceExpr"));
+    }
+
 }

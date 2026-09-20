@@ -1419,6 +1419,77 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// `COALESCE(expr, ...)`: gram.y:15848 `func_expr_common_subexpr: COALESCE
+    /// '(' expr_list ')'`, PostgreSQL's `CoalesceExpr`.
+    ///
+    /// `COALESCE` is a `COL_NAME` keyword, so it is a `ColId` but not a
+    /// `type_function_name`: a bare `coalesce` is a column reference and
+    /// `coalesce(...)` is only ever this production. `expr_list` has neither
+    /// `*`, `DISTINCT`, `VARIADIC` nor named arguments, and cannot be empty.
+    #[derive(Debug)]
+    #[tok(COALESCE, LPAREN, this, RPAREN)]
+    pub struct CoalesceExpr {
+        #[sep(COMMA)]
+        pub args: one_or_many!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `GREATEST(expr, ...)`: gram.y:15856 `func_expr_common_subexpr: GREATEST
+    /// '(' expr_list ')'`, PostgreSQL's `MinMaxExpr` with `IS_GREATEST`.
+    /// `GREATEST` is a `COL_NAME` keyword, as [`CoalesceExpr`] describes.
+    #[derive(Debug)]
+    #[tok(GREATEST, LPAREN, this, RPAREN)]
+    pub struct GreatestExpr {
+        #[sep(COMMA)]
+        pub args: one_or_many!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `LEAST(expr, ...)`: gram.y:15865 `func_expr_common_subexpr: LEAST '('
+    /// expr_list ')'`, PostgreSQL's `MinMaxExpr` with `IS_LEAST`. `LEAST` is a
+    /// `COL_NAME` keyword, as [`CoalesceExpr`] describes.
+    #[derive(Debug)]
+    #[tok(LEAST, LPAREN, this, RPAREN)]
+    pub struct LeastExpr {
+        #[sep(COMMA)]
+        pub args: one_or_many!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `NULLIF(left, right)`: gram.y:15844 `func_expr_common_subexpr: NULLIF
+    /// '(' a_expr ',' a_expr ')'`, PostgreSQL's `A_Expr` of kind
+    /// `AEXPR_NULLIF`. It takes exactly two arguments. `NULLIF` is a
+    /// `COL_NAME` keyword, as [`CoalesceExpr`] describes.
+    #[derive(Debug)]
+    #[tok(NULLIF, LPAREN, this, RPAREN)]
+    pub struct NullIfExpr {
+        pub left: boxed!(Expr),
+        #[tok(COMMA, this)]
+        pub right: boxed!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// The `COALESCE`, `GREATEST`, `LEAST` and `NULLIF` forms where gram.y
+    /// writes `func_expr_windowless` (gram.y:15637) and not an expression: a
+    /// `func_table`, a `rowsfrom_item`, an `index_elem` and a `part_elem`.
+    /// `func_expr_windowless` is `func_application | func_expr_common_subexpr
+    /// | ...`, and a `COL_NAME` keyword is never the name of a
+    /// `func_application`, so each position names these forms itself.
+    /// [`Expr`] holds the same four nodes as variants of its own.
+    #[derive(Debug)]
+    pub enum CommonSubexprCall {
+        Coalesce(CoalesceExpr),
+        Greatest(GreatestExpr),
+        Least(LeastExpr),
+        NullIf(NullIfExpr),
+    }
+}
+
+recursa::ast_node! {
     /// ROW constructor: `ROW(expr, ...)` or the empty `ROW()`.
     ///
     /// PostgreSQL's `row` production keeps `ROW '(' expr_list ')'` and
@@ -3678,6 +3749,16 @@ recursa::ast_node! {
         /// `ColumnRef`, which would otherwise claim the bare `GROUPING` keyword
         /// and leave the argument list unparsed.
         Grouping(GroupingCall),
+        /// `COALESCE(expr, ...)`. `COALESCE`, `GREATEST`, `LEAST` and `NULLIF`
+        /// are `COL_NAME` keywords, so `Func` never sees them as a name; they
+        /// stand before `ColumnRef` for the reason `Grouping` does.
+        Coalesce(CoalesceExpr),
+        /// `GREATEST(expr, ...)`.
+        Greatest(GreatestExpr),
+        /// `LEAST(expr, ...)`.
+        Least(LeastExpr),
+        /// `NULLIF(left, right)`.
+        NullIf(NullIfExpr),
         /// CASE expression: `CASE [expr] WHEN ... THEN ... [ELSE ...] END`
         Case(CaseExpr),
         /// Unicode string literal: `U&'...'` with optional `UESCAPE 'c'`. Must
@@ -3948,6 +4029,10 @@ recursa::ast_node! {
         Array,
         RowExpr,
         Grouping,
+        Coalesce,
+        Greatest,
+        Least,
+        NullIf,
         Case,
         UnicodeStringLit,
         EscapeStringLit,

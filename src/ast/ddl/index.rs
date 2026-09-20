@@ -3,7 +3,7 @@ pub use crate::ast::shared::flags::{DropBehavior, IfExists, IfNotExists};
 
 use crate::ast::dml::select::{NullsOrder, SortDir, WhereClause};
 use crate::ast::session::set_reset::SetValue;
-use crate::ast::shared::expr::{Expr, FunctionApplicationExpr, JsonFuncExpr};
+use crate::ast::shared::expr::{CommonSubexprCall, Expr, FunctionApplicationExpr, JsonFuncExpr};
 use crate::tokens::literal;
 
 // ---------------------------------------------------------------------------
@@ -161,6 +161,11 @@ recursa::ast_node! {
     pub enum IndexTarget {
         Expr(#[tok(LPAREN, this, RPAREN)] boxed!(Expr)),
         Json(boxed!(JsonFuncExpr)),
+        /// gram.y `func_expr_common_subexpr`'s `COALESCE`, `GREATEST`, `LEAST`
+        /// and `NULLIF`, as in `ON CONFLICT (coalesce(key, 0))`. Their words
+        /// are `COL_NAME` keywords, so `Func` never takes them as a name; a
+        /// bare `coalesce` is still `Col`.
+        Common(boxed!(CommonSubexprCall)),
         /// gram.y `func_expr_windowless`: no `WITHIN GROUP`, `FILTER` or `OVER`
         /// suffix, which are also operator class names after the call.
         Func(boxed!(FunctionApplicationExpr)),
