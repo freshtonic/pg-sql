@@ -26,7 +26,7 @@ mod tests {
         let stmt_parsed = CreateIndexStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.as_ref().unwrap().text(), "fooi");
-        assert_eq!(stmt.table_name.object(), "foo");
+        assert_eq!(stmt.relation.name().object(), "foo");
         assert!(input.is_eof());
     }
 

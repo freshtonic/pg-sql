@@ -644,4 +644,92 @@ mod tests {
         assert!(matches!(stmt, Statement::Insert(_)));
         assert!(input.is_eof());
     }
+    /// gram.y:13757 `relation_expr` and gram.y:13771 `extended_relation_expr`:
+    /// `name`, `name *`, `ONLY name` and `ONLY ( name )`, and never `ONLY name
+    /// *`. Every statement gram.y gives a `relation_expr` takes all four.
+    /// Before the shared node each statement had its own pair of flags, with
+    /// no `ONLY ( name )` and with `ONLY name *`. PostgreSQL 17.9 agrees with
+    /// every line here.
+    #[test]
+    fn parse_relation_expr_forms_in_every_statement() {
+        use crate::ast::shared::names::{OnlyRelation, RelationExpr};
+
+        for (src, only, parens, star) in [
+            ("t", false, false, false),
+            ("s.t", false, false, false),
+            ("t *", false, false, true),
+            ("ONLY t", true, false, false),
+            ("ONLY (t)", true, true, false),
+            ("only ( s.t )", true, true, false),
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed =
+                RelationExpr::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+            let relation = parsed.ast();
+            assert_eq!(relation.is_only(), only, "{src:?}");
+            assert_eq!(
+                matches!(relation, RelationExpr::Only(OnlyRelation::Parens(_))),
+                parens,
+                "{src:?}"
+            );
+            assert_eq!(
+                matches!(relation, RelationExpr::Named(named) if named.star),
+                star,
+                "{src:?}"
+            );
+            assert_eq!(relation.name().object(), "t", "{src:?}");
+        }
+        for src in ["ONLY t *", "ONLY ((t))", "(t)", "ONLY", "ONLY ()", "t * *"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = RelationExpr::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+
+        let statements = [
+            "LOCK TABLE {}",
+            "LOCK TABLE {}, {} IN SHARE MODE",
+            "TRUNCATE {}",
+            "TRUNCATE TABLE {}, u",
+            "ALTER TABLE {} ADD COLUMN a int",
+            "ALTER TABLE IF EXISTS {} RENAME TO v",
+            "ALTER TABLE {} ATTACH PARTITION q DEFAULT",
+            "ALTER FOREIGN TABLE {} ADD COLUMN a int",
+            "CREATE INDEX ON {} (a)",
+            "UPDATE {} SET a = 1",
+            "UPDATE {} AS x SET a = 1",
+            "DELETE FROM {}",
+            "DELETE FROM {} x WHERE true",
+            "MERGE INTO {} USING u ON true WHEN MATCHED THEN DO NOTHING",
+            "CREATE PUBLICATION p FOR TABLE {}",
+            "ALTER PUBLICATION p ADD TABLE {} (a) WHERE (a > 1)",
+            "TABLE {}",
+            "CREATE VIEW v AS TABLE {}",
+            "SELECT * FROM {}",
+        ];
+        for statement in statements {
+            for (form, accepted) in [
+                ("t", true),
+                ("s.t", true),
+                ("t *", true),
+                ("ONLY t", true),
+                ("ONLY (t)", true),
+                ("ONLY (s.t)", true),
+                ("ONLY t *", false),
+                ("ONLY ((t))", false),
+            ] {
+                let src: &'static str = statement.replace("{}", form).leak();
+                let lexed = crate::lex(src);
+                assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+                let mut input = lexed.input();
+                let parsed = Statement::parse(&mut input);
+                let complete = parsed.is_ok() && input.is_eof();
+                assert_eq!(complete, accepted, "{src:?}");
+            }
+        }
+    }
+
 }

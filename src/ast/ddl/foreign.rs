@@ -371,11 +371,7 @@ recursa::ast_node! {
     #[tok(TABLE, this)]
     pub struct AlterForeignTableBody {
         pub if_exists: Option<IfExists>,
-        #[presence(ONLY)]
-        pub only: bool,
-        pub name: QualifiedName,
-        #[presence(STAR)]
-        pub star: bool,
+        pub relation: crate::ast::shared::names::RelationExpr,
         pub action: AlterForeignTableAction,
     }
 }

@@ -48,6 +48,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/dml/values.tests.rs	reject_table_stmt_duplicate_limit_offset_clauses	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/values.tests.rs	set_operation_tails_belong_to_the_whole_chain	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/values.tests.rs	set_operations_nest_as_gram_y_declares	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/mod.tests.rs	parse_relation_expr_forms_in_every_statement	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_local_scope_session_authorization	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_session_scope_session_authorization	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	accept_function_applications_gram_y_admits	issue-9-generated-expression

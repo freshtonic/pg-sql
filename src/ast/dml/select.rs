@@ -254,15 +254,11 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Plain table reference with optional alias: `[ONLY] tablename [AS] alias`
-    ///
-    /// `ONLY` means do not recurse into inheritance children (the opposite
-    /// of the `table *` `InheritedTable` form).
+    /// gram.y `relation_expr_opt_alias`, the target of `MERGE INTO`: a
+    /// `relation_expr` with an optional alias.
     #[derive(Debug)]
     pub struct PlainTable {
-        #[presence(ONLY)]
-        pub only: bool,
-        pub name: QualifiedName,
+        pub relation: crate::ast::shared::names::RelationExpr,
         pub alias: Option<PlainTableAlias>,
     }
 }

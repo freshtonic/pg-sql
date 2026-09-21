@@ -9,7 +9,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = TableStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert_eq!(stmt.table_name.object(), "int8_tbl");
+        assert_eq!(stmt.relation.name().object(), "int8_tbl");
         assert!(input.is_eof());
     }
 

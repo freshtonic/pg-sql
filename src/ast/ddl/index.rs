@@ -231,12 +231,10 @@ recursa::ast_node! {
         pub concurrently: bool,
         pub if_not_exists: Option<IfNotExists>,
         pub name: Option<crate::tokens::ColId>,
+        /// gram.y `ON relation_expr`. `ONLY` restricts the index to the named
+        /// table without descending into its partitions.
         #[tok(ON, this)]
-        #[presence(ONLY)]
-        /// Optional `ONLY` modifier — restricts the index to the named table
-        /// without descending into inheritance children (partitioned tables).
-        pub only: bool,
-        pub table_name: crate::ast::shared::names::QualifiedName,
+        pub relation: crate::ast::shared::names::RelationExpr,
         pub using: Option<boxed!(UsingMethod)>,
         pub columns: IndexElementList,
         pub include: Option<boxed!(IncludeClause)>,

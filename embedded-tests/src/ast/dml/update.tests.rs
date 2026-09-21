@@ -9,7 +9,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert_eq!(stmt.table_name.object(), "pg_class");
+        assert_eq!(stmt.relation.name().object(), "pg_class");
         assert!(input.is_eof());
     }
 
@@ -43,7 +43,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert_eq!(stmt.table_name.object(), "y");
+        assert_eq!(stmt.relation.name().object(), "y");
         assert!(input.is_eof());
     }
 
@@ -211,8 +211,8 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = UpdateStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert!(stmt.only, "ONLY qualifier should be parsed");
-        assert_eq!(stmt.table_name.object(), "a");
+        assert!(stmt.relation.is_only(), "ONLY qualifier should be parsed");
+        assert_eq!(stmt.relation.name().object(), "a");
         assert!(input.is_eof());
     }
 }
