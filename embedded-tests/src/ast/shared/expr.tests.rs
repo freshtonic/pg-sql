@@ -4061,19 +4061,26 @@ mod tests {
         assert!(matches!(&*normalize.arg, Expr::Concat(..)));
         assert!(normalize.form.is_none());
 
-        let forms: [(&'static str, fn(&UnicodeNormalForm) -> bool); 4] = [
-            ("normalize(a, NFC)", |f| matches!(f, UnicodeNormalForm::Nfc)),
-            ("normalize(a, nfd)", |f| matches!(f, UnicodeNormalForm::Nfd)),
-            ("normalize(a, NFKC)", |f| matches!(f, UnicodeNormalForm::Nfkc)),
-            ("normalize(a, Nfkd)", |f| matches!(f, UnicodeNormalForm::Nfkd)),
-        ];
-        for (src, is_form) in forms {
+        fn form_name(form: &UnicodeNormalForm) -> &'static str {
+            match form {
+                UnicodeNormalForm::Nfc => "NFC",
+                UnicodeNormalForm::Nfd => "NFD",
+                UnicodeNormalForm::Nfkc => "NFKC",
+                UnicodeNormalForm::Nfkd => "NFKD",
+            }
+        }
+        for (src, expected) in [
+            ("normalize(a, NFC)", "NFC"),
+            ("normalize(a, nfd)", "NFD"),
+            ("normalize(a, NFKC)", "NFKC"),
+            ("normalize(a, Nfkd)", "NFKD"),
+        ] {
             let parsed = parse_expr_classified(src);
             let Expr::Normalize(normalize) = parsed.ast() else {
                 panic!("expected Normalize for {src:?}, got {:?}", parsed.ast());
             };
             assert!(matches!(&*normalize.arg, Expr::ColumnRef(_)), "{src:?}");
-            assert!(normalize.form.as_ref().is_some_and(is_form), "{src:?}");
+            assert_eq!(normalize.form.as_ref().map(form_name), Some(expected), "{src:?}");
         }
         assert!(matches!(parse_expr_classified("normalize").ast(), Expr::ColumnRef(_)));
         // `nfc` alone is an unreserved keyword: a column like any other.
