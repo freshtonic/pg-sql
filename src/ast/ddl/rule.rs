@@ -104,10 +104,10 @@ recursa::ast_node! {
         pub clause: RuleSelectClause,
         #[pretty(break_before = soft)]
         pub order_by: Option<boxed!(crate::ast::dml::select::OrderByClause)>,
+        /// The LIMIT / OFFSET / FETCH FIRST tail and the locking clause, in either
+        /// of gram.y's two orders.
         #[pretty(break_before = soft)]
-        pub limit_offset: Option<boxed!(crate::ast::dml::select::LimitOffsetClause)>,
-        #[pretty(break_before = soft)]
-        pub for_update: Option<boxed!(crate::ast::dml::select::ForUpdateClause)>,
+        pub limit_locking: Option<boxed!(crate::ast::dml::select::LimitLockingClause)>,
     }
 }
 
