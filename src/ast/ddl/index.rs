@@ -62,7 +62,8 @@ recursa::ast_node! {
     /// Opclass name plus optional options: `int4_ops [(opt = val, ...)]`.
     #[derive(Debug)]
     pub struct OpclassSpec {
-        pub name: crate::tokens::ColId,
+        /// gram.y `opt_qualified_name`: an `any_name`, so `s.text_ops`.
+        pub name: crate::ast::shared::names::QualifiedName,
         pub options: Option<OpclassOptions>,
     }
 }
@@ -177,8 +178,9 @@ recursa::ast_node! {
     /// `COLLATE "name"` on an index element.
     #[derive(Debug)]
     pub struct IndexCollate {
+        /// gram.y:8231 `opt_collate: COLLATE any_name`.
         #[tok(COLLATE, this)]
-        pub name: crate::tokens::ColId,
+        pub name: crate::ast::shared::names::QualifiedName,
     }
 }
 

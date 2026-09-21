@@ -1107,7 +1107,14 @@ mod tests {
 
     #[test]
     fn parse_cast_call() {
+        // gram.y `CAST '(' a_expr AS Typename ')'` has no collation inside the
+        // parentheses; PostgreSQL rejects `CAST('42' AS text COLLATE "C")`
+        // (collate.sql). The collation follows the cast.
         let lexed = crate::lex("CAST('42' AS text COLLATE \"C\")");
+        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+        let mut input = lexed.input();
+        assert!(Expr::parse(&mut input).is_err() || !input.is_eof());
+        let lexed = crate::lex("CAST('42' AS text) COLLATE \"C\"");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let _expr_parsed = Expr::parse(&mut input).unwrap();
@@ -4194,6 +4201,57 @@ mod tests {
             crate::ast::Statement::parse(&mut input).unwrap_or_else(|e| panic!("{src:?}: {e}"));
             assert!(input.is_eof(), "{src:?}");
         }
+    }
+
+    /// gram.y:14783 `a_expr COLLATE any_name`: the collation is an `any_name`,
+    /// so it may be schema-qualified. `CAST '(' a_expr AS Typename ')'` has no
+    /// collation at all; PostgreSQL 17.9 rejects `CAST(x AS text COLLATE "C")`
+    /// (collate.sql expects that error).
+    #[test]
+    fn parse_collate_with_a_qualified_name() {
+        for (src, parts) in [
+            ("x COLLATE \"C\"", 1),
+            ("x COLLATE pg_catalog.\"C\"", 2),
+            ("x COLLATE a.b.\"C\"", 3),
+            ("x COLLATE pg_catalog.default", 2),
+            ("x COLLATE value", 1),
+        ] {
+            let parsed = parse_expr_classified(src);
+            let Expr::Collate(operand, name) = parsed.ast() else {
+                panic!("expected Collate for {src:?}, got {:?}", parsed.ast());
+            };
+            assert!(matches!(&**operand, Expr::ColumnRef(_)), "{src:?}");
+            assert_eq!(1 + name.rest.len(), parts, "{src:?}");
+        }
+        // `COLLATE` binds tighter than `||` and looser than `::`.
+        let parsed = parse_expr_classified("x::text COLLATE pg_catalog.\"C\" || y");
+        let Expr::Concat(left, _) = parsed.ast() else {
+            panic!("expected Concat at the root, got {:?}", parsed.ast());
+        };
+        let Expr::Collate(operand, _) = &**left else {
+            panic!("expected Collate on the left, got {left:?}");
+        };
+        assert!(matches!(&**operand, Expr::Cast(..)));
+
+        for src in [
+            "CAST(x AS text COLLATE \"C\")",
+            "CAST(x AS text COLLATE pg_catalog.\"C\")",
+            "x COLLATE",
+            "x COLLATE pg_catalog.",
+            "x COLLATE 'C'",
+        ] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                lexed.errors().count() > 0 || parsed.is_err() || !input.is_eof(),
+                "{src:?} parsed completely"
+            );
+        }
+        assert!(matches!(
+            parse_expr_classified("CAST(x AS text) COLLATE \"C\"").ast(),
+            Expr::Collate(..)
+        ));
     }
 
 }

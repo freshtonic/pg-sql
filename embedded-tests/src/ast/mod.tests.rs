@@ -732,4 +732,63 @@ mod tests {
         }
     }
 
+    /// `COLLATE any_name` and the operator class name after it
+    /// (`opt_qualified_name`) are `any_name` wherever gram.y has them:
+    /// gram.y:8231 `opt_collate`, `opt_collate_clause` in a column definition
+    /// and in `TableFuncElement`, and `part_elem`. pg-sql had four different
+    /// single-identifier types there. PostgreSQL 17.9 accepts every statement
+    /// of the first list and rejects every one of the second.
+    #[test]
+    fn parse_collation_and_opclass_names_as_any_name() {
+        let accepted = [
+            "SELECT * FROM t ORDER BY x COLLATE pg_catalog.\"C\" DESC",
+            "CREATE TABLE t (a text COLLATE pg_catalog.\"C\" NOT NULL DEFAULT '')",
+            "ALTER TABLE t ADD COLUMN a text COLLATE a.b.\"C\"",
+            "ALTER TABLE t ALTER COLUMN a TYPE text COLLATE pg_catalog.default",
+            "CREATE INDEX ON t (a COLLATE pg_catalog.\"C\" s.text_pattern_ops DESC NULLS LAST)",
+            "CREATE INDEX ON t ((a || b) COLLATE pg_catalog.\"C\")",
+            "CREATE INDEX ON t (a s.ops (k = 1))",
+            "CREATE TABLE p (a text) PARTITION BY RANGE (a COLLATE pg_catalog.\"C\" s.text_ops)",
+            "CREATE TABLE t (a text, EXCLUDE USING gist (a COLLATE pg_catalog.\"C\" WITH =))",
+            "CREATE STATISTICS s ON (a COLLATE pg_catalog.\"C\"), b FROM t",
+            "CREATE DOMAIN d AS text COLLATE pg_catalog.\"C\"",
+            "CREATE TYPE c AS (a text COLLATE pg_catalog.\"C\")",
+            // gram.y `TableFuncElement: ColId Typename opt_collate_clause`.
+            "SELECT * FROM f() AS (a text COLLATE pg_catalog.\"C\")",
+            "SELECT * FROM f() AS x (a int, b text COLLATE \"C\")",
+            "SELECT * FROM ROWS FROM (f() AS (a text COLLATE s.\"C\")) x",
+            // gram.y:13694 `func_alias_clause`.
+            "SELECT * FROM f() AS x (a, b)",
+            "SELECT * FROM f() x (a int, b text)",
+            "SELECT * FROM f() WITH ORDINALITY AS x (a, n)",
+        ];
+        for src in accepted {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+        let rejected = [
+            "SELECT CAST(x AS text COLLATE \"C\")",
+            // A name list has no collation, and a list is names or definitions.
+            "SELECT * FROM f() AS (a COLLATE \"C\")",
+            "SELECT * FROM f() AS x (a int, b)",
+            "SELECT * FROM f() AS x (a, b int)",
+            // A list needs `AS` or a name, and with no name it holds definitions.
+            "SELECT * FROM f() AS (a, b)",
+            "SELECT * FROM f() (a int)",
+            "SELECT * FROM f() (a)",
+            "SELECT * FROM ROWS FROM (f()) (a int)",
+            "SELECT * FROM f() AS x ()",
+        ];
+        for src in rejected {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = Statement::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+    }
+
 }

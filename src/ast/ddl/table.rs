@@ -488,8 +488,9 @@ recursa::ast_node! {
     /// `COLLATE "name"` clause used after a column's type.
     #[derive(Debug)]
     pub struct CollateClause {
+        /// gram.y `opt_collate_clause: COLLATE any_name`.
         #[tok(COLLATE, this)]
-        pub name: literal::Ident,
+        pub name: crate::ast::shared::names::QualifiedName,
     }
 }
 
@@ -1271,9 +1272,11 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct PartitionKeyItem {
         pub target: crate::ast::ddl::index::IndexTarget,
+        /// gram.y `part_elem: ... opt_collate opt_qualified_name`: both are
+        /// `any_name`.
         #[tok(COLLATE, this)]
-        pub collate: Option<literal::AliasName>,
-        pub opclass: Option<literal::AliasName>,
+        pub collate: Option<crate::ast::shared::names::QualifiedName>,
+        pub opclass: Option<crate::ast::shared::names::QualifiedName>,
     }
 }
 

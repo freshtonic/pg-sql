@@ -558,6 +558,7 @@ embedded-tests/src/ast/dml/values.tests.rs	reject_table_stmt_duplicate_limit_off
 embedded-tests/src/ast/dml/values.tests.rs	set_operation_tails_belong_to_the_whole_chain	false
 embedded-tests/src/ast/dml/values.tests.rs	set_operations_nest_as_gram_y_declares	false
 embedded-tests/src/ast/mod.tests.rs	parse_bang_eq_minus_line_comment_split	false
+embedded-tests/src/ast/mod.tests.rs	parse_collation_and_opclass_names_as_any_name	false
 embedded-tests/src/ast/mod.tests.rs	parse_full_insert_with_type_cast	false
 embedded-tests/src/ast/mod.tests.rs	parse_is_normalized	false
 embedded-tests/src/ast/mod.tests.rs	parse_like_operator_aliases	false
@@ -658,6 +659,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_chained_cast	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_coalesce_as_its_own_variant	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_coalesce_family_words_as_names	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_collate_postfix	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_collate_with_a_qualified_name	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_collation_for	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_column_ref	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_date_literal_as_castfunc	false

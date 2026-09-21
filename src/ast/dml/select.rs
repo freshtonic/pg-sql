@@ -353,9 +353,10 @@ recursa::ast_node! {
     /// `name type` (e.g., `a int`).
     #[derive(Debug)]
     pub struct FuncTableColumnDef {
-        /// gram.y `TableFuncElement: ColId Typename ...`.
+        /// gram.y `TableFuncElement: ColId Typename opt_collate_clause`.
         pub name: crate::tokens::ColId,
         pub type_name: crate::ast::shared::expr::CastType,
+        pub collate: Option<crate::ast::ddl::table::CollateClause>,
     }
 }
 
@@ -376,15 +377,16 @@ recursa::ast_node! {
 recursa::ast_node! {
     /// Alias of a function table reference.
     ///
-    /// The alias head is parsed once. Parenthesized columns retain an optional
-    /// type per item, representing both ordinary alias columns and a function
-    /// column-definition list without two alternatives competing on the same
-    /// `AS name (` or `name (` prefix.
+    /// gram.y:13694 `func_alias_clause: alias_clause | AS '('
+    /// TableFuncElementList ')' | AS ColId '(' TableFuncElementList ')' | ColId
+    /// '(' TableFuncElementList ')'`, where `alias_clause` is `[AS] ColId ['('
+    /// name_list ')']`. So a list needs `AS` or a name before it, a named list
+    /// holds names or definitions ([`FuncTableAliasColumnList`]), and a list
+    /// with `AS` and no name holds definitions only.
     #[derive(Debug)]
     pub enum FuncTableAlias {
         WithAs(FuncTableAliasWithAs),
         Named(FuncTableAliasNamed),
-        Columns(FuncTableAliasColumns),
     }
 }
 
@@ -408,7 +410,20 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum FuncTableAliasAfterAs {
         Named(FuncTableAliasAsNamed),
-        Columns(FuncTableAliasColumns),
+        /// `AS ( definitions )`: with no alias name the list is a
+        /// `TableFuncElementList`, never a `name_list`.
+        Definitions(FuncTableDefinitionList),
+    }
+}
+
+recursa::ast_node! {
+    /// `'(' TableFuncElementList ')'`.
+    #[derive(Debug)]
+    pub struct FuncTableDefinitionList {
+        pub open: SelectLParen,
+        #[sep(COMMA)]
+        pub columns: one_or_many!(FuncTableColumnDef),
+        pub close: SelectRParen,
     }
 }
 
@@ -433,21 +448,28 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// The parenthesized list of a function table alias: gram.y's `'('
+    /// name_list ')'` or `'(' TableFuncElementList ')'`.
     #[derive(Debug)]
     pub struct FuncTableAliasColumns {
         pub open: SelectLParen,
-        #[sep(COMMA)]
-        pub columns: one_or_many!(FuncTableAliasColumn),
+        pub columns: FuncTableAliasColumnList,
         pub close: SelectRParen,
     }
 }
 
 recursa::ast_node! {
+    /// Column names, or column definitions, and never a mix: PostgreSQL
+    /// rejects `AS x (a int, b)`.
+    ///
+    /// Both lists lead with a `ColId`, and the parser tells them apart on the
+    /// token after it: a `,` or `)` ends a name, anything else starts a type.
     #[derive(Debug)]
-    pub struct FuncTableAliasColumn {
-        /// gram.y `name_list` / `TableFuncElement`, both `ColId`.
-        pub name: crate::tokens::ColId,
-        pub type_name: Option<CastType>,
+    pub enum FuncTableAliasColumnList {
+        /// gram.y `name_list`.
+        Names(#[sep(COMMA)] one_or_many!(crate::tokens::ColId)),
+        /// gram.y `TableFuncElementList`.
+        Definitions(#[sep(COMMA)] one_or_many!(FuncTableColumnDef)),
     }
 }
 
