@@ -1355,4 +1355,50 @@ mod tests {
         }
     }
 
+    /// gram.y `frame_bound` (gram.y:16391-16427) has `UNBOUNDED PRECEDING` and
+    /// `UNBOUNDED FOLLOWING` as alternatives of their own, and `%nonassoc
+    /// UNBOUNDED` under `PRECEDING` and `FOLLOWING` (gram.y:886) makes the
+    /// keyword win over a column named `unbounded`. The differential oracle
+    /// cannot see which bound pg-sql built.
+    #[test]
+    fn parse_unbounded_frame_bounds_as_their_own_variant() {
+        fn bounds(src: &'static str) -> Vec<&'static str> {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = crate::ast::shared::expr::WindowFrameClause::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+            let tree = format!("{:?}", parsed.ast());
+            let mut found = Vec::new();
+            for (needle, name) in [
+                ("Unbounded(Preceding", "unbounded preceding"),
+                ("Unbounded(Following", "unbounded following"),
+                ("CurrentRow", "current row"),
+                ("Offset(", "offset"),
+            ] {
+                found.extend(std::iter::repeat_n(name, tree.matches(needle).count()));
+            }
+            found
+        }
+
+        assert_eq!(
+            bounds("ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"),
+            ["unbounded preceding", "current row"]
+        );
+        assert_eq!(
+            bounds("RANGE BETWEEN unbounded preceding AND Unbounded Following"),
+            ["unbounded preceding", "unbounded following"]
+        );
+        assert_eq!(bounds("ROWS UNBOUNDED PRECEDING"), ["unbounded preceding"]);
+        assert_eq!(
+            bounds("GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING"),
+            ["unbounded following", "offset"]
+        );
+        // A quoted name, or the word inside an expression, is a column.
+        assert_eq!(bounds("ROWS \"unbounded\" PRECEDING"), ["offset"]);
+        assert_eq!(bounds("ROWS unbounded + 1 PRECEDING"), ["offset"]);
+        assert_eq!(bounds("ROWS (unbounded) FOLLOWING"), ["offset"]);
+    }
+
 }

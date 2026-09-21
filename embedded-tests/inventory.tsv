@@ -517,6 +517,7 @@ embedded-tests/src/ast/dml/select.tests.rs	parse_select_with_alias_keyword	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_simple_select	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_stacked_on_joins	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_targetless_select_set_operations	false
+embedded-tests/src/ast/dml/select.tests.rs	parse_unbounded_frame_bounds_as_their_own_variant	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_window_clause_standalone	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_xmltable_and_lateral	false
 embedded-tests/src/ast/dml/select.tests.rs	reject_distinct_without_a_target_list	false
