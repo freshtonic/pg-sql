@@ -122,13 +122,11 @@ recursa::ast_node! {
     /// list, so `Parens` is not admitted and the clause never leads with a
     /// parenthesized query.
     ///
-    /// Known limit: a restricted expression restricts its last operand as well
-    /// as its first, so `DO ALSO SELECT 1 UNION (SELECT 2)` is rejected, which
-    /// PostgreSQL accepts. A separate enum with a full right operand is not
-    /// derivable: `Pretty` repairs precedence with the grammar's own
-    /// parenthesized atom, and this clause has none (RCA9105). The spelling
-    /// `DO ALSO (SELECT 1 UNION (SELECT 2))` parses.
-    #[restricts(crate::ast::dml::values::SelectClause)]
+    /// The restriction is `leading`: only the operand that leads a rule is
+    /// restricted, so the rule is `RuleSelectClause UNION SelectClause` and `DO
+    /// ALSO SELECT 1 UNION (SELECT 2)` is an action, as it is in PostgreSQL.
+    /// Restricting the right operand too would reject it.
+    #[restricts(crate::ast::dml::values::SelectClause, leading)]
     pub enum RuleSelectClause {
         Union,
         Except,

@@ -258,6 +258,7 @@ embedded-tests/src/ast/ddl/rule.tests.rs	create_rule_select_event_roundtrips	fal
 embedded-tests/src/ast/ddl/rule.tests.rs	create_rule_with_where_clause_roundtrips	false
 embedded-tests/src/ast/ddl/rule.tests.rs	parse_alter_rule_rename	false
 embedded-tests/src/ast/ddl/rule.tests.rs	parse_create_rule_nothing	false
+embedded-tests/src/ast/ddl/rule.tests.rs	parse_rule_action_set_operations_with_parenthesized_right_operands	false
 embedded-tests/src/ast/ddl/schema.tests.rs	parse_alter_schema_owner	false
 embedded-tests/src/ast/ddl/schema.tests.rs	parse_alter_schema_rename	false
 embedded-tests/src/ast/ddl/schema.tests.rs	parse_create_schema_authorization_only	false

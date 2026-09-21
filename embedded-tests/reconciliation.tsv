@@ -12,6 +12,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_bare_func_with_operator_argument	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_on_bare_coalesce_family	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_opclass_options	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/rule.tests.rs	parse_rule_action_set_operations_with_parenthesized_right_operands	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_as_execute	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_as_execute_params_with_no_data	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_as_query_still_parses	issue-9-generated-statement
