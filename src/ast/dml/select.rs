@@ -873,7 +873,9 @@ recursa::ast_node! {
     pub enum NamedTableRefTail {
         Function(boxed!(NamedFunctionTableTail)),
         Inherited(NamedInheritedTail),
-        Alias(PlainTableAlias),
+        Alias(SampledTableAlias),
+        /// `TABLESAMPLE ...` with no alias before it.
+        Sample(TableSampleClause),
     }
 }
 
@@ -893,6 +895,7 @@ recursa::ast_node! {
     pub struct NamedInheritedTail {
         pub star: SelectStar,
         pub alias: Option<PlainTableAlias>,
+        pub tablesample: Option<TableSampleClause>,
     }
 }
 
@@ -902,8 +905,29 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct OnlyTableRef {
         pub only: SelectOnly,
-        pub name: QualifiedName,
+        pub name: OnlyRelationName,
         pub alias: Option<PlainTableAlias>,
+        pub tablesample: Option<TableSampleClause>,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `extended_relation_expr: ONLY qualified_name | ONLY '('
+    /// qualified_name ')'`.
+    #[derive(Debug)]
+    pub enum OnlyRelationName {
+        Parens(#[tok(LPAREN, this, RPAREN)] QualifiedName),
+        Plain(QualifiedName),
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `opt_alias_clause tablesample_clause` after a relation name: the
+    /// alias, then the sample that only a relation can have.
+    #[derive(Debug)]
+    pub struct SampledTableAlias {
+        pub alias: PlainTableAlias,
+        pub tablesample: Option<TableSampleClause>,
     }
 }
 
@@ -1041,8 +1065,11 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum ColNameTableTail {
         Inherited(NamedInheritedTail),
-        Alias(PlainTableAlias),
+        Alias(SampledTableAlias),
+        /// `TABLESAMPLE ...` with no alias before it.
+        Sample(TableSampleClause),
     }
+
 }
 
 recursa::ast_node! {
@@ -1182,7 +1209,6 @@ recursa::ast_node! {
     pub struct UnqualifiedJoin {
         pub kind: UnqualifiedJoinKind,
         pub table: SimpleTableRef,
-        pub tablesample: Option<TableSampleClause>,
     }
 }
 
@@ -1223,11 +1249,19 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// TABLESAMPLE clause: `TABLESAMPLE method (args) [REPEATABLE (seed)]`.
-    /// Attached to a single table reference (not to joined results).
+    ///
+    /// gram.y attaches it to one `table_ref` form only, gram.y:13451
+    /// `relation_expr opt_alias_clause tablesample_clause`: a table name, with
+    /// `*` or `ONLY` or an alias, and never a subquery, a function, a
+    /// parenthesized join, `LATERAL` or `ROWS FROM`. So the relation forms hold
+    /// it ([`NamedTableRefTail`], [`ColNameTableTail`], [`NamedInheritedTail`],
+    /// [`OnlyTableRef`]) and [`TableRef`] does not. It follows the alias, and a
+    /// join operand takes it because the operand is a `table_ref`.
     #[derive(Debug)]
     pub struct TableSampleClause {
+        /// gram.y `func_name`: the method may be schema-qualified.
         #[tok(TABLESAMPLE, this)]
-        pub method: literal::AliasName,
+        pub method: crate::ast::shared::expr::FuncCallName,
         /// gram.y `tablesample_clause: TABLESAMPLE func_name '(' expr_list ')'`.
         #[tok(LPAREN, this, RPAREN)]
         pub args: TableSampleArgs,
@@ -1258,7 +1292,6 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct TableRef {
         pub base: SimpleTableRef,
-        pub tablesample: Option<TableSampleClause>,
         pub joins: zero_or_many!(JoinSuffix),
     }
 }

@@ -29,6 +29,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_limit_offset_orders_roundtrip	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_no_targets_at_all	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_plain_distinct_prefix_identifier	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_tablesample_on_relations_only	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_targetless_select_set_operations	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_unbounded_frame_bounds_as_their_own_variant	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	reject_distinct_without_a_target_list	issue-9-generated-statement

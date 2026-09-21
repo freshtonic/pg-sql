@@ -1401,4 +1401,61 @@ mod tests {
         assert_eq!(bounds("ROWS (unbounded) FOLLOWING"), ["offset"]);
     }
 
+    /// gram.y:13451 `table_ref: relation_expr opt_alias_clause
+    /// tablesample_clause` is the only `table_ref` with a sample: a table
+    /// name, with `*`, `ONLY`, `ONLY (name)` or an alias, and never a subquery,
+    /// a function, a parenthesized join, `LATERAL` or `ROWS FROM`. PostgreSQL
+    /// 17.9 accepts every statement of the first list and rejects every one of
+    /// the second with a syntax error at `TABLESAMPLE`.
+    #[test]
+    fn parse_tablesample_on_relations_only() {
+        for (src, samples) in [
+            ("SELECT * FROM t TABLESAMPLE BERNOULLI (5)", 1),
+            ("SELECT * FROM t AS x TABLESAMPLE BERNOULLI (5) REPEATABLE (1)", 1),
+            ("SELECT * FROM t x (a, b) TABLESAMPLE SYSTEM (5)", 1),
+            ("SELECT * FROM s.t TABLESAMPLE BERNOULLI (5)", 1),
+            ("SELECT * FROM t * TABLESAMPLE BERNOULLI (5)", 1),
+            ("SELECT * FROM t * x TABLESAMPLE SYSTEM (1)", 1),
+            ("SELECT * FROM ONLY t TABLESAMPLE BERNOULLI (5)", 1),
+            ("SELECT * FROM ONLY (t) TABLESAMPLE BERNOULLI (5)", 1),
+            ("SELECT * FROM ONLY (s.t) x", 0),
+            ("SELECT * FROM ONLY t AS x TABLESAMPLE BERNOULLI (5)", 1),
+            ("SELECT * FROM value TABLESAMPLE BERNOULLI (5)", 1),
+            // gram.y `tablesample_clause: TABLESAMPLE func_name ...`.
+            ("SELECT * FROM t TABLESAMPLE s.m (5, 6)", 1),
+            // A join operand is a `table_ref`, so each side can have one.
+            ("SELECT * FROM a CROSS JOIN b TABLESAMPLE BERNOULLI (5)", 1),
+            ("SELECT * FROM a NATURAL JOIN b TABLESAMPLE BERNOULLI (5)", 1),
+            ("SELECT * FROM a JOIN b TABLESAMPLE BERNOULLI (5) ON true", 1),
+            (
+                "SELECT * FROM a TABLESAMPLE SYSTEM (1) JOIN b TABLESAMPLE BERNOULLI (5) USING (x)",
+                2,
+            ),
+        ] {
+            let parsed = parse_select_classified(src);
+            let tree = format!("{:?}", parsed.ast());
+            assert_eq!(tree.matches("TableSampleClause {").count(), samples, "{src:?}: {tree}");
+        }
+
+        for src in [
+            "SELECT * FROM (SELECT * FROM t) AS q TABLESAMPLE BERNOULLI (5)",
+            "SELECT * FROM f() TABLESAMPLE BERNOULLI (5)",
+            "SELECT * FROM f() AS x TABLESAMPLE BERNOULLI (5)",
+            "SELECT * FROM (a JOIN b ON true) TABLESAMPLE BERNOULLI (5)",
+            "SELECT * FROM (a JOIN b ON true) AS j TABLESAMPLE BERNOULLI (5)",
+            "SELECT * FROM LATERAL (SELECT 1) x TABLESAMPLE BERNOULLI (5)",
+            "SELECT * FROM ROWS FROM (f()) TABLESAMPLE BERNOULLI (5)",
+            "SELECT * FROM xmltable('/a' PASSING d COLUMNS a int) TABLESAMPLE SYSTEM (1)",
+            "SELECT * FROM t TABLESAMPLE BERNOULLI (5) TABLESAMPLE SYSTEM (1)",
+            "SELECT * FROM t TABLESAMPLE BERNOULLI (5) AS x",
+            "SELECT * FROM ONLY ((t))",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = SelectStmt::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+    }
+
 }
