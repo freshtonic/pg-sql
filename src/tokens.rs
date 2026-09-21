@@ -919,8 +919,9 @@ recursa::tokens! {
     // below. Only `< > = <= >= <>`, `+ - * / % ^`, `::` and `.` are named by
     // the scanner in their own right and take their own levels.
     precedence {
-        // gram.y:830 `%left UNION EXCEPT`: the set operators, which pg-sql
-        // parses as `CompoundBody` rather than as `Expr` extenders.
+        // gram.y:830 `%left UNION EXCEPT`: the set operators of
+        // `SelectClause`, which is left-recursive as gram.y's `select_clause`
+        // is.
         left(bp = 10) { UNION, EXCEPT },
         // gram.y:831 `%left INTERSECT`.
         left(bp = 20) { INTERSECT },

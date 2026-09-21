@@ -112,11 +112,30 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Non-parenthesized query forms accepted as a single rule action.
-    #[derive(Debug)]
+    /// The `select_clause` of a single rule action: a restricted
+    /// [`SelectClause`](crate::ast::dml::values::SelectClause), which builds a
+    /// `SelectClause`, so a consumer sees one tree type and the same
+    /// left-associative nesting with `INTERSECT` above `UNION` and `EXCEPT`.
+    ///
+    /// gram.y's `RuleActionList` is `NOTHING | RuleActionStmt | '('
+    /// RuleActionMulti ')'`. A `(` after `DO [ALSO | INSTEAD]` opens the action
+    /// list, so `Parens` is not admitted and the clause never leads with a
+    /// parenthesized query.
+    ///
+    /// Known limit: a restricted expression restricts its last operand as well
+    /// as its first, so `DO ALSO SELECT 1 UNION (SELECT 2)` is rejected, which
+    /// PostgreSQL accepts. A separate enum with a full right operand is not
+    /// derivable: `Pretty` repairs precedence with the grammar's own
+    /// parenthesized atom, and this clause has none (RCA9105). The spelling
+    /// `DO ALSO (SELECT 1 UNION (SELECT 2))` parses.
+    #[restricts(crate::ast::dml::values::SelectClause)]
     pub enum RuleSelectClause {
-        Table(crate::ast::dml::values::TableStmt),
-        Body(crate::ast::dml::values::CompoundBody),
+        Union,
+        Except,
+        Intersect,
+        Select,
+        Values,
+        Table,
     }
 }
 

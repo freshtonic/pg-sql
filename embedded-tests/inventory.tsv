@@ -548,6 +548,8 @@ embedded-tests/src/ast/dml/values.tests.rs	parse_values_union_all_select	false
 embedded-tests/src/ast/dml/values.tests.rs	parse_values_union_all_table	false
 embedded-tests/src/ast/dml/values.tests.rs	reject_compound_paren_duplicate_limit_offset_clauses	false
 embedded-tests/src/ast/dml/values.tests.rs	reject_table_stmt_duplicate_limit_offset_clauses	false
+embedded-tests/src/ast/dml/values.tests.rs	set_operation_tails_belong_to_the_whole_chain	false
+embedded-tests/src/ast/dml/values.tests.rs	set_operations_nest_as_gram_y_declares	false
 embedded-tests/src/ast/mod.tests.rs	parse_bang_eq_minus_line_comment_split	false
 embedded-tests/src/ast/mod.tests.rs	parse_full_insert_with_type_cast	false
 embedded-tests/src/ast/mod.tests.rs	parse_is_normalized	false

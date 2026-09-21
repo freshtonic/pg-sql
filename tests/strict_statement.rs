@@ -5,10 +5,7 @@
 
 use pg_sql::{
     LexErrorCode,
-    ast::{
-        Statement, dml::select::SelectBody, dml::values::SelectClause, dml::values::SimpleSelect,
-        shared::with_clause::WithBody,
-    },
+    ast::{Statement, dml::values::SelectClause, shared::with_clause::WithBody},
     lex,
 };
 use recursa::{ParseErrorKind, Span};
@@ -27,8 +24,7 @@ fn parses_one_complete_semantically_typed_statement() {
         Statement::Query(query)
             if matches!(
                 &query.clause,
-                SelectClause::Simple(SimpleSelect::Body(body))
-                    if matches!(&body.body, SelectBody::Select(_))
+                SelectClause::Select(_)
             )
     ));
 }
@@ -191,8 +187,7 @@ fn parses_explain_without_optional_settings_as_a_guarded_statement() {
         pg_sql::ast::utility::explain::ExplainableStmt::Query(query)
             if matches!(
                 &query.clause,
-                SelectClause::Simple(SimpleSelect::Body(body))
-                    if matches!(&body.body, SelectBody::Select(_))
+                SelectClause::Select(_)
             )
     ));
 }
