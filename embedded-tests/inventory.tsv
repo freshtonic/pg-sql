@@ -637,6 +637,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_bang_eq_eq_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_bang_eq_minus_prefix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_between_as_value	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_between_expr	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_between_symmetric_and_asymmetric	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_bool_false	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_bool_true	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_case_nested	false

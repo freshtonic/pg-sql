@@ -369,6 +369,11 @@ recursa::tokens! {
         // gram.y `func_expr_common_subexpr` heads (gram.y:15730, 15874):
         // `col_name_keyword` (gram.y:17903, 17922) and `bare_label_keyword`
         // (gram.y:18316, 18507).
+        // gram.y `opt_asymmetric` and the `BETWEEN SYMMETRIC` rules
+        // (gram.y:15092, 15100, 16827): both are `reserved_keyword`
+        // (gram.y:17985, 18039) and `bare_label_keyword` (gram.y:18088, 18446).
+        ASYMMETRIC      => r"ASYMMETRIC" in RESERVED + bare_label,
+        SYMMETRIC       => r"SYMMETRIC" in RESERVED + bare_label,
         NORMALIZE       => r"NORMALIZE" in COL_NAME + bare_label,
         XMLCONCAT       => r"XMLCONCAT" in COL_NAME + bare_label,
         PRESERVE        => r"PRESERVE" in UNRESERVED + bare_label,

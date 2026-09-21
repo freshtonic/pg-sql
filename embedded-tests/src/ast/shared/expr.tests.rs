@@ -3984,13 +3984,13 @@ mod tests {
         let Expr::BetweenExpr(_, low, _) = parsed.ast() else {
             panic!("expected BetweenExpr, got {:?}", parsed.ast());
         };
-        assert!(matches!(&**low, Expr::DecoratedInfix(..)));
+        assert!(matches!(&*low.low, Expr::DecoratedInfix(..)));
 
         let parsed = parse_expr_classified("x BETWEEN OPERATOR(pg_catalog.-) 2 AND 5");
         let Expr::BetweenExpr(_, low, _) = parsed.ast() else {
             panic!("expected BetweenExpr, got {:?}", parsed.ast());
         };
-        assert!(matches!(&**low, Expr::DecoratedPrefix(..)));
+        assert!(matches!(&*low.low, Expr::DecoratedPrefix(..)));
 
         assert!(matches!(
             parse_expr_classified("a OPERATOR(pg_catalog.=) ANY (ARRAY[1])").ast(),
@@ -4125,6 +4125,74 @@ mod tests {
                 panic!("expected QualRef for {src:?}, got {:?}", parsed.ast());
             };
             assert!(qualified.call.is_some(), "{src:?}");
+        }
+    }
+
+    /// gram.y has `BETWEEN opt_asymmetric`, `NOT_LA BETWEEN opt_asymmetric`,
+    /// `BETWEEN SYMMETRIC` and `NOT_LA BETWEEN SYMMETRIC` (gram.y:15076-15100).
+    /// `SYMMETRIC` and `ASYMMETRIC` are reserved words; pg-sql used to read
+    /// `SYMMETRIC '1997-01-01'` as a typed literal of a type named `symmetric`.
+    #[test]
+    fn parse_between_symmetric_and_asymmetric() {
+        use crate::ast::shared::expr::BetweenModifier;
+
+        for (src, negated, modifier) in [
+            ("f1 BETWEEN '1997-01-01' AND '1998-01-01'", false, None),
+            ("f1 BETWEEN SYMMETRIC '1997-01-01' AND '1998-01-01'", false, Some(true)),
+            ("f1 BETWEEN ASYMMETRIC '1997-01-01' AND '1998-01-01'", false, Some(false)),
+            ("f1 NOT BETWEEN '1997-01-01' AND '1998-01-01'", true, None),
+            ("f1 NOT BETWEEN SYMMETRIC '1997-01-01' AND '1998-01-01'", true, Some(true)),
+            ("f1 not between asymmetric 1 and 2", true, Some(false)),
+        ] {
+            let parsed = parse_expr_classified(src);
+            let (low, is_negated) = match parsed.ast() {
+                Expr::BetweenExpr(_, low, _) => (low, false),
+                Expr::NotBetweenExpr(_, low, _) => (low, true),
+                other => panic!("expected a BETWEEN for {src:?}, got {other:?}"),
+            };
+            assert_eq!(is_negated, negated, "{src:?}");
+            assert_eq!(
+                low.modifier
+                    .as_ref()
+                    .map(|modifier| matches!(modifier, BetweenModifier::Symmetric)),
+                modifier,
+                "{src:?}"
+            );
+            // The low bound is the literal, not a typed literal that ate the word.
+            assert!(
+                matches!(&*low.low, Expr::StringLit(_) | Expr::IntegerLit(_)),
+                "{src:?}: {:?}",
+                low.low
+            );
+        }
+
+        // The low bound stays a `b_expr`, and the level stays `BETWEEN`'s.
+        let parsed = parse_expr_classified("a BETWEEN SYMMETRIC b + 1 AND c AND d");
+        let Expr::And(left, _) = parsed.ast() else {
+            panic!("expected And at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**left, Expr::BetweenExpr(..)));
+
+        // Reserved: neither word is a column, a type or a function name.
+        for src in [
+            "symmetric",
+            "asymmetric",
+            "symmetric '1'",
+            "a BETWEEN SYMMETRIC ASYMMETRIC 1 AND 2",
+            "a BETWEEN SYMMETRIC SYMMETRIC 1 AND 2",
+            "a BETWEEN SYMMETRIC AND 2",
+        ] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+        // Both are bare labels.
+        for src in ["SELECT 1 symmetric", "SELECT 1 AS asymmetric"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            crate::ast::Statement::parse(&mut input).unwrap_or_else(|e| panic!("{src:?}: {e}"));
+            assert!(input.is_eof(), "{src:?}");
         }
     }
 

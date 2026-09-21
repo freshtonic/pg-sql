@@ -34,7 +34,7 @@ fn shape(e: &Expr<'_>) -> String {
         Expr::RegexMatch(a, b) => format!("Tilde({},{})", shape(a), shape(b)),
         Expr::Concat(a, b) => format!("Concat({},{})", shape(a), shape(b)),
         Expr::BetweenExpr(a, b, c) => {
-            format!("Between({},{},{})", shape(a), shape(b), shape(c))
+            format!("Between({},{},{})", shape(a), shape(&b.low), shape(c))
         }
         Expr::AtTimeZone(a, b) => format!("AtTz({},{})", shape(a), shape(b)),
         Expr::BoolTest(a, _) => format!("BoolTest({})", shape(a)),

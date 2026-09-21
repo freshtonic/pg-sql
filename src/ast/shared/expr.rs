@@ -3295,6 +3295,37 @@ recursa::ast_node! {
     }
 }
 
+recursa::ast_node! {
+    /// `SYMMETRIC | ASYMMETRIC` after `BETWEEN`.
+    ///
+    /// gram.y has four rules: `BETWEEN opt_asymmetric` and `NOT_LA BETWEEN
+    /// opt_asymmetric` (gram.y:15076, 15084), where `ASYMMETRIC` is a noise
+    /// word (gram.y:16827), and `BETWEEN SYMMETRIC` and `NOT_LA BETWEEN
+    /// SYMMETRIC` (gram.y:15092, 15100). `SYMMETRIC` changes the meaning:
+    /// PostgreSQL tests the two bounds in either order.
+    #[derive(Debug)]
+    pub enum BetweenModifier {
+        #[tok(SYMMETRIC)]
+        Symmetric,
+        #[tok(ASYMMETRIC)]
+        Asymmetric,
+    }
+}
+
+recursa::ast_node! {
+    /// The low bound of a `BETWEEN`, with the modifier that precedes it:
+    /// `[SYMMETRIC | ASYMMETRIC] b_expr`.
+    ///
+    /// Both words are reserved, so neither starts a `b_expr`: before this
+    /// node existed `SYMMETRIC '1997-01-01'` read as a typed literal of a
+    /// type named `symmetric`.
+    #[derive(Debug)]
+    pub struct BetweenLow {
+        pub modifier: Option<BetweenModifier>,
+        pub low: boxed!(BExpr),
+    }
+}
+
 // --- The expression enum ---
 //
 // `Expr` is an ordinary left-recursive enum, as gram.y's `a_expr` is an
@@ -3604,9 +3635,10 @@ recursa::ast_node! {
         RecordEq(boxed!(Self), #[tok(STAREQ, this)] boxed!(Self)),
         /// IN list: `expr IN (val, ...)`
         InExpr(boxed!(Self), #[tok(IN, this)] InList),
-        /// `expr NOT BETWEEN low AND high`. The low operand is the restricted
-        /// expression `BExpr`, which is how gram.y stops it before the `AND`
-        /// that closes the clause.
+        /// `expr NOT BETWEEN [SYMMETRIC | ASYMMETRIC] low AND high`. The low
+        /// operand is the restricted expression `BExpr`, which is how gram.y
+        /// stops it before the `AND` that closes the clause; [`BetweenLow`]
+        /// holds it with the modifier, so the variant stays three words wide.
         ///
         /// gram.y:15084 `a_expr NOT_LA BETWEEN opt_asymmetric b_expr AND a_expr
         /// %prec NOT_LA`: the rule ends in `AND`, whose own level would make the
@@ -3614,18 +3646,18 @@ recursa::ast_node! {
         #[parse(prec = NOT_LA)]
         NotBetweenExpr(
             boxed!(Self),
-            #[tok(NOT, BETWEEN, this)] boxed!(BExpr),
+            #[tok(NOT, BETWEEN, this)] BetweenLow,
             #[tok(AND, this)] boxed!(Self),
         ),
-        /// `expr BETWEEN low AND high`. The low operand is the restricted
-        /// expression `BExpr`, as in `NotBetweenExpr`.
+        /// `expr BETWEEN [SYMMETRIC | ASYMMETRIC] low AND high`. The low
+        /// operand is the restricted expression `BExpr`, as in `NotBetweenExpr`.
         ///
         /// gram.y:15076 `a_expr BETWEEN opt_asymmetric b_expr AND a_expr
         /// %prec BETWEEN`: the rule ends in `AND`, as above.
         #[parse(prec = BETWEEN)]
         BetweenExpr(
             boxed!(Self),
-            #[tok(BETWEEN, this)] boxed!(BExpr),
+            #[tok(BETWEEN, this)] BetweenLow,
             #[tok(AND, this)] boxed!(Self),
         ),
 
