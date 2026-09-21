@@ -1612,34 +1612,46 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `ROLLUP ( item, ... )`.
+    /// gram.y:13336 `rollup_clause: ROLLUP '(' expr_list ')'`, PostgreSQL's
+    /// `GroupingSet` of kind `GROUPING_SET_ROLLUP`.
+    ///
+    /// `ROLLUP` is an unreserved keyword, so `rollup(a, b)` is also the
+    /// spelling of a function call. gram.y settles it with `%nonassoc CUBE
+    /// ROLLUP` below `'('` (gram.y:871-873, 13330-13334): as a
+    /// `group_by_item` the word followed by `(` is always this clause. A
+    /// parenthesized `(rollup(a, b))` and a qualified `s.rollup(a, b)` stay
+    /// function calls, because neither starts a `group_by_item` with the word.
     #[derive(Debug)]
     #[tok(ROLLUP, LPAREN, this, RPAREN)]
     pub struct RollupItem {
         #[sep(COMMA)]
-        pub items: zero_or_many!(boxed!(GroupByItem)),
+        pub items: one_or_many!(Expr),
     }
 }
 
 recursa::ast_node! {
-    /// `CUBE ( item, ... )`.
+    /// gram.y:13343 `cube_clause: CUBE '(' expr_list ')'`, PostgreSQL's
+    /// `GroupingSet` of kind `GROUPING_SET_CUBE`. [`RollupItem`] describes how
+    /// it wins over the function call of the same spelling.
     #[derive(Debug)]
     #[tok(CUBE, LPAREN, this, RPAREN)]
     pub struct CubeItem {
         #[sep(COMMA)]
-        pub items: zero_or_many!(boxed!(GroupByItem)),
+        pub items: one_or_many!(Expr),
     }
 }
 
 recursa::ast_node! {
     /// A single element in a GROUP BY clause.
     ///
-    /// Variant ordering: two-keyword primitives first (`GROUPING SETS`), then
-    /// single-keyword primitives (`ROLLUP`, `CUBE`), then the catch-all `Expr`
-    /// which also handles `(a, b)` row-style groupings.
+    /// gram.y:13315 `group_by_item: a_expr | empty_grouping_set | cube_clause |
+    /// rollup_clause | grouping_sets_clause`. `Expr` also handles `(a, b)`
+    /// row-style groupings.
     #[derive(Debug)]
     pub enum GroupByItem {
         GroupingSets(GroupingSetsItem),
+        Rollup(RollupItem),
+        Cube(CubeItem),
         Empty(EmptyGroupingSet),
         Expr(boxed!(Expr)),
     }
@@ -1783,21 +1795,29 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// A required `DISTINCT ON (...)` qualifier followed by the SELECT targets.
+    ///
+    /// gram.y `simple_select: SELECT distinct_clause target_list into_clause
+    /// ...`: the list is `target_list`, not the nullable `opt_target_list` of
+    /// the `opt_all_clause` form, so `SELECT DISTINCT ON (x) FROM t` is a
+    /// syntax error.
     #[derive(Debug)]
     pub struct SelectDistinctOnTargets {
         pub qualifier: SelectDistinctOn,
         #[pretty(break_before = soft)]
-        pub targets: SelectTargets,
+        pub targets: SelectTargetList,
     }
 }
 
 recursa::ast_node! {
     /// A required bare `DISTINCT` prefix followed by the SELECT targets.
+    ///
+    /// The list is gram.y's `target_list`, as [`SelectDistinctOnTargets`]
+    /// describes: `SELECT DISTINCT FROM t` is a syntax error (errors.sql).
     #[derive(Debug)]
     #[tok(DISTINCT, this)]
     pub struct SelectDistinctTargets {
         #[pretty(break_before = soft)]
-        pub targets: SelectTargets,
+        pub targets: SelectTargetList,
     }
 }
 
@@ -1862,50 +1882,60 @@ impl<'input> SelectStmt<'input> {
         }
     }
 
-    /// Return the targets from either SELECT-head form, or `None` for the
-    /// targetless `SELECT` that has no `INTO` and no `FROM` either.
-    pub fn targets(&self) -> Option<&SelectTargets<'input>> {
+    /// Return the nonempty target list of any SELECT-head form, or `None`
+    /// for a zero-target `SELECT`, which only the head without `DISTINCT` has.
+    pub fn target_list(&self) -> Option<&SelectTargetList<'input>> {
         match self.head.as_ref()? {
             SelectHead::DistinctOn(head) => Some(&head.targets),
             SelectHead::Distinct(head) => Some(&head.targets),
+            SelectHead::Plain(SelectTargets::Items(targets)) => Some(targets),
+            SelectHead::Plain(SelectTargets::Into(_) | SelectTargets::Empty(_)) => None,
+        }
+    }
+
+    /// Return the targets of the head without `DISTINCT`, the only one that
+    /// has the zero-target forms.
+    fn plain_targets(&self) -> Option<&SelectTargets<'input>> {
+        match self.head.as_ref()? {
             SelectHead::Plain(targets) => Some(targets),
+            SelectHead::DistinctOn(_) | SelectHead::Distinct(_) => None,
         }
     }
 
     /// Number of items in the SELECT list (zero if the list is empty,
     /// e.g. the regression-test form `SELECT FROM tbl`).
     pub fn item_count(&self) -> usize {
-        match self.targets() {
-            Some(SelectTargets::Items(targets)) => targets.items.len(),
-            Some(SelectTargets::Into(_)) | Some(SelectTargets::Empty(_)) | None => 0,
-        }
+        self.target_list().map_or(0, |targets| targets.items.len())
     }
 
     /// Iterate over the SELECT items.
     pub fn items(&self) -> impl Iterator<Item = &SelectItem<'input>> {
-        match self.targets() {
-            Some(SelectTargets::Items(targets)) => Some(targets.items.as_slice()),
-            Some(SelectTargets::Into(_)) | Some(SelectTargets::Empty(_)) | None => None,
-        }
-        .into_iter()
-        .flatten()
+        self.target_list()
+            .map(|targets| targets.items.as_slice())
+            .into_iter()
+            .flatten()
     }
 
     /// Return the FROM clause from any target-list form.
     pub fn from_clause(&self) -> Option<&FromClause<'input>> {
-        match self.targets()? {
+        if let Some(targets) = self.target_list() {
+            return targets.from_clause.as_deref();
+        }
+        match self.plain_targets()? {
             SelectTargets::Into(targets) => targets.from_clause.as_deref(),
             SelectTargets::Empty(from_clause) => Some(from_clause),
-            SelectTargets::Items(targets) => targets.from_clause.as_deref(),
+            SelectTargets::Items(_) => None,
         }
     }
 
     /// Return the `INTO` clause from any target-list form.
     pub fn into_clause(&self) -> Option<&SelectIntoClause<'input>> {
-        match self.targets()? {
+        if let Some(targets) = self.target_list() {
+            return targets.into.as_deref();
+        }
+        match self.plain_targets()? {
             SelectTargets::Into(targets) => Some(&targets.into),
-            SelectTargets::Empty(_) => None,
-            SelectTargets::Items(targets) => targets.into.as_deref(),
+            SelectTargets::Empty(_) | SelectTargets::Items(_) => None,
         }
     }
 }

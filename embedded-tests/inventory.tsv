@@ -457,6 +457,7 @@ embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_grouping_sets_nested	f
 embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_grouping_sets_simple	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_mixed_primitives	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_rollup	false
+embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_rollup_and_cube_as_grouping_clauses	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_join_chained_after_using	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_json_table	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_limit_before_offset	false
@@ -517,6 +518,7 @@ embedded-tests/src/ast/dml/select.tests.rs	parse_stacked_on_joins	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_targetless_select_set_operations	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_window_clause_standalone	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_xmltable_and_lateral	false
+embedded-tests/src/ast/dml/select.tests.rs	reject_distinct_without_a_target_list	false
 embedded-tests/src/ast/dml/select.tests.rs	reject_select_duplicate_limit_offset_clauses	false
 embedded-tests/src/ast/dml/select.tests.rs	reject_select_from_without_from_list	false
 embedded-tests/src/ast/dml/update.tests.rs	parse_update_multiple_assignments_and_returning_items	false
