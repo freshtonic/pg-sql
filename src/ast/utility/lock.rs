@@ -1,26 +1,6 @@
 //! LOCK statement.
 
-use crate::ast::shared::names::QualifiedName;
-
 // --- LOCK ---
-
-recursa::ast_node! {
-    /// A single relation reference in a `LOCK` statement — Postgres'
-    /// `relation_expr`.
-    ///
-    /// `ONLY name` excludes inheritance children; a trailing `*` makes the
-    /// (default) inheritance behaviour explicit. The `ONLY (name)` parenthesised
-    /// form is not exercised by any corpus statement, so it is not modelled.
-    #[derive(Debug)]
-    pub struct LockRelation {
-        #[presence(ONLY)]
-        pub only: bool,
-        pub name: QualifiedName,
-        #[presence(STAR)]
-        #[pretty(break_before = soft)]
-        pub star: bool,
-    }
-}
 
 recursa::ast_node! {
     /// A `LOCK` lock-mode name — Postgres' `lock_type`.
@@ -68,7 +48,7 @@ recursa::ast_node! {
         #[presence(TABLE)]
         pub table: bool,
         #[sep(COMMA)]
-        pub relations: one_or_many!(LockRelation),
+        pub relations: one_or_many!(crate::ast::shared::names::RelationExpr),
         pub mode: Option<LockMode>,
         #[presence(NOWAIT)]
         pub nowait: bool,

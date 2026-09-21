@@ -536,3 +536,75 @@ recursa::ast_node! {
         pub args: OperatorArgtypes,
     }
 }
+
+recursa::ast_node! {
+    /// gram.y:13757 `relation_expr: qualified_name | extended_relation_expr`
+    /// with gram.y:13771 `extended_relation_expr: qualified_name '*' | ONLY
+    /// qualified_name | ONLY '(' qualified_name ')'`: the table a statement
+    /// names, with its inheritance marker.
+    ///
+    /// `ONLY` excludes inheritance children, and a trailing `*` states the
+    /// default, that they are included. The two never combine: `ONLY t *` is a
+    /// syntax error, which a pair of flags cannot say. Every statement that
+    /// gram.y gives a `relation_expr` holds this one node: `LOCK`, `TRUNCATE`,
+    /// `ALTER TABLE`, `ALTER FOREIGN TABLE`, `CREATE INDEX`, `UPDATE`,
+    /// `DELETE`, `MERGE`, `TABLE` and the publication table list. A `FROM`
+    /// item has the same forms, written with its alias and sample in
+    /// `crate::ast::dml::select`.
+    ///
+    /// Variant ordering: `Only` leads with the keyword, `Named` with a name.
+    #[derive(Debug)]
+    pub enum RelationExpr {
+        /// `ONLY name` or `ONLY ( name )`.
+        Only(OnlyRelation),
+        /// `name` or `name *`.
+        Named(InheritedRelation),
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `extended_relation_expr`'s two `ONLY` forms: `ONLY
+    /// qualified_name | ONLY '(' qualified_name ')'`. Neither takes a `*`.
+    ///
+    /// Variant ordering: the forms part on the `(` after `ONLY`.
+    #[derive(Debug)]
+    pub enum OnlyRelation {
+        Parens(#[tok(ONLY, LPAREN, this, RPAREN)] QualifiedName),
+        Plain(#[tok(ONLY, this)] QualifiedName),
+    }
+}
+
+recursa::ast_node! {
+    /// `name [*]`: a relation with its inheritance children, the default.
+    #[derive(Debug)]
+    pub struct InheritedRelation {
+        pub name: QualifiedName,
+        #[presence(STAR)]
+        #[pretty(break_before = soft)]
+        pub star: bool,
+    }
+}
+
+impl<'input> RelationExpr<'input> {
+    /// The relation's name, whichever form wraps it.
+    pub fn name(&self) -> &QualifiedName<'input> {
+        match self {
+            Self::Only(only) => only.name(),
+            Self::Named(relation) => &relation.name,
+        }
+    }
+
+    /// Whether `ONLY` excludes the inheritance children.
+    pub fn is_only(&self) -> bool {
+        matches!(self, Self::Only(_))
+    }
+}
+
+impl<'input> OnlyRelation<'input> {
+    /// The relation's name, with or without its parentheses.
+    pub fn name(&self) -> &QualifiedName<'input> {
+        match self {
+            Self::Parens(name) | Self::Plain(name) => name,
+        }
+    }
+}

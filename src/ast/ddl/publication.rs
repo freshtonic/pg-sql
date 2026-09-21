@@ -34,12 +34,9 @@ recursa::ast_node! {
     /// publication object.
     #[derive(Debug)]
     pub struct PublicationObjTable {
+        /// gram.y `PublicationObjSpec: TABLE relation_expr ...`.
         #[tok(TABLE, this)]
-        #[presence(ONLY)]
-        pub only: bool,
-        pub name: QualifiedName,
-        #[presence(STAR)]
-        pub star: bool,
+        pub relation: crate::ast::shared::names::RelationExpr,
         pub columns: Option<PublicationColumnList>,
         pub r#where: Option<PublicationWhereClause>,
     }
@@ -73,10 +70,8 @@ recursa::ast_node! {
     /// object kind from the previous prefixed item at semantic time.
     #[derive(Debug)]
     pub struct PublicationObjOnly {
-        #[tok(ONLY, this)]
-        pub name: QualifiedName,
-        #[presence(STAR)]
-        pub star: bool,
+        /// `ONLY name` or `ONLY ( name )`; neither takes a `*`.
+        pub relation: crate::ast::shared::names::OnlyRelation,
         pub columns: Option<PublicationColumnList>,
         pub r#where: Option<PublicationWhereClause>,
     }

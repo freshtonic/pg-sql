@@ -9,7 +9,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = DeleteStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert_eq!(stmt.table_name.object(), "pg_class");
+        assert_eq!(stmt.relation.name().object(), "pg_class");
         assert!(input.is_eof());
     }
 
@@ -20,7 +20,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = DeleteStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert_eq!(stmt.table_name.object(), "delete_test");
+        assert_eq!(stmt.relation.name().object(), "delete_test");
         assert!(stmt.alias.is_none());
         assert!(stmt.where_clause.is_some());
         assert!(input.is_eof());
@@ -33,7 +33,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = DeleteStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert_eq!(stmt.table_name.object(), "delete_test");
+        assert_eq!(stmt.relation.name().object(), "delete_test");
         assert!(matches!(
             stmt.alias.as_deref(),
             Some(DeleteTableAlias::WithAs(_))
@@ -50,7 +50,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = DeleteStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert_eq!(stmt.table_name.object(), "delete_test");
+        assert_eq!(stmt.relation.name().object(), "delete_test");
         assert!(matches!(
             stmt.alias.as_deref(),
             Some(DeleteTableAlias::Bare(_))
@@ -67,7 +67,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = DeleteStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert_eq!(stmt.table_name.object(), "t");
+        assert_eq!(stmt.relation.name().object(), "t");
         assert!(stmt.alias.is_none());
         assert!(stmt.where_clause.is_none());
         assert!(input.is_eof());
@@ -83,8 +83,8 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = DeleteStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert!(stmt.only, "ONLY qualifier should be parsed");
-        assert_eq!(stmt.table_name.object(), "c");
+        assert!(stmt.relation.is_only(), "ONLY qualifier should be parsed");
+        assert_eq!(stmt.relation.name().object(), "c");
         assert!(input.is_eof());
     }
 }

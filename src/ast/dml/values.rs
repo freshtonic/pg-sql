@@ -8,7 +8,7 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct TableStmt {
         #[tok(TABLE, this)]
-        pub table_name: crate::ast::shared::names::QualifiedName,
+        pub relation: crate::ast::shared::names::RelationExpr,
     }
 }
 

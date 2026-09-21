@@ -3,7 +3,6 @@
 /// `UPDATE table SET col = expr [, ...] [FROM ...] [WHERE ...] [RETURNING ...]`
 use crate::ast::dml::select::{FromClause, WhereClause};
 use crate::ast::shared::expr::Expr;
-use crate::ast::shared::names::QualifiedName;
 use crate::tokens::literal;
 
 recursa::ast_node! {
@@ -140,10 +139,9 @@ recursa::ast_node! {
     #[derive(Debug)]
     #[pretty(group = consistent)]
     pub struct UpdateStmt {
+        /// gram.y `UPDATE relation_expr_opt_alias`.
         #[tok(UPDATE, this)]
-        #[presence(ONLY)]
-        pub only: bool,
-        pub table_name: QualifiedName,
+        pub relation: crate::ast::shared::names::RelationExpr,
         pub alias: Option<UpdateTableAlias>,
         #[pretty(break_before = soft)]
         pub assignments: SetClause,

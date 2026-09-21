@@ -1,7 +1,6 @@
 /// DELETE FROM statement AST.
 use crate::ast::dml::select::WhereClause;
 use crate::ast::dml::update::ReturningClause;
-use crate::ast::shared::names::QualifiedName;
 
 recursa::ast_node! {
     /// Table alias with explicit AS keyword: `AS alias`.
@@ -62,10 +61,9 @@ recursa::ast_node! {
     #[derive(Debug)]
     #[pretty(group = consistent)]
     pub struct DeleteStmt {
+        /// gram.y `DELETE FROM relation_expr_opt_alias`.
         #[tok(DELETE, FROM, this)]
-        #[presence(ONLY)]
-        pub only: bool,
-        pub table_name: QualifiedName,
+        pub relation: crate::ast::shared::names::RelationExpr,
         pub alias: Option<boxed!(DeleteTableAlias)>,
         #[pretty(break_before = soft)]
         pub using_clause: Option<boxed!(DeleteUsingClause)>,

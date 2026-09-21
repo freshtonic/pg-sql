@@ -558,6 +558,7 @@ embedded-tests/src/ast/mod.tests.rs	parse_bang_eq_minus_line_comment_split	false
 embedded-tests/src/ast/mod.tests.rs	parse_full_insert_with_type_cast	false
 embedded-tests/src/ast/mod.tests.rs	parse_is_normalized	false
 embedded-tests/src/ast/mod.tests.rs	parse_like_operator_aliases	false
+embedded-tests/src/ast/mod.tests.rs	parse_relation_expr_forms_in_every_statement	false
 embedded-tests/src/ast/mod.tests.rs	parse_select_with_where_and_bool_test	false
 embedded-tests/src/ast/mod.tests.rs	parse_set_as_function_name	false
 embedded-tests/src/ast/mod.tests.rs	parse_statement_create_table	false
