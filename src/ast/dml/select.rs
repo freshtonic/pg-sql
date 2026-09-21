@@ -168,25 +168,23 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Parenthesized join tree in FROM: `(t1 CROSS JOIN t2) AS alias`.
+    /// A parenthesized FROM source: gram.y `select_with_parens
+    /// opt_alias_clause` or `'(' joined_table ')' alias_clause`. The
+    /// parentheses hold a query or a join, never a lone relation: `FROM (t)`
+    /// is a syntax error.
     ///
-    /// Distinguished from `SubqueryRef` by what the `(` contains: a subquery
-    /// starts with `SELECT` / `VALUES` / `TABLE` / `WITH` (all keywords),
-    /// whereas a parenthesized join tree starts with a table name (ident).
+    /// Variant ordering: both lead with `(` and part on what follows it.
     #[derive(Debug)]
-    pub struct ParenJoinRef {
-        pub open: SelectLParen,
-        pub table: boxed!(TableRef),
-        pub close: SelectRParen,
-        pub alias: Option<PlainTableAlias>,
+    pub enum ParenTableRef {
+        Query(ParenQueryRef),
+        Join(ParenJoinRef),
     }
 }
 
 recursa::ast_node! {
-    /// Parenthesized FROM source with the delimiters and trailing alias shared by
-    /// query and join bodies.
+    /// `( query ) [alias]`.
     #[derive(Debug)]
-    pub struct ParenTableRef {
+    pub struct ParenQueryRef {
         pub open: SelectLParen,
         pub body: ParenTableBody,
         pub close: SelectRParen,
@@ -195,6 +193,11 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// The query inside a parenthesized FROM source. It is an enum of one
+    /// variant so that the scoped resolutions against [`SelectWithParens`]
+    /// have a variant to stand on.
+    ///
+    /// [`SelectWithParens`]: crate::ast::dml::values::SelectWithParens
     #[derive(Debug)]
     pub enum ParenTableBody {
         #[parse(lr_conflict(
@@ -210,7 +213,51 @@ recursa::ast_node! {
         expect = 1
     ))]
         Query(boxed!(Subquery)),
-        Table(boxed!(TableRef)),
+    }
+}
+
+recursa::ast_node! {
+    /// `( joined_table ) [alias]`: gram.y `'(' joined_table ')' alias_clause`,
+    /// and with no alias the `joined_table: '(' joined_table ')'` that stands
+    /// as the operand of a further join.
+    #[derive(Debug)]
+    pub struct ParenJoinRef {
+        pub group: ParenJoinGroup,
+        pub alias: Option<PlainTableAlias>,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `joined_table` (gram.y:13529): `'(' joined_table ')'`, or a
+    /// `table_ref` with at least one join after it.
+    ///
+    /// Variant ordering: both can lead with `(`. A group is a `joined_table`
+    /// when `)` follows it, and the base of a chain when a join does.
+    #[derive(Debug)]
+    pub enum JoinedTable {
+        Chain(boxed!(JoinChain)),
+        Group(ParenJoinGroup),
+    }
+}
+
+recursa::ast_node! {
+    /// `table_ref join ...`: one table reference and one or more joins.
+    #[derive(Debug)]
+    pub struct JoinChain {
+        pub base: SimpleTableRef,
+        pub joins: one_or_many!(JoinSuffix),
+    }
+}
+
+recursa::ast_node! {
+    /// `'(' joined_table ')'`, with no alias. [`ParenJoinRef`] and
+    /// [`JoinedTable::Group`] share it, so the parser decides between them on
+    /// the token after the `)` and not before it.
+    #[derive(Debug)]
+    pub struct ParenJoinGroup {
+        pub open: SelectLParen,
+        pub joined: boxed!(JoinedTable),
+        pub close: SelectRParen,
     }
 }
 

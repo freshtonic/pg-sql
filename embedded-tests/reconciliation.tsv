@@ -23,6 +23,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_coalesce_family_as_function_tables	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_rollup_and_cube_as_grouping_clauses	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_join_chained_after_using	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_parenthesized_from_sources_as_queries_or_joins	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_all_with_and_without_targets	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_distinct_heads	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_into_without_targets	issue-9-generated-statement

@@ -1458,4 +1458,62 @@ mod tests {
         }
     }
 
+    /// gram.y's parenthesized `table_ref` is `select_with_parens
+    /// opt_alias_clause` or `'(' joined_table ')' alias_clause`, and
+    /// `joined_table` is `'(' joined_table ')'` or a `table_ref` with a join
+    /// after it (gram.y:13529). The parentheses never hold a lone relation.
+    /// PostgreSQL 17.9 agrees with every line here.
+    #[test]
+    fn parse_parenthesized_from_sources_as_queries_or_joins() {
+        for (src, node) in [
+            ("SELECT * FROM (a JOIN b ON true)", "ParenJoinRef"),
+            ("SELECT * FROM (a JOIN b ON true) AS j", "ParenJoinRef"),
+            ("SELECT * FROM (a JOIN b ON true) j (x, y)", "ParenJoinRef"),
+            // `joined_table: '(' joined_table ')'`, to any depth, alias outside.
+            ("SELECT * FROM ((a JOIN b ON true))", "Group(ParenJoinGroup"),
+            ("SELECT * FROM ((a JOIN b ON true)) AS j", "Group(ParenJoinGroup"),
+            ("SELECT * FROM (((a JOIN b ON true)))", "Group(ParenJoinGroup"),
+            // An aliased group is a `table_ref`, so it needs a join after it.
+            ("SELECT * FROM ((a JOIN b ON true) j JOIN c ON true)", "ParenJoinRef"),
+            ("SELECT * FROM ((a JOIN b ON true) JOIN c ON true)", "ParenJoinRef"),
+            ("SELECT * FROM (a JOIN (b JOIN c ON true) ON true)", "ParenJoinRef"),
+            ("SELECT * FROM a JOIN (b JOIN c ON true) ON true", "ParenJoinRef"),
+            ("SELECT * FROM (f() CROSS JOIN g())", "ParenJoinRef"),
+            ("SELECT * FROM (t TABLESAMPLE SYSTEM (1) CROSS JOIN u)", "ParenJoinRef"),
+            ("SELECT * FROM ((SELECT 1) s CROSS JOIN t)", "ParenJoinRef"),
+            ("SELECT * FROM (SELECT * FROM ((a JOIN b ON true))) s", "Group(ParenJoinGroup"),
+            // A query in the parentheses.
+            ("SELECT * FROM (SELECT 1)", "ParenQueryRef"),
+            ("SELECT * FROM (SELECT 1) s", "ParenQueryRef"),
+            ("SELECT * FROM ((SELECT 1)) s", "ParenQueryRef"),
+            ("SELECT * FROM ((SELECT 1) UNION SELECT 2) s", "ParenQueryRef"),
+            ("SELECT * FROM (VALUES (1)) v", "ParenQueryRef"),
+            ("SELECT * FROM (TABLE t) v", "ParenQueryRef"),
+        ] {
+            let parsed = parse_select_classified(src);
+            let tree = format!("{:?}", parsed.ast());
+            assert!(tree.contains(node), "{src:?} did not build {node}: {tree}");
+        }
+
+        for src in [
+            "SELECT * FROM (t)",
+            "SELECT * FROM (t) x",
+            "SELECT * FROM (t x)",
+            "SELECT * FROM ((t))",
+            "SELECT * FROM (ONLY t)",
+            "SELECT * FROM (f())",
+            "SELECT * FROM (t TABLESAMPLE SYSTEM (1))",
+            "SELECT * FROM a JOIN (b) ON true",
+            "SELECT * FROM ((a JOIN b ON true) j)",
+            "SELECT * FROM ((SELECT 1) s)",
+            "SELECT * FROM ()",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = SelectStmt::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+    }
+
 }
