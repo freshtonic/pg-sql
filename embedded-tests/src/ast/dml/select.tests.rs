@@ -533,7 +533,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = QueryBody::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert!(stmt.limit_offset.is_some());
+        assert!(stmt.limit_offset().is_some());
         assert!(input.is_eof());
     }
 
@@ -544,7 +544,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = QueryBody::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert!(stmt.limit_offset.is_some());
+        assert!(stmt.limit_offset().is_some());
         assert!(input.is_eof());
     }
 
@@ -1003,7 +1003,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = QueryBody::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert!(stmt.for_update.is_some());
+        assert!(!stmt.locking_items().is_empty());
         assert!(input.is_eof());
     }
 
@@ -1021,7 +1021,7 @@ mod tests {
             let mut input = lexed.input();
             let stmt_parsed = QueryBody::parse(&mut input).unwrap();
             let stmt = stmt_parsed.ast();
-            assert!(stmt.for_update.is_some(), "no locking clause: {src:?}");
+            assert!(!stmt.locking_items().is_empty(), "no locking clause: {src:?}");
             assert!(input.is_eof(), "leftover for {src:?}");
         }
     }

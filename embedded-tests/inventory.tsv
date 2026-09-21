@@ -541,6 +541,7 @@ embedded-tests/src/ast/dml/update.tests.rs	parse_update_with_returning	false
 embedded-tests/src/ast/dml/update.tests.rs	reject_bare_set_as_update_alias	false
 embedded-tests/src/ast/dml/update.tests.rs	reject_update_from_without_from_list	false
 embedded-tests/src/ast/dml/values.tests.rs	parse_compound_paren_limit_offset_orders_roundtrip	false
+embedded-tests/src/ast/dml/values.tests.rs	parse_locking_clauses_in_both_orders_and_as_a_list	false
 embedded-tests/src/ast/dml/values.tests.rs	parse_table_stmt	false
 embedded-tests/src/ast/dml/values.tests.rs	parse_table_stmt_limit_offset_orders_roundtrip	false
 embedded-tests/src/ast/dml/values.tests.rs	parse_table_stmt_order_by	false

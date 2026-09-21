@@ -1521,7 +1521,97 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// FOR UPDATE / FOR SHARE / FOR NO KEY UPDATE / FOR KEY SHARE locking clause.
+    /// The limit and locking tails of a query, in the two orders gram.y's
+    /// `select_no_parens` has (gram.y:12707-12715):
+    ///
+    /// ```text
+    /// select_clause opt_sort_clause for_locking_clause opt_select_limit
+    /// select_clause opt_sort_clause select_limit opt_for_locking_clause
+    /// ```
+    ///
+    /// so `ORDER BY 1 FOR UPDATE LIMIT 1` and `ORDER BY 1 LIMIT 1 FOR UPDATE`
+    /// are both queries, and `FOR UPDATE LIMIT 1 FOR SHARE` is not. The variant
+    /// keeps the written order for rendering.
+    ///
+    /// Variant ordering: `LockingFirst` leads with `FOR`, `LimitFirst` with
+    /// `LIMIT`, `OFFSET` or `FETCH`.
+    #[derive(Debug)]
+    pub enum LimitLockingClause {
+        LockingFirst(LockingThenLimit),
+        LimitFirst(LimitThenLocking),
+    }
+}
+
+recursa::ast_node! {
+    /// `for_locking_clause opt_select_limit`.
+    #[derive(Debug)]
+    pub struct LockingThenLimit {
+        pub locking: ForLockingClause,
+        #[pretty(break_before = soft)]
+        pub limit_offset: Option<boxed!(LimitOffsetClause)>,
+    }
+}
+
+recursa::ast_node! {
+    /// `select_limit opt_for_locking_clause`.
+    #[derive(Debug)]
+    pub struct LimitThenLocking {
+        pub limit_offset: boxed!(LimitOffsetClause),
+        #[pretty(break_before = soft)]
+        pub locking: Option<ForLockingClause>,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y:13362 `for_locking_clause: for_locking_items | FOR READ ONLY`.
+    ///
+    /// `for_locking_items` is a list with no separator (gram.y:13372): `FOR
+    /// SHARE OF a FOR UPDATE OF b` holds two items, and PostgreSQL applies
+    /// each one. `FOR READ ONLY` locks nothing; PostgreSQL reads it as no
+    /// locking clause at all.
+    ///
+    /// Variant ordering: `ReadOnly` is three fixed tokens; an item's second
+    /// token is never `READ`.
+    #[derive(Debug)]
+    pub enum ForLockingClause {
+        #[tok(FOR, READ, ONLY)]
+        ReadOnly,
+        Items(one_or_many!(ForUpdateClause)),
+    }
+}
+
+impl<'input> LimitLockingClause<'input> {
+    /// The `select_limit` of either order.
+    pub fn limit_offset(&self) -> Option<&LimitOffsetClause<'input>> {
+        match self {
+            Self::LockingFirst(tail) => tail.limit_offset.as_deref(),
+            Self::LimitFirst(tail) => Some(&tail.limit_offset),
+        }
+    }
+
+    /// The `for_locking_clause` of either order.
+    pub fn locking(&self) -> Option<&ForLockingClause<'input>> {
+        match self {
+            Self::LockingFirst(tail) => Some(&tail.locking),
+            Self::LimitFirst(tail) => tail.locking.as_ref(),
+        }
+    }
+}
+
+impl<'input> ForLockingClause<'input> {
+    /// The locking items, in source order; none for `FOR READ ONLY`.
+    pub fn items(&self) -> &[ForUpdateClause<'input>] {
+        match self {
+            Self::ReadOnly => &[],
+            Self::Items(items) => items.as_slice(),
+        }
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y:13377 `for_locking_item: for_locking_strength locked_rels_list
+    /// opt_nowait_or_skip`: FOR UPDATE / FOR SHARE / FOR NO KEY UPDATE / FOR KEY
+    /// SHARE.
     #[derive(Debug)]
     pub struct ForUpdateClause {
         #[tok(FOR, this)]
@@ -1537,11 +1627,17 @@ recursa::ast_node! {
 recursa::ast_node! {
     /// `OF name[, ...]` in a `FOR UPDATE` locking clause.
     #[derive(Debug)]
+    #[tok(OF, this)]
     pub struct ForUpdateOf {
-        /// gram.y `OF qualified_name_list`: one or more names.
-        #[tok(OF, this)]
+        /// gram.y:13396 `locked_rels_list: OF qualified_name_list`: one or more
+        /// names, each a `qualified_name`. PostgreSQL's parse analysis rejects a
+        /// qualified one ("FOR UPDATE must specify unqualified relation names"),
+        /// and the grammar accepts it.
+        ///
+        /// `OF` is on the node, not on this field: on the list field it took the
+        /// separator's place and `OF a, b` did not parse.
         #[sep(COMMA)]
-        pub names: one_or_many!(crate::tokens::ColId),
+        pub names: one_or_many!(crate::ast::shared::names::QualifiedName),
     }
 }
 

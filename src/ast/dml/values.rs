@@ -76,12 +76,27 @@ recursa::ast_node! {
         pub clause: SelectClause,
         #[pretty(break_before = soft)]
         pub order_by: Option<boxed!(crate::ast::dml::select::OrderByClause)>,
-        /// LIMIT / OFFSET / FETCH FIRST tail. Postgres allows one limiting
-        /// clause (`LIMIT` or `FETCH FIRST`) and one `OFFSET`, in either order.
+        /// The LIMIT / OFFSET / FETCH FIRST tail and the locking clause, in either
+        /// of gram.y's two orders.
         #[pretty(break_before = soft)]
-        pub limit_offset: Option<boxed!(crate::ast::dml::select::LimitOffsetClause)>,
-        #[pretty(break_before = soft)]
-        pub for_update: Option<boxed!(crate::ast::dml::select::ForUpdateClause)>,
+        pub limit_locking: Option<boxed!(crate::ast::dml::select::LimitLockingClause)>,
+    }
+}
+
+impl<'input> QueryBody<'input> {
+    /// The `select_limit` tail, wherever it stands relative to the locking
+    /// clause.
+    pub fn limit_offset(&self) -> Option<&crate::ast::dml::select::LimitOffsetClause<'input>> {
+        self.limit_locking.as_deref()?.limit_offset()
+    }
+
+    /// The locking items, in source order. Empty for no locking clause and
+    /// for `FOR READ ONLY`.
+    pub fn locking_items(&self) -> &[crate::ast::dml::select::ForUpdateClause<'input>] {
+        self.limit_locking
+            .as_deref()
+            .and_then(|tail| tail.locking())
+            .map_or(&[], |locking| locking.items())
     }
 }
 

@@ -251,7 +251,7 @@ mod tests {
         let query = parsed.ast();
         assert_eq!(shape(&query.clause), "Union(Intersect(s,s),s)");
         assert!(query.order_by.is_some());
-        assert!(query.limit_offset.is_some());
+        assert!(query.limit_offset().is_some());
 
         for src in [
             "SELECT 1 ORDER BY 1 UNION SELECT 2",
@@ -259,6 +259,102 @@ mod tests {
             "SELECT 1 UNION",
             "SELECT 1 UNION ALL DISTINCT SELECT 2",
             "UNION SELECT 1",
+        ] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = QueryBody::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+    }
+
+    /// gram.y `select_no_parens` has the limit and the locking clause in both
+    /// orders (gram.y:12707-12715), and `for_locking_clause` is a list of
+    /// items with no separator, or `FOR READ ONLY` (gram.y:13362-13375).
+    /// PostgreSQL 17.9 accepts every statement in the first table and rejects
+    /// every one in the second.
+    #[test]
+    fn parse_locking_clauses_in_both_orders_and_as_a_list() {
+        use crate::ast::dml::select::{ForLockingClause, LimitLockingClause, LockingMode};
+
+        fn modes(query: &QueryBody<'_>) -> Vec<&'static str> {
+            query
+                .locking_items()
+                .iter()
+                .map(|item| match item.mode {
+                    LockingMode::Update => "update",
+                    LockingMode::NoKeyUpdate => "no key update",
+                    LockingMode::Share => "share",
+                    LockingMode::KeyShare => "key share",
+                })
+                .collect()
+        }
+
+        // (source, locking modes, has limit, locking stands first)
+        let cases: [(&'static str, &[&str], bool, bool); 9] = [
+            ("SELECT * FROM a FOR UPDATE", &["update"], false, true),
+            ("SELECT * FROM a, b FOR SHARE OF a FOR UPDATE", &["share", "update"], false, true),
+            (
+                "SELECT * FROM a, b FOR NO KEY UPDATE OF a NOWAIT FOR KEY SHARE OF b SKIP LOCKED",
+                &["no key update", "key share"],
+                false,
+                true,
+            ),
+            ("SELECT * FROM a ORDER BY 1 FOR UPDATE LIMIT 1", &["update"], true, true),
+            ("SELECT * FROM a ORDER BY 1 LIMIT 1 FOR UPDATE", &["update"], true, false),
+            (
+                "SELECT * FROM a FOR SHARE FOR UPDATE OFFSET 2 LIMIT 1",
+                &["share", "update"],
+                true,
+                true,
+            ),
+            ("SELECT * FROM a FETCH FIRST 1 ROW ONLY FOR SHARE FOR UPDATE", &["share", "update"], true, false),
+            ("SELECT * FROM a LIMIT 1", &[], true, false),
+            // gram.y `locked_rels_list: OF qualified_name_list`.
+            ("SELECT * FROM s.a FOR UPDATE OF s.a, b", &["update"], false, true),
+        ];
+        for (src, expected, has_limit, locking_first) in cases {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed =
+                QueryBody::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+            let query = parsed.ast();
+            assert_eq!(modes(query), expected, "{src:?}");
+            assert_eq!(query.limit_offset().is_some(), has_limit, "{src:?}");
+            assert_eq!(
+                matches!(query.limit_locking.as_deref(), Some(LimitLockingClause::LockingFirst(_))),
+                locking_first,
+                "{src:?}"
+            );
+        }
+
+        // `FOR READ ONLY` is a locking clause with no items, in either order.
+        for src in ["SELECT 1 FOR READ ONLY", "SELECT 1 LIMIT 1 FOR READ ONLY", "SELECT 1 FOR READ ONLY LIMIT 1"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed =
+                QueryBody::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+            let query = parsed.ast();
+            assert!(query.locking_items().is_empty(), "{src:?}");
+            assert!(
+                matches!(
+                    query.limit_locking.as_deref().and_then(|tail| tail.locking()),
+                    Some(ForLockingClause::ReadOnly)
+                ),
+                "{src:?}"
+            );
+        }
+
+        for src in [
+            "SELECT 1 FOR UPDATE LIMIT 1 FOR SHARE",
+            "SELECT 1 LIMIT 1 FOR UPDATE LIMIT 1",
+            "SELECT 1 FOR READ ONLY FOR UPDATE",
+            "SELECT 1 FOR UPDATE FOR READ ONLY",
+            "SELECT 1 FOR UPDATE ORDER BY 1",
+            "SELECT 1 FOR",
+            "SELECT 1 FOR UPDATE, FOR SHARE",
         ] {
             let lexed = crate::lex(src);
             let mut input = lexed.input();
