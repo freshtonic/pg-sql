@@ -1163,7 +1163,7 @@ recursa::ast_node! {
         #[tok(ATSIGN)]
         At,
         Custom(literal::CustomOp),
-        Decorated(QuantifiedDecoratedOperator),
+        Decorated(DecoratedOperator),
     }
 }
 
@@ -1232,9 +1232,11 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `OPERATOR(any_operator)` in a quantified comparison.
+    /// gram.y:16494 `OPERATOR '(' any_operator ')'`, the explicit spelling
+    /// that `qual_Op`, `qual_all_Op` and `subquery_Op` share. It names any
+    /// operator, a `MathOp` included, with an optional schema path.
     #[derive(Debug)]
-    pub struct QuantifiedDecoratedOperator {
+    pub struct DecoratedOperator {
         #[tok(OPERATOR, LPAREN, this, RPAREN)]
         pub name: crate::ast::shared::names::QualifiedOperatorName,
     }
@@ -1415,6 +1417,111 @@ recursa::ast_node! {
     pub struct GroupingCall {
         #[sep(COMMA)]
         pub args: one_or_many!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `COALESCE(expr, ...)`: gram.y:15848 `func_expr_common_subexpr: COALESCE
+    /// '(' expr_list ')'`, PostgreSQL's `CoalesceExpr`.
+    ///
+    /// `COALESCE` is a `COL_NAME` keyword, so it is a `ColId` but not a
+    /// `type_function_name`: a bare `coalesce` is a column reference and
+    /// `coalesce(...)` is only ever this production. `expr_list` has neither
+    /// `*`, `DISTINCT`, `VARIADIC` nor named arguments, and cannot be empty.
+    #[derive(Debug)]
+    #[tok(COALESCE, LPAREN, this, RPAREN)]
+    pub struct CoalesceExpr {
+        #[sep(COMMA)]
+        pub args: one_or_many!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `GREATEST(expr, ...)`: gram.y:15856 `func_expr_common_subexpr: GREATEST
+    /// '(' expr_list ')'`, PostgreSQL's `MinMaxExpr` with `IS_GREATEST`.
+    /// `GREATEST` is a `COL_NAME` keyword, as [`CoalesceExpr`] describes.
+    #[derive(Debug)]
+    #[tok(GREATEST, LPAREN, this, RPAREN)]
+    pub struct GreatestExpr {
+        #[sep(COMMA)]
+        pub args: one_or_many!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `LEAST(expr, ...)`: gram.y:15865 `func_expr_common_subexpr: LEAST '('
+    /// expr_list ')'`, PostgreSQL's `MinMaxExpr` with `IS_LEAST`. `LEAST` is a
+    /// `COL_NAME` keyword, as [`CoalesceExpr`] describes.
+    #[derive(Debug)]
+    #[tok(LEAST, LPAREN, this, RPAREN)]
+    pub struct LeastExpr {
+        #[sep(COMMA)]
+        pub args: one_or_many!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `NULLIF(left, right)`: gram.y:15844 `func_expr_common_subexpr: NULLIF
+    /// '(' a_expr ',' a_expr ')'`, PostgreSQL's `A_Expr` of kind
+    /// `AEXPR_NULLIF`. It takes exactly two arguments. `NULLIF` is a
+    /// `COL_NAME` keyword, as [`CoalesceExpr`] describes.
+    #[derive(Debug)]
+    #[tok(NULLIF, LPAREN, this, RPAREN)]
+    pub struct NullIfExpr {
+        pub left: boxed!(Expr),
+        #[tok(COMMA, this)]
+        pub right: boxed!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `XMLCONCAT(expr, ...)`: gram.y:15874 `func_expr_common_subexpr:
+    /// XMLCONCAT '(' expr_list ')'`, PostgreSQL's `XmlExpr` with
+    /// `IS_XMLCONCAT`. `XMLCONCAT` is a `COL_NAME` keyword, as
+    /// [`CoalesceExpr`] describes.
+    #[derive(Debug)]
+    #[tok(XMLCONCAT, LPAREN, this, RPAREN)]
+    pub struct XmlConcatExpr {
+        #[sep(COMMA)]
+        pub args: one_or_many!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `NORMALIZE(expr [, form])`: gram.y:15730 `NORMALIZE '(' a_expr ')'` and
+    /// gram.y:15737 `NORMALIZE '(' a_expr ',' unicode_normal_form ')'`.
+    ///
+    /// PostgreSQL builds a call of `pg_catalog.normalize` whose second
+    /// argument is the string constant `'NFC'`, `'NFD'`, `'NFKC'` or `'NFKD'`
+    /// (`makeStringConst`), so the form is a keyword here and never a column
+    /// reference. `NORMALIZE` is a `COL_NAME` keyword, as [`CoalesceExpr`]
+    /// describes. The form enum is the one `IS [NOT] [form] NORMALIZED` uses.
+    #[derive(Debug)]
+    #[tok(NORMALIZE, LPAREN, this, RPAREN)]
+    pub struct NormalizeExpr {
+        pub arg: boxed!(Expr),
+        #[tok(COMMA, this)]
+        pub form: Option<UnicodeNormalForm>,
+    }
+}
+
+recursa::ast_node! {
+    /// The `COALESCE`, `GREATEST`, `LEAST`, `NULLIF`, `XMLCONCAT` and
+    /// `NORMALIZE` forms where gram.y
+    /// writes `func_expr_windowless` (gram.y:15637) and not an expression: a
+    /// `func_table`, a `rowsfrom_item`, an `index_elem` and a `part_elem`.
+    /// `func_expr_windowless` is `func_application | func_expr_common_subexpr
+    /// | ...`, and a `COL_NAME` keyword is never the name of a
+    /// `func_application`, so each position names these forms itself.
+    /// [`Expr`] holds the same nodes as variants of its own.
+    #[derive(Debug)]
+    pub enum CommonSubexprCall {
+        Coalesce(CoalesceExpr),
+        Greatest(GreatestExpr),
+        Least(LeastExpr),
+        NullIf(NullIfExpr),
+        XmlConcat(XmlConcatExpr),
+        Normalize(NormalizeExpr),
     }
 }
 
@@ -3283,6 +3390,15 @@ recursa::ast_node! {
             literal::CustomOp,
             #[pretty(break_before = soft)] boxed!(Self),
         ),
+        /// `OPERATOR(schema.op) expr`: gram.y:14846 `qual_Op a_expr %prec Op`
+        /// with `qual_Op`'s second alternative. The level is `Op` whatever
+        /// operator the parentheses name: `OPERATOR(pg_catalog.-) a * b` is
+        /// `OPERATOR(pg_catalog.-) (a * b)`.
+        #[parse(prec = Op)]
+        DecoratedPrefix(
+            DecoratedOperator,
+            #[pretty(break_before = soft)] boxed!(Self),
+        ),
 
         // --- Postfix ---
         /// Postgres-style cast: `expr::type`
@@ -3643,6 +3759,21 @@ recursa::ast_node! {
             #[pretty(break_before = soft, break_after = soft)] literal::CustomOp,
             boxed!(Self),
         ),
+        /// `expr OPERATOR(schema.op) expr`: gram.y:14844 `a_expr qual_Op a_expr
+        /// %prec Op` with `qual_Op`'s second alternative.
+        ///
+        /// The level is `Op` whatever operator the parentheses name, and it is
+        /// left-associative (gram.y:889 `%left Op OPERATOR`). So `1
+        /// OPERATOR(pg_catalog.=) 2 = 3` is `(1 OPERATOR(pg_catalog.=) 2) = 3`,
+        /// and `a OPERATOR(pg_catalog.+) b * c` is `a OPERATOR(pg_catalog.+)
+        /// (b * c)`. The rule ends in `)`, which has no level, so the override
+        /// is what carries `Op`.
+        #[parse(prec = Op)]
+        DecoratedInfix(
+            boxed!(Self),
+            #[pretty(break_before = soft, break_after = soft)] DecoratedOperator,
+            boxed!(Self),
+        ),
 
         Lt(boxed!(Self), #[tok(LT, this)] boxed!(Self)),
         Gt(boxed!(Self), #[tok(GT, this)] boxed!(Self)),
@@ -3678,6 +3809,20 @@ recursa::ast_node! {
         /// `ColumnRef`, which would otherwise claim the bare `GROUPING` keyword
         /// and leave the argument list unparsed.
         Grouping(GroupingCall),
+        /// `COALESCE(expr, ...)`. `COALESCE`, `GREATEST`, `LEAST` and `NULLIF`
+        /// are `COL_NAME` keywords, so `Func` never sees them as a name; they
+        /// stand before `ColumnRef` for the reason `Grouping` does.
+        Coalesce(CoalesceExpr),
+        /// `GREATEST(expr, ...)`.
+        Greatest(GreatestExpr),
+        /// `LEAST(expr, ...)`.
+        Least(LeastExpr),
+        /// `NULLIF(left, right)`.
+        NullIf(NullIfExpr),
+        /// `XMLCONCAT(expr, ...)`.
+        XmlConcat(XmlConcatExpr),
+        /// `NORMALIZE(expr [, NFC | NFD | NFKC | NFKD])`.
+        Normalize(NormalizeExpr),
         /// CASE expression: `CASE [expr] WHEN ... THEN ... [ELSE ...] END`
         Case(CaseExpr),
         /// Unicode string literal: `U&'...'` with optional `UESCAPE 'c'`. Must
@@ -3841,7 +3986,8 @@ recursa::ast_node! {
     /// - `b_expr qual_Op b_expr` and `qual_Op b_expr` (gram.y:15322-15324):
     ///   every operator spelling PostgreSQL's scanner returns as `Op`, which
     ///   pg-sql names one token at a time, in both its infix and its prefix
-    ///   form.
+    ///   form, and `qual_Op`'s `OPERATOR(...)` spelling: `DecoratedInfix` and
+    ///   `DecoratedPrefix`.
     /// - `b_expr IS [NOT] DISTINCT FROM b_expr` (gram.y:15326-15330).
     /// - `b_expr IS [NOT] DOCUMENT_P` (gram.y:15334-15339): `IsDocument`.
     ///
@@ -3863,6 +4009,7 @@ recursa::ast_node! {
         Sqrt,
         Cbrt,
         CustomPrefix,
+        DecoratedPrefix,
         Cast,
         IsNotDistinctFrom,
         IsDistinctFrom,
@@ -3932,6 +4079,7 @@ recursa::ast_node! {
         StartsWith,
         JsonDeletePath,
         CustomInfix,
+        DecoratedInfix,
         Lt,
         Gt,
         Concat,
@@ -3948,6 +4096,12 @@ recursa::ast_node! {
         Array,
         RowExpr,
         Grouping,
+        Coalesce,
+        Greatest,
+        Least,
+        NullIf,
+        XmlConcat,
+        Normalize,
         Case,
         UnicodeStringLit,
         EscapeStringLit,

@@ -143,6 +143,7 @@ embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_full_kitchen_sink	f
 embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_func_target_collate_opclass	false
 embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_if_not_exists	false
 embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_include	false
+embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_on_bare_coalesce_family	false
 embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_on_only	false
 embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_opclass	false
 embedded-tests/src/ast/ddl/index.tests.rs	parse_create_index_opclass_desc	false
@@ -443,6 +444,7 @@ embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_not_matched_by_source_defa
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_not_matched_by_source_update_delete	false
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_target_alias	false
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_matched_and	false
+embedded-tests/src/ast/dml/select.tests.rs	parse_coalesce_family_as_function_tables	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_fetch_first_row_with_ties	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_fetch_first_rows_no_count	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_fetch_first_rows_only	false
@@ -639,10 +641,16 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_cast_func_with_precision	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_cast_interval_day_to_minute	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_cast_parenthesized_field_access	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_chained_cast	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_coalesce_as_its_own_variant	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_coalesce_family_words_as_names	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_collate_postfix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_collation_for	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_column_ref	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_date_literal_as_castfunc	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_infix_operator_at_op_precedence	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_operator_in_b_expr_and_beside_quantified_form	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_operator_with_every_math_op	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_decorated_prefix_operator_at_op_precedence	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_default_atom	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_direct_parenthesized_set_limit_offset_orders_roundtrip	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_distance	false
@@ -675,6 +683,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_function_call_booleq	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_function_call_no_args	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_function_call_with_args	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_function_calls_with_required_delimiters	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_greatest_as_its_own_variant	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_grouping_function	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_gt_caret_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_hash_hash_infix	false
@@ -720,6 +729,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_jsonb_contained_by	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_jsonb_contains	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_jsonb_key_exists	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_jsonb_path_query_silent	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_least_as_its_own_variant	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_like_escape	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_like_escape_string	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_like_expr	false
@@ -733,6 +743,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_no_extend_above	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_no_extend_below	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_no_extend_left	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_no_extend_right	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_normalize_as_its_own_variant	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_not_between_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_not_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_not_ilike_escape	false
@@ -744,6 +755,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_not_similar_to_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_not_tilde_all	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_notnull_isnull	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_null	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_nullif_as_its_own_variant	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_numeric_literal	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_or_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_overlap	false
@@ -764,8 +776,10 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_positional_param	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_positional_param_in_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_pound_prefix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_power_operator	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_coalesce_as_an_ordinary_call	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_column_ref	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_wildcard	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_xmlconcat_and_normalize_as_ordinary_calls	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_question_dash_pipe_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_question_pipe_pipe_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_regex_imatch	false
@@ -825,6 +839,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_unicode_string_lit_uescape	fal
 embedded-tests/src/ast/shared/expr.tests.rs	parse_unicode_string_with_backslash	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_user_zero_arg_atom	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_xml_functions	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_xmlconcat_as_its_own_variant	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_xmlelement_simple	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_xmlelement_with_attributes	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_xmlforest	false
@@ -836,6 +851,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	positional_param_preserves_digits	fa
 embedded-tests/src/ast/shared/expr.tests.rs	pratt_peek_classified_covers_identifier_atoms	false
 embedded-tests/src/ast/shared/expr.tests.rs	qualified_ref_qualifier_is_a_col_id	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_direct_parenthesized_set_duplicate_limit_offset_clauses	false
+embedded-tests/src/ast/shared/expr.tests.rs	reject_function_call_syntax_in_coalesce_greatest_least	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_invalid_function_application_states	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_typed_literal_with_a_psql_variable_payload	false
 embedded-tests/src/ast/shared/expr.tests.rs	reject_wildcard_as_an_ordinary_function_argument	false

@@ -1181,4 +1181,28 @@ mod tests {
             );
         }
     }
+    /// gram.y `func_table` (gram.y:13867) and `rowsfrom_item` (gram.y:13891)
+    /// take `func_expr_windowless`, which reaches `COALESCE`, `GREATEST`,
+    /// `LEAST` and `NULLIF` through `func_expr_common_subexpr`. Their words
+    /// are `COL_NAME` keywords, so the ordinary function-table node never
+    /// sees them, and the tree must say which form it holds.
+    #[test]
+    fn parse_coalesce_family_as_function_tables() {
+        for (src, node) in [
+            ("SELECT * FROM coalesce(1, 2) AS c", "CoalesceExpr"),
+            ("SELECT * FROM greatest(1, 2) WITH ORDINALITY AS g(v, n)", "GreatestExpr"),
+            ("SELECT * FROM least(1, 2)", "LeastExpr"),
+            ("SELECT * FROM nullif(1, 2) n", "NullIfExpr"),
+            ("SELECT * FROM ROWS FROM(coalesce(a, b), f(1)) AS z", "CoalesceExpr"),
+            ("SELECT * FROM ROWS FROM(nullif(a, b) AS (x int)) AS z", "NullIfExpr"),
+        ] {
+            let parsed = parse_select_classified(src);
+            let tree = format!("{:?}", parsed.ast());
+            assert!(tree.contains(node), "{src:?} did not build {node}: {tree}");
+        }
+        // A bare word is still a table name.
+        let parsed = parse_select_classified("SELECT * FROM coalesce");
+        assert!(!format!("{:?}", parsed.ast()).contains("CoalesceExpr"));
+    }
+
 }

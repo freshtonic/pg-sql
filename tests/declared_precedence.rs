@@ -39,6 +39,8 @@ fn shape(e: &Expr<'_>) -> String {
         Expr::AtTimeZone(a, b) => format!("AtTz({},{})", shape(a), shape(b)),
         Expr::BoolTest(a, _) => format!("BoolTest({})", shape(a)),
         Expr::Like(a, b, _) => format!("Like({},{})", shape(a), shape(b)),
+        Expr::DecoratedInfix(a, _, b) => format!("Decorated({},{})", shape(a), shape(b)),
+        Expr::DecoratedPrefix(_, a) => format!("DecoratedPrefix({})", shape(a)),
         Expr::ColumnRef(_) => "c".to_owned(),
         Expr::IntegerLit(_) => "n".to_owned(),
         Expr::Parenthesized(_) => "(...)".to_owned(),
@@ -71,6 +73,26 @@ fn declared_precedence_matches_gram_y() {
         ("a = b IS NULL", "BoolTest(Eq(c,c))"),
         ("a LIKE b = c", "Eq(Like(c,c),c)"),
         ("a::int + b", "Add(Cast(c),c)"),
+        // gram.y:14844 `a_expr qual_Op a_expr %prec Op`: `OPERATOR(...)` sits
+        // at `Op` whatever operator it names, so a decorated `=` binds
+        // tighter than a bare `=` and a decorated `+` looser than `*`.
+        ("1 OPERATOR(pg_catalog.=) 2 = 3", "Eq(Decorated(n,n),n)"),
+        ("1 = 2 OPERATOR(pg_catalog.=) 3", "Eq(n,Decorated(n,n))"),
+        ("a OPERATOR(pg_catalog.+) b * c", "Decorated(c,Mul(c,c))"),
+        ("a * b OPERATOR(pg_catalog.+) c", "Decorated(Mul(c,c),c)"),
+        ("a OPERATOR(pg_catalog.*) b + c", "Decorated(c,Add(c,c))"),
+        // gram.y:889 `%left Op OPERATOR`.
+        (
+            "a OPERATOR(pg_catalog.||) b OPERATOR(pg_catalog.||) c",
+            "Decorated(Decorated(c,c),c)",
+        ),
+        (
+            "a || b OPERATOR(pg_catalog.||) c",
+            "Decorated(Concat(c,c),c)",
+        ),
+        // gram.y:14846 `qual_Op a_expr %prec Op`.
+        ("OPERATOR(pg_catalog.-) a * b", "DecoratedPrefix(Mul(c,c))"),
+        ("OPERATOR(pg_catalog.-) a = b", "Eq(DecoratedPrefix(c),c)"),
     ];
     for (source, expected) in cases {
         assert_eq!(parse_shape(source), expected, "for {source}");

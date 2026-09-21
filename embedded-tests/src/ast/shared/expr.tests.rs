@@ -3749,4 +3749,373 @@ mod tests {
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
     }
+    /// `COALESCE`, `GREATEST`, `LEAST` and `NULLIF` are gram.y
+    /// `func_expr_common_subexpr` productions with nodes of their own
+    /// (gram.y:15844-15865), not function calls. The differential oracle
+    /// compares PostgreSQL's parse of two texts that both say `COALESCE(...)`,
+    /// so it cannot see which variant pg-sql built; these tests can.
+    #[test]
+    fn parse_coalesce_as_its_own_variant() {
+        for src in ["COALESCE(a, b)", "coalesce(a)", "Coalesce(a, b + 1, NULL)"] {
+            let parsed = parse_expr_classified(src);
+            assert!(
+                matches!(parsed.ast(), Expr::Coalesce(_)),
+                "expected Coalesce for {src:?}, got {:?}",
+                parsed.ast(),
+            );
+        }
+        let parsed = parse_expr_classified("COALESCE(a, b, c)");
+        let Expr::Coalesce(coalesce) = parsed.ast() else {
+            panic!("expected Coalesce, got {:?}", parsed.ast());
+        };
+        assert_eq!(coalesce.args.len(), 3);
+    }
+
+    #[test]
+    fn parse_greatest_as_its_own_variant() {
+        for src in ["GREATEST(a, b)", "greatest(a)", "greatest(1, 2, 3)"] {
+            let parsed = parse_expr_classified(src);
+            assert!(
+                matches!(parsed.ast(), Expr::Greatest(_)),
+                "expected Greatest for {src:?}, got {:?}",
+                parsed.ast(),
+            );
+        }
+    }
+
+    #[test]
+    fn parse_least_as_its_own_variant() {
+        for src in ["LEAST(a, b)", "least(a)", "least(1, 2, 3)"] {
+            let parsed = parse_expr_classified(src);
+            assert!(
+                matches!(parsed.ast(), Expr::Least(_)),
+                "expected Least for {src:?}, got {:?}",
+                parsed.ast(),
+            );
+        }
+    }
+
+    /// gram.y:15844 `NULLIF '(' a_expr ',' a_expr ')'`: exactly two arguments.
+    #[test]
+    fn parse_nullif_as_its_own_variant() {
+        let parsed = parse_expr_classified("NULLIF(a, b + 1)");
+        let Expr::NullIf(nullif) = parsed.ast() else {
+            panic!("expected NullIf, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&*nullif.left, Expr::ColumnRef(_)));
+        assert!(matches!(&*nullif.right, Expr::Add(..)));
+        for src in ["nullif(a)", "nullif(a, b, c)", "nullif()"] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "NULLIF without exactly two arguments parsed completely: {src:?}",
+            );
+        }
+    }
+
+    /// `expr_list` is not `func_arg_list`: no `*`, no `DISTINCT`, no
+    /// `VARIADIC`, no named argument, and never empty. PostgreSQL 17.9's
+    /// `raw_parser` rejects every one of these.
+    #[test]
+    fn reject_function_call_syntax_in_coalesce_greatest_least() {
+        for src in [
+            "coalesce(*)",
+            "coalesce(DISTINCT a)",
+            "coalesce(ALL a)",
+            "coalesce(VARIADIC a)",
+            "coalesce(x => a)",
+            "coalesce()",
+            "coalesce(a ORDER BY a)",
+            "greatest(*)",
+            "greatest(DISTINCT a)",
+            "greatest()",
+            "least(*)",
+            "least(DISTINCT a)",
+            "least()",
+            "coalesce(a) OVER ()",
+            "coalesce(a) FILTER (WHERE true)",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "function-call syntax parsed completely in a special form: {src:?}",
+            );
+        }
+    }
+
+    /// The four words are `col_name_keyword` and `bare_label_keyword`
+    /// (gram.y:17875-17904, 18120-18323): a column name, a label with or
+    /// without `AS`, and an `attr_name` after a dot, but never an unqualified
+    /// function name.
+    #[test]
+    fn parse_coalesce_family_words_as_names() {
+        for word in ["coalesce", "greatest", "least", "nullif"] {
+            assert!(
+                matches!(parse_expr_classified(word).ast(), Expr::ColumnRef(_)),
+                "expected ColumnRef for {word:?}",
+            );
+        }
+        for src in [
+            "SELECT coalesce FROM t",
+            "SELECT nullif, greatest, least FROM t",
+            "SELECT 1 AS coalesce",
+            "SELECT 1 coalesce",
+            "SELECT t.coalesce FROM t",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = crate::ast::Statement::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+            let tree = format!("{:?}", parsed.ast());
+            assert!(!tree.contains("CoalesceExpr"), "{src:?} built the special form");
+        }
+    }
+
+    /// `pg_catalog.coalesce(a, b)` is not the special form. gram.y's
+    /// `func_name: ColId indirection` takes `coalesce` as an `attr_name`
+    /// (`ColLabel`), so PostgreSQL's raw parser accepts it as an ordinary
+    /// function call and fails later, in parse analysis, because no such
+    /// function exists.
+    #[test]
+    fn parse_qualified_coalesce_as_an_ordinary_call() {
+        let parsed = parse_expr_classified("pg_catalog.coalesce(a, b)");
+        let Expr::QualRef(qualified) = parsed.ast() else {
+            panic!("expected QualRef, got {:?}", parsed.ast());
+        };
+        assert!(qualified.call.is_some());
+    }
+
+    /// gram.y:14844 `a_expr qual_Op a_expr %prec Op` with `qual_Op:
+    /// OPERATOR '(' any_operator ')'` (gram.y:16494). The level is `Op`
+    /// whatever operator the parentheses name.
+    #[test]
+    fn parse_decorated_infix_operator_at_op_precedence() {
+        use crate::ast::shared::names::QualifiedOperatorName;
+
+        // `(1 OPERATOR(pg_catalog.=) 2) = 3`: a decorated `=` is above `=`.
+        let parsed = parse_expr_classified("1 OPERATOR(pg_catalog.=) 2 = 3");
+        let Expr::Eq(left, right) = parsed.ast() else {
+            panic!("expected Eq at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**right, Expr::IntegerLit(_)));
+        let Expr::DecoratedInfix(one, operator, two) = &**left else {
+            panic!("expected DecoratedInfix on the left, got {left:?}");
+        };
+        assert!(matches!(&**one, Expr::IntegerLit(_)));
+        assert!(matches!(&**two, Expr::IntegerLit(_)));
+        assert!(matches!(operator.name, QualifiedOperatorName::Qualified(_)));
+
+        // `a OPERATOR(pg_catalog.+) (b * c)`: a decorated `+` is below `*`.
+        let parsed = parse_expr_classified("a OPERATOR(pg_catalog.+) b * c");
+        let Expr::DecoratedInfix(left, _, right) = parsed.ast() else {
+            panic!("expected DecoratedInfix at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**left, Expr::ColumnRef(_)));
+        assert!(matches!(&**right, Expr::Mul(..)));
+
+        // gram.y:889 `%left Op OPERATOR`.
+        let parsed = parse_expr_classified("a OPERATOR(+) b OPERATOR(-) c");
+        let Expr::DecoratedInfix(left, operator, right) = parsed.ast() else {
+            panic!("expected DecoratedInfix at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**left, Expr::DecoratedInfix(..)));
+        assert!(matches!(&**right, Expr::ColumnRef(_)));
+        assert!(matches!(operator.name, QualifiedOperatorName::Plain(_)));
+    }
+
+    /// `any_operator` is `all_Op` behind any number of `ColId '.'` parts
+    /// (gram.y:9004), and `all_Op` is `Op | MathOp`: every `MathOp` spelling
+    /// (gram.y:16478) must be a decorated operator, as must an `Op`.
+    #[test]
+    fn parse_decorated_operator_with_every_math_op() {
+        for op in [
+            "+", "-", "*", "/", "%", "^", "<", ">", "=", "<=", ">=", "<>", "||", "@>", "~~", "<->",
+            "!=", "&&&",
+        ] {
+            for path in ["", "pg_catalog.", "a.b."] {
+                let src: &'static str = format!("x OPERATOR({path}{op}) y").leak();
+                assert!(
+                    matches!(parse_expr_classified(src).ast(), Expr::DecoratedInfix(..)),
+                    "expected DecoratedInfix for {src:?}",
+                );
+            }
+        }
+    }
+
+    /// gram.y:14846 `qual_Op a_expr %prec Op`.
+    #[test]
+    fn parse_decorated_prefix_operator_at_op_precedence() {
+        let parsed = parse_expr_classified("OPERATOR(pg_catalog.-) a * b");
+        let Expr::DecoratedPrefix(_, operand) = parsed.ast() else {
+            panic!("expected DecoratedPrefix at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**operand, Expr::Mul(..)));
+
+        let parsed = parse_expr_classified("OPERATOR(pg_catalog.-) a = b");
+        let Expr::Eq(left, _) = parsed.ast() else {
+            panic!("expected Eq at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**left, Expr::DecoratedPrefix(..)));
+
+        let parsed = parse_expr_classified("a OPERATOR(pg_catalog.+) OPERATOR(pg_catalog.-) b");
+        let Expr::DecoratedInfix(_, _, right) = parsed.ast() else {
+            panic!("expected DecoratedInfix at the root, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**right, Expr::DecoratedPrefix(..)));
+    }
+
+    /// gram.y:15322-15324 `b_expr qual_Op b_expr` and `qual_Op b_expr`: both
+    /// forms are in `b_expr`, so they stand as the low bound of `BETWEEN`.
+    /// The quantified form keeps its own production (gram.y `subquery_Op`).
+    #[test]
+    fn parse_decorated_operator_in_b_expr_and_beside_quantified_form() {
+        let parsed = parse_expr_classified("x BETWEEN 1 OPERATOR(pg_catalog.+) 2 AND 5");
+        let Expr::BetweenExpr(_, low, _) = parsed.ast() else {
+            panic!("expected BetweenExpr, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**low, Expr::DecoratedInfix(..)));
+
+        let parsed = parse_expr_classified("x BETWEEN OPERATOR(pg_catalog.-) 2 AND 5");
+        let Expr::BetweenExpr(_, low, _) = parsed.ast() else {
+            panic!("expected BetweenExpr, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&**low, Expr::DecoratedPrefix(..)));
+
+        assert!(matches!(
+            parse_expr_classified("a OPERATOR(pg_catalog.=) ANY (ARRAY[1])").ast(),
+            Expr::QuantifiedComparisonOp(..)
+                | Expr::QuantifiedComparisonCmp(..)
+                | Expr::QuantifiedComparisonAdd(..)
+        ));
+
+        // `=>` is not an operator name, and the parentheses are not optional.
+        for src in ["a OPERATOR(pg_catalog.=>) b", "a OPERATOR pg_catalog.= b", "a OPERATOR() b"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                lexed.errors().count() > 0 || parsed.is_err() || !input.is_eof(),
+                "invalid decorated operator parsed completely: {src:?}",
+            );
+        }
+    }
+
+    /// gram.y:15874 `XMLCONCAT '(' expr_list ')'` is PostgreSQL's `XmlExpr`
+    /// with `IS_XMLCONCAT`, not a function call, and `XMLCONCAT` is a
+    /// `col_name_keyword` (gram.y:17922). The differential oracle cannot see
+    /// which variant pg-sql built.
+    #[test]
+    fn parse_xmlconcat_as_its_own_variant() {
+        for src in ["XMLCONCAT(a, b)", "xmlconcat(a)", "xmlconcat('<a/>', NULL, x || y)"] {
+            let parsed = parse_expr_classified(src);
+            assert!(
+                matches!(parsed.ast(), Expr::XmlConcat(_)),
+                "expected XmlConcat for {src:?}, got {:?}",
+                parsed.ast(),
+            );
+        }
+        let parsed = parse_expr_classified("xmlconcat(a, b, c)");
+        let Expr::XmlConcat(concat) = parsed.ast() else {
+            panic!("expected XmlConcat, got {:?}", parsed.ast());
+        };
+        assert_eq!(concat.args.len(), 3);
+        assert!(matches!(parse_expr_classified("xmlconcat").ast(), Expr::ColumnRef(_)));
+        for src in [
+            "xmlconcat()",
+            "xmlconcat(*)",
+            "xmlconcat(DISTINCT a)",
+            "xmlconcat(VARIADIC a)",
+            "xmlconcat(x => a)",
+            "xmlconcat(a) OVER ()",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "function-call syntax parsed completely in XMLCONCAT: {src:?}",
+            );
+        }
+    }
+
+    /// gram.y:15730 `NORMALIZE '(' a_expr ')'` and gram.y:15737 `NORMALIZE '('
+    /// a_expr ',' unicode_normal_form ')'`. PostgreSQL turns the form into a
+    /// string constant, so it must never be a column reference here.
+    #[test]
+    fn parse_normalize_as_its_own_variant() {
+        use crate::ast::shared::expr::UnicodeNormalForm;
+
+        let parsed = parse_expr_classified("NORMALIZE(a || b)");
+        let Expr::Normalize(normalize) = parsed.ast() else {
+            panic!("expected Normalize, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&*normalize.arg, Expr::Concat(..)));
+        assert!(normalize.form.is_none());
+
+        let forms: [(&'static str, fn(&UnicodeNormalForm) -> bool); 4] = [
+            ("normalize(a, NFC)", |f| matches!(f, UnicodeNormalForm::Nfc)),
+            ("normalize(a, nfd)", |f| matches!(f, UnicodeNormalForm::Nfd)),
+            ("normalize(a, NFKC)", |f| matches!(f, UnicodeNormalForm::Nfkc)),
+            ("normalize(a, Nfkd)", |f| matches!(f, UnicodeNormalForm::Nfkd)),
+        ];
+        for (src, is_form) in forms {
+            let parsed = parse_expr_classified(src);
+            let Expr::Normalize(normalize) = parsed.ast() else {
+                panic!("expected Normalize for {src:?}, got {:?}", parsed.ast());
+            };
+            assert!(matches!(&*normalize.arg, Expr::ColumnRef(_)), "{src:?}");
+            assert!(normalize.form.as_ref().is_some_and(is_form), "{src:?}");
+        }
+        assert!(matches!(parse_expr_classified("normalize").ast(), Expr::ColumnRef(_)));
+        // `nfc` alone is an unreserved keyword: a column like any other.
+        assert!(matches!(parse_expr_classified("nfc").ast(), Expr::ColumnRef(_)));
+        for src in [
+            "normalize()",
+            "normalize(a, b)",
+            "normalize(a, 'NFC')",
+            "normalize(a, NFC, NFD)",
+            "normalize(NFC, a)",
+            "normalize(*)",
+            "normalize(DISTINCT a)",
+            "normalize(a) OVER ()",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "invalid NORMALIZE parsed completely: {src:?}",
+            );
+        }
+    }
+
+    /// As for `coalesce`: after a dot the word is an `attr_name`
+    /// (`ColLabel`), so PostgreSQL's raw parser takes `pg_catalog.xmlconcat(a,
+    /// b)` and `pg_catalog.normalize(a)` as ordinary calls. Neither is the
+    /// special form, and in the second one `NFC` is an ordinary argument.
+    #[test]
+    fn parse_qualified_xmlconcat_and_normalize_as_ordinary_calls() {
+        for src in [
+            "pg_catalog.xmlconcat(a, b)",
+            "pg_catalog.normalize(a)",
+            "pg_catalog.normalize(a, nfc)",
+        ] {
+            let parsed = parse_expr_classified(src);
+            let Expr::QualRef(qualified) = parsed.ast() else {
+                panic!("expected QualRef for {src:?}, got {:?}", parsed.ast());
+            };
+            assert!(qualified.call.is_some(), "{src:?}");
+        }
+    }
+
 }
