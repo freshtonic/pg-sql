@@ -54,6 +54,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	custom_infix_chain_is_left_associative	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	custom_infix_does_not_consume_lower_precedence_comparison	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_array_slice_with_string_bounds	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_between_symmetric_and_asymmetric	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_cast_parenthesized_field_access	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_coalesce_as_its_own_variant	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_coalesce_family_words_as_names	issue-9-generated-expression
