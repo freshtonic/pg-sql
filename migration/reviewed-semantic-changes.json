@@ -3,6 +3,7 @@
   "issue": 9,
   "base_execution_sha256": "0c0c76016571f281d4bee0a00449800d31a32530076f045578f739d276464c76",
   "base_inventory_sha256": "823091d9e06bfd915ddd254874b6a678b4c1a3ef9fa0e5c324f4456365797cd7",
+  "destinations_commit": "6a9aa92ccb5d2f512f05e63d6d137c23e1f2c137",
   "frozen_prefix": {
     "entry_count": 55,
     "sha256": "fedb99cf805863ea99ba74467b28c5afea4c5a37234d49e0d3af4be8b7acf8a5"

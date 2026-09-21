@@ -101,6 +101,10 @@ struct ReviewedSemanticChanges {
     issue: u32,
     base_execution_sha256: String,
     base_inventory_sha256: String,
+    /// The pg-sql commit whose AST the destinations were reviewed against.
+    /// The AST is hand-edited after the one-shot migration, so a destination
+    /// can be renamed or removed later; the review is a fact about this tree.
+    destinations_commit: String,
     frozen_prefix: ReviewedSemanticFrozenPrefix,
     changes: Vec<ReviewedSemanticChange>,
 }
@@ -299,7 +303,8 @@ pub fn verify_execution(repository: &Path, record_path: &Path) -> Result<(), Exe
 }
 
 /// Validate an append-only ledger of reviewed semantic changes against the
-/// immutable issue-8 inventory and the live AST declarations.
+/// immutable issue-8 inventory and the AST declarations of the commit the
+/// ledger names as reviewed.
 pub fn verify_reviewed_semantic_changes(
     repository: &Path,
     ledger_path: &Path,
@@ -309,6 +314,17 @@ pub fn verify_reviewed_semantic_changes(
         .map_err(|error| fail(format!("parse {}: {error}", ledger_path.display())))?;
     let ledger: ReviewedSemanticChanges = serde_json::from_slice(&ledger_bytes)
         .map_err(|error| fail(format!("parse {}: {error}", ledger_path.display())))?;
+    if ledger.destinations_commit.len() != 40
+        || !ledger
+            .destinations_commit
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+    {
+        return Err(fail(format!(
+            "reviewed semantic changes destinations commit {:?} is not a full object name",
+            ledger.destinations_commit
+        )));
+    }
     if ledger.schema_version != 1 || ledger.issue != 9 {
         return Err(fail(format!(
             "reviewed semantic changes must use schema 1 for issue 9, got schema {} issue {}",
@@ -376,7 +392,11 @@ pub fn verify_reviewed_semantic_changes(
             }
         }
         for destination in &change.destinations {
-            verify_live_semantic_destination(repository, destination)?;
+            verify_live_semantic_destination(
+                repository,
+                Some(&ledger.destinations_commit),
+                destination,
+            )?;
         }
     }
     Ok(())
@@ -423,8 +443,11 @@ fn verify_reviewed_semantic_frozen_prefix(
     Ok(())
 }
 
+/// Prove that `destination` names a declaration of the reviewed AST: the
+/// tree of `reviewed_commit`, or the working tree when there is none.
 fn verify_live_semantic_destination(
     repository: &Path,
+    reviewed_commit: Option<&str>,
     destination: &LiveSemanticDestination,
 ) -> Result<(), ExecutionError> {
     let relative = Path::new(&destination.path);
@@ -467,7 +490,13 @@ fn verify_live_semantic_destination(
         })?;
 
     let source_path = repository.join(relative);
-    let source = read_text(&source_path)?;
+    let source = match reviewed_commit {
+        Some(commit) => git_text(
+            repository,
+            &["show", &format!("{commit}:{}", destination.path)],
+        )?,
+        None => read_text(&source_path)?,
+    };
     let syntax = syn::parse_file(&source)
         .map_err(|error| fail(format!("parse {}: {error}", source_path.display())))?;
     let items = inline_module_items(&syntax.items, nested_module)?;
@@ -497,7 +526,7 @@ fn verify_live_semantic_destination(
     });
     if !exists {
         return Err(fail(format!(
-            "live AST destination {} does not exist in the live AST at {}",
+            "reviewed AST destination {} does not exist in the reviewed AST at {}",
             destination.id,
             source_path.display()
         )));
@@ -1854,7 +1883,7 @@ mod ast_node_destination_tests {
                 member: Some("value".into()),
             },
         ] {
-            verify_live_semantic_destination(repository.path(), &destination).unwrap();
+            verify_live_semantic_destination(repository.path(), None, &destination).unwrap();
         }
     }
 }

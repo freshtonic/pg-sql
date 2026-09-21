@@ -128,7 +128,13 @@ remain immutable historical evidence. Later issues do not rewrite that inventory
 to describe their evolving AST. Instead, reviewed rehomings are appended to
 [`migration/reviewed-semantic-changes.json`](../migration/reviewed-semantic-changes.json).
 Each entry cites semantic IDs from the frozen issue-8 inventory and explicit
-destination declarations in the live AST.
+destination declarations in the AST of the commit that the ledger header names
+as `destinations_commit`. The grammar is hand-edited after the one-shot
+migration, so a later commit can rename or remove a destination; the review is
+a fact about that commit's tree, and the verifier reads the files from it with
+`git show`. For the same reason the migration tool, its fixtures and its
+frozen mappings stay as they were when the recorded execution ran: they
+reproduce a historical publication and do not follow the live grammar.
 
 Validate the ledger independently with:
 
@@ -139,8 +145,8 @@ cargo run -p pg-sql-migrate -- execution verify-semantic-changes \
 ```
 
 The validator pins the two historical file digests, rejects duplicate or
-unknown frozen source IDs, and parses the declared live Rust files to prove each
-destination type, field, or variant exists. The ledger header records the entry
+unknown frozen source IDs, and parses the declared Rust files of the reviewed
+commit to prove each destination type, field, or variant exists. The ledger header records the entry
 count and canonical-JSON SHA-256 digest of its frozen prefix; the verifier pins
 both values independently. Deleting, reordering, or rewriting any frozen entry
 therefore fails verification, while strictly ordered new reviews may append

@@ -64,7 +64,7 @@ enum ExecutionCommand {
         #[arg(long, default_value = "migration/execution.json")]
         record: PathBuf,
     },
-    /// Validate reviewed issue-9 semantic changes against frozen and live ASTs.
+    /// Validate reviewed issue-9 semantic changes against the frozen and reviewed ASTs.
     VerifySemanticChanges {
         #[arg(long, default_value = ".")]
         repository_root: PathBuf,

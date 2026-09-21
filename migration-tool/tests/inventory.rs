@@ -36,7 +36,12 @@ fn materialize_frozen_inventory_input(repository: &Path, destination: &Path) {
 
     let common_git =
         String::from_utf8(git_output(repository, &["rev-parse", "--git-common-dir"])).unwrap();
-    let postgres_git = Path::new(common_git.trim()).join("modules/vendor/postgres");
+    // Git prints the common directory relative to `repository` in a main
+    // checkout and absolute in a worktree; a test runs in the package
+    // directory, so resolve it against the repository as the tool does.
+    let postgres_git = repository
+        .join(common_git.trim())
+        .join("modules/vendor/postgres");
     assert!(
         postgres_git.is_dir(),
         "PostgreSQL submodule object database is unavailable"

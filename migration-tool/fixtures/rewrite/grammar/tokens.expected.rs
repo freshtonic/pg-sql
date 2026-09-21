@@ -1,6 +1,7 @@
 recursa::grammar! {
     module = crate::grammar,
     keyword_matching = ascii_insensitive,
+    max_lookahead = 5,
 }
 
 recursa::tokens! {

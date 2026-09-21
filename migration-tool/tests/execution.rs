@@ -139,7 +139,7 @@ fn reviewed_semantic_changes_reject_unknown_sources_and_destinations() {
         verify_reviewed_semantic_changes(repository, &path)
             .unwrap_err()
             .to_string()
-            .contains("does not exist in the live AST")
+            .contains("does not exist in the reviewed AST")
     );
 }
 

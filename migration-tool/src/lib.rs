@@ -1845,6 +1845,14 @@ const OPTIONAL_FIXED_DECISIONS: &[(&str, OptionalFixedDecision)] = &[
         OptionalFixedDecision::Bool,
     ),
     (
+        "ast::session::set_reset::SetRoleStmt.to",
+        OptionalFixedDecision::SyntaxOnly,
+    ),
+    (
+        "ast::session::set_reset::SetSessionAuthStmt.local",
+        OptionalFixedDecision::Bool,
+    ),
+    (
         "ast::session::set_reset::SignedNumeric.minus",
         OptionalFixedDecision::Sign,
     ),
