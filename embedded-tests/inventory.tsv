@@ -470,6 +470,7 @@ embedded-tests/src/ast/dml/select.tests.rs	parse_order_by_desc	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_order_by_desc_nulls_last	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_order_by_nulls_first	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_order_by_using	false
+embedded-tests/src/ast/dml/select.tests.rs	parse_order_by_using_any_operator	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_order_by_using_locale_ops	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_paren_join_leading_subquery	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_paren_join_simple	false

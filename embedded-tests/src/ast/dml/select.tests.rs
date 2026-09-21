@@ -1516,4 +1516,70 @@ mod tests {
         }
     }
 
+    /// gram.y:13095 `sortby: a_expr USING qual_all_Op opt_nulls_order | a_expr
+    /// opt_asc_desc opt_nulls_order`. `qual_all_Op` is every operator, a
+    /// `MathOp` included, or `OPERATOR(...)`; PostgreSQL parses `ORDER BY x
+    /// USING +` and rejects it later, in parse analysis. The order is `ASC`,
+    /// `DESC` or `USING op`, never two of them. PostgreSQL 17.9 agrees with
+    /// every line here.
+    #[test]
+    fn parse_order_by_using_any_operator() {
+        fn tree(src: &'static str) -> String {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = crate::ast::dml::values::QueryBody::parse(&mut input)
+                .unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+            format!("{:?}", parsed.ast())
+        }
+
+        for op in [
+            "+", "-", "*", "/", "%", "^", "<", ">", "=", "<=", ">=", "<>", "!=", "~<~", "||",
+            "@>", "&&&",
+        ] {
+            let src: &'static str = format!("SELECT x FROM t ORDER BY x USING {op}").leak();
+            let tree = tree(src);
+            assert!(tree.contains("Using(UsingClause"), "{src:?}: {tree}");
+            assert!(tree.contains("op: Plain("), "{src:?}: {tree}");
+        }
+        for src in [
+            "SELECT x FROM t ORDER BY x USING OPERATOR(pg_catalog.<)",
+            "SELECT x FROM t ORDER BY x USING operator(s.t.>) NULLS LAST",
+        ] {
+            let tree = tree(src);
+            assert!(tree.contains("op: Decorated(DecoratedOperator"), "{src:?}: {tree}");
+        }
+        // The same `sortby` stands in an aggregate, in WITHIN GROUP and in a
+        // window.
+        for src in [
+            "SELECT array_agg(x ORDER BY x USING +) FROM t",
+            "SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY x USING +) FROM t",
+            "SELECT rank() OVER (ORDER BY x USING -) FROM t",
+        ] {
+            assert!(tree(src).contains("Using(UsingClause"), "{src:?}");
+        }
+        let plain = tree("SELECT x FROM t ORDER BY x DESC NULLS LAST, y USING < NULLS FIRST");
+        assert!(plain.contains("Dir(") && plain.contains("Using(UsingClause"), "{plain}");
+
+        for src in [
+            "SELECT x FROM t ORDER BY x ASC USING <",
+            "SELECT x FROM t ORDER BY x USING < DESC",
+            "SELECT x FROM t ORDER BY x NULLS FIRST ASC",
+            "SELECT x FROM t ORDER BY x USING",
+            "SELECT x FROM t ORDER BY x USING =>",
+            "SELECT x FROM t ORDER BY x USING OPERATOR()",
+            "SELECT x FROM t ORDER BY x USING < >",
+            "SELECT x FROM t ORDER BY x USING lt",
+        ] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = crate::ast::dml::values::QueryBody::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "{src:?} parsed completely"
+            );
+        }
+    }
+
 }
