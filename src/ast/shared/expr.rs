@@ -427,15 +427,21 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A single frame bound.
+    /// A single frame bound: gram.y `frame_bound` (gram.y:16391-16427),
+    /// `UNBOUNDED PRECEDING | UNBOUNDED FOLLOWING | CURRENT ROW | a_expr
+    /// PRECEDING | a_expr FOLLOWING`.
     ///
-    /// `UNBOUNDED` is admitted as an expression word and therefore shares the
-    /// ordinary expression-plus-direction representation. `CURRENT ROW` remains
-    /// the one fixed form without a direction suffix.
+    /// `UNBOUNDED` is an unreserved keyword, so `unbounded PRECEDING` is also
+    /// the spelling of `a_expr PRECEDING` with a column named `unbounded`.
+    /// gram.y settles it with `%nonassoc UNBOUNDED` one level under
+    /// `PRECEDING` and `FOLLOWING` (gram.y:861-868, 886), which `crate::tokens`
+    /// declares the same way: the keyword shifts, and the bound is always
+    /// `Unbounded`. A quoted `"unbounded" PRECEDING` is an `Offset`.
     #[derive(Debug)]
     pub enum WindowFrameBound {
         #[tok(CURRENT, ROW)]
         CurrentRow,
+        Unbounded(#[tok(UNBOUNDED, this)] WindowFrameDirection),
         Offset(WindowFrameOffset),
     }
 }
