@@ -1375,25 +1375,20 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// USING operator in ORDER BY: `USING > | USING < | USING ~<~ | ...`
+    /// gram.y:16498 `qual_all_Op: all_Op | OPERATOR '(' any_operator ')'`, the
+    /// operator of `sortby: a_expr USING qual_all_Op` (gram.y:13095).
     ///
-    /// Variant ordering: longer (4-char) locale operators before shorter (3-char),
-    /// then single-char `>` / `<` last.
+    /// `all_Op` is `Op | MathOp`, so every operator spelling is legal here,
+    /// `+`, `=` and `<>` included. Whether the operator orders anything is
+    /// for parse analysis: PostgreSQL parses `ORDER BY x USING +` and then
+    /// reports "operator + is not a valid ordering operator".
+    ///
+    /// Variant ordering: `Decorated` leads with `OPERATOR`, `Plain` with an
+    /// operator token.
     #[derive(Debug)]
     pub enum UsingOp {
-        #[tok(TILDELEQTILDE)]
-        TildeLeqTilde,
-        #[tok(TILDEGEQTILDE)]
-        TildeGeqTilde,
-        #[tok(TILDELTTILDE)]
-        TildeLtTilde,
-        #[tok(TILDEGTTILDE)]
-        TildeGtTilde,
-        #[tok(GT)]
-        Gt,
-        #[tok(LT)]
-        Lt,
-        Custom(#[lex(matcher)] literal::CustomOp),
+        Decorated(crate::ast::shared::expr::DecoratedOperator),
+        Plain(crate::ast::shared::names::OperatorName),
     }
 }
 
@@ -1429,13 +1424,28 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A single ORDER BY item: `expr [ASC|DESC] [USING op] [NULLS FIRST|LAST]`
+    /// A single ORDER BY item, gram.y:13095 `sortby: a_expr USING qual_all_Op
+    /// opt_nulls_order | a_expr opt_asc_desc opt_nulls_order`.
+    ///
+    /// The order is `ASC`, `DESC` or `USING op`, one of them at most: `ORDER
+    /// BY x ASC USING <` is a syntax error.
     #[derive(Debug)]
     pub struct OrderByItem {
         pub expr: Expr,
-        pub dir: Option<SortDir>,
-        pub using: Option<UsingClause>,
+        pub order: Option<SortOrder>,
         pub nulls: Option<NullsOrder>,
+    }
+}
+
+recursa::ast_node! {
+    /// How a `sortby` orders: `opt_asc_desc`'s two words, or `USING
+    /// qual_all_Op`.
+    ///
+    /// Variant ordering: the three lead with `ASC`, `DESC` and `USING`.
+    #[derive(Debug)]
+    pub enum SortOrder {
+        Dir(SortDir),
+        Using(UsingClause),
     }
 }
 
