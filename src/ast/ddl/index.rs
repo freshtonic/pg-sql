@@ -161,8 +161,8 @@ recursa::ast_node! {
     pub enum IndexTarget {
         Expr(#[tok(LPAREN, this, RPAREN)] boxed!(Expr)),
         Json(boxed!(JsonFuncExpr)),
-        /// gram.y `func_expr_common_subexpr`'s `COALESCE`, `GREATEST`, `LEAST`
-        /// and `NULLIF`, as in `ON CONFLICT (coalesce(key, 0))`. Their words
+        /// gram.y `func_expr_common_subexpr`'s `COALESCE`, `GREATEST`, `LEAST`,
+        /// `NULLIF`, `XMLCONCAT` and `NORMALIZE`, as in `ON CONFLICT (coalesce(key, 0))`. Their words
         /// are `COL_NAME` keywords, so `Func` never takes them as a name; a
         /// bare `coalesce` is still `Col`.
         Common(boxed!(CommonSubexprCall)),

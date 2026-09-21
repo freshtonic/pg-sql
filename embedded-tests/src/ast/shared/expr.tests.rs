@@ -4008,4 +4008,114 @@ mod tests {
         }
     }
 
+    /// gram.y:15874 `XMLCONCAT '(' expr_list ')'` is PostgreSQL's `XmlExpr`
+    /// with `IS_XMLCONCAT`, not a function call, and `XMLCONCAT` is a
+    /// `col_name_keyword` (gram.y:17922). The differential oracle cannot see
+    /// which variant pg-sql built.
+    #[test]
+    fn parse_xmlconcat_as_its_own_variant() {
+        for src in ["XMLCONCAT(a, b)", "xmlconcat(a)", "xmlconcat('<a/>', NULL, x || y)"] {
+            let parsed = parse_expr_classified(src);
+            assert!(
+                matches!(parsed.ast(), Expr::XmlConcat(_)),
+                "expected XmlConcat for {src:?}, got {:?}",
+                parsed.ast(),
+            );
+        }
+        let parsed = parse_expr_classified("xmlconcat(a, b, c)");
+        let Expr::XmlConcat(concat) = parsed.ast() else {
+            panic!("expected XmlConcat, got {:?}", parsed.ast());
+        };
+        assert_eq!(concat.args.len(), 3);
+        assert!(matches!(parse_expr_classified("xmlconcat").ast(), Expr::ColumnRef(_)));
+        for src in [
+            "xmlconcat()",
+            "xmlconcat(*)",
+            "xmlconcat(DISTINCT a)",
+            "xmlconcat(VARIADIC a)",
+            "xmlconcat(x => a)",
+            "xmlconcat(a) OVER ()",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "function-call syntax parsed completely in XMLCONCAT: {src:?}",
+            );
+        }
+    }
+
+    /// gram.y:15730 `NORMALIZE '(' a_expr ')'` and gram.y:15737 `NORMALIZE '('
+    /// a_expr ',' unicode_normal_form ')'`. PostgreSQL turns the form into a
+    /// string constant, so it must never be a column reference here.
+    #[test]
+    fn parse_normalize_as_its_own_variant() {
+        use crate::ast::shared::expr::UnicodeNormalForm;
+
+        let parsed = parse_expr_classified("NORMALIZE(a || b)");
+        let Expr::Normalize(normalize) = parsed.ast() else {
+            panic!("expected Normalize, got {:?}", parsed.ast());
+        };
+        assert!(matches!(&*normalize.arg, Expr::Concat(..)));
+        assert!(normalize.form.is_none());
+
+        let forms: [(&'static str, fn(&UnicodeNormalForm) -> bool); 4] = [
+            ("normalize(a, NFC)", |f| matches!(f, UnicodeNormalForm::Nfc)),
+            ("normalize(a, nfd)", |f| matches!(f, UnicodeNormalForm::Nfd)),
+            ("normalize(a, NFKC)", |f| matches!(f, UnicodeNormalForm::Nfkc)),
+            ("normalize(a, Nfkd)", |f| matches!(f, UnicodeNormalForm::Nfkd)),
+        ];
+        for (src, is_form) in forms {
+            let parsed = parse_expr_classified(src);
+            let Expr::Normalize(normalize) = parsed.ast() else {
+                panic!("expected Normalize for {src:?}, got {:?}", parsed.ast());
+            };
+            assert!(matches!(&*normalize.arg, Expr::ColumnRef(_)), "{src:?}");
+            assert!(normalize.form.as_ref().is_some_and(is_form), "{src:?}");
+        }
+        assert!(matches!(parse_expr_classified("normalize").ast(), Expr::ColumnRef(_)));
+        // `nfc` alone is an unreserved keyword: a column like any other.
+        assert!(matches!(parse_expr_classified("nfc").ast(), Expr::ColumnRef(_)));
+        for src in [
+            "normalize()",
+            "normalize(a, b)",
+            "normalize(a, 'NFC')",
+            "normalize(a, NFC, NFD)",
+            "normalize(NFC, a)",
+            "normalize(*)",
+            "normalize(DISTINCT a)",
+            "normalize(a) OVER ()",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "invalid NORMALIZE parsed completely: {src:?}",
+            );
+        }
+    }
+
+    /// As for `coalesce`: after a dot the word is an `attr_name`
+    /// (`ColLabel`), so PostgreSQL's raw parser takes `pg_catalog.xmlconcat(a,
+    /// b)` and `pg_catalog.normalize(a)` as ordinary calls. Neither is the
+    /// special form, and in the second one `NFC` is an ordinary argument.
+    #[test]
+    fn parse_qualified_xmlconcat_and_normalize_as_ordinary_calls() {
+        for src in [
+            "pg_catalog.xmlconcat(a, b)",
+            "pg_catalog.normalize(a)",
+            "pg_catalog.normalize(a, nfc)",
+        ] {
+            let parsed = parse_expr_classified(src);
+            let Expr::QualRef(qualified) = parsed.ast() else {
+                panic!("expected QualRef for {src:?}, got {:?}", parsed.ast());
+            };
+            assert!(qualified.call.is_some(), "{src:?}");
+        }
+    }
+
 }

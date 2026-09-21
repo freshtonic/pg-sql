@@ -366,6 +366,11 @@ recursa::tokens! {
         GREATEST        => r"GREATEST" in COL_NAME + bare_label,
         LEAST           => r"LEAST" in COL_NAME + bare_label,
         NULLIF          => r"NULLIF" in COL_NAME + bare_label,
+        // gram.y `func_expr_common_subexpr` heads (gram.y:15730, 15874):
+        // `col_name_keyword` (gram.y:17903, 17922) and `bare_label_keyword`
+        // (gram.y:18316, 18507).
+        NORMALIZE       => r"NORMALIZE" in COL_NAME + bare_label,
+        XMLCONCAT       => r"XMLCONCAT" in COL_NAME + bare_label,
         PRESERVE        => r"PRESERVE" in UNRESERVED + bare_label,
         INCREMENT       => r"INCREMENT" in UNRESERVED + bare_label,
         MINVALUE        => r"MINVALUE" in UNRESERVED + bare_label,

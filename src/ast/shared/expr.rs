@@ -1475,19 +1475,53 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// The `COALESCE`, `GREATEST`, `LEAST` and `NULLIF` forms where gram.y
+    /// `XMLCONCAT(expr, ...)`: gram.y:15874 `func_expr_common_subexpr:
+    /// XMLCONCAT '(' expr_list ')'`, PostgreSQL's `XmlExpr` with
+    /// `IS_XMLCONCAT`. `XMLCONCAT` is a `COL_NAME` keyword, as
+    /// [`CoalesceExpr`] describes.
+    #[derive(Debug)]
+    #[tok(XMLCONCAT, LPAREN, this, RPAREN)]
+    pub struct XmlConcatExpr {
+        #[sep(COMMA)]
+        pub args: one_or_many!(Expr),
+    }
+}
+
+recursa::ast_node! {
+    /// `NORMALIZE(expr [, form])`: gram.y:15730 `NORMALIZE '(' a_expr ')'` and
+    /// gram.y:15737 `NORMALIZE '(' a_expr ',' unicode_normal_form ')'`.
+    ///
+    /// PostgreSQL builds a call of `pg_catalog.normalize` whose second
+    /// argument is the string constant `'NFC'`, `'NFD'`, `'NFKC'` or `'NFKD'`
+    /// (`makeStringConst`), so the form is a keyword here and never a column
+    /// reference. `NORMALIZE` is a `COL_NAME` keyword, as [`CoalesceExpr`]
+    /// describes. The form enum is the one `IS [NOT] [form] NORMALIZED` uses.
+    #[derive(Debug)]
+    #[tok(NORMALIZE, LPAREN, this, RPAREN)]
+    pub struct NormalizeExpr {
+        pub arg: boxed!(Expr),
+        #[tok(COMMA, this)]
+        pub form: Option<UnicodeNormalForm>,
+    }
+}
+
+recursa::ast_node! {
+    /// The `COALESCE`, `GREATEST`, `LEAST`, `NULLIF`, `XMLCONCAT` and
+    /// `NORMALIZE` forms where gram.y
     /// writes `func_expr_windowless` (gram.y:15637) and not an expression: a
     /// `func_table`, a `rowsfrom_item`, an `index_elem` and a `part_elem`.
     /// `func_expr_windowless` is `func_application | func_expr_common_subexpr
     /// | ...`, and a `COL_NAME` keyword is never the name of a
     /// `func_application`, so each position names these forms itself.
-    /// [`Expr`] holds the same four nodes as variants of its own.
+    /// [`Expr`] holds the same nodes as variants of its own.
     #[derive(Debug)]
     pub enum CommonSubexprCall {
         Coalesce(CoalesceExpr),
         Greatest(GreatestExpr),
         Least(LeastExpr),
         NullIf(NullIfExpr),
+        XmlConcat(XmlConcatExpr),
+        Normalize(NormalizeExpr),
     }
 }
 
@@ -3785,6 +3819,10 @@ recursa::ast_node! {
         Least(LeastExpr),
         /// `NULLIF(left, right)`.
         NullIf(NullIfExpr),
+        /// `XMLCONCAT(expr, ...)`.
+        XmlConcat(XmlConcatExpr),
+        /// `NORMALIZE(expr [, NFC | NFD | NFKC | NFKD])`.
+        Normalize(NormalizeExpr),
         /// CASE expression: `CASE [expr] WHEN ... THEN ... [ELSE ...] END`
         Case(CaseExpr),
         /// Unicode string literal: `U&'...'` with optional `UESCAPE 'c'`. Must
@@ -4062,6 +4100,8 @@ recursa::ast_node! {
         Greatest,
         Least,
         NullIf,
+        XmlConcat,
+        Normalize,
         Case,
         UnicodeStringLit,
         EscapeStringLit,

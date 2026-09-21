@@ -442,7 +442,8 @@ recursa::ast_node! {
         Cast(crate::ast::shared::expr::CastCall),
         /// `COLLATION FOR (expr)`.
         CollationFor(crate::ast::shared::expr::CollationForCall),
-        /// `COALESCE(...)`, `GREATEST(...)`, `LEAST(...)` or `NULLIF(a, b)`.
+        /// `COALESCE(...)`, `GREATEST(...)`, `LEAST(...)`, `NULLIF(a, b)`,
+        /// `XMLCONCAT(...)` or `NORMALIZE(...)`.
         Common(crate::ast::shared::expr::CommonSubexprCall),
         #[tok(USER)]
         /// `USER` — the reserved-keyword spelling of `CURRENT_USER`. Used as a
@@ -1001,6 +1002,10 @@ recursa::ast_node! {
         Least,
         #[tok(NULLIF)]
         NullIf,
+        #[tok(NORMALIZE)]
+        Normalize,
+        #[tok(XMLCONCAT)]
+        XmlConcat,
         #[tok(INTERVAL)]
         Interval,
         #[tok(PRECISION)]

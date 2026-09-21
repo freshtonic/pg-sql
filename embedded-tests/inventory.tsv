@@ -743,6 +743,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_no_extend_above	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_no_extend_below	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_no_extend_left	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_no_extend_right	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_normalize_as_its_own_variant	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_not_between_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_not_expr	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_not_ilike_escape	false
@@ -778,6 +779,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_power_operator	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_coalesce_as_an_ordinary_call	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_column_ref	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_wildcard	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_xmlconcat_and_normalize_as_ordinary_calls	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_question_dash_pipe_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_question_pipe_pipe_infix	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_regex_imatch	false
@@ -837,6 +839,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_unicode_string_lit_uescape	fal
 embedded-tests/src/ast/shared/expr.tests.rs	parse_unicode_string_with_backslash	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_user_zero_arg_atom	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_xml_functions	false
+embedded-tests/src/ast/shared/expr.tests.rs	parse_xmlconcat_as_its_own_variant	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_xmlelement_simple	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_xmlelement_with_attributes	false
 embedded-tests/src/ast/shared/expr.tests.rs	parse_xmlforest	false
