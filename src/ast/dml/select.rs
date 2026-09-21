@@ -1789,7 +1789,22 @@ recursa::ast_node! {
     pub enum SelectHead {
         DistinctOn(SelectDistinctOnTargets),
         Distinct(SelectDistinctTargets),
+        All(SelectAllTargets),
         Plain(SelectTargets),
+    }
+}
+
+recursa::ast_node! {
+    /// `ALL` followed by the optional SELECT targets: gram.y:12791 `SELECT
+    /// opt_all_clause opt_target_list` with `opt_all_clause: ALL`
+    /// (gram.y:13071). `ALL` is a noise word, and unlike `DISTINCT` it keeps
+    /// the nullable `opt_target_list`: `SELECT ALL FROM t` and a bare `SELECT
+    /// ALL` are complete.
+    #[derive(Debug)]
+    #[tok(ALL, this)]
+    pub struct SelectAllTargets {
+        #[pretty(break_before = soft)]
+        pub targets: Option<SelectTargets>,
     }
 }
 
@@ -1878,7 +1893,7 @@ impl<'input> SelectStmt<'input> {
         match self.head.as_ref()? {
             SelectHead::DistinctOn(head) => Some(SelectDistinctRef::On(&head.qualifier)),
             SelectHead::Distinct(_) => Some(SelectDistinctRef::All),
-            SelectHead::Plain(_) => None,
+            SelectHead::All(_) | SelectHead::Plain(_) => None,
         }
     }
 
@@ -1888,15 +1903,18 @@ impl<'input> SelectStmt<'input> {
         match self.head.as_ref()? {
             SelectHead::DistinctOn(head) => Some(&head.targets),
             SelectHead::Distinct(head) => Some(&head.targets),
-            SelectHead::Plain(SelectTargets::Items(targets)) => Some(targets),
-            SelectHead::Plain(SelectTargets::Into(_) | SelectTargets::Empty(_)) => None,
+            SelectHead::All(_) | SelectHead::Plain(_) => match self.plain_targets()? {
+                SelectTargets::Items(targets) => Some(targets),
+                SelectTargets::Into(_) | SelectTargets::Empty(_) => None,
+            },
         }
     }
 
-    /// Return the targets of the head without `DISTINCT`, the only one that
+    /// Return the targets of a head without `DISTINCT`, the only kind that
     /// has the zero-target forms.
     fn plain_targets(&self) -> Option<&SelectTargets<'input>> {
         match self.head.as_ref()? {
+            SelectHead::All(head) => head.targets.as_ref(),
             SelectHead::Plain(targets) => Some(targets),
             SelectHead::DistinctOn(_) | SelectHead::Distinct(_) => None,
         }

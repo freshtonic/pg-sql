@@ -1323,4 +1323,36 @@ mod tests {
         }
     }
 
+    /// gram.y:12791 `SELECT opt_all_clause opt_target_list`: `ALL` is a noise
+    /// word that keeps the nullable target list, so `SELECT ALL FROM t` is
+    /// complete where `SELECT DISTINCT FROM t` is an error.
+    #[test]
+    fn parse_select_all_with_and_without_targets() {
+        use crate::ast::dml::select::SelectHead;
+
+        for (src, count, has_from, has_into) in [
+            ("SELECT ALL a, b FROM t", 2, true, false),
+            ("SELECT ALL FROM t", 0, true, false),
+            ("SELECT ALL", 0, false, false),
+            ("SELECT ALL INTO u FROM t", 0, true, true),
+            ("SELECT ALL a INTO u FROM t WHERE a > 1", 1, true, true),
+            ("SELECT ALL WHERE true", 0, false, false),
+        ] {
+            let parsed = parse_select_classified(src);
+            let stmt = parsed.ast();
+            assert!(matches!(stmt.head, Some(SelectHead::All(_))), "{src:?}");
+            assert_eq!(stmt.item_count(), count, "{src:?}");
+            assert_eq!(stmt.from_clause().is_some(), has_from, "{src:?}");
+            assert_eq!(stmt.into_clause().is_some(), has_into, "{src:?}");
+            assert!(stmt.distinct().is_none(), "{src:?}");
+        }
+        for src in ["SELECT ALL DISTINCT a FROM t", "SELECT DISTINCT ALL a FROM t", "SELECT ALL ALL a"] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = SelectStmt::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+    }
+
 }

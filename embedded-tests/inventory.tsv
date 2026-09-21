@@ -474,6 +474,7 @@ embedded-tests/src/ast/dml/select.tests.rs	parse_paren_join_simple	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_paren_join_with_subquery_inside	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_quoted_keyword_function_name	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_rows_from	false
+embedded-tests/src/ast/dml/select.tests.rs	parse_select_all_with_and_without_targets	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_distinct_heads	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_empty_items	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_select_for_update	false
