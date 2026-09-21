@@ -2510,27 +2510,19 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `expr AS cast_type [COLLATE "c"]` — inner of `CAST(...)`.
+    /// `expr AS cast_type` — inner of `CAST(...)`. gram.y's rule is `CAST '('
+    /// a_expr AS Typename ')'`, with no collation: PostgreSQL rejects `CAST(x
+    /// AS text COLLATE "C")`.
     #[derive(Debug)]
     pub struct CastAsInner {
         pub value: boxed!(Expr),
         #[tok(AS, this)]
         pub target: CastType,
-        pub collate: Option<CollateSuffix>,
     }
 }
 
 recursa::ast_node! {
-    /// `COLLATE "name"` suffix appearing after a cast target type.
-    #[derive(Debug)]
-    pub struct CollateSuffix {
-        #[tok(COLLATE, this)]
-        pub name: crate::tokens::ColId,
-    }
-}
-
-recursa::ast_node! {
-    /// `CAST(expr AS type [COLLATE "c"])` — SQL-standard cast form.
+    /// `CAST(expr AS type)` — SQL-standard cast form.
     #[derive(Debug)]
     pub struct CastCall {
         #[tok(CAST, LPAREN, this, RPAREN)]
@@ -3440,9 +3432,11 @@ recursa::ast_node! {
         // --- Postfix ---
         /// Postgres-style cast: `expr::type`
         Cast(boxed!(Self), #[tok(COLONCOLON, this)] boxed!(CastType)),
-        /// `expr COLLATE "collation"` — collation specifier. Binds tighter than
-        /// comparisons (bp 5) but looser than `::` cast (bp 20).
-        Collate(boxed!(Self), #[tok(COLLATE, this)] crate::tokens::ColId),
+        /// gram.y:14783 `a_expr COLLATE any_name`: the collation may be
+        /// schema-qualified (`x COLLATE pg_catalog."C"`). `any_name` is `ColId
+        /// attrs`, which is `QualifiedName`. It binds tighter than comparisons
+        /// and looser than the `::` cast.
+        Collate(boxed!(Self), #[tok(COLLATE, this)] crate::ast::shared::names::QualifiedName),
         /// `lhs operator {ANY|SOME|ALL} (expr-or-query)`: gram.y `a_expr
         /// subquery_Op sub_type '(' a_expr ')' %prec Op` and its
         /// `select_with_parens` twin. gram.y decides the shift before the
@@ -3901,7 +3895,7 @@ recursa::ast_node! {
         /// `TRIM([LEADING|TRAILING|BOTH] [chars] FROM source)`. Before `Func`
         /// since `trim` is also a valid function-call identifier.
         Trim(TrimCall),
-        /// `CAST(expr AS type [COLLATE "c"])`. Before `Func`.
+        /// `CAST(expr AS type)`. Before `Func`.
         CastCall(CastCall),
         /// `COLLATION FOR (expr)`. Before `Func`.
         CollationFor(CollationForCall),
