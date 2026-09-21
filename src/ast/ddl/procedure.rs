@@ -1,6 +1,5 @@
 /// CREATE PROCEDURE / DROP PROCEDURE / CALL statement AST.
 use crate::ast::ddl::function::{FuncOption, FunctionParameters, RoutineBody};
-use crate::ast::shared::expr::FuncArg;
 // ---------------------------------------------------------------------------
 // Additional imports for the ALTER/DROP types appended to this file as part
 // of the DDL physical-extraction migration. Glob imports keep cross-batch
@@ -64,23 +63,16 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Parenthesized argument list of a `CALL` statement.
-    #[derive(Debug, derive_more :: Deref)]
-    #[tok(LPAREN, this, RPAREN)]
-    pub struct CallArguments(
-        #[sep(COMMA)]
-        #[deref]
-        pub zero_or_many!(FuncArg),
-    );
-}
-
-recursa::ast_node! {
-    /// `CALL name ( [ argument ] [, ...] )`
+    /// gram.y:1159 `CallStmt: CALL func_application`.
+    ///
+    /// `func_application` is the production a function call uses, so the name
+    /// is a `func_name`, which may be schema-qualified (`CALL s.p(1)`), and
+    /// the arguments are a function call's: named, `VARIADIC`, and the rest.
+    /// It is the node a function table in `FROM` holds.
     #[derive(Debug)]
     pub struct CallStmt {
         #[tok(CALL, this)]
-        pub name: crate::tokens::type_function_name,
-        pub args: CallArguments,
+        pub call: crate::ast::shared::expr::FunctionApplicationExpr,
     }
 }
 

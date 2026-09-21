@@ -213,6 +213,7 @@ embedded-tests/src/ast/ddl/policy.tests.rs	create_policy_minimal_roundtrips	fals
 embedded-tests/src/ast/ddl/policy.tests.rs	parse_drop_policy_on_table	false
 embedded-tests/src/ast/ddl/procedure.tests.rs	alter_procedure_rename	false
 embedded-tests/src/ast/ddl/procedure.tests.rs	alter_procedure_strict	false
+embedded-tests/src/ast/ddl/procedure.tests.rs	parse_call_as_a_func_application	false
 embedded-tests/src/ast/ddl/procedure.tests.rs	parse_call_basic	false
 embedded-tests/src/ast/ddl/procedure.tests.rs	parse_call_concat_arg	false
 embedded-tests/src/ast/ddl/procedure.tests.rs	parse_call_no_args	false

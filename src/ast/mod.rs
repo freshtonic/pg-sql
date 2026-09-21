@@ -229,7 +229,7 @@ recursa::ast_node! {
         AlterProcedure(boxed!(AlterProcedureStmt)),
         AlterRoutine(boxed!(AlterRoutineStmt)),
         // CALL stored procedure
-        Call(CallStmt),
+        Call(boxed!(CallStmt)),
         // DML
         Insert(boxed!(InsertStmt)),
         Update(boxed!(UpdateStmt)),

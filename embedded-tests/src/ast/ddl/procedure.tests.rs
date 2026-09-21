@@ -81,4 +81,54 @@ mod tests {
     fn alter_procedure_rename() {
         reparse_stable::<AlterProcedureStmt>("ALTER PROCEDURE ptest1(text) RENAME TO ptest1a");
     }
+    /// gram.y:1159 `CallStmt: CALL func_application`: the name is a
+    /// `func_name`, so it may be schema-qualified, and the arguments are a
+    /// function call's. PostgreSQL 17.9 agrees with every line here.
+    #[test]
+    fn parse_call_as_a_func_application() {
+        use crate::ast::shared::expr::FuncCallName;
+
+        for (src, qualified) in [
+            ("CALL p()", false),
+            ("CALL p(1, 2)", false),
+            ("CALL pg_catalog.nosuch()", true),
+            ("CALL a.b.c(1)", true),
+            ("CALL p(x => 1, y := 2)", false),
+            ("CALL p(1, VARIADIC arr)", false),
+            ("CALL p(DISTINCT 1)", false),
+            ("CALL p(*)", false),
+            ("CALL p(1 ORDER BY 1)", false),
+            ("CALL \"P\"(1)", false),
+            // `type_func_name` and unreserved keywords are function names.
+            ("CALL left(1)", false),
+            ("CALL value(1)", false),
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed =
+                CallStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+            assert_eq!(
+                matches!(parsed.ast().call.name, FuncCallName::Qualified(_)),
+                qualified,
+                "{src:?}"
+            );
+        }
+        for src in [
+            "CALL p",
+            "CALL p() OVER ()",
+            "CALL p() FILTER (WHERE true)",
+            "CALL coalesce(1, 2)",
+            "CALL select(1)",
+            "CALL p(), q()",
+            "CALL (p())",
+        ] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = CallStmt::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+    }
+
 }
