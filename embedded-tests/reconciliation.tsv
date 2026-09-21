@@ -20,6 +20,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_tablespace_as_execute	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_partition_of_multiple_column_options	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_coalesce_family_as_function_tables	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_rollup_and_cube_as_grouping_clauses	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_join_chained_after_using	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_distinct_heads	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_into_without_targets	issue-9-generated-statement
@@ -27,6 +28,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_no_targets_at_all	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_select_plain_distinct_prefix_identifier	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_targetless_select_set_operations	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/dml/select.tests.rs	reject_distinct_without_a_target_list	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	reject_select_duplicate_limit_offset_clauses	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	reject_select_from_without_from_list	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/update.tests.rs	parse_update_multiple_assignments_and_returning_items	issue-9-generated-statement

@@ -226,7 +226,7 @@ mod tests {
         assert_eq!(stmt.item_count(), 0);
         assert!(stmt.from_clause().is_none());
         assert!(stmt.into_clause().is_none());
-        assert!(stmt.targets().is_none());
+        assert!(stmt.target_list().is_none());
         assert!(input.is_eof());
     }
 
@@ -925,7 +925,7 @@ mod tests {
         let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
         let group_by = stmt.group_by.as_ref().expect("GROUP BY clause");
-        assert!(matches!(group_by.items.as_slice(), [GroupByItem::Expr(_)]));
+        assert!(matches!(group_by.items.as_slice(), [GroupByItem::Rollup(_)]));
         assert!(input.is_eof());
     }
 
@@ -937,7 +937,7 @@ mod tests {
         let stmt_parsed = SelectStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
         let group_by = stmt.group_by.as_ref().expect("GROUP BY clause");
-        assert!(matches!(group_by.items.as_slice(), [GroupByItem::Expr(_)]));
+        assert!(matches!(group_by.items.as_slice(), [GroupByItem::Cube(_)]));
         assert!(input.is_eof());
     }
 
@@ -955,8 +955,8 @@ mod tests {
         assert!(matches!(
             grouping_sets.groups.as_slice(),
             [rollup, cube]
-                if matches!(rollup.as_ref(), GroupByItem::Expr(_))
-                    && matches!(cube.as_ref(), GroupByItem::Expr(_))
+                if matches!(rollup.as_ref(), GroupByItem::Rollup(_))
+                    && matches!(cube.as_ref(), GroupByItem::Cube(_))
         ));
         assert!(input.is_eof());
     }
@@ -973,8 +973,8 @@ mod tests {
             group_by.items.as_slice(),
             [
                 GroupByItem::Expr(_),
-                GroupByItem::Expr(_),
-                GroupByItem::Expr(_)
+                GroupByItem::Rollup(_),
+                GroupByItem::Cube(_)
             ]
         ));
         assert!(input.is_eof());
@@ -1203,6 +1203,124 @@ mod tests {
         // A bare word is still a table name.
         let parsed = parse_select_classified("SELECT * FROM coalesce");
         assert!(!format!("{:?}", parsed.ast()).contains("CoalesceExpr"));
+    }
+
+    /// gram.y `simple_select: SELECT distinct_clause target_list ...`: only the
+    /// `opt_all_clause opt_target_list` form has an empty list. PostgreSQL
+    /// rejects `SELECT DISTINCT FROM pg_database` (errors.sql) with a syntax
+    /// error at `from`.
+    #[test]
+    fn reject_distinct_without_a_target_list() {
+        for src in [
+            "SELECT DISTINCT FROM pg_database",
+            "SELECT DISTINCT ON (x) FROM t",
+            "SELECT DISTINCT",
+            "SELECT DISTINCT ON (x)",
+            "SELECT DISTINCT INTO u FROM t",
+            "SELECT DISTINCT WHERE true",
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = SelectStmt::parse(&mut input);
+            assert!(
+                parsed.is_err() || !input.is_eof(),
+                "DISTINCT without targets parsed completely: {src:?}",
+            );
+        }
+        // The head without DISTINCT keeps every zero-target form.
+        for src in ["SELECT FROM t", "SELECT", "SELECT INTO u FROM t"] {
+            assert_eq!(parse_select_classified(src).ast().item_count(), 0, "{src:?}");
+        }
+        for (src, count) in [
+            ("SELECT DISTINCT a FROM t", 1),
+            ("SELECT DISTINCT ON (a) a, b FROM t", 2),
+            ("SELECT DISTINCT a INTO u FROM t", 1),
+        ] {
+            let parsed = parse_select_classified(src);
+            assert_eq!(parsed.ast().item_count(), count, "{src:?}");
+            assert!(parsed.ast().distinct().is_some(), "{src:?}");
+            assert!(parsed.ast().from_clause().is_some(), "{src:?}");
+        }
+    }
+
+    /// gram.y:13336-13348 `rollup_clause` and `cube_clause`. `%nonassoc CUBE
+    /// ROLLUP` below `'('` (gram.y:871-873) makes the word followed by `(`
+    /// the grouping clause whenever it starts a `group_by_item`. The
+    /// differential oracle cannot see which node pg-sql built.
+    #[test]
+    fn parse_group_by_rollup_and_cube_as_grouping_clauses() {
+        use crate::ast::dml::select::GroupByItem;
+        fn items(src: &'static str, check: impl for<'a> FnOnce(&'a [GroupByItem<'a>])) {
+            let parsed = parse_select_classified(src);
+            let group_by = parsed.ast().group_by.as_ref().expect("GROUP BY");
+            check(group_by.items.as_slice());
+        }
+
+        items("SELECT 1 FROM t GROUP BY rollup(a, b)", |items| {
+            let [GroupByItem::Rollup(rollup)] = items else {
+                panic!("expected Rollup, got {items:?}");
+            };
+            assert_eq!(rollup.items.len(), 2);
+        });
+        items("SELECT 1 FROM t GROUP BY CUBE (a, b + 1, (c, d))", |items| {
+            let [GroupByItem::Cube(cube)] = items else {
+                panic!("expected Cube, got {items:?}");
+            };
+            assert_eq!(cube.items.len(), 3);
+        });
+        items("SELECT 1 FROM t GROUP BY a, rollup(b), cube(c), ()", |items| {
+            assert!(matches!(
+                items,
+                [
+                    GroupByItem::Expr(_),
+                    GroupByItem::Rollup(_),
+                    GroupByItem::Cube(_),
+                    GroupByItem::Empty(_)
+                ]
+            ));
+        });
+        items(
+            "SELECT 1 FROM t GROUP BY GROUPING SETS (rollup(a, b), cube(c), (d))",
+            |items| {
+                let [GroupByItem::GroupingSets(sets)] = items else {
+                    panic!("expected GroupingSets, got {items:?}");
+                };
+                assert!(matches!(
+                    sets.groups.as_slice(),
+                    [a, b, c] if matches!(**a, GroupByItem::Rollup(_))
+                        && matches!(**b, GroupByItem::Cube(_))
+                        && matches!(**c, GroupByItem::Expr(_))
+                ));
+            },
+        );
+
+        // Not at the start of a `group_by_item`: a function call.
+        items("SELECT 1 FROM t GROUP BY (cube(a, b))", |items| {
+            let [GroupByItem::Expr(expr)] = items else {
+                panic!("expected Expr, got {items:?}");
+            };
+            assert!(matches!(**expr, Expr::Parenthesized(_)));
+        });
+        items("SELECT 1 FROM t GROUP BY pg_catalog.cube(a, b), s.rollup(a)", |items| {
+            assert!(matches!(items, [GroupByItem::Expr(a), GroupByItem::Expr(b)]
+                if matches!(**a, Expr::QualRef(_)) && matches!(**b, Expr::QualRef(_))));
+        });
+        // A bare word is a column, and outside GROUP BY the call is a call.
+        items("SELECT 1 FROM t GROUP BY cube, rollup", |items| {
+            assert!(matches!(items, [GroupByItem::Expr(a), GroupByItem::Expr(b)]
+                if matches!(**a, Expr::ColumnRef(_)) && matches!(**b, Expr::ColumnRef(_))));
+        });
+        let parsed = parse_select_classified("SELECT cube(a, b), rollup(a) FROM t");
+        assert!(format!("{:?}", parsed.ast()).matches("Func(").count() >= 2);
+
+        // `expr_list` is never empty.
+        for src in ["SELECT 1 FROM t GROUP BY rollup()", "SELECT 1 FROM t GROUP BY cube()"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = SelectStmt::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
     }
 
 }
