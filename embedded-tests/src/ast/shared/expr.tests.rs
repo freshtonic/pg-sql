@@ -6,7 +6,7 @@ mod tests {
         FunctionCallTail, JsonObject, ParenContent, ParenthesizedDotStar, ParenthesizedExpr,
         ParenthesizedIndirection, StringLitSeq0, TypeName,
     };
-    use crate::ast::dml::values::{SelectClause, SimpleSelect, Subquery};
+    use crate::ast::dml::values::{SelectClause, Subquery};
 
     /// Parse `src` as an `Expr` through the logos lex pass.
     ///
@@ -2023,7 +2023,10 @@ mod tests {
                 content: ParenContent::Subquery(subquery),
                 indirection,
                 ..
-            }) if matches!(subquery.body.clause, SelectClause::Simple(SimpleSelect::ParenthesizedSet(_)))
+            }) if matches!(
+                &subquery.body.clause,
+                SelectClause::Union(left, _, _) if matches!(**left, SelectClause::Parens(_))
+            )
                 && indirection.is_empty()
         ));
         assert!(input.is_eof());

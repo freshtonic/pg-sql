@@ -1,5 +1,5 @@
 /// VALUES statement, TABLE statement, and set operation support (UNION, EXCEPT, INTERSECT).
-use crate::ast::dml::select::SelectBody;
+use crate::ast::dml::select::{SelectStmt, ValuesBody};
 
 recursa::ast_node! {
     /// TABLE statement: gram.y `simple_select: TABLE relation_expr`. Its ORDER BY
@@ -13,36 +13,42 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A set operation keyword with its optional `ALL` / `DISTINCT` quantifier.
-    ///
-    /// Variant ordering: the two-token forms before the bare keywords.
+    /// gram.y `set_quantifier: ALL | DISTINCT | /*EMPTY*/`, the present forms.
+    /// `DISTINCT` is the default and changes nothing; `ALL` keeps duplicates.
     #[derive(Debug)]
-    pub enum SetOp {
-        #[tok(UNION, ALL)]
-        UnionAll,
-        #[tok(UNION, DISTINCT)]
-        UnionDistinct,
-        #[tok(EXCEPT, ALL)]
-        ExceptAll,
-        #[tok(INTERSECT, ALL)]
-        IntersectAll,
-        #[tok(UNION)]
-        Union,
-        #[tok(EXCEPT)]
-        Except,
-        #[tok(INTERSECT)]
-        Intersect,
+    pub enum SetQuantifier {
+        #[tok(ALL)]
+        All,
+        #[tok(DISTINCT)]
+        Distinct,
     }
 }
 
 recursa::ast_node! {
-    /// `UNION | EXCEPT | INTERSECT [ALL | DISTINCT] select_clause` — gram.y
-    /// `simple_select: select_clause UNION set_quantifier select_clause`; the
-    /// right operand is a `select_clause`, never a sorted or limited query.
+    /// `UNION [ALL | DISTINCT]`. The keyword is on the node and not on the
+    /// optional field, so the operator is never empty.
     #[derive(Debug)]
-    pub struct SetOpCombiner {
-        pub op: SetOp,
-        pub right: boxed!(SelectClause),
+    #[tok(UNION, this)]
+    pub struct UnionOp {
+        pub quantifier: Option<SetQuantifier>,
+    }
+}
+
+recursa::ast_node! {
+    /// `EXCEPT [ALL | DISTINCT]`.
+    #[derive(Debug)]
+    #[tok(EXCEPT, this)]
+    pub struct ExceptOp {
+        pub quantifier: Option<SetQuantifier>,
+    }
+}
+
+recursa::ast_node! {
+    /// `INTERSECT [ALL | DISTINCT]`.
+    #[derive(Debug)]
+    #[tok(INTERSECT, this)]
+    pub struct IntersectOp {
+        pub quantifier: Option<SetQuantifier>,
     }
 }
 
@@ -103,51 +109,58 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A parenthesized left operand with its required set operation:
-    /// gram.y `simple_select: select_clause UNION set_quantifier select_clause`
-    /// (gram.y:12844) where the left `select_clause` is a `select_with_parens`,
-    /// as in `(SELECT 1) UNION SELECT 2`.
-    #[derive(Debug)]
-    pub struct ParenthesizedSetOp {
-        pub left: SelectWithParens,
-        pub set_op: SetOpCombiner,
-    }
-}
-
-recursa::ast_node! {
-    /// gram.y `simple_select` (gram.y:12790): the set-operation members of a
-    /// query, which are exactly the `select_clause` forms that carry no outer
-    /// parentheses of their own.
-    ///
-    /// Variant ordering: `ParenthesizedSet` starts with `(`, `Table` with
-    /// `TABLE`, `Body` with `SELECT` or `VALUES`.
-    #[derive(Debug)]
-    pub enum SimpleSelect {
-        ParenthesizedSet(ParenthesizedSetOp),
-        Table(TableStmt),
-        Body(CompoundBody),
-    }
-}
-
-recursa::ast_node! {
     /// gram.y `select_clause: simple_select | select_with_parens`
-    /// (gram.y:12757).
+    /// (gram.y:12757), with `simple_select`'s productions (gram.y:12790) as
+    /// variants, the way [`crate::ast::shared::expr::Expr`] holds `c_expr`'s.
     ///
-    /// Both alternatives can begin with `(`, and they part company after the
-    /// completed group — a set operation there continues a
-    /// `simple_select`, and anything else ends the `select_with_parens`.
+    /// A set operation is an ordinary left-recursive rule, as it is in gram.y:
+    /// `select_clause UNION set_quantifier select_clause` (gram.y:12844-12854).
+    /// The declared precedence of `crate::tokens` decides a chain, level for
+    /// level with gram.y:830-831 `%left UNION EXCEPT` and `%left INTERSECT`:
+    /// `INTERSECT` binds tighter, and every operator associates to the left.
+    /// `a INTERSECT b UNION c` is `(a INTERSECT b) UNION c`, `a UNION b
+    /// INTERSECT c` is `a UNION (b INTERSECT c)`, and `a UNION b EXCEPT c` is
+    /// `(a UNION b) EXCEPT c`. The tree is PostgreSQL's `SetOperationStmt`
+    /// tree, so a consumer never regroups a chain. Only parentheses override
+    /// it, and they are explicit as [`SelectClause::Parens`].
+    ///
+    /// Each operator is a Node, so its rule ends in no terminal of its own and
+    /// carries the level of its keyword through `#[parse(prec = ...)]`.
+    ///
+    /// The right operand is a `select_clause`, never a sorted or limited
+    /// query: `opt_sort_clause` and the other tails belong to [`QueryBody`].
     #[derive(Debug)]
+    #[flat(pool)]
     pub enum SelectClause {
-        Simple(SimpleSelect),
+        /// gram.y:12844 `select_clause UNION set_quantifier select_clause`.
+        #[parse(prec = UNION)]
+        Union(
+            boxed!(Self),
+            #[pretty(break_before = soft)] UnionOp,
+            boxed!(Self),
+        ),
+        /// gram.y:12852 `select_clause EXCEPT set_quantifier select_clause`.
+        #[parse(prec = EXCEPT)]
+        Except(
+            boxed!(Self),
+            #[pretty(break_before = soft)] ExceptOp,
+            boxed!(Self),
+        ),
+        /// gram.y:12848 `select_clause INTERSECT set_quantifier select_clause`.
+        #[parse(prec = INTERSECT)]
+        Intersect(
+            boxed!(Self),
+            #[pretty(break_before = soft)] IntersectOp,
+            boxed!(Self),
+        ),
+        /// gram.y:12791 `SELECT opt_all_clause opt_target_list ...` and its
+        /// `distinct_clause` twin.
+        Select(boxed!(SelectStmt)),
+        /// gram.y `simple_select: values_clause`.
+        Values(ValuesBody),
+        /// gram.y `simple_select: TABLE relation_expr`.
+        Table(TableStmt),
+        /// gram.y `select_clause: select_with_parens`.
         Parens(SelectWithParens),
-    }
-}
-
-recursa::ast_node! {
-    /// A `SELECT` or `VALUES` `simple_select` with an optional set operation.
-    #[derive(Debug)]
-    pub struct CompoundBody {
-        pub body: SelectBody,
-        pub set_op: Option<SetOpCombiner>,
     }
 }

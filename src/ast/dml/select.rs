@@ -1959,17 +1959,6 @@ impl<'input> SelectStmt<'input> {
 }
 
 recursa::ast_node! {
-    /// gram.y `simple_select`'s `SELECT` and `values_clause` forms. A `WITH`
-    /// query is a `Subquery` with its own clause: gram.y attaches the
-    /// `with_clause` to `select_no_parens`, never to a set-operation member.
-    #[derive(Debug)]
-    pub enum SelectBody {
-        Select(boxed!(SelectStmt)),
-        Values(ValuesBody),
-    }
-}
-
-recursa::ast_node! {
     #[derive(Debug)]
     #[tok(LPAREN, this, RPAREN)]
     pub struct ValuesRow {
