@@ -40,6 +40,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `privilege: ALTER SYSTEM_P`).
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `ALTER SYSTEM` privilege keyword — Postgres' `privilege: ALTER SYSTEM_P`.
     ///
@@ -101,6 +104,8 @@ recursa::ast_node! {
     /// explicit.
     #[derive(Debug)]
     pub enum Privilege {
+        /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
+        #[cfg(feature = "since-pg15")]
         AlterSystem(AlterSystemPriv),
         Select(SelectPriv),
         References(ReferencesPriv),
@@ -304,6 +309,39 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `parameter_name: ColId | parameter_name '.' ColId`).
+#[cfg(feature = "since-pg15")]
+recursa::ast_node! {
+    /// `. ColId` — one more part of a dotted parameter name.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(DOT, this)]
+    pub struct ParameterNamePart(#[deref] pub crate::tokens::ColId);
+}
+
+#[cfg(feature = "since-pg15")]
+recursa::ast_node! {
+    /// gram.y `parameter_name`: `ColId [. ColId ...]`.
+    #[derive(Debug)]
+    pub struct ParameterName {
+        pub first: crate::tokens::ColId,
+        pub rest: zero_or_many!(ParameterNamePart),
+    }
+}
+
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `privilege_target: PARAMETER parameter_name_list`).
+#[cfg(feature = "since-pg15")]
+recursa::ast_node! {
+    /// `PARAMETER name [, …]`.
+    #[derive(Debug)]
+    #[tok(PARAMETER, this)]
+    pub struct ParameterTarget {
+        #[sep(COMMA)]
+        pub names: one_or_many!(ParameterName),
+    }
+}
+
 recursa::ast_node! {
     /// `ALL TABLES IN SCHEMA name [, …]`.
     #[derive(Debug)]
@@ -395,6 +433,9 @@ recursa::ast_node! {
         Schema(SchemaTarget),
         Tablespace(TablespaceTarget),
         Type(TypeTarget),
+        /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
+        #[cfg(feature = "since-pg15")]
+        Parameter(ParameterTarget),
         Bare(BareTablesTarget),
     }
 }

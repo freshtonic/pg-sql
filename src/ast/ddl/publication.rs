@@ -8,6 +8,10 @@ use crate::ast::shared::names::*;
 use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// Optional `(col, ...)` column-list on a publication table object —
     /// Postgres' `opt_column_list`.
@@ -19,6 +23,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `WHERE (a_expr)` row-filter on a publication table object —
     /// Postgres' `OptWhereClause`.
@@ -29,6 +37,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `TABLE [ONLY] name [*] [(cols)] [WHERE (expr)]` — the `TABLE`-prefixed
     /// publication object.
@@ -42,6 +54,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `TABLES IN SCHEMA name [(cols)]` — the schema-scoped publication
     /// object. The schema name is an unqualified identifier (PG accepts
@@ -63,6 +79,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `ONLY`-prefixed continuation publication object (Postgres'
     /// `extended_relation_expr`-with-ONLY branch). Used after a `TABLE` or
@@ -77,6 +97,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// Bare-name continuation publication object — `qualified_name [*]
     /// [(cols)] [WHERE (expr)]` with no leading keyword. Used after a
@@ -93,6 +117,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// One entry in a publication object list — Postgres' `PublicationObjSpec`.
     ///
@@ -118,6 +146,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `FOR pub_obj_list` — Postgres' `CREATE PUBLICATION ... FOR pub_obj_list`.
     #[derive(Debug)]
@@ -145,7 +177,27 @@ recursa::ast_node! {
         /// research PostgreSQL 19, "Changes to existing statements").
         #[cfg(feature = "since-pg19")]
         AllObjects(PublicationForAllObjects),
+        /// Added in 15: `FOR pub_obj_list` (research, PostgreSQL 15,
+        /// "Changes to existing statements").
+        #[cfg(feature = "since-pg15")]
         Objects(PublicationForObjects),
+        /// Removed in 15: `FOR TABLE relation_expr_list` (REL_14_24 gram.y
+        /// `publication_for_tables`), which `FOR pub_obj_list` replaces.
+        #[cfg(not(feature = "since-pg15"))]
+        Tables(PublicationForTables),
+    }
+}
+
+// Removed in 15: research, PostgreSQL 15, "Changes to existing statements".
+// REL_14_24 gram.y `publication_for_tables: FOR TABLE relation_expr_list`.
+#[cfg(not(feature = "since-pg15"))]
+recursa::ast_node! {
+    /// `FOR TABLE relation_expr [, ...]` on CREATE PUBLICATION before 15.
+    #[derive(Debug)]
+    #[tok(FOR, TABLE, this)]
+    pub struct PublicationForTables {
+        #[sep(COMMA)]
+        pub relations: one_or_many!(crate::ast::shared::names::RelationExpr),
     }
 }
 
@@ -281,6 +333,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `SET pub_obj_list` — Postgres' `ALTER PUBLICATION ... SET pub_obj_list`.
     /// Distinct from `SetDefinitionClause` because the body is a publication
@@ -293,6 +349,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `ADD pub_obj_list` — Postgres' `ALTER PUBLICATION ... ADD pub_obj_list`.
     #[derive(Debug)]
@@ -303,6 +363,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `PublicationObjSpec`, `pub_obj_list`). REL_14_24 gram.y
+// has only `FOR TABLE relation_expr_list` and `FOR ALL TABLES`.
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `DROP pub_obj_list` — Postgres' `ALTER PUBLICATION ... DROP pub_obj_list`.
     #[derive(Debug)]
@@ -329,10 +393,21 @@ recursa::ast_node! {
     pub enum AlterPublicationAction {
         Rename(RenameTo),
         Owner(OwnerTo),
+        /// Added in 15: `ADD pub_obj_list` (research, PostgreSQL 15,
+        /// "Changes to existing statements").
+        #[cfg(feature = "since-pg15")]
         AddObjs(AlterPublicationAddObjects),
+        /// Added in 15: `DROP pub_obj_list`.
+        #[cfg(feature = "since-pg15")]
         DropObjs(AlterPublicationDropObjects),
         SetDef(SetDefinitionClause),
+        /// Added in 15: `SET pub_obj_list`.
+        #[cfg(feature = "since-pg15")]
         SetObjs(AlterPublicationSetObjects),
+        /// Removed in 15: `{ ADD | SET | DROP } TABLE relation_expr_list`
+        /// (REL_14_24 gram.y `AlterPublicationStmt`).
+        #[cfg(not(feature = "since-pg15"))]
+        Tables(AlterPublicationTables),
         /// Added in 19: `ALTER PUBLICATION name SET pub_all_obj_type_list`
         /// (gram.y b73d13c:11003; research PostgreSQL 19, "Changes to
         /// existing statements").
@@ -349,6 +424,45 @@ recursa::ast_node! {
     pub struct AlterPublicationSetAllObjects {
         /// Boxed so that `Statement` stays small.
         pub objects: boxed!(PublicationAllObjects),
+    }
+}
+
+// Removed in 15: research, PostgreSQL 15, "Changes to existing statements".
+// REL_14_24 gram.y `AlterPublicationStmt`: `ALTER PUBLICATION name { ADD_P |
+// SET | DROP } TABLE relation_expr_list`.
+#[cfg(not(feature = "since-pg15"))]
+recursa::ast_node! {
+    /// `ADD`, `SET` or `DROP` before `TABLE` in ALTER PUBLICATION before 15.
+    #[derive(Debug)]
+    pub enum AlterPublicationTablesVerb {
+        #[tok(ADD)]
+        Add,
+        #[tok(SET)]
+        Set,
+        #[tok(DROP)]
+        Drop,
+    }
+}
+
+#[cfg(not(feature = "since-pg15"))]
+recursa::ast_node! {
+    /// `TABLE relation_expr [, ...]` after the verb of ALTER PUBLICATION
+    /// before 15.
+    #[derive(Debug)]
+    #[tok(TABLE, this)]
+    pub struct AlterPublicationTableList {
+        #[sep(COMMA)]
+        pub relations: one_or_many!(crate::ast::shared::names::RelationExpr),
+    }
+}
+
+#[cfg(not(feature = "since-pg15"))]
+recursa::ast_node! {
+    /// `{ ADD | SET | DROP } TABLE relation_expr [, ...]` before 15.
+    #[derive(Debug)]
+    pub struct AlterPublicationTables {
+        pub verb: AlterPublicationTablesVerb,
+        pub tables: AlterPublicationTableList,
     }
 }
 

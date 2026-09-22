@@ -12,7 +12,10 @@ use crate::tokens::literal;
 use crate::ast::ddl::database::SetTablespaceClause;
 use crate::ast::ddl::foreign::AlterGenericOptions;
 use crate::ast::ddl::index::{AllInTablespaceBody, ColumnRef, ResetReloptions, SetReloptions};
-use crate::ast::ddl::materialized_view::{ColumnCompressionTarget, SetAccessMethodClause};
+use crate::ast::ddl::materialized_view::ColumnCompressionTarget;
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
+#[cfg(feature = "since-pg15")]
+use crate::ast::ddl::materialized_view::SetAccessMethodClause;
 use crate::ast::ddl::statistics::SetStatisticsValue;
 use crate::ast::ddl::trigger::DependsOnExtension;
 use crate::ast::ddl::view::RenameColumnClause;
@@ -50,12 +53,17 @@ recursa::ast_node! {
     #[derive(Debug)]
     #[tok(UNIQUE, this)]
     pub struct UniqueConstraint {
-        /// Optional `NULLS [NOT] DISTINCT` qualifier (Postgres 15+).
+        /// Optional `NULLS [NOT] DISTINCT` qualifier. Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+        /// (REL_15_19 gram.y `opt_unique_null_treatment`).
+        #[cfg(feature = "since-pg15")]
         pub nulls: Option<NullsDistinctQualifier>,
         pub index_tablespace: Option<UsingIndexTablespace>,
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `opt_unique_null_treatment`).
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `NULLS DISTINCT` or `NULLS NOT DISTINCT` for UNIQUE constraints.
     #[derive(Debug)]
@@ -84,6 +92,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `key_action`).
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// Parenthesized column list on `ON DELETE SET NULL` / `SET DEFAULT`.
     #[derive(Debug, derive_more :: Deref)]
@@ -96,17 +107,25 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// `SET NULL [(columns)]`. The column list is added in 15: research, PostgreSQL 15, "Changes to existing statements"
+    /// (REL_15_19 gram.y `key_action: SET NULL_P opt_column_list`).
     #[derive(Debug)]
-    #[tok(SET, NULL, this)]
+    #[cfg_attr(feature = "since-pg15", tok(SET, NULL, this))]
+    #[cfg_attr(not(feature = "since-pg15"), tok(SET, NULL))]
     pub struct SetNullKw {
+        #[cfg(feature = "since-pg15")]
         pub cols: Option<ReferentialActionColumnList>,
     }
 }
 
 recursa::ast_node! {
+    /// `SET DEFAULT [(columns)]`. The column list is added in 15: research, PostgreSQL 15, "Changes to existing statements"
+    /// (REL_15_19 gram.y `key_action: SET DEFAULT opt_column_list`).
     #[derive(Debug)]
-    #[tok(SET, DEFAULT, this)]
+    #[cfg_attr(feature = "since-pg15", tok(SET, DEFAULT, this))]
+    #[cfg_attr(not(feature = "since-pg15"), tok(SET, DEFAULT))]
     pub struct SetDefaultKw {
+        #[cfg(feature = "since-pg15")]
         pub cols: Option<ReferentialActionColumnList>,
     }
 }
@@ -699,7 +718,9 @@ recursa::ast_node! {
         /// `NULLS [NOT] DISTINCT` qualifier — only meaningful for the
         /// `(cols)` branch but accepted before either body for parsing
         /// simplicity. If present alongside `USING INDEX`, PG rejects at
-        /// semantic time; the diff oracle handles that case.
+        /// semantic time; the diff oracle handles that case. Added in 15:
+        /// research, PostgreSQL 15, "Changes to existing statements".
+        #[cfg(feature = "since-pg15")]
         pub nulls: Option<NullsDistinctQualifier>,
         pub body: IndexedConstraintBody,
         /// gram.y `ConstraintAttributeSpec`.
@@ -1868,6 +1889,9 @@ recursa::ast_node! {
         SetWithoutOids(SetWithoutOidsCmd),
         SetLogged(SetLoggedCmd),
         SetUnlogged(SetUnloggedCmd),
+        /// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+        /// (REL_15_19 gram.y `alter_table_cmd: SET ACCESS METHOD name`).
+        #[cfg(feature = "since-pg15")]
         SetAccessMethod(SetAccessMethodClause),
         SetTablespace(SetTablespaceClause),
         SetReloptions(SetReloptions),

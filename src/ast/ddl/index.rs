@@ -237,6 +237,9 @@ recursa::ast_node! {
         pub using: Option<boxed!(UsingMethod)>,
         pub columns: IndexElementList,
         pub include: Option<boxed!(IncludeClause)>,
+        /// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+        /// (REL_15_19 gram.y `IndexStmt ... opt_unique_null_treatment`).
+        #[cfg(feature = "since-pg15")]
         pub nulls_distinct: Option<NullsDistinctClause>,
         pub with_storage: Option<boxed!(WithStorage)>,
         pub tablespace: Option<crate::ast::ddl::table::TablespaceClause>,
@@ -244,6 +247,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `opt_unique_null_treatment`).
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `NULLS [NOT] DISTINCT` modifier on a unique index.
     ///

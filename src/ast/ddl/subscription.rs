@@ -134,6 +134,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `AlterSubscriptionStmt: ALTER SUBSCRIPTION name SKIP
+// definition`).
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `SKIP (def_list)` — Postgres' `ALTER SUBSCRIPTION ... SKIP definition`.
     #[derive(Debug)]
@@ -174,6 +178,8 @@ recursa::ast_node! {
         RefreshSequences,
         AddPublication(AlterSubscriptionAddPublication),
         DropPublication(AlterSubscriptionDropPublication),
+        /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
+        #[cfg(feature = "since-pg15")]
         Skip(AlterSubscriptionSkip),
         #[tok(ENABLE)]
         Enable,

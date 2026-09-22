@@ -262,8 +262,17 @@ recursa::tokens! {
         SUMMARY         => r"SUMMARY" in UNRESERVED + bare_label,
         RECURSIVE       => r"RECURSIVE" in UNRESERVED + bare_label,
         MATERIALIZED    => r"MATERIALIZED" in UNRESERVED + bare_label,
+        // Added in 15: research, PostgreSQL 15, "Keywords". REL_14_24
+        // kwlist.h has no `merge`, `matched` or `parameter`.
+        #[cfg(feature = "since-pg15")]
         MERGE           => r"MERGE" in UNRESERVED + bare_label,
+        // Added in 15: research, PostgreSQL 15, "Keywords".
+        #[cfg(feature = "since-pg15")]
         MATCHED         => r"MATCHED" in UNRESERVED + bare_label,
+        // Added in 15: research, PostgreSQL 15, "Keywords" (gram.y
+        // `privilege_target: PARAMETER parameter_name_list`).
+        #[cfg(feature = "since-pg15")]
+        PARAMETER       => r"PARAMETER" in UNRESERVED + bare_label,
         CONFLICT        => r"CONFLICT" in UNRESERVED + bare_label,
         NOTHING         => r"NOTHING" in UNRESERVED + bare_label,
         EXCLUDED        => r"EXCLUDED" in UNRESERVED + bare_label,
@@ -914,7 +923,8 @@ recursa::tokens! {
         #[node(omit(Arbitrary))]
         DollarStringLit => same_delimiter(opener = r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$"),
         // The numeric literals of scan.l. A literal that an identifier
-        // character follows directly is a lexical error from 15 (`excluded`):
+        // character follows directly is a lexical error from 15 (`excluded`,
+        // research, PostgreSQL 15, "Lexical and literal syntax"):
         // scan.l `integer_junk`, `numeric_junk` (`decimal_junk` before 16),
         // `real_junk` and `realfail`.
         //
@@ -932,11 +942,29 @@ recursa::tokens! {
         // `real ({integer}|{decimal})[Ee][-+]?{digit}+`. So `0x1F` and `1_000`
         // are `integer_junk`, `1.5_0` is `decimal_junk` and `1e1_0` is
         // `real_junk`, and each is an error.
-        #[cfg(not(feature = "since-pg16"))]
+        #[cfg(all(feature = "since-pg15", not(feature = "since-pg16")))]
         NumericLit => next_exclusion(pattern = r"(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)[eE][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*", excluded = r"[A-Za-z0-9_]"),
-        #[cfg(not(feature = "since-pg16"))]
+        #[cfg(all(feature = "since-pg15", not(feature = "since-pg16")))]
         IntegerLit => next_exclusion(pattern = r"[0-9]+", excluded = r"[A-Za-z0-9_]"),
+        // Before 15 there is no trailing-junk check: research, PostgreSQL 15,
+        // "Lexical and literal syntax" (commit 2549f0661). REL_14_24 scan.l
+        // 392-399 has the 15 patterns, but no `*_junk` rule, and `realfail1`
+        // and `realfail2` give back the `[Ee]` and `[Ee][-+]`. So a number
+        // ends where its pattern ends, whatever follows: `123abc` is `123`
+        // then `abc`, `0x1F` is `0` then `x1F`, and `1e+` is `1`, `e`, `+`.
+        #[cfg(not(feature = "since-pg15"))]
+        NumericLit => next_exclusion(pattern = r"(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)[eE][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*"),
+        #[cfg(not(feature = "since-pg15"))]
+        IntegerLit => next_exclusion(pattern = r"[0-9]+"),
+        // A parameter that an identifier character follows directly is a
+        // lexical error from 15 (scan.l `param_junk`).
+        #[cfg(feature = "since-pg15")]
         DollarNum => next_exclusion(pattern = r"\$[0-9]+", excluded = r"[A-Za-z0-9_]"),
+        // Before 15 there is no `param_junk`: `$1abc` is `$1` then `abc`
+        // (REL_14_24 scan.l 399 `param \${integer}`; research, PostgreSQL
+        // 15, "Lexical and literal syntax").
+        #[cfg(not(feature = "since-pg15"))]
+        DollarNum => next_exclusion(pattern = r"\$[0-9]+"),
         CustomOp => operator_run(
             characters = "-+*/<>=~!@#%^&|?",
             fences = ["/*", "--"],

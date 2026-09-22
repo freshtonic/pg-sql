@@ -129,6 +129,11 @@ recursa::ast_node! {
         SequenceName(SeqSequenceNameOption),
         #[tok(CYCLE)]
         Cycle,
+        /// Added in 15: REL_15_19 gram.y `SeqOptElem: ... | UNLOGGED`. The
+        /// research lists it under PostgreSQL 17, "Changes to existing
+        /// statements" (commit f7567f9e53d, back-patched to 15 and 16).
+        /// REL_14_24 gram.y `SeqOptElem` has no `LOGGED` or `UNLOGGED`.
+        #[cfg(feature = "since-pg15")]
         #[tok(UNLOGGED)]
         Unlogged,
         // `LOGGED` is in Postgres' SeqOptElem but no corpus statement uses it

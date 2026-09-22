@@ -49,7 +49,6 @@ use self::{
     ddl::view::*,
     dml::delete::DeleteStmt,
     dml::insert::InsertStmt,
-    dml::merge::MergeStmt,
     dml::update::UpdateStmt,
     dml::values::QueryBody,
     session::discard::*,
@@ -233,7 +232,9 @@ recursa::ast_node! {
         // DML
         Insert(boxed!(InsertStmt)),
         Update(boxed!(UpdateStmt)),
-        Merge(boxed!(MergeStmt)),
+        /// Added in 15: research, PostgreSQL 15, "New statements".
+        #[cfg(feature = "since-pg15")]
+        Merge(boxed!(crate::ast::dml::merge::MergeStmt)),
         Delete(boxed!(DeleteStmt)),
         // Transaction control
         Rollback(RollbackStmt),

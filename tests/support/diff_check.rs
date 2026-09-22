@@ -213,12 +213,12 @@ mod tests {
     }
 
     // Before 15, PostgreSQL reads `123abc` as `123 AS abc` (the same research
-    // entry). The 14 grammar is not complete yet, so this is an expected
-    // version gap; #76 makes it pass.
+    // entry), and so does pg-sql.
     #[cfg(all(feature = "postgres-oracle", not(feature = "since-pg15")))]
     #[test]
-    fn numeric_junk_is_a_version_gap_before_15() {
-        assert!(matches!(check("SELECT 123abc"), Outcome::Skip(_)));
+    fn numeric_junk_is_a_column_label_before_15() {
+        assert_eq!(check("SELECT 123abc"), Outcome::Pass);
+        assert_eq!(pgsql_format("SELECT 123abc").as_deref(), Ok("SELECT 123 abc"));
     }
 
     #[test]

@@ -67,6 +67,9 @@ recursa::ast_node! {
         CreateTable(boxed!(crate::ast::ddl::table::CreateTableStmt)),
         Insert(boxed!(crate::ast::dml::insert::InsertStmt)),
         Update(boxed!(crate::ast::dml::update::UpdateStmt)),
+        /// Added in 15: research, PostgreSQL 15, "New statements" (REL_15_19 gram.y
+        /// `PreparableStmt`, `ExplainableStmt`, `MergeStmt: opt_with_clause MERGE`).
+        #[cfg(feature = "since-pg15")]
         Merge(boxed!(crate::ast::dml::merge::MergeStmt)),
         Delete(boxed!(crate::ast::dml::delete::DeleteStmt)),
         Execute(crate::ast::tcl::prepared::ExecuteStmt),
