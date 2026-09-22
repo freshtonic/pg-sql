@@ -700,6 +700,11 @@ recursa::tokens! {
         // in `kwlist.h`; deprecated but still parsed for legacy-dump
         // compatibility. Soft so it stays reclaimable as an identifier outside
         // opclass-item positions.
+        //
+        // Removed in 18: `opt_recheck` and the `recheck` keyword are gone
+        // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+        // "Keywords" and "Removed or changed syntax"; commit 7da1bdc2c2f).
+        #[cfg(not(feature = "since-pg18"))]
         RECHECK         => r"RECHECK" in UNRESERVED + bare_label,
         // Added in 19: `kwlist.h` at `b73d13c` (docs/research/
         // postgres-14-19-sql-syntax-changes.md, PostgreSQL 19, "Keywords").
@@ -715,6 +720,20 @@ recursa::tokens! {
         REPACK          => r"REPACK" in UNRESERVED + bare_label,
         #[cfg(feature = "since-pg19")]
         WAIT            => r"WAIT" in UNRESERVED + bare_label,
+        // Added in 18: four new unreserved, bare-label keywords
+        // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+        // "Keywords"; REL_18_6 kwlist.h). `ENFORCED` is the constraint
+        // attribute, `OBJECTS` ends `ON LARGE OBJECTS` in default privileges,
+        // `PERIOD` marks a temporal foreign-key column, and `VIRTUAL` is the
+        // generated-column kind.
+        #[cfg(feature = "since-pg18")]
+        ENFORCED        => r"ENFORCED" in UNRESERVED + bare_label,
+        #[cfg(feature = "since-pg18")]
+        OBJECTS         => r"OBJECTS" in UNRESERVED + bare_label,
+        #[cfg(feature = "since-pg18")]
+        PERIOD          => r"PERIOD" in UNRESERVED + bare_label,
+        #[cfg(feature = "since-pg18")]
+        VIRTUAL         => r"VIRTUAL" in UNRESERVED + bare_label,
     },
     punctuation {
         SEMI      => ";",

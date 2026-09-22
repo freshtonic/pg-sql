@@ -196,7 +196,7 @@ embedded-tests/src/ast/ddl/operator.tests.rs	parse_alter_operator_family_set_sch
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_alter_operator_set_commutator_custom_op	false	14-
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_alter_operator_set_negator_at_eq	false	14-
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_create_operator_class_default_with_family	false	14-
-embedded-tests/src/ast/ddl/operator.tests.rs	parse_create_operator_class_recheck_modifier	false	14-
+embedded-tests/src/ast/ddl/operator.tests.rs	parse_create_operator_class_recheck_modifier	false	14-17
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_create_operator_class_storage_only	false	14-
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_create_operator_commutator_custom_op	false	14-
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_create_operator_custom_op	false	14-
@@ -208,6 +208,7 @@ embedded-tests/src/ast/ddl/operator.tests.rs	parse_drop_operator_family_if_exist
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_drop_operator_single_char	false	14-
 embedded-tests/src/ast/ddl/operator.tests.rs	alter_operator_set_option_without_a_value	false	17-
 embedded-tests/src/ast/ddl/operator.tests.rs	alter_operator_set_option_without_a_value_is_rejected_before_17	false	14-16
+embedded-tests/src/ast/ddl/operator.tests.rs	opclass_recheck_is_rejected_from_18	false	18-
 embedded-tests/src/ast/ddl/policy.tests.rs	create_policy_as_permissive_using_roundtrips	false	14-
 embedded-tests/src/ast/ddl/policy.tests.rs	create_policy_as_restrictive_to_role_using_roundtrips	false	14-
 embedded-tests/src/ast/ddl/policy.tests.rs	create_policy_for_all_to_public_using_roundtrips	false	14-
@@ -366,6 +367,14 @@ embedded-tests/src/ast/ddl/table.tests.rs	parse_table_primary_key	false	14-
 embedded-tests/src/ast/ddl/table.tests.rs	parse_table_unique	false	14-
 embedded-tests/src/ast/ddl/table.tests.rs	alter_table_17_column_and_access_method_forms	false	17-
 embedded-tests/src/ast/ddl/table.tests.rs	alter_table_17_forms_are_rejected_before_17	false	14-16
+embedded-tests/src/ast/ddl/table.tests.rs	parse_virtual_generated_column	false	18-
+embedded-tests/src/ast/ddl/table.tests.rs	parse_temporal_keys_without_overlaps	false	18-
+embedded-tests/src/ast/ddl/table.tests.rs	parse_temporal_foreign_key_period	false	18-
+embedded-tests/src/ast/ddl/table.tests.rs	parse_enforced_constraint_attributes	false	18-
+embedded-tests/src/ast/ddl/table.tests.rs	parse_alter_constraint_enforced_and_inherit	false	18-
+embedded-tests/src/ast/ddl/table.tests.rs	parse_not_null_constraints_of_18	false	18-
+embedded-tests/src/ast/ddl/table.tests.rs	the_keywords_of_18_are_names	false	14-
+embedded-tests/src/ast/ddl/table.tests.rs	the_table_forms_of_18_are_rejected_before_18	false	14-17
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_owner	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_rename	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_reset	false	14-
@@ -553,6 +562,8 @@ embedded-tests/src/ast/dml/update.tests.rs	parse_update_with_from_where	false	14
 embedded-tests/src/ast/dml/update.tests.rs	parse_update_with_returning	false	14-
 embedded-tests/src/ast/dml/update.tests.rs	reject_bare_set_as_update_alias	false	14-
 embedded-tests/src/ast/dml/update.tests.rs	reject_update_from_without_from_list	false	14-
+embedded-tests/src/ast/dml/update.tests.rs	returning_with_old_and_new_aliases	false	18-
+embedded-tests/src/ast/dml/update.tests.rs	returning_with_is_rejected_before_18	false	14-17
 embedded-tests/src/ast/dml/values.tests.rs	parse_compound_paren_limit_offset_orders_roundtrip	false	14-
 embedded-tests/src/ast/dml/values.tests.rs	parse_locking_clauses_in_both_orders_and_as_a_list	false	14-
 embedded-tests/src/ast/dml/values.tests.rs	parse_table_stmt	false	14-
@@ -939,6 +950,8 @@ embedded-tests/src/ast/utility/analyze.tests.rs	parse_analyze	false	14-
 embedded-tests/src/ast/utility/analyze.tests.rs	parse_analyze_bare	false	14-
 embedded-tests/src/ast/utility/analyze.tests.rs	parse_analyze_columns	false	14-
 embedded-tests/src/ast/utility/cluster.tests.rs	cluster_bare_is_modelled	false	17-
+embedded-tests/src/ast/utility/analyze.tests.rs	analyze_relation_expr_of_18	false	18-
+embedded-tests/src/ast/utility/analyze.tests.rs	analyze_relation_expr_is_rejected_before_18	false	14-17
 embedded-tests/src/ast/utility/cluster.tests.rs	cluster_legacy_index_on_table_roundtrips	false	14-
 embedded-tests/src/ast/utility/cluster.tests.rs	cluster_options_roundtrips	false	17-
 embedded-tests/src/ast/utility/cluster.tests.rs	cluster_table_only_roundtrips	false	14-
@@ -1024,6 +1037,8 @@ embedded-tests/src/ast/utility/grant.tests.rs	revoke_admin_option_for_role	false
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_grant_option_for_cascade	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_membership_cascade	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_simple_privilege	false	14-
+embedded-tests/src/ast/utility/grant.tests.rs	alter_default_privileges_on_large_objects	false	18-
+embedded-tests/src/ast/utility/grant.tests.rs	alter_default_privileges_on_large_objects_is_rejected_before_18	false	14-17
 embedded-tests/src/ast/utility/lock.tests.rs	lock_inheritance_star_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_multiple_relations_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_only_roundtrips	false	14-
@@ -1073,6 +1088,8 @@ embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_multi_targets_roundtrips	f
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_options_with_target_roundtrips	false	14-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_parallel_option_with_value_roundtrips	false	14-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_verbose_analyze_roundtrips	false	14-
+embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_relation_expr_of_18	false	18-
+embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_relation_expr_is_rejected_before_18	false	14-17
 embedded-tests/src/bench_data.tests.rs	empty_benchmark_list_yields_empty_array	false	14-
 embedded-tests/src/bench_data.tests.rs	round_trips_through_a_json_parser	false	14-
 embedded-tests/src/bench_data.tests.rs	serializes_run_metadata_and_benchmark_array	false	14-

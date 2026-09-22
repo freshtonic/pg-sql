@@ -102,4 +102,41 @@ mod tests {
     fn vacuum_parallel_option_with_value_roundtrips() {
         reparse_stable::<VacuumStmt>("VACUUM (PARALLEL 2) pvactst");
     }
+
+    /// Whether `src` parses as one complete statement.
+    fn statement_parses(src: &str) -> bool {
+        let lexed = crate::lex(src);
+        if lexed.errors().count() > 0 {
+            return false;
+        }
+        let mut input = lexed.input();
+        crate::ast::Statement::parse(&mut input).is_ok() && input.is_eof()
+    }
+
+    // Added in 18: `vacuum_relation: relation_expr opt_name_list`
+    // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+    // item 9).
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn vacuum_relation_expr_of_18() {
+        let stmt = parse_stmt::<VacuumStmt>("VACUUM (ANALYZE) ONLY s.t (a, b), u *");
+        let stmt = stmt.ast();
+        let relations = stmt.relations.as_ref().unwrap();
+        assert_eq!(relations.len(), 2);
+        assert!(relations.first().name.is_only());
+        assert_eq!(relations.first().relation_name().object(), "t");
+        assert!(!relations.last().name.is_only());
+        for src in ["VACUUM ONLY t", "VACUUM FULL ONLY (t)", "VACUUM t *"] {
+            reparse_stable::<VacuumStmt>(src);
+        }
+        assert!(!statement_parses("VACUUM ONLY t *"));
+    }
+
+    #[cfg(not(feature = "since-pg18"))]
+    #[test]
+    fn vacuum_relation_expr_is_rejected_before_18() {
+        for src in ["VACUUM ONLY t", "VACUUM t *", "VACUUM FULL ONLY (t)"] {
+            assert!(!statement_parses(src), "{src:?} must not parse before 18");
+        }
+    }
 }

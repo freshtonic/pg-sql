@@ -490,6 +490,124 @@ fn a_vertical_tab_does_not_end_a_send_command_name_before_17() {
     );
 }
 
+// --- The 18 buffer-ending commands -----------------------------------------
+//
+// Added in 18: nine commands end the query buffer
+// (docs/research/psql-14-19-syntax-changes.md, class (A) item A1;
+// `REL_18_6:command.c` 350-452, `mainloop.c` 513). `\parse` and
+// `\sendpipeline` send the buffer text; the other seven do not.
+
+/// The number of terminators in `source`.
+fn terminator_count(source: &str) -> usize {
+    pg_psql::parse(source)
+        .unwrap_or_else(|error| panic!("{source:?} must parse as psql: {error}"))
+        .items
+        .iter()
+        .filter(|item| matches!(item, PsqlItem::Terminator(_)))
+        .count()
+}
+
+#[cfg(feature = "since-pg18")]
+#[test]
+fn the_18_send_commands_render_as_a_statement_boundary() {
+    for (source, expected) in [
+        (r"SELECT $1 \sendpipeline", "SELECT $1 ;"),
+        (r"SELECT $1 \parse", "SELECT $1 ;"),
+    ] {
+        let rendered = pg_psql::render(source, &Variables::new()).unwrap();
+        assert_eq!(rendered.sql(), expected, "rendering {source:?}");
+        assert_eq!(rendered.parse_sql().unwrap().statements().len(), 1);
+    }
+    let document = pg_psql::parse(r"SELECT 1 \parse").unwrap();
+    assert!(matches!(
+        document.items.last(),
+        Some(PsqlItem::Terminator(pg_psql::Terminator::Send(
+            pg_psql::SendCommand::Parse(_)
+        )))
+    ));
+}
+
+#[cfg(feature = "since-pg18")]
+#[test]
+fn a_discard_command_removes_the_buffer_it_ends() {
+    // psql resets the query buffer after each of these commands, but does not
+    // send the buffer text, so the rendered SQL does not contain it.
+    for command in [
+        r"\close_prepared",
+        r"\endpipeline",
+        r"\flushrequest",
+        r"\flush",
+        r"\getresults",
+        r"\startpipeline",
+        r"\syncpipeline",
+    ] {
+        let source = format!("SELECT 1; SELECT 2 {command}\nSELECT 3;");
+        assert_eq!(terminator_count(&source), 3, "{source:?}");
+        let rendered = pg_psql::render(&source, &Variables::new()).unwrap();
+        assert_eq!(rendered.sql(), "SELECT 1; \nSELECT 3;", "rendering {source:?}");
+        assert_eq!(rendered.parse_sql().unwrap().statements().len(), 2);
+        // With an empty buffer, only the command goes.
+        let source = format!("SELECT 1;\n{command}\nSELECT 3;");
+        let rendered = pg_psql::render(&source, &Variables::new()).unwrap();
+        assert_eq!(rendered.sql(), "SELECT 1;\n\nSELECT 3;", "rendering {source:?}");
+    }
+}
+
+#[cfg(feature = "since-pg18")]
+#[test]
+fn a_discarded_buffer_drops_its_interpolations() {
+    // An interpolation inside a discarded buffer is never sent, so it is
+    // neither substituted nor reported as unbound.
+    let bindings = variables(&[("x", "42")]);
+    let source = r"SELECT :x, :y \startpipeline SELECT :x;";
+    let rendered = pg_psql::render(source, &bindings).unwrap();
+    assert_eq!(rendered.sql(), " SELECT 42;");
+    assert!(rendered.unbound().is_empty());
+    // The map still carries the surviving text back to the source.
+    let select = source.rfind("SELECT").unwrap();
+    assert_eq!(rendered.map().origin(1), Origin::Verbatim(select));
+    // After a send command, the buffer starts again.
+    let rendered = pg_psql::render(r"SELECT :y \g SELECT 2 \flush", &bindings).unwrap();
+    assert_eq!(rendered.sql(), "SELECT :y ; ");
+    assert_eq!(rendered.unbound().len(), 1);
+}
+
+#[cfg(feature = "since-pg18")]
+#[test]
+fn an_18_command_name_is_read_whole() {
+    // `\flushrequest` is one command, not `\flush` and `request`; a longer
+    // unknown name is one meta-command, not a terminator.
+    assert_eq!(terminator_count(r"\flushrequest"), 1);
+    assert_eq!(render_unbound(r"SELECT 1 \flushrequest"), "");
+    for source in [r"SELECT 1 \flushx", r"SELECT 1 \parsed", r"SELECT 1 \sendpipelines"] {
+        assert_eq!(terminator_count(source), 0, "{source:?}");
+        assert_eq!(render_unbound(source), source, "{source:?}");
+    }
+}
+
+// Before 18 the nine commands do not exist: psql 17 reports each one as an
+// invalid command, and pg-psql forwards each one verbatim as an unmodelled
+// meta-command (docs/research/psql-14-19-syntax-changes.md, class (A) item
+// A1).
+#[cfg(not(feature = "since-pg18"))]
+#[test]
+fn the_18_buffer_ending_commands_are_text_before_18() {
+    for source in [
+        r"SELECT 1 \parse s",
+        r"SELECT 1 \sendpipeline",
+        r"SELECT 1 \close_prepared s",
+        r"SELECT 1 \startpipeline",
+        r"SELECT 1 \syncpipeline",
+        r"SELECT 1 \endpipeline",
+        r"SELECT 1 \flushrequest",
+        r"SELECT 1 \flush",
+        r"SELECT 1 \getresults",
+    ] {
+        assert_eq!(terminator_count(source), 0, "{source:?}");
+        assert_eq!(render_unbound(source), source, "{source:?}");
+    }
+}
+
 // --- The source map ---------------------------------------------------------
 
 #[test]

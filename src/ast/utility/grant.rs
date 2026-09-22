@@ -665,6 +665,12 @@ recursa::ast_node! {
         Schemas,
         #[tok(TYPES)]
         Types,
+        /// Added in 18: gram.y `defacl_privilege_target: LARGE_P OBJECTS_P`
+        /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+        /// item 8; REL_18_6 gram.y `defacl_privilege_target`).
+        #[cfg(feature = "since-pg18")]
+        #[tok(LARGE, OBJECTS)]
+        LargeObjects,
     }
 }
 

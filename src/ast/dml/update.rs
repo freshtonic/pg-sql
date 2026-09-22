@@ -78,8 +78,59 @@ recursa::ast_node! {
     #[derive(Debug)]
     #[tok(RETURNING, this)]
     pub struct ReturningClause {
+        /// Added in 18: gram.y `returning_with_clause`
+        /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+        /// item 12; REL_18_6 gram.y `returning_clause`).
+        #[cfg(feature = "since-pg18")]
+        pub with: Option<ReturningWithClause>,
+        #[cfg(not(feature = "since-pg18"))]
         #[sep(COMMA)]
         pub items: zero_or_many!(crate::ast::dml::select::SelectItem),
+        /// From 18 the list is gram.y `target_list`, which is not empty: an
+        /// empty list would let `RETURNING WITH (OLD AS o)` parse, which
+        /// REL_18_6 gram.y `returning_clause` rejects.
+        #[cfg(feature = "since-pg18")]
+        #[sep(COMMA)]
+        pub items: one_or_many!(crate::ast::dml::select::SelectItem),
+    }
+}
+
+// Added in 18: `RETURNING WITH (OLD AS o, NEW AS n)`
+// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18, item 12;
+// REL_18_6 gram.y `returning_with_clause`, `returning_option`).
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// gram.y `returning_with_clause: WITH '(' returning_options ')'`: new
+    /// names for the `old` and `new` row qualifiers.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(WITH, LPAREN, this, RPAREN)]
+    pub struct ReturningWithClause(
+        #[sep(COMMA)]
+        #[deref]
+        pub one_or_many!(ReturningOption),
+    );
+}
+
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// gram.y `returning_option: returning_option_kind AS ColId`.
+    #[derive(Debug)]
+    pub struct ReturningOption {
+        pub kind: ReturningOptionKind,
+        #[tok(AS, this)]
+        pub alias: crate::tokens::ColId,
+    }
+}
+
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// gram.y `returning_option_kind: OLD | NEW`.
+    #[derive(Debug)]
+    pub enum ReturningOptionKind {
+        #[tok(OLD)]
+        Old,
+        #[tok(NEW)]
+        New,
     }
 }
 

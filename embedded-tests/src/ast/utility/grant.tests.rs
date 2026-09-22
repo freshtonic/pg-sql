@@ -195,4 +195,39 @@ mod tests {
             "ALTER DEFAULT PRIVILEGES FOR ROLE r IN SCHEMA s GRANT ALL ON TABLES TO u2",
         );
     }
+
+    /// Whether `src` parses as one complete statement.
+    fn statement_parses(src: &str) -> bool {
+        let lexed = crate::lex(src);
+        if lexed.errors().count() > 0 {
+            return false;
+        }
+        let mut input = lexed.input();
+        crate::ast::Statement::parse(&mut input).is_ok() && input.is_eof()
+    }
+
+    // Added in 18: `defacl_privilege_target: LARGE_P OBJECTS_P`
+    // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+    // item 8).
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn alter_default_privileges_on_large_objects() {
+        for src in [
+            "ALTER DEFAULT PRIVILEGES GRANT SELECT ON LARGE OBJECTS TO u1",
+            "ALTER DEFAULT PRIVILEGES FOR ROLE r REVOKE GRANT OPTION FOR UPDATE ON LARGE OBJECTS FROM u1",
+        ] {
+            reparse_stable::<AlterDefaultPrivilegesStmt>(src);
+        }
+        assert!(!statement_parses(
+            "ALTER DEFAULT PRIVILEGES GRANT SELECT ON LARGE OBJECT TO u1"
+        ));
+    }
+
+    #[cfg(not(feature = "since-pg18"))]
+    #[test]
+    fn alter_default_privileges_on_large_objects_is_rejected_before_18() {
+        assert!(!statement_parses(
+            "ALTER DEFAULT PRIVILEGES GRANT SELECT ON LARGE OBJECTS TO u1"
+        ));
+    }
 }

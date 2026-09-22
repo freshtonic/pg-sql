@@ -164,6 +164,16 @@ recursa::ast_node! {
         InitiallyDeferred,
         #[tok(INITIALLY, IMMEDIATE)]
         InitiallyImmediate,
+        /// Added in 18: gram.y `ConstraintAttr: ENFORCED | NOT ENFORCED`
+        /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+        /// item 4; REL_18_6 gram.y `ConstraintAttr`).
+        #[cfg(feature = "since-pg18")]
+        #[tok(ENFORCED)]
+        Enforced,
+        /// Added in 18: see [`Self::Enforced`].
+        #[cfg(feature = "since-pg18")]
+        #[tok(NOT, ENFORCED)]
+        NotEnforced,
     }
 }
 
@@ -361,6 +371,27 @@ recursa::ast_node! {
     pub enum GeneratedBody {
         Identity(GeneratedIdentityTail),
         Stored(GeneratedStoredTail),
+        /// Added in 18: `AS (expr) [VIRTUAL]`, gram.y `opt_virtual_or_stored`
+        /// with `VIRTUAL` or empty (docs/research/postgres-14-19-sql-syntax-changes.md,
+        /// PostgreSQL 18, item 1; REL_18_6 gram.y `ColConstraintElem`).
+        #[cfg(feature = "since-pg18")]
+        Virtual(GeneratedVirtualTail),
+    }
+}
+
+// Added in 18: see `GeneratedBody::Virtual`.
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// `AS (expr) [VIRTUAL]` — a virtual generated column. From 18 a
+    /// generated column without `STORED` is virtual, so the keyword is
+    /// optional.
+    #[derive(Debug)]
+    pub struct GeneratedVirtualTail {
+        #[tok(AS, LPAREN, this, RPAREN)]
+        pub expr: crate::ast::shared::expr::Expr,
+        /// Whether the source spells `VIRTUAL`.
+        #[presence(VIRTUAL)]
+        pub virtual_keyword: bool,
     }
 }
 
@@ -419,6 +450,12 @@ recursa::ast_node! {
         PrimaryKey(PrimaryKeyConstraint),
         #[tok(NOT, NULL)]
         NotNull,
+        /// Added in 18: gram.y `ColConstraintElem: NOT NULL_P opt_no_inherit`
+        /// with `NO INHERIT` (docs/research/postgres-14-19-sql-syntax-changes.md,
+        /// PostgreSQL 18, item 7; REL_18_6 gram.y `ColConstraintElem`).
+        #[cfg(feature = "since-pg18")]
+        #[tok(NOT, NULL, NO, INHERIT)]
+        NotNullNoInherit,
         #[tok(NULL)]
         /// Bare `NULL` — redundant (columns are nullable by default) but
         /// syntactically accepted.
@@ -579,9 +616,23 @@ recursa::ast_node! {
     #[derive(Debug, derive_more :: Deref)]
     #[tok(LPAREN, this, RPAREN)]
     pub struct IndexedConstraintColumnList(
+        #[cfg(not(feature = "since-pg18"))]
         #[sep(COMMA)]
         #[deref]
         pub zero_or_many!(crate::tokens::ColId),
+        /// From 18 the list is gram.y `columnList`, which is not empty: an
+        /// empty list would let `(WITHOUT OVERLAPS)` parse, which REL_18_6
+        /// gram.y `ConstraintElem` rejects.
+        #[cfg(feature = "since-pg18")]
+        #[sep(COMMA)]
+        #[deref]
+        pub one_or_many!(crate::tokens::ColId),
+        /// Added in 18: gram.y `opt_without_overlaps` after the last key
+        /// column, a temporal key (docs/research/postgres-14-19-sql-syntax-changes.md,
+        /// PostgreSQL 18, item 2; REL_18_6 gram.y `ConstraintElem`).
+        #[cfg(feature = "since-pg18")]
+        #[presence(WITHOUT, OVERLAPS)]
+        pub bool,
     );
 }
 
@@ -652,10 +703,73 @@ recursa::ast_node! {
     #[derive(Debug, derive_more :: Deref)]
     #[tok(LPAREN, this, RPAREN)]
     pub struct ForeignKeyColumnList(
+        #[cfg(not(feature = "since-pg18"))]
         #[sep(COMMA)]
         #[deref]
         pub zero_or_many!(crate::tokens::ColId),
+        /// From 18 the list is gram.y `columnList`, which is not empty: an
+        /// empty list would let `(, PERIOD c)` parse, which REL_18_6 gram.y
+        /// `ConstraintElem` rejects.
+        #[cfg(feature = "since-pg18")]
+        #[sep(COMMA)]
+        #[deref]
+        pub one_or_many!(crate::tokens::ColId),
+        /// Added in 18: gram.y `optionalPeriodName`, the `PERIOD` column of a
+        /// temporal foreign key (docs/research/postgres-14-19-sql-syntax-changes.md,
+        /// PostgreSQL 18, item 3; REL_18_6 gram.y `ConstraintElem`).
+        #[cfg(feature = "since-pg18")]
+        pub Option<PeriodColumn>,
     );
+}
+
+// Added in 18: gram.y `optionalPeriodName: ',' PERIOD columnElem`
+// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18, item 3).
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// `, PERIOD column` — the last column of a temporal foreign key, on the
+    /// referencing and on the referenced side.
+    #[derive(Debug)]
+    pub struct PeriodColumn {
+        #[tok(COMMA, PERIOD, this)]
+        pub column: crate::tokens::ColId,
+    }
+}
+
+// Added in 18: gram.y `opt_column_and_period_list`
+// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18, item 3).
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// gram.y `opt_column_and_period_list: '(' columnList optionalPeriodName
+    /// ')'`: the referenced columns of a table-level foreign key. Only the
+    /// table-level form takes `PERIOD`; a column-level `REFERENCES` keeps
+    /// [`ReferencedColumnList`] (`opt_column_list`).
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct ForeignKeyReferencedColumnList(
+        #[sep(COMMA)]
+        #[deref]
+        pub one_or_many!(crate::tokens::ColId),
+        pub Option<PeriodColumn>,
+    );
+}
+
+// Added in 18: the referenced side of a table-level foreign key, which differs
+// from a column-level `REFERENCES` in its column list
+// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18, item 3).
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// `REFERENCES table [(col, ... [, PERIOD col])] [MATCH ...] [ON ...]` —
+    /// gram.y `ConstraintElem`'s `REFERENCES qualified_name
+    /// opt_column_and_period_list key_match key_actions`. The fields have the
+    /// names of [`ReferencesConstraint`].
+    #[derive(Debug)]
+    pub struct ForeignKeyReferences {
+        #[tok(REFERENCES, this)]
+        pub table: crate::ast::shared::names::QualifiedName,
+        pub columns: Option<ForeignKeyReferencedColumnList>,
+        pub match_clause: Option<MatchClause>,
+        pub actions: zero_or_many!(OnAction),
+    }
 }
 
 recursa::ast_node! {
@@ -664,7 +778,13 @@ recursa::ast_node! {
     #[tok(FOREIGN, KEY, this)]
     pub struct TableForeignKey {
         pub columns: ForeignKeyColumnList,
+        #[cfg(not(feature = "since-pg18"))]
         pub references: ReferencesConstraint,
+        /// From 18 the referenced column list can end with `PERIOD col`,
+        /// which a column-level `REFERENCES` cannot (REL_18_6 gram.y
+        /// `opt_column_and_period_list`).
+        #[cfg(feature = "since-pg18")]
+        pub references: ForeignKeyReferences,
         /// gram.y `ConstraintAttributeSpec` after `key_actions`.
         pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
     }
@@ -777,6 +897,26 @@ recursa::ast_node! {
         Unique(TableUnique),
         Check(TableCheck),
         Exclude(TableExclude),
+        /// Added in 18: gram.y `ConstraintElem: NOT NULL_P ColId
+        /// ConstraintAttributeSpec` (docs/research/postgres-14-19-sql-syntax-changes.md,
+        /// PostgreSQL 18, item 6; REL_18_6 gram.y `ConstraintElem`).
+        #[cfg(feature = "since-pg18")]
+        NotNull(TableNotNull),
+    }
+}
+
+// Added in 18: a table-level `NOT NULL` constraint
+// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18, item 6).
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// `NOT NULL column [NO INHERIT] [NOT VALID]` — a table-level not-null
+    /// constraint, which can have a name.
+    #[derive(Debug)]
+    pub struct TableNotNull {
+        #[tok(NOT, NULL, this)]
+        pub column: crate::tokens::ColId,
+        /// gram.y `ConstraintAttributeSpec`.
+        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
     }
 }
 
@@ -1686,6 +1826,11 @@ recursa::ast_node! {
         AddColumnBare(AddColumnBareCmd),
         // ALTER CONSTRAINT ...
         AlterConstraint(AlterConstraintCmd),
+        /// Added in 18: gram.y `alter_table_cmd: ALTER CONSTRAINT name
+        /// INHERIT` (docs/research/postgres-14-19-sql-syntax-changes.md,
+        /// PostgreSQL 18, item 5; REL_18_6 gram.y `alter_table_cmd`).
+        #[cfg(feature = "since-pg18")]
+        AlterConstraintInherit(AlterConstraintInheritCmd),
         // ALTER [COLUMN] colname ...
         AlterColumn(AlterColumnCmd),
         // DROP ... — longer prefixes first.
@@ -1807,6 +1952,18 @@ recursa::ast_node! {
         pub name: literal::Ident,
         /// gram.y `ConstraintAttributeSpec`.
         pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+    }
+}
+
+// Added in 18: see `AlterTableCmd::AlterConstraintInherit`.
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// `ALTER CONSTRAINT name INHERIT` — makes a not-null constraint
+    /// inheritable again.
+    #[derive(Debug)]
+    pub struct AlterConstraintInheritCmd {
+        #[tok(ALTER, CONSTRAINT, this, INHERIT)]
+        pub name: literal::Ident,
     }
 }
 

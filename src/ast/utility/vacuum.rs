@@ -1,6 +1,7 @@
 //! VACUUM statement and the shared `VacuumOption(s)` AST nodes used by
 //! VACUUM/REINDEX/CLUSTER for their `( option [= value], ... )` lists.
 
+#[cfg(not(feature = "since-pg18"))]
 use crate::ast::shared::names::QualifiedName;
 use crate::tokens::literal;
 
@@ -53,7 +54,14 @@ recursa::ast_node! {
 recursa::ast_node! {
     #[derive(Debug)]
     pub struct VacuumRelation {
+        #[cfg(not(feature = "since-pg18"))]
         pub name: QualifiedName,
+        /// From 18 gram.y `vacuum_relation` names a `relation_expr`, so
+        /// `ONLY name` and `name *` are accepted
+        /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+        /// item 9; REL_18_6 gram.y `vacuum_relation`).
+        #[cfg(feature = "since-pg18")]
+        pub name: crate::ast::shared::names::RelationExpr,
         pub columns: Option<VacuumColumnList>,
     }
 }
@@ -85,5 +93,16 @@ recursa::ast_node! {
         pub analyze: bool,
         #[sep(COMMA)]
         pub relations: Option<one_or_many!(VacuumRelation)>,
+    }
+}
+
+impl<'input> VacuumRelation<'input> {
+    /// The name of the relation. From 18 the relation is a `relation_expr`,
+    /// and this is the name inside it.
+    pub fn relation_name(&self) -> &crate::ast::shared::names::QualifiedName<'input> {
+        #[cfg(not(feature = "since-pg18"))]
+        return &self.name;
+        #[cfg(feature = "since-pg18")]
+        return self.name.name();
     }
 }

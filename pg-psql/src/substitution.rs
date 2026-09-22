@@ -181,6 +181,13 @@ pub(crate) fn render_document(
 ) -> Rendered {
     let mut rewrites = Vec::new();
     let mut unbound = Vec::new();
+    // Where the current query buffer starts: the end of the previous
+    // terminator. A command that discards the buffer (18) removes the text
+    // from here.
+    #[cfg(feature = "since-pg18")]
+    let mut buffer_start = 0;
+    #[cfg(feature = "since-pg18")]
+    let mut semicolons = semicolon_ends(source).into_iter();
 
     for item in &document.items {
         match item {
@@ -198,11 +205,43 @@ pub(crate) fn render_document(
             }
             // A send command submits the buffer but is client syntax the
             // server never sees, so it renders as the boundary it is.
-            PsqlItem::Terminator(Terminator::Send(send)) => rewrites.push(Rewrite {
-                source: span_of(source, send.text()),
-                text: ";".to_owned(),
-            }),
-            PsqlItem::Terminator(Terminator::Semi) => {}
+            PsqlItem::Terminator(Terminator::Send(send)) => {
+                let span = span_of(source, send.text());
+                #[cfg(feature = "since-pg18")]
+                {
+                    buffer_start = span.end;
+                }
+                rewrites.push(Rewrite {
+                    source: span,
+                    text: ";".to_owned(),
+                });
+            }
+            PsqlItem::Terminator(Terminator::Semi) => {
+                #[cfg(feature = "since-pg18")]
+                {
+                    buffer_start = semicolons
+                        .next()
+                        .expect("each `;` terminator is one `SEMI` token");
+                }
+            }
+            // A discard command ends the query buffer, but psql sends none
+            // of the buffer text (docs/research/psql-14-19-syntax-changes.md,
+            // class (A) item A1). The buffer text and the command render as
+            // nothing, and the rewrites and unbound variables inside the
+            // buffer go with them. Whitespace before the buffer stays.
+            #[cfg(feature = "since-pg18")]
+            PsqlItem::Terminator(Terminator::Discard(discard)) => {
+                let command = span_of(source, discard.text());
+                let gap = &source[buffer_start..command.start];
+                let start = buffer_start + (gap.len() - gap.trim_start().len());
+                rewrites.retain(|rewrite: &Rewrite| rewrite.source.start < start);
+                unbound.retain(|variable: &Unbound| variable.source.start < start);
+                rewrites.push(Rewrite {
+                    source: start..command.end,
+                    text: String::new(),
+                });
+                buffer_start = command.end;
+            }
             PsqlItem::Sql(text) => {
                 for atom in text.atoms.iter() {
                     // `\;` and `\:` each force their second character into
@@ -242,6 +281,21 @@ pub(crate) fn render_document(
         map: SourceMap { regions },
         unbound,
     }
+}
+
+/// The end offset of each `;` terminator in `source`, in order.
+///
+/// `Terminator::Semi` holds no text, so its position comes from the lexer.
+/// Only a terminator lexes as `SEMI`: `\;` is one `Escaped` token, and a
+/// `;` inside a string, a quoted identifier, a dollar-quoted body or a
+/// comment is part of that token or of trivia.
+#[cfg(feature = "since-pg18")]
+fn semicolon_ends(source: &str) -> Vec<usize> {
+    crate::lex(source)
+        .tokens()
+        .filter(|token| token.kind() == crate::TokenKind::SEMI)
+        .map(|token| token.span().range().end)
+        .collect()
 }
 
 /// The text a bound interpolation renders to, or `None` when it is unbound.
