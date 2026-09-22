@@ -139,11 +139,18 @@ recursa::tokens! {
     // Version gates (ADR 0009): "research" in a gate comment is
     // docs/research/postgres-14-19-sql-syntax-changes.md. A keyword that 17
     // added is absent before 17, so PostgreSQL 16 lexes the word as an
-    // identifier (REL_16_15 kwlist.h).
+    // identifier (REL_16_15 kwlist.h). The same applies to a keyword that 16
+    // added: PostgreSQL 15 lexes the word as an identifier (REL_15_19
+    // kwlist.h).
         // `json` changes category in 17 from UNRESERVED to COL_NAME: research,
         // PostgreSQL 17, "Keywords"; REL_16_15 kwlist.h line 233.
         #[cfg(feature = "since-pg17")]
         JSON            => r"JSON" in COL_NAME + bare_label + json_type,
+        // Added in 16 (research, PostgreSQL 16, "Keywords"), but a 15 build
+        // keeps this entry: the `FORMAT_LA` lookahead filter names `JSON` as
+        // its trigger, and a `lookahead` entry takes no `cfg`. A 15 build
+        // therefore lexes `json` as an unreserved keyword where 15 has an
+        // identifier. Only the positions that take a bare `IDENT` see this.
         #[cfg(not(feature = "since-pg17"))]
         JSON            => r"JSON" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
@@ -155,9 +162,17 @@ recursa::tokens! {
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
         JSON_EXISTS     => r"JSON_EXISTS" in COL_NAME + bare_label,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         JSON_OBJECT     => r"JSON_OBJECT" in COL_NAME + bare_label,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         JSON_ARRAY      => r"JSON_ARRAY" in COL_NAME + bare_label,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         JSON_OBJECTAGG  => r"JSON_OBJECTAGG" in COL_NAME + bare_label,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         JSON_ARRAYAGG   => r"JSON_ARRAYAGG" in COL_NAME + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
@@ -168,6 +183,10 @@ recursa::tokens! {
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
         JSON_TABLE      => r"JSON_TABLE" in COL_NAME + bare_label,
+        // Added in 16 (research, PostgreSQL 16, "Keywords"), but not gated:
+        // the `lookahead` block names it, and a `lookahead` entry takes no `cfg`.
+        // A 15 build therefore lexes it as a keyword where 15 has an
+        // identifier.
         FORMAT          => r"FORMAT" in UNRESERVED + bare_label,
         ENCODING        => r"ENCODING" in UNRESERVED + bare_label,
         PASSING         => r"PASSING" in UNRESERVED + bare_label,
@@ -176,7 +195,15 @@ recursa::tokens! {
         #[cfg(feature = "since-pg17")]
         PATH            => r"PATH" in UNRESERVED + bare_label,
         COLUMNS         => r"COLUMNS" in UNRESERVED + bare_label,
+        // Added in 16 (research, PostgreSQL 16, "Keywords"), but not gated:
+        // the `precedence` block names it, and a `precedence` entry takes no `cfg`.
+        // A 15 build therefore lexes it as a keyword where 15 has an
+        // identifier.
         KEYS            => r"KEYS" in UNRESERVED + bare_label,
+        // Added in 16 (research, PostgreSQL 16, "Keywords"), but not gated:
+        // the `precedence` block names it, and a `precedence` entry takes no `cfg`.
+        // A 15 build therefore lexes it as a keyword where 15 has an
+        // identifier.
         SCALAR          => r"SCALAR" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
@@ -197,6 +224,8 @@ recursa::tokens! {
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
         UNCONDITIONAL   => r"UNCONDITIONAL" in UNRESERVED + bare_label,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         ABSENT          => r"ABSENT" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
@@ -535,6 +564,8 @@ recursa::tokens! {
         CONTENT         => r"CONTENT" in UNRESERVED + bare_label,
         VERSION         => r"VERSION" in UNRESERVED + bare_label,
         STANDALONE      => r"STANDALONE" in UNRESERVED + bare_label,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         INDENT          => r"INDENT" in UNRESERVED + bare_label,
         REF             => r"REF" in UNRESERVED + bare_label,
         YES             => r"YES" in UNRESERVED + bare_label,
@@ -1482,6 +1513,23 @@ pub mod literal {
             pub integer: IntegerLit,
             #[lex(matcher)]
             pub numeric: NumericLit,
+            // Before 16, the scanner has no non-decimal integers and no `_`
+            // digit separators: research, PostgreSQL 16, "Lexical and literal
+            // syntax" (commits 6fcda9aba, faff8f8e4). In REL_15_19 scan.l,
+            // `0x1F` and `1_000` match `integer_junk` (`{integer}{identifier}`),
+            // `1.5_0` matches `decimal_junk` and `1e1_0` matches `real_junk`, and
+            // each is an error. The `IntegerLit` and `NumericLit` matchers have
+            // the 16 patterns, and a `matchers` entry takes no `cfg`. So a 15
+            // build adds this token: it matches every such literal at the same
+            // length as the matchers or longer, and wins a tie by priority. No
+            // grammar rule takes it, so the statement is rejected, as the 15
+            // scanner rejects it.
+            #[cfg(not(feature = "since-pg16"))]
+            #[lex(
+                pattern = r"0[xXoObB][0-9A-Za-z_]*|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?_(?:[eE][+-]|[0-9A-Za-z_.])*",
+                priority = 100
+            )]
+            pub numeric_junk: NumericJunk,
             #[lex(matcher)]
             pub custom_operator: CustomOp,
         }

@@ -186,13 +186,20 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `( query ) [alias]`.
+    /// `( query ) [alias]`. Before 16 the alias is required.
     #[derive(Debug)]
     pub struct ParenQueryRef {
         pub open: SelectLParen,
         pub body: ParenTableBody,
         pub close: SelectRParen,
+        // The alias is optional from 16: research, PostgreSQL 16, "Queries and
+        // expressions" (commit bcedd8f5f). The REL_15_19 gram.y action of
+        // `table_ref: select_with_parens opt_alias_clause` raises "subquery in
+        // FROM must have an alias", so the raw parser rejects the form.
+        #[cfg(feature = "since-pg16")]
         pub alias: Option<PlainTableAlias>,
+        #[cfg(not(feature = "since-pg16"))]
+        pub alias: PlainTableAlias,
     }
 }
 
@@ -275,7 +282,12 @@ recursa::ast_node! {
     pub struct LateralSubquery {
         #[tok(LPAREN, this, RPAREN)]
         pub query: boxed!(Subquery),
+        // The alias is optional from 16, as in `ParenQueryRef` (REL_15_19
+        // gram.y `table_ref: LATERAL_P select_with_parens opt_alias_clause`).
+        #[cfg(feature = "since-pg16")]
         pub alias: Option<PlainTableAlias>,
+        #[cfg(not(feature = "since-pg16"))]
+        pub alias: PlainTableAlias,
     }
 }
 
@@ -1047,12 +1059,20 @@ recursa::ast_node! {
         #[cfg(feature = "since-pg17")]
         #[tok(JSON_EXISTS)]
         JsonExists,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         #[tok(JSON_OBJECT)]
         JsonObject,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         #[tok(JSON_ARRAY)]
         JsonArray,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         #[tok(JSON_OBJECTAGG)]
         JsonObjectAgg,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         #[tok(JSON_ARRAYAGG)]
         JsonArrayAgg,
         // Added in 17: research, PostgreSQL 17, "Keywords".

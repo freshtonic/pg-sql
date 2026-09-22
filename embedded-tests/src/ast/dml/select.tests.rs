@@ -1485,7 +1485,6 @@ mod tests {
             ("SELECT * FROM ((SELECT 1) s CROSS JOIN t)", "ParenJoinRef"),
             ("SELECT * FROM (SELECT * FROM ((a JOIN b ON true))) s", "Group(ParenJoinGroup"),
             // A query in the parentheses.
-            ("SELECT * FROM (SELECT 1)", "ParenQueryRef"),
             ("SELECT * FROM (SELECT 1) s", "ParenQueryRef"),
             ("SELECT * FROM ((SELECT 1)) s", "ParenQueryRef"),
             ("SELECT * FROM ((SELECT 1) UNION SELECT 2) s", "ParenQueryRef"),
@@ -1665,6 +1664,56 @@ mod tests {
             "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int PATH 'a' NOT NULL)",
             "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"path\" 'a')",
             "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS path int PATH 'a', nested text)",
+        ]);
+    }
+
+
+    // A subquery in `FROM` needs no alias from 16: research, PostgreSQL 16,
+    // "Queries and expressions" (commit bcedd8f5f).
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn parse_from_subquery_without_alias() {
+        for src in [
+            "SELECT * FROM (SELECT 1)",
+            "SELECT * FROM (VALUES (1))",
+            "SELECT * FROM ((SELECT 1))",
+            "SELECT * FROM (SELECT 1) JOIN u ON true",
+        ] {
+            let tree = format!("{:?}", parse_select_classified(src).ast());
+            assert!(tree.contains("ParenQueryRef"), "{src:?} did not build ParenQueryRef: {tree}");
+        }
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT * FROM LATERAL (SELECT 1)",
+            "SELECT * FROM t, LATERAL (SELECT 1)",
+            "DELETE FROM t USING (SELECT 1)",
+            "UPDATE t SET a = 1 FROM (SELECT 1)",
+        ]);
+    }
+
+    // Before 16, the `table_ref` action raises "subquery in FROM must have an
+    // alias" (REL_15_19 gram.y `table_ref: select_with_parens opt_alias_clause`).
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn from_subquery_needs_an_alias_before_16() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "SELECT * FROM (SELECT 1)",
+            "SELECT * FROM (VALUES (1))",
+            "SELECT * FROM ((SELECT 1))",
+            "SELECT * FROM ((SELECT 1) UNION (SELECT 2))",
+            "SELECT * FROM (SELECT 1) JOIN u ON true",
+            "SELECT * FROM LATERAL (SELECT 1)",
+            "SELECT * FROM t, LATERAL (SELECT 1)",
+            "DELETE FROM t USING (SELECT 1)",
+            "UPDATE t SET a = 1 FROM (SELECT 1)",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT * FROM (SELECT 1) s",
+            "SELECT * FROM (SELECT 1) AS s (a)",
+            "SELECT * FROM (VALUES (1)) v",
+            "SELECT * FROM ((SELECT 1) UNION (SELECT 2)) x",
+            "SELECT * FROM ((SELECT 1) s JOIN u ON true)",
+            "SELECT * FROM t, LATERAL (SELECT 1) s",
+            "SELECT * FROM (a JOIN b ON true)",
         ]);
     }
 }

@@ -471,10 +471,16 @@ recursa::ast_node! {
         Default(DefaultConstraint),
         Check(CheckConstraint),
         Compression(CompressionConstraint),
+        // Added in 16: see `StorageConstraint`.
+        #[cfg(feature = "since-pg16")]
         Storage(StorageConstraint),
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+// (REL_16_15 gram.y `column_storage`: `STORAGE ColId | STORAGE DEFAULT`). In
+// 15, only `ALTER ... SET STORAGE ColId` takes a storage mode.
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// Column STORAGE mode: `STORAGE { PLAIN | EXTERNAL | EXTENDED | MAIN | DEFAULT }`.
     #[derive(Debug)]
@@ -492,6 +498,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+// (REL_16_15 gram.y `columnDef ... opt_column_storage`, commit 784cedda0).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `STORAGE mode` column-level storage specifier (used inline in CREATE
     /// TABLE column definitions).
@@ -2161,8 +2170,15 @@ recursa::ast_node! {
     /// column's TOAST storage strategy.
     #[derive(Debug)]
     pub struct AlterColSetStorage {
+        // 16 accepts `DEFAULT` (`column_storage`): research, PostgreSQL 16,
+        // "Changes to existing statements" (commit b9424d014). REL_15_19 gram.y
+        // has `ALTER opt_column ColId SET STORAGE ColId`.
+        #[cfg(feature = "since-pg16")]
         #[tok(SET, STORAGE, this)]
         pub mode: crate::ast::ddl::table::ColumnStorageMode,
+        #[cfg(not(feature = "since-pg16"))]
+        #[tok(SET, STORAGE, this)]
+        pub mode: crate::tokens::ColId,
     }
 }
 

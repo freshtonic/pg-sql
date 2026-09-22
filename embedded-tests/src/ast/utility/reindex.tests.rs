@@ -51,6 +51,9 @@ mod tests {
         reparse_stable::<ReindexStmt>("REINDEX DATABASE not_current_database");
     }
 
+    // The name is optional from 16: research, PostgreSQL 16, "Changes to
+    // existing statements".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn reindex_system_roundtrips() {
         reparse_stable::<ReindexStmt>("REINDEX (CONCURRENTLY) SYSTEM");
@@ -74,5 +77,38 @@ mod tests {
     #[test]
     fn reindex_qualified_name_roundtrips() {
         reparse_stable::<ReindexStmt>("REINDEX INDEX CONCURRENTLY pg_toast.pg_toast_1260_index");
+    }
+
+    // Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+    // (REL_16_15 gram.y `reindex_target_all opt_concurrently opt_single_name`).
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn reindex_database_without_a_name() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "REINDEX DATABASE",
+            "REINDEX SYSTEM",
+            "REINDEX DATABASE CONCURRENTLY",
+            "REINDEX (VERBOSE) DATABASE",
+        ]);
+    }
+
+    // Added in 16, so rejected before 16: REL_15_19 gram.y has
+    // `REINDEX reindex_target_multitable opt_concurrently name`.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn reindex_database_needs_a_name_before_16() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "REINDEX DATABASE",
+            "REINDEX SYSTEM",
+            "REINDEX DATABASE CONCURRENTLY",
+            "REINDEX (VERBOSE) DATABASE",
+            "REINDEX (CONCURRENTLY) SYSTEM",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&[
+            "REINDEX DATABASE d",
+            "REINDEX SYSTEM d",
+            "REINDEX DATABASE CONCURRENTLY d",
+            "REINDEX (VERBOSE) SYSTEM s",
+        ]);
     }
 }

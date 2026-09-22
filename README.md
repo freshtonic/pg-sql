@@ -36,9 +36,9 @@ The features are mutually exclusive: the build stops with an error for zero
 or for two or more. Cargo feature unification is the usual cause of two. A
 crate between your crate and pg-sql must use `default-features = false` on
 pg-sql and forward the version features, as `pg-psql` does.
-`pg_sql::TARGET_VERSION` reports the selection. The grammar of `pg16` is
-complete (#74). The grammar of `pg14`, `pg15`, `pg18` and `pg19-beta` is not
-complete yet (#75 to #78). See ADR 0009 and
+`pg_sql::TARGET_VERSION` reports the selection. The grammar of `pg15` and
+`pg16` is complete (#74, #75). The grammar of `pg14`, `pg18` and `pg19-beta`
+is not complete yet (#76 to #78). See ADR 0009 and
 `docs/plans/2026-09-22-target-versions.md`.
 
 `scripts/gate-versions` builds and tests every target version.

@@ -3,9 +3,12 @@ mod tests {
     use crate::ast::shared::expr::{
         CastType, CastTypeHead, ColumnRef, Expr,
         FunctionCallBody,
-        FunctionCallTail, JsonObject, ParenContent, ParenthesizedDotStar, ParenthesizedExpr,
+        FunctionCallTail, ParenContent, ParenthesizedDotStar, ParenthesizedExpr,
         ParenthesizedIndirection, StringLitSeq0, TypeName,
     };
+    // Added in 16: research, PostgreSQL 16, "Queries and expressions".
+    #[cfg(feature = "since-pg16")]
+    use crate::ast::shared::expr::JsonObject;
     use crate::ast::dml::values::{SelectClause, Subquery};
 
     /// Parse `src` as an `Expr` through the logos lex pass.
@@ -103,6 +106,8 @@ mod tests {
         ));
     }
 
+    // Added in 16: research, PostgreSQL 16, "Queries and expressions".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn parse_json_constructors() {
         // JSON_OBJECT() — entries, KEY/VALUE, all clauses, empty, returning-only
@@ -197,6 +202,8 @@ mod tests {
         ));
     }
 
+    // Added in 16: research, PostgreSQL 16, "Queries and expressions".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn parse_json_aggregates() {
         for src in [
@@ -248,7 +255,7 @@ mod tests {
     #[test]
     fn parse_xml_functions() {
         assert!(matches!(
-            parse_expr_classified("xmlserialize(CONTENT x AS text NO INDENT)").ast(),
+            parse_expr_classified("xmlserialize(CONTENT x AS text)").ast(),
             Expr::XmlSerialize(_)
         ));
         assert!(matches!(
@@ -273,6 +280,8 @@ mod tests {
         ));
     }
 
+    // Added in 16: research, PostgreSQL 16, "Queries and expressions".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn parse_is_json_predicate() {
         for src in [
@@ -3600,6 +3609,8 @@ mod tests {
         }
     }
 
+    // Added in 16: research, PostgreSQL 16, "Queries and expressions".
+    #[cfg(feature = "since-pg16")]
     /// `JSON_OBJECTAGG(k: v)` and `JSON_OBJECT(k: v)` with an identifier key.
     ///
     /// pg-sql used to model psql's `:name` interpolation in the expression
@@ -3704,6 +3715,8 @@ mod tests {
             let _expr = _expr_parsed.ast();
             assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
         }
+        // Added in 16: research, PostgreSQL 16, "Queries and expressions".
+        #[cfg(feature = "since-pg16")]
         for src in [
             "JSON_OBJECT('a': 1, 'b': 2)",
             "JSON_OBJECT(KEY 'a' VALUE 2 + 3)",
@@ -4327,6 +4340,11 @@ mod tests {
             "CREATE FUNCTION json(int) RETURNS int LANGUAGE sql AS 'select 1'",
             "DROP FUNCTION json(int)",
             "CREATE TABLE t (a json(10))",
+        ]);
+        // `JSON_OBJECT(...)` is added in 16: research, PostgreSQL 16, "Queries
+        // and expressions".
+        #[cfg(feature = "since-pg16")]
+        crate::ast::test_support::assert_statements_parse(&[
             "SELECT JSON_OBJECT('a': 1 RETURNING json(3))",
         ]);
     }
@@ -4452,4 +4470,110 @@ mod tests {
         }
     }
 
+
+    // Added in 16: research, PostgreSQL 16, "Queries and expressions"
+    // (REL_16_15 gram.y `xml_indent_option`).
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn parse_xmlserialize_indent() {
+        for src in [
+            "xmlserialize(CONTENT x AS text NO INDENT)",
+            "XMLSERIALIZE(DOCUMENT x AS text INDENT)",
+        ] {
+            assert!(matches!(parse_expr_classified(src).ast(), Expr::XmlSerialize(_)), "{src}");
+        }
+    }
+
+    // Added in 16, so rejected before 16: research, PostgreSQL 16, "Queries and
+    // expressions". REL_15_19 gram.y has `XMLSERIALIZE '(' document_or_content
+    // a_expr AS SimpleTypename ')'`.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn xmlserialize_indent_is_rejected_before_16() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "SELECT XMLSERIALIZE(DOCUMENT x AS text INDENT)",
+            "SELECT XMLSERIALIZE(CONTENT x AS text NO INDENT)",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT XMLSERIALIZE(DOCUMENT x AS text)",
+            "SELECT xmlserialize(content x AS text) indent",
+        ]);
+    }
+
+    // Before 16, `json_object`, `json_array`, `json_objectagg` and
+    // `json_arrayagg` are not keywords (research, PostgreSQL 16, "Keywords";
+    // REL_15_19 kwlist.h). So each call is an ordinary function call, and each
+    // word is an ordinary name.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn sql_json_16_names_are_ordinary_calls_before_16() {
+        for src in [
+            "json_object('{a,b}')",
+            "json_object(VARIADIC ARRAY['a'])",
+            "json_object(a => 1)",
+            "JSON_OBJECT()",
+            "json_array(1, 2)",
+            "JSON_ARRAY()",
+            "json_arrayagg(a ORDER BY a)",
+            "json_arrayagg(a) FILTER (WHERE a > 0)",
+            "json_objectagg(a, b) OVER ()",
+        ] {
+            assert!(matches!(parse_expr_classified(src).ast(), Expr::Func(_)), "{src}");
+        }
+        crate::ast::test_support::assert_statements_parse(&[
+            "CREATE TABLE json_object (json_array int, json_arrayagg int, json_objectagg int)",
+            "SELECT 1::json_object",
+            "SELECT * FROM json_arrayagg",
+            "CREATE FUNCTION json_array() RETURNS int LANGUAGE sql AS 'select 1'",
+        ]);
+    }
+
+    // Added in 16, so rejected before 16: research, PostgreSQL 16, "Queries and
+    // expressions". REL_15_19 gram.y has no SQL/JSON production.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn sql_json_16_syntax_is_rejected_before_16() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "SELECT JSON_OBJECT('a' : 1)",
+            "SELECT JSON_OBJECT('a' VALUE 1)",
+            "SELECT JSON_OBJECT(KEY 'a' VALUE 1)",
+            "SELECT JSON_OBJECT('a' : 1 ABSENT ON NULL WITH UNIQUE KEYS)",
+            "SELECT JSON_OBJECT(RETURNING jsonb)",
+            "SELECT JSON_ARRAY(1 ABSENT ON NULL)",
+            "SELECT JSON_ARRAY(SELECT 1)",
+            "SELECT JSON_ARRAY('[1]' FORMAT JSON)",
+            "SELECT JSON_ARRAY(RETURNING jsonb)",
+            "SELECT JSON_OBJECTAGG(a : b) FROM t",
+            "SELECT JSON_OBJECTAGG(a VALUE b) FROM t",
+            "SELECT JSON_ARRAYAGG(a NULL ON NULL) FROM t",
+            "SELECT JSON_ARRAYAGG(a RETURNING jsonb) FROM t",
+            "SELECT '{}' IS JSON",
+            "SELECT '{}' IS NOT JSON",
+            "SELECT '{}' IS JSON OBJECT",
+            "SELECT '{}' IS JSON SCALAR",
+            "SELECT '{}' IS JSON WITH UNIQUE KEYS",
+        ]);
+    }
+
+    // The keywords that 16 added are identifiers before 16: research,
+    // PostgreSQL 16, "Keywords" (REL_15_19 kwlist.h). `format`, `json`, `keys`
+    // and `scalar` stay unreserved keywords in a 15 build (see `crate::tokens`),
+    // which is invisible here. `system_user` is an identifier in every build.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn words_that_16_adds_are_identifiers_before_16() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT absent, indent, format, json, keys, scalar FROM t",
+            "SELECT 1 absent, 2 indent, 3 format, 4 json, 5 keys, 6 scalar",
+            "CREATE TABLE absent (indent int, format int, json int, keys int, scalar int)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, absent = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, indent = 1)",
+            "CREATE DATABASE d absent = 1",
+            "CREATE DATABASE d indent = 1",
+            "SELECT format json FROM t",
+            "SELECT system_user FROM t",
+            "CREATE TABLE system_user (a int)",
+            "SELECT system_user()",
+        ]);
+    }
 }

@@ -428,6 +428,8 @@ mod tests {
         assert_eq!(lit.text(), "4.4e131071");
     }
 
+    // Added in 16: research, PostgreSQL 16, "Lexical and literal syntax".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn integer_literal_with_underscores() {
         let lexed = crate::lex("100_000_000_000_000");
@@ -442,6 +444,8 @@ mod tests {
     // `0o273` (plus uppercase prefixes and `_` digit separators). Without these,
     // `0x42F` lexes as `IntegerLit("0")` + `Ident("x42F")` — the bug this widening
     // closes.
+    // Added in 16: research, PostgreSQL 16, "Lexical and literal syntax".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn integer_literal_hex_lowercase_prefix() {
         let lexed = crate::lex("0x42F");
@@ -453,6 +457,8 @@ mod tests {
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
+    // Added in 16: research, PostgreSQL 16, "Lexical and literal syntax".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn integer_literal_hex_uppercase_prefix() {
         let lexed = crate::lex("0X1A2b");
@@ -464,6 +470,8 @@ mod tests {
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
+    // Added in 16: research, PostgreSQL 16, "Lexical and literal syntax".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn integer_literal_hex_with_underscores() {
         let lexed = crate::lex("0xFF_FF");
@@ -475,6 +483,8 @@ mod tests {
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
+    // Added in 16: research, PostgreSQL 16, "Lexical and literal syntax".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn integer_literal_octal_prefix() {
         let lexed = crate::lex("0o273");
@@ -486,6 +496,8 @@ mod tests {
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
+    // Added in 16: research, PostgreSQL 16, "Lexical and literal syntax".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn integer_literal_binary_prefix() {
         let lexed = crate::lex("0b101");
@@ -497,6 +509,8 @@ mod tests {
         assert!(input.is_eof(), "parser cursor: {}", input.cursor());
     }
 
+    // Added in 16: research, PostgreSQL 16, "Lexical and literal syntax".
+    #[cfg(feature = "since-pg16")]
     /// PG accepts `_` immediately after the radix prefix (`0b_…`, `0x_…`,
     /// `0o_…`) — gram.y `bininteger 0[bB](_?{bindigit})+`.
     #[test]
@@ -541,6 +555,8 @@ mod tests {
         assert!(first_token_is("1e10", crate::TokenKind::NumericLit, 4));
     }
 
+    // Added in 16: research, PostgreSQL 16, "Lexical and literal syntax".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn numeric_literal_with_underscores() {
         let lexed = crate::lex("1_234.567_89");
@@ -556,7 +572,7 @@ mod tests {
     // It must classify as a `NumericLit` spanning the whole `1.`.
     #[test]
     fn numeric_literal_trailing_dot_valid() {
-        for src in ["1.", "1. ", "1.;", "1_000."] {
+        for src in ["1.", "1. ", "1.;"] {
             let dot_end = src.find('.').unwrap() + 1;
             assert!(
                 first_token_is(src, crate::TokenKind::NumericLit, dot_end),
@@ -604,6 +620,8 @@ mod tests {
     // arbitration test above; the per-token `IntegerLit::parse` tests verify
     // the regex in isolation, this test verifies the cross-regex arbitration
     // that is the actual code path the bug lived on.
+    // Added in 16: research, PostgreSQL 16, "Lexical and literal syntax".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn integer_literals_classify_as_single_token() {
         for src in ["0x42F", "0b101", "0o273", "0xFF_FF", "0X1A2b"] {
@@ -712,8 +730,6 @@ mod tests {
             ("123 ", 3),
             ("123;", 3),
             ("123,", 3),
-            ("0xFF", 4),
-            ("0b101", 5),
             ("100", 3),
         ] {
             assert!(
@@ -1232,5 +1248,54 @@ mod tests {
             "SELECT 'a'\n\u{b}'b'",
         ]);
         crate::ast::test_support::assert_statements_parse(&["SELECT 'a'\n'b'"]);
+    }
+
+    // Added in 16: research, PostgreSQL 16, "Lexical and literal syntax".
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn numeric_literal_trailing_dot_after_underscores() {
+        assert!(first_token_is("1_000.", crate::TokenKind::NumericLit, 6));
+    }
+
+    // Added in 16, so rejected before 16: research, PostgreSQL 16, "Lexical and
+    // literal syntax". In REL_15_19 scan.l each form matches `integer_junk`,
+    // `decimal_junk` or `real_junk`, which are errors.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn non_decimal_and_underscore_literals_are_rejected_before_16() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "SELECT 0x1F",
+            "SELECT 0X1F",
+            "SELECT 0o17",
+            "SELECT 0b101",
+            "SELECT 0x_FF",
+            "SELECT 0x",
+            "SELECT 0x'1F'",
+            "SELECT 1_000",
+            "SELECT 1_000_000",
+            "SELECT 0_1",
+            "SELECT 1_000.5",
+            "SELECT 1.000_5",
+            "SELECT 1_000.",
+            "SELECT .5_0",
+            "SELECT 1e1_0",
+            "SELECT 1_000.5e+1",
+            "SELECT 1_2::int",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT 0",
+            "SELECT 007",
+            "SELECT 0.5",
+            "SELECT 1e5",
+            "SELECT 1E+5",
+            "SELECT .5e-3",
+            "SELECT 1.e5",
+            "SELECT 0e1",
+            "SELECT 1.",
+            "SELECT 1+2",
+            "SELECT x'1F'",
+            "SELECT b'101'",
+            "SELECT $1",
+        ]);
     }
 }

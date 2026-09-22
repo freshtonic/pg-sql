@@ -40,13 +40,19 @@ recursa::ast_node! {
 recursa::ast_node! {
     /// `REINDEX … { SYSTEM | DATABASE } [CONCURRENTLY] [name]` — Postgres'
     /// `reindex_target_all`, where the trailing name is optional
-    /// (`opt_single_name`).
+    /// (`opt_single_name`) from 16.
     #[derive(Debug)]
     pub struct ReindexAllTarget {
         pub kind: ReindexAllKind,
         #[presence(CONCURRENTLY)]
         pub concurrently: bool,
+        // The name is optional from 16: research, PostgreSQL 16, "Changes to
+        // existing statements" (commits 2cbc3c17a, 0a5f06b84). REL_15_19 gram.y
+        // has `REINDEX reindex_target_multitable opt_concurrently name`.
+        #[cfg(feature = "since-pg16")]
         pub name: Option<crate::tokens::ColId>,
+        #[cfg(not(feature = "since-pg16"))]
+        pub name: crate::tokens::ColId,
     }
 }
 

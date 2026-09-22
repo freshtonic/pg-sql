@@ -823,8 +823,6 @@ mod tests {
             ("xmlpi(NAME x)", "XmlPi("),
             ("xmlroot(a, VERSION '1.0')", "XmlRoot("),
             ("xmlserialize(DOCUMENT a AS text)", "XmlSerialize("),
-            ("json_object('a': 1)", "JsonObject("),
-            ("json_array(1, 2)", "JsonArray("),
         ];
         assert_special_forms_in_windowless_positions(&forms);
 
@@ -896,6 +894,17 @@ mod tests {
                 assert!(tree.contains(node), "{src:?} did not build {node}");
             }
         }
+    }
+
+    // The SQL/JSON constructors of 16: research, PostgreSQL 16, "Queries and
+    // expressions".
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn parse_sql_json_16_forms_in_windowless_positions() {
+        assert_special_forms_in_windowless_positions(&[
+            ("json_object('a': 1)", "JsonObject("),
+            ("json_array(1, 2)", "JsonArray("),
+        ]);
     }
 
     // The SQL/JSON functions of 17: research, PostgreSQL 17, "Queries and

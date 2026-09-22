@@ -190,7 +190,7 @@ PostgreSQL 16 adds no new top-level statement.
 | `REINDEX DATABASE`, `REINDEX SYSTEM` | The name is optional | `REINDEX DATABASE;` | RN16 "Utility Commands"; `ReindexStmt` 9065; commits 2cbc3c17a, 0a5f06b84 |
 | `GRANT role TO role` | Accepts `WITH` and a list of `ColLabel {OPTION \| TRUE \| FALSE}`. The options are `ADMIN`, `INHERIT` and `SET`. Parse analysis validates the names. | `GRANT r TO u WITH INHERIT FALSE, SET TRUE, ADMIN OPTION;` | RN16 "Privileges"; `GrantRoleStmt` 7771, `grant_role_opt` 7819; commits e3ce2de09, 3d14e171e |
 | `REVOKE ... OPTION FOR role` | `ADMIN` is generalized to `ColId`, so `INHERIT OPTION FOR` and `SET OPTION FOR` parse | `REVOKE INHERIT OPTION FOR r FROM u;` | `RevokeRoleStmt` 7797; commit e3ce2de09 |
-| `CREATE DATABASE` | A numeric option value is `NumericOnly`, not `SignedIconst`, so `OID` values above 2^31 parse | `CREATE DATABASE d OID = 3000000000;` | `createdb_opt_item` 11130; commit 34fa0ddae5c |
+| `CREATE DATABASE` | A numeric option value is `NumericOnly`, not `SignedIconst`, so `OID` values above 2^31 parse. The change is back-patched into 15.1 (commit 2c6d43650d1), so the `pg15` pin `REL_15_19` has it too, and it needs no version gate. | `CREATE DATABASE d OID = 3000000000;` | `createdb_opt_item` 11130; commit 34fa0ddae5c |
 | Utility options | `utility_option_elem` accepts `FORMAT_LA`, so `EXPLAIN (FORMAT JSON)` still works after the `FORMAT JSON` lookahead | `EXPLAIN (FORMAT JSON) SELECT 1;` | `utility_option_elem` 11705 |
 
 New option names with no gram.y change:
