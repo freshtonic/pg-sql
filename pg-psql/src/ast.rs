@@ -239,8 +239,11 @@ recursa::ast_node! {
     /// item in the document repetition. Extending the current run is the psql
     /// scanner's maximal-match behaviour, so resolve that exact family of cells
     /// as shifts.
+    ///
+    /// The lookahead family has one more token in each version range: from
+    /// 15 the `Number` atom, and before 15 the `LineComment` atom.
     #[derive(Debug, Clone, derive_more :: Deref)]
-    #[parse(lr_conflict(
+    #[cfg_attr(feature = "since-pg15", parse(lr_conflict(
     action = shift,
     against = ast::SqlAtom,
     lookahead = {
@@ -265,9 +268,39 @@ recursa::ast_node! {
         DOLLAR,
         MetaCommandText,
         BACKSLASH,
+        NumberText,
     },
-    expect = 21
-))]
+    expect = 22
+)))]
+    #[cfg_attr(not(feature = "since-pg15"), parse(lr_conflict(
+    action = shift,
+    against = ast::SqlAtom,
+    lookahead = {
+        StringText,
+        EscapeStringText,
+        UnicodeStringText,
+        BitStringText,
+        HexStringText,
+        UnicodeIdentifierText,
+        QuotedIdentifierText,
+        DollarString,
+        DollarNumber,
+        EscapedText,
+        WordText,
+        DigitsText,
+        PunctText,
+        COLONCOLON,
+        COLONEQUALS,
+        COLON,
+        MINUS,
+        SLASH,
+        DOLLAR,
+        MetaCommandText,
+        BACKSLASH,
+        LineCommentText,
+    },
+    expect = 22
+)))]
     pub struct SqlText {
         #[deref]
         pub atoms: one_or_many!(SqlAtom),
@@ -333,6 +366,37 @@ recursa::ast_node! {
         /// interprets a number, and no numeric spelling can contain or start an
         /// interpolation.
         Digits(#[lex(pattern = r"[0-9]+")] DigitsText),
+        /// From 15: a number or `$n` that an identifier follows directly, or a
+        /// number with an exponent sign. psqlscan.l copies the trailing-junk
+        /// rules of scan.l, `integer_junk`, `decimal_junk`, `real_junk`,
+        /// `param_junk` and `realfail`, and echoes each as one token
+        /// (docs/research/psql-14-19-syntax-changes.md, class (A) item A2;
+        /// `REL_15_19:psqlscan.l` 341-348, commits 2549f0661, f37ac613a83).
+        ///
+        /// The extent matters where a quote or a `-` follows: from 15,
+        /// `1e'\'` is `1e` and a standard string, and `1e--c` has no comment.
+        /// Before 15, `realfail1` and `realfail2` give back the `e` and the
+        /// sign, so `e'\'` starts an escape string and `--c` is a comment.
+        #[cfg(feature = "since-pg15")]
+        Number(
+            #[lex(
+                pattern = r"(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)(?:[eE][+-]?[0-9]+)?[A-Za-z_\u{0080}-\u{10FFFF}][A-Za-z0-9_$\u{0080}-\u{10FFFF}]*|(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)[eE][+-][0-9]*|\$[0-9]+[A-Za-z_\u{0080}-\u{10FFFF}][A-Za-z0-9_$\u{0080}-\u{10FFFF}]*"
+            )]
+            NumberText,
+        ),
+        /// Before 15: a `--` comment, which psql removes from the text that it
+        /// sends. psqlscan.l's `{whitespace}` rule does not echo a match that
+        /// starts with `-` (docs/research/psql-14-19-syntax-changes.md, class
+        /// (A) item A3; `REL_14_24:psqlscan.l` 388; commit 83884682f restores
+        /// the comments in 15). Rendering removes the comment and keeps the
+        /// line ending.
+        ///
+        /// The token also takes the line ending, so it has the extent of the
+        /// ignored `LineComment` and wins the tie by its priority.
+        #[cfg(not(feature = "since-pg15"))]
+        LineComment(
+            #[lex(pattern = r"--[^\r\n]*(?:\r\n|\r|\n)?", priority = 3)] LineCommentText,
+        ),
         /// Any other run of operator and delimiter characters. The excluded
         /// characters are exactly those that can begin a longer token above.
         Punct(#[lex(pattern = r#"[^\s\-/:;'"$\\A-Za-z0-9_\u{0080}-\u{10FFFF}]+"#)] PunctText),

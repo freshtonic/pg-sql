@@ -254,6 +254,20 @@ pub(crate) fn render_document(
                             text: escaped[1..].to_owned(),
                         });
                     }
+                    // Before 15, psql does not send a `--` comment
+                    // (docs/research/psql-14-19-syntax-changes.md, class (A)
+                    // item A3; `REL_14_24:psqlscan.l` 388). The line ending
+                    // after it is whitespace, which psql sends.
+                    #[cfg(not(feature = "since-pg15"))]
+                    if let SqlAtom::LineComment(token) = atom {
+                        let text = token.text();
+                        let comment = text.trim_end_matches(['\r', '\n']);
+                        let start = span_of(source, text).start;
+                        rewrites.push(Rewrite {
+                            source: start..start + comment.len(),
+                            text: String::new(),
+                        });
+                    }
                 }
             }
         }

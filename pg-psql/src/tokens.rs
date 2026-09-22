@@ -12,10 +12,12 @@
 //! ambiguous against the SQL/JSON `int : value` entry.
 
 recursa::tokens! {
-    // psqlscan.l:163-165 folds `--` line comments into `{whitespace}`. Both
-    // are passed through to the server untouched, and neither can contain an
-    // interpolation, so both are ignored here: rendering copies the source
-    // between interpolations verbatim, so ignored trivia survives exactly.
+    // psqlscan.l:163-165 folds `--` line comments into `{whitespace}`. From
+    // 15 both are passed through to the server untouched, and neither can
+    // contain an interpolation, so both are ignored here: rendering copies the
+    // source between interpolations verbatim, so ignored trivia survives
+    // exactly. Before 15 psql removes each `--` comment, so a 14 build lexes
+    // it as the `SqlAtom::LineComment` token instead (`crate::ast`).
     ignore = r"[ \t\r\n\f\x0b]+",
     punctuation {
         // psqlscan.l:288 `typecast` and psqlscan.l:290 `colon_equals` are
