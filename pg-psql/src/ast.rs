@@ -113,8 +113,14 @@ recursa::ast_node! {
         #[tok(SEMI)]
         Semi,
         /// `\g`, `\gx`, `\gset`, `\gexec`, `\crosstabview` — client syntax the
-        /// server never sees, so rendering replaces one with `;`.
+        /// server never sees, so rendering replaces one with `;`. From 18 also
+        /// `\parse` and `\sendpipeline`.
         Send(SendCommand),
+        /// Added in 18: a command that ends the query buffer but does not
+        /// send its text (docs/research/psql-14-19-syntax-changes.md, class
+        /// (A) item A1; `REL_18_6:command.c` 350-452, `mainloop.c` 513).
+        #[cfg(feature = "since-pg18")]
+        Discard(DiscardCommand),
     }
 }
 
@@ -136,6 +142,16 @@ recursa::ast_node! {
     pub enum SendCommand {
         /// `\crosstabview`
         Crosstabview(#[lex(pattern = r"\\crosstabview", priority = 2)] SendCrosstabview),
+        /// Added in 18: `\parse statement_name` sends the buffer text with
+        /// `PQsendPrepare` (docs/research/psql-14-19-syntax-changes.md, class
+        /// (A) item A1; `REL_18_6:command.c` 424, 2508).
+        #[cfg(feature = "since-pg18")]
+        Parse(#[lex(pattern = r"\\parse", priority = 2)] SendParse),
+        /// Added in 18: `\sendpipeline` sends the buffer text in pipeline
+        /// mode (docs/research/psql-14-19-syntax-changes.md, class (A) item
+        /// A1; `REL_18_6:command.c` 440, 2844).
+        #[cfg(feature = "since-pg18")]
+        Sendpipeline(#[lex(pattern = r"\\sendpipeline", priority = 2)] SendSendpipeline),
         /// `\gexec`
         Gexec(#[lex(pattern = r"\\gexec", priority = 2)] SendGexec),
         /// `\gset`
@@ -152,10 +168,66 @@ impl<'input> SendCommand<'input> {
     pub fn text(&self) -> &str {
         match self {
             Self::Crosstabview(token) => token.text(),
+            #[cfg(feature = "since-pg18")]
+            Self::Parse(token) => token.text(),
+            #[cfg(feature = "since-pg18")]
+            Self::Sendpipeline(token) => token.text(),
             Self::Gexec(token) => token.text(),
             Self::Gset(token) => token.text(),
             Self::Gx(token) => token.text(),
             Self::G(token) => token.text(),
+        }
+    }
+}
+
+// Added in 18: seven pipeline and prepared-statement commands end the query
+// buffer without sending its text (docs/research/psql-14-19-syntax-changes.md,
+// class (A) item A1; `REL_18_6:command.c` 350-452, `common.c` 1602-1725).
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// A psql command that ends the query buffer but does not send its text.
+    ///
+    /// Each of these returns `PSQL_CMD_SEND`, so `MainLoop()` resets the query
+    /// buffer after it, as after `\g`. But the send mode of each one does not
+    /// send the buffer text to the server. Rendering therefore removes the
+    /// text of the buffer together with the command, and the server SQL does
+    /// not contain it. The arguments of `\close_prepared` and `\getresults`
+    /// stay in the rendered text, as the arguments of `\g` do.
+    ///
+    /// Like [`SendCommand`], each has a priority that wins the tie against
+    /// the [`SqlAtom::MetaCommand`] catch-all, and a longer name wins on
+    /// length: `\flushrequest` is not `\flush` followed by `request`.
+    #[derive(Debug, Clone)]
+    pub enum DiscardCommand {
+        /// `\close_prepared statement_name`
+        ClosePrepared(#[lex(pattern = r"\\close_prepared", priority = 2)] DiscardClosePrepared),
+        /// `\endpipeline`
+        Endpipeline(#[lex(pattern = r"\\endpipeline", priority = 2)] DiscardEndpipeline),
+        /// `\flushrequest`
+        Flushrequest(#[lex(pattern = r"\\flushrequest", priority = 2)] DiscardFlushrequest),
+        /// `\flush`
+        Flush(#[lex(pattern = r"\\flush", priority = 2)] DiscardFlush),
+        /// `\getresults [number_results]`
+        Getresults(#[lex(pattern = r"\\getresults", priority = 2)] DiscardGetresults),
+        /// `\startpipeline`
+        Startpipeline(#[lex(pattern = r"\\startpipeline", priority = 2)] DiscardStartpipeline),
+        /// `\syncpipeline`
+        Syncpipeline(#[lex(pattern = r"\\syncpipeline", priority = 2)] DiscardSyncpipeline),
+    }
+}
+
+#[cfg(feature = "since-pg18")]
+impl<'input> DiscardCommand<'input> {
+    /// The exact source spelling.
+    pub fn text(&self) -> &str {
+        match self {
+            Self::ClosePrepared(token) => token.text(),
+            Self::Endpipeline(token) => token.text(),
+            Self::Flushrequest(token) => token.text(),
+            Self::Flush(token) => token.text(),
+            Self::Getresults(token) => token.text(),
+            Self::Startpipeline(token) => token.text(),
+            Self::Syncpipeline(token) => token.text(),
         }
     }
 }

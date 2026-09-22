@@ -60,6 +60,9 @@ pub mod substitution;
 pub mod tokens;
 
 pub use ast::{Interpolation, PsqlDocument, PsqlItem, SendCommand, SqlAtom, SqlText, Terminator};
+// Added in 18: docs/research/psql-14-19-syntax-changes.md, class (A) item A1.
+#[cfg(feature = "since-pg18")]
+pub use ast::DiscardCommand;
 pub use substitution::{Origin, Rendered, SourceMap, Unbound, Variables};
 
 use std::fmt;
