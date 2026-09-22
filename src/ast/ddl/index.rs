@@ -3,7 +3,7 @@ pub use crate::ast::shared::flags::{DropBehavior, IfExists, IfNotExists};
 
 use crate::ast::dml::select::{NullsOrder, SortDir, WhereClause};
 use crate::ast::session::set_reset::SetValue;
-use crate::ast::shared::expr::{CommonSubexprCall, Expr, FunctionApplicationExpr, JsonFuncExpr};
+use crate::ast::shared::expr::{Expr, FunctionApplicationExpr};
 use crate::tokens::literal;
 
 // ---------------------------------------------------------------------------
@@ -48,13 +48,14 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Parenthesized opclass option list: `(name = value, ...)`.
+    /// Parenthesized opclass option list: `(name = value, ...)`. gram.y:3026
+    /// `reloptions: '(' reloption_list ')'`, and the list is never empty.
     #[derive(Debug, derive_more :: Deref)]
     #[tok(LPAREN, this, RPAREN)]
     pub struct OpclassOptions(
         #[sep(COMMA)]
         #[deref]
-        pub zero_or_many!(OpclassOption),
+        pub one_or_many!(OpclassOption),
     );
 }
 
@@ -147,26 +148,22 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Index column target: a parenthesized expression, a bare SQL/JSON
-    /// function expression, a bare function call (e.g., `lower(fruit)`), or a
-    /// plain column identifier. Postgres allows any `func_expr_windowless` as a
-    /// bare index element — that includes the SQL/JSON functions.
+    /// Index column target, gram.y:8199 `index_elem: ColId | func_expr_windowless
+    /// | '(' a_expr ')'`: a plain column, a parenthesized expression, or a
+    /// function-like form with no parentheses around it. `Special` and `Func`
+    /// are the two halves of `func_expr_windowless`.
     ///
-    /// Variant ordering:
-    /// - `Expr` (`(`) starts with a different token than the others.
-    /// - `Json` before `Func`: a JSON function keyword is soft and `Func`
-    ///   would otherwise reclaim it as an ordinary function name.
-    /// - `Func` (`ident(`) must come before `Col` (`ident`) so longest-match
-    ///   prefers the function call form.
+    /// Variant ordering: `Expr` leads with `(`. `Special`, `Func` and `Col`
+    /// can lead with the same word and part on the `(` after it.
     #[derive(Debug)]
     pub enum IndexTarget {
         Expr(#[tok(LPAREN, this, RPAREN)] boxed!(Expr)),
-        Json(boxed!(JsonFuncExpr)),
-        /// gram.y `func_expr_common_subexpr`'s `COALESCE`, `GREATEST`, `LEAST`,
-        /// `NULLIF`, `XMLCONCAT` and `NORMALIZE`, as in `ON CONFLICT (coalesce(key, 0))`. Their words
-        /// are `COL_NAME` keywords, so `Func` never takes them as a name; a
+        /// gram.y `func_expr_windowless`'s `func_expr_common_subexpr` half,
+        /// as in `ON CONFLICT (coalesce(key, 0))`: `COALESCE`, `CAST`, `TRIM`,
+        /// the XML and SQL/JSON functions and the rest. It holds an [`Expr`].
+        /// Their words are keywords that `Func` never takes as a name, and a
         /// bare `coalesce` is still `Col`.
-        Common(boxed!(CommonSubexprCall)),
+        Special(boxed!(crate::ast::shared::expr::FuncExprCommonSubexpr)),
         /// gram.y `func_expr_windowless`: no `WITHIN GROUP`, `FILTER` or `OVER`
         /// suffix, which are also operator class names after the call.
         Func(boxed!(FunctionApplicationExpr)),

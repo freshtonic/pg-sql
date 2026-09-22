@@ -4254,4 +4254,24 @@ mod tests {
         ));
     }
 
+    /// gram.y:15797 `TREAT '(' a_expr AS Typename ')'`. `TREAT` is a
+    /// `col_name_keyword`, so a bare `treat` is a column and `treat(...)` is
+    /// only ever this form.
+    #[test]
+    fn parse_treat_as_its_own_variant() {
+        for src in ["TREAT(a AS int)", "treat(a + 1 AS s.t)", "treat(a AS numeric(10, 2))"] {
+            assert!(
+                matches!(parse_expr_classified(src).ast(), Expr::Treat(_)),
+                "expected Treat for {src:?}",
+            );
+        }
+        assert!(matches!(parse_expr_classified("treat").ast(), Expr::ColumnRef(_)));
+        for src in ["treat(a, b)", "treat(a)", "treat(a AS int COLLATE \"C\")", "treat()"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+    }
+
 }

@@ -53,6 +53,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/dml/values.tests.rs	set_operations_nest_as_gram_y_declares	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/mod.tests.rs	parse_collation_and_opclass_names_as_any_name	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/mod.tests.rs	parse_relation_expr_forms_in_every_statement	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/mod.tests.rs	parse_special_function_forms_in_windowless_positions	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_local_scope_session_authorization	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/session/set_reset.tests.rs	parse_set_session_scope_session_authorization	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	accept_function_applications_gram_y_admits	issue-9-generated-expression
@@ -94,6 +95,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_coalesce_as_an_ordinary_call	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_qualified_xmlconcat_and_normalize_as_ordinary_calls	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_substring_comma_argument_form	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_treat_as_its_own_variant	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_xmlconcat_as_its_own_variant	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	position_needle_rejects_unparenthesized_a_expr_only_extensions	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	position_needle_uses_postgres_restricted_expression_extensions	issue-9-generated-expression

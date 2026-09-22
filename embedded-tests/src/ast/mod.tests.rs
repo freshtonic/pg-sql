@@ -791,4 +791,111 @@ mod tests {
         }
     }
 
+    /// gram.y:15637 `func_expr_windowless` is what a `func_table`, a
+    /// `rowsfrom_item`, an `index_elem` (so an `ON CONFLICT` arbiter) and a
+    /// `part_elem` take, and its `func_expr_common_subexpr` half is every
+    /// "special expression considered to be a function": `CAST`, `TREAT`,
+    /// `TRIM`, `EXTRACT`, the XML and SQL/JSON functions, `COALESCE` and the
+    /// rest. pg-sql took four of them in `FROM` and eleven in an index
+    /// element. Each position now holds the `Expr` that the expression grammar
+    /// builds for the same text. PostgreSQL 17.9 accepts every statement here.
+    #[test]
+    fn parse_special_function_forms_in_windowless_positions() {
+        let forms = [
+            ("coalesce(a, b)", "Coalesce(CoalesceExpr"),
+            ("greatest(a, b)", "Greatest(GreatestExpr"),
+            ("nullif(a, b)", "NullIf(NullIfExpr"),
+            ("normalize(a, nfc)", "Normalize(NormalizeExpr"),
+            ("xmlconcat(a, b)", "XmlConcat(XmlConcatExpr"),
+            ("cast(a AS int)", "CastCall(CastCall"),
+            ("treat(a AS int)", "Treat(TreatCall"),
+            ("collation for (a)", "CollationFor("),
+            ("extract(year FROM a)", "Extract("),
+            ("overlay(a PLACING b FROM 1)", "Overlay("),
+            ("position(a IN b)", "Position("),
+            ("substring(a FROM 1 FOR 2)", "Substring("),
+            ("substring(a, 1, 2)", "Substring("),
+            ("trim(BOTH a FROM b)", "Trim("),
+            ("xmlelement(NAME x, a)", "XmlElement("),
+            ("xmlexists(a PASSING BY REF b)", "XmlExists("),
+            ("xmlforest(a, b)", "XmlForest("),
+            ("xmlparse(DOCUMENT a)", "XmlParse("),
+            ("xmlpi(NAME x)", "XmlPi("),
+            ("xmlroot(a, VERSION '1.0')", "XmlRoot("),
+            ("xmlserialize(DOCUMENT a AS text)", "XmlSerialize("),
+            ("json_object('a': 1)", "JsonObject("),
+            ("json_array(1, 2)", "JsonArray("),
+            ("json(a)", "JsonCtor("),
+            ("json_scalar(a)", "JsonScalar("),
+            ("json_serialize(a)", "JsonSerialize("),
+            ("json_query(a, '$')", "JsonQuery("),
+            ("json_exists(a, '$')", "JsonExists("),
+            ("json_value(a, '$')", "JsonValue("),
+        ];
+        let positions = [
+            "SELECT * FROM {}",
+            "SELECT * FROM {} AS x (d int, e int)",
+            "SELECT * FROM {} WITH ORDINALITY x",
+            "SELECT * FROM ROWS FROM ({}, f(1)) x",
+            "CREATE INDEX ON t ({} DESC, b)",
+            "INSERT INTO t VALUES (1) ON CONFLICT ({}) DO NOTHING",
+            "CREATE TABLE p (a int) PARTITION BY RANGE ({})",
+        ];
+        for (form, node) in forms {
+            // The expression grammar builds the same variant for the same text.
+            let src: &'static str = format!("SELECT {form}").leak();
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Statement::parse(&mut input).unwrap_or_else(|e| panic!("{src:?}: {e}"));
+            assert!(format!("{:?}", parsed.ast()).contains(node), "{src:?} has no {node}");
+
+            for position in positions {
+                let src: &'static str = position.replace("{}", form).leak();
+                let lexed = crate::lex(src);
+                assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+                let mut input = lexed.input();
+                let parsed =
+                    Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+                let tree = format!("{:?}", parsed.ast());
+                assert!(tree.contains(node), "{src:?} did not build {node}");
+            }
+        }
+
+        // `USER` is the one form with no parentheses.
+        for src in ["SELECT * FROM USER", "CREATE INDEX ON t (user)", "SELECT * FROM ROWS FROM (user) x"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "{src:?}");
+        }
+        // A bare word is still a relation or a column, and an ordinary call
+        // keeps its own node.
+        for (src, absent) in [
+            ("SELECT * FROM trim", "Trim("),
+            ("CREATE INDEX ON t (extract)", "Extract("),
+            ("CREATE INDEX ON t (lower(a))", "Special("),
+        ] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Statement::parse(&mut input).unwrap_or_else(|e| panic!("{src:?}: {e}"));
+            assert!(input.is_eof(), "{src:?}");
+            assert!(!format!("{:?}", parsed.ast()).contains(absent), "{src:?}");
+        }
+        // Only an expression in parentheses is an operator expression here,
+        // a windowless call has no `OVER`, and an opclass option list
+        // (gram.y:3026 `reloptions`) is never empty.
+        for src in [
+            "CREATE INDEX ON t (a + b)",
+            "SELECT * FROM a + b",
+            "CREATE INDEX ON t (f(a) OVER ())",
+            "CREATE INDEX ON t (a ops ())",
+        ] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Statement::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+    }
+
 }

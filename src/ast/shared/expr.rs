@@ -1512,26 +1512,6 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// The `COALESCE`, `GREATEST`, `LEAST`, `NULLIF`, `XMLCONCAT` and
-    /// `NORMALIZE` forms where gram.y
-    /// writes `func_expr_windowless` (gram.y:15637) and not an expression: a
-    /// `func_table`, a `rowsfrom_item`, an `index_elem` and a `part_elem`.
-    /// `func_expr_windowless` is `func_application | func_expr_common_subexpr
-    /// | ...`, and a `COL_NAME` keyword is never the name of a
-    /// `func_application`, so each position names these forms itself.
-    /// [`Expr`] holds the same nodes as variants of its own.
-    #[derive(Debug)]
-    pub enum CommonSubexprCall {
-        Coalesce(CoalesceExpr),
-        Greatest(GreatestExpr),
-        Least(LeastExpr),
-        NullIf(NullIfExpr),
-        XmlConcat(XmlConcatExpr),
-        Normalize(NormalizeExpr),
-    }
-}
-
-recursa::ast_node! {
     /// ROW constructor: `ROW(expr, ...)` or the empty `ROW()`.
     ///
     /// PostgreSQL's `row` production keeps `ROW '(' expr_list ')'` and
@@ -2522,6 +2502,18 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// `TREAT(expr AS type)`: gram.y:15797 `func_expr_common_subexpr: TREAT
+    /// '(' a_expr AS Typename ')'`. PostgreSQL turns it into a call of the
+    /// function named after the type. `TREAT` is a `COL_NAME` keyword, as
+    /// [`CoalesceExpr`] describes.
+    #[derive(Debug)]
+    pub struct TreatCall {
+        #[tok(TREAT, LPAREN, this, RPAREN)]
+        pub inner: CastAsInner,
+    }
+}
+
+recursa::ast_node! {
     /// `CAST(expr AS type)` — SQL-standard cast form.
     #[derive(Debug)]
     pub struct CastCall {
@@ -3268,26 +3260,6 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Any value-producing SQL/JSON function — the constructors and query
-    /// functions grouped into one peekable type. Each variant leads with a
-    /// distinct soft keyword, so this peeks `true` only for a JSON function.
-    /// Lets a context outside `Expr` (for instance a `CREATE INDEX`
-    /// expression element) accept the whole family. Aggregates and `JSON_TABLE` are excluded:
-    /// neither is a plain value expression usable as an index element.
-    #[derive(Debug)]
-    pub enum JsonFuncExpr {
-        Ctor(boxed!(JsonConstructor)),
-        Scalar(boxed!(JsonScalar)),
-        Serialize(boxed!(JsonSerialize)),
-        Object(boxed!(JsonObject)),
-        Array(boxed!(JsonArray)),
-        Exists(boxed!(JsonExists)),
-        Value(boxed!(JsonValue)),
-        Query(boxed!(JsonQuery)),
-    }
-}
-
-recursa::ast_node! {
     /// `SYMMETRIC | ASYMMETRIC` after `BETWEEN`.
     ///
     /// gram.y has four rules: `BETWEEN opt_asymmetric` and `NOT_LA BETWEEN
@@ -3897,6 +3869,9 @@ recursa::ast_node! {
         Trim(TrimCall),
         /// `CAST(expr AS type)`. Before `Func`.
         CastCall(CastCall),
+        /// `TREAT(expr AS type)`. `TREAT` is a `COL_NAME` keyword, so `Func`
+        /// never takes it as a name.
+        Treat(TreatCall),
         /// `COLLATION FOR (expr)`. Before `Func`.
         CollationFor(CollationForCall),
         /// `SUBSTRING(source FROM ... | SIMILAR ...)`. Before `Func`.
@@ -4151,6 +4126,7 @@ recursa::ast_node! {
         XmlExists,
         Trim,
         CastCall,
+        Treat,
         CollationFor,
         Substring,
         Position,
@@ -4181,5 +4157,61 @@ recursa::ast_node! {
         Null,
         PositionalParam,
         ColumnRef,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y:15646 `func_expr_common_subexpr`: "special expressions that are
+    /// considered to be functions". With `func_application` and
+    /// `json_aggregate_func` they make up gram.y:15637 `func_expr_windowless`,
+    /// which is what a `func_table`, a `rowsfrom_item`, an `index_elem` and a
+    /// `part_elem` take where an expression would need parentheses.
+    ///
+    /// It is a restricted [`Expr`] and not a type of its own: each rule builds
+    /// the `Expr` variant the expression grammar builds for the same text, so
+    /// `FROM coalesce(a, b)` and `SELECT coalesce(a, b)` hold one node and a
+    /// consumer needs one expression walker. Every admitted variant is an atom
+    /// that leads with its keyword, so no operand is retyped.
+    ///
+    /// Not admitted: `Func`, because `func_application` has its own node with
+    /// no `OVER`, `FILTER` or `WITHIN GROUP` ([`FunctionApplicationExpr`]);
+    /// `JsonObjectAgg` and `JsonArrayAgg`, whose `Expr` nodes carry an optional
+    /// `FILTER` and `OVER` that a windowless position does not have, and where
+    /// either word could start an alias or an operator class (RCA0400). An
+    /// aggregate in these positions fails PostgreSQL's parse analysis anyway;
+    /// `Grouping`, which gram.y has in `c_expr`, not here; and the
+    /// `CURRENT_DATE` family, which pg-sql lexes as identifiers.
+    #[restricts(Expr)]
+    pub enum FuncExprCommonSubexpr {
+        XmlElement,
+        XmlForest,
+        XmlPi,
+        XmlSerialize,
+        XmlParse,
+        XmlRoot,
+        XmlExists,
+        Trim,
+        CastCall,
+        Treat,
+        CollationFor,
+        Substring,
+        Position,
+        Overlay,
+        Extract,
+        JsonCtor,
+        JsonScalar,
+        JsonSerialize,
+        JsonObject,
+        JsonArray,
+        JsonExists,
+        JsonValue,
+        JsonQuery,
+        Coalesce,
+        Greatest,
+        Least,
+        NullIf,
+        XmlConcat,
+        Normalize,
+        User,
     }
 }
