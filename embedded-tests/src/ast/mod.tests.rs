@@ -898,27 +898,7 @@ mod tests {
         }
     }
 
-    /// Whether `Statement` parses `src` to the end.
-    fn statement_parses(src: &'static str) -> bool {
-        let lexed = crate::lex(src);
-        if lexed.errors().count() != 0 {
-            return false;
-        }
-        let mut input = lexed.input();
-        Statement::parse(&mut input).is_ok() && input.is_eof()
-    }
-
-    /// Asserts that each accepted form parses and formats to a fixed point,
-    /// and that each rejected form does not parse to the end.
-    fn check_statement_forms(accepted: &[&'static str], rejected: &[&'static str]) {
-        for &src in accepted {
-            assert!(statement_parses(src), "{src:?} did not parse");
-            crate::ast::test_support::reparse_stable::<Statement>(src);
-        }
-        for &src in rejected {
-            assert!(!statement_parses(src), "{src:?} parsed completely");
-        }
-    }
+    use crate::ast::test_support::check_statement_forms;
 
     /// Added in 19: `CHECKPOINT opt_utility_option_list` (gram.y b73d13c:2100,
     /// `utility_option_list` 1164; research PostgreSQL 19, "Changes to
