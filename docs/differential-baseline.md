@@ -1,10 +1,44 @@
-# PostgreSQL 17.9 differential baseline
+# Differential baseline: PostgreSQL 17.9 corpus, PostgreSQL 17.11 oracle
 
 `baselines/postgresql-17.9.json` is the named, machine-readable floor for
 PostgreSQL statement parity. It records the immutable legacy Git identities,
 the PostgreSQL 17.9 gitlink, all 226 regression SQL files, the legacy suite's
 222 included files and four explained exclusions, and per-file statement and
 pass/skip/fail counts.
+
+## Frozen corpus and pinned oracle
+
+The corpus and the oracle are two different inputs:
+
+- The **corpus** is frozen at PostgreSQL 17.9 (`6d396980fc5`). It is the set
+  of regression SQL files that the legacy parser split into the frozen
+  statement spans. The tests read each file by its Git blob ID from the
+  `vendor/postgres` object database, not from the checked-out tree. The
+  baseline file names and their `postgres` fields name this corpus.
+- The **oracle** is the raw parser of the pinned PostgreSQL release. The
+  `vendor/postgres` submodule pins PostgreSQL 17.11 (`REL_17_11`,
+  `083ac033419`). `pg-oracle` builds that release and runs `make` again when
+  the submodule moves to a different commit.
+
+Thus a move of the pin changes only the oracle. The statement spans, the
+legacy item kinds and the per-file counts stay valid, so each outcome change
+has one cause: a change in the raw parser. The submodule must contain the
+history back to 17.9, because the tests read the frozen blobs from it.
+
+### Pin move from 17.9 to 17.11 (#71)
+
+Between `REL_17_9` and `REL_17_11`, `src/backend/parser/gram.y`, `scan.l`,
+`parser.c` and `src/include/parser/kwlist.h` did not change. The only change in
+the oracle sources is in node support: `CreateStatsStmt` has a new `owner`
+field (commit `75a03c569c7`) and `makeJsonIsPredicate` has a new assertion.
+Neither changes which statements the raw parser accepts. The differential
+suite has the same result at 17.11 as at 17.9: 222 of 222 corpus files pass,
+with no outcome change for any statement.
+
+The 17.11 regression files change 40 corpus files. A simple split of these
+files gives 345 statements that are not in the frozen corpus. They are not in
+the baseline. A one-time probe of these statements with the differential check
+and the 17.11 oracle found no failure.
 
 The inclusion rule is the exact `corpus_tests!` declaration at legacy commit
 `1e71421d66baac15c8c5264e8f29b5f80122f50e`. The only excluded files are the

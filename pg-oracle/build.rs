@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 /// PostgreSQL source tree, relative to this crate's manifest directory.
-/// This is the workspace's `vendor/postgres` Git submodule, pinned to 17.9.
+/// This is the workspace's `vendor/postgres` Git submodule, pinned to 17.11.
 const PG_SOURCE_DIR: &str = "../vendor/postgres";
 
 fn pg_source_dir() -> PathBuf {
@@ -34,13 +34,48 @@ fn first_missing_generated(pg: &Path) -> Option<&'static str> {
         .find(|rel| !pg.join(rel).exists())
 }
 
+/// File in the build tree that records the PostgreSQL commit it was built from.
+const SOURCE_COMMIT_STAMP: &str = "pg-oracle-source-commit";
+
+/// The commit that the PostgreSQL checkout is at, or `None` when Git cannot
+/// tell (for example, a source tree that is not a Git checkout).
+fn pg_source_commit(source: &Path) -> Option<String> {
+    git_stdout(source, &["rev-parse", "HEAD"])
+}
+
+/// Run this build script again when the submodule moves to a different
+/// commit. Without this, Cargo keeps the oracle of the old pin.
+fn watch_pg_source_head(source: &Path) {
+    if let Some(head) = git_stdout(
+        source,
+        &["rev-parse", "--path-format=absolute", "--git-path", "HEAD"],
+    ) {
+        println!("cargo:rerun-if-changed={head}");
+    }
+}
+
+fn git_stdout(repository: &Path, arguments: &[&str]) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repository)
+        .args(arguments)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
 /// Ensure the PostgreSQL checkout is built far enough for pg-oracle to link.
 ///
 /// On a fresh clone the submodule carries only source — `configure && make`
 /// has not run, so the generated headers and static libs are missing. Rather
 /// than failing with a "run this script" message, build it automatically by
 /// invoking `scripts/build-pg.sh` (idempotent: a no-op once built, so the
-/// slow path runs only once per clone).
+/// slow path runs only once per clone). When the submodule moves to a
+/// different commit, the build tree is removed and built again, so the
+/// oracle always comes from the pinned release.
 fn verify_pg_built(source: &Path, build: &Path) {
     if !source.join("configure").exists() {
         panic!(
@@ -50,15 +85,29 @@ fn verify_pg_built(source: &Path, build: &Path) {
         );
     }
 
-    if first_missing_generated(build).is_none() {
+    let commit = pg_source_commit(source);
+    let stamp = build.join(SOURCE_COMMIT_STAMP);
+    let built_from = std::fs::read_to_string(&stamp).ok();
+    let same_commit = match &commit {
+        Some(commit) => built_from.as_deref().map(str::trim) == Some(commit.as_str()),
+        None => true,
+    };
+    if first_missing_generated(build).is_none() && same_commit {
         return;
     }
+    if !same_commit && build.exists() {
+        // The build tree comes from a different commit. PostgreSQL is
+        // configured without dependency tracking, so `make` does not rebuild
+        // the objects whose headers changed. Start from an empty tree.
+        std::fs::remove_dir_all(build)
+            .unwrap_or_else(|e| panic!("cannot remove {}: {e}", build.display()));
+    }
 
-    // Not built yet — build it now. The PostgreSQL build is slow the first
-    // time; surface that to the user since build-script output is otherwise
-    // buffered until completion.
+    // Not built yet, or built from a different commit — build it now. The
+    // PostgreSQL build is slow the first time; surface that to the user since
+    // build-script output is otherwise buffered until completion.
     eprintln!(
-        "PostgreSQL is not built yet — running \
+        "PostgreSQL is not built for the pinned commit — running \
          pg-oracle/scripts/build-pg.sh (slow on the first build)"
     );
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/build-pg.sh");
@@ -83,6 +132,10 @@ fn verify_pg_built(source: &Path, build: &Path) {
             build.display(),
             missing
         );
+    }
+    if let Some(commit) = commit {
+        std::fs::write(&stamp, format!("{commit}\n"))
+            .unwrap_or_else(|e| panic!("cannot write {}: {e}", stamp.display()));
     }
 }
 
@@ -147,6 +200,7 @@ fn main() {
     println!("cargo:rerun-if-changed=csrc/pgo_elog_stub.c");
     let pg_source = pg_source_dir();
     let pg_build = pg_build_dir();
+    watch_pg_source_head(&pg_source);
     verify_pg_built(&pg_source, &pg_build);
 
     let mut build = cc::Build::new();

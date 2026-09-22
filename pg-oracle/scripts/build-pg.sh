@@ -3,7 +3,7 @@
 # parser. Idempotent: safe to re-run.
 #
 # PostgreSQL lives in the `pg-sql/vendor/postgres` Git submodule,
-# pinned to the REL_17_9 tag.
+# pinned to the REL_17_11 tag.
 set -euo pipefail
 
 # PostgreSQL's makefiles interpret PROFILE as compiler profiling flags. Cargo
@@ -13,7 +13,7 @@ unset PROFILE
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PG_SRC="$REPO_ROOT/vendor/postgres"
-PG_BUILD="${1:-${PG_ORACLE_PG_BUILD_DIR:-$REPO_ROOT/target/postgres-17.9}}"
+PG_BUILD="${1:-${PG_ORACLE_PG_BUILD_DIR:-$REPO_ROOT/target/postgres-17.11}}"
 
 if [ ! -f "$PG_SRC/configure" ]; then
   echo "PostgreSQL source not found at $PG_SRC" >&2

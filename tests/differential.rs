@@ -1,4 +1,5 @@
-//! Differential parser test: pg-sql vs PostgreSQL 17.9's raw_parser.
+//! Differential parser test: pg-sql vs the pinned PostgreSQL raw_parser
+//! (17.11), over the frozen PostgreSQL 17.9 regression corpus.
 //! See docs/plans/2026-05-21-differential-parser-testing-design.md.
 
 mod support;
@@ -20,23 +21,16 @@ fn baseline_name(name: &str) -> String {
 fn run_corpus_file(name: &str) {
     // Fixture names that collide with Rust keywords (`async`, `box`, `enum`)
     // are written as raw identifiers in `corpus_tests!`. `stringify!` keeps
-    // the `r#` prefix, but the fixture file on disk has none — strip it so
-    // the path resolves.
+    // the `r#` prefix, but the fixture file name has none — strip it so
+    // the name matches the baseline.
     let name = fixture_name(name);
     let baseline = Baseline::pinned();
     let baseline_name = baseline_name(name);
     let expected = baseline.file(&baseline_name);
     let frozen = FrozenStatements::pinned().file(&baseline_name);
-    let path = format!(
-        "{}/vendor/postgres/src/test/regress/sql/{name}.sql",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
-    let source_git_blob = git_blob(&path);
-    assert_eq!(
-        source_git_blob, frozen.source_git_blob,
-        "{name}: source fixture differs from the frozen PostgreSQL blob"
-    );
+    // The frozen corpus is read by Git blob ID, so its identity is exact
+    // even when the submodule pins a later PostgreSQL release.
+    let text = frozen.source();
 
     let statements = frozen
         .statements(&text)
@@ -117,22 +111,6 @@ fn run_corpus_file(name: &str) {
         expected.outcomes.pass,
         actual.pass
     );
-}
-
-fn git_blob(path: &str) -> String {
-    let output = std::process::Command::new("git")
-        .args(["hash-object", "--no-filters", path])
-        .output()
-        .unwrap_or_else(|error| panic!("cannot hash {path}: {error}"));
-    assert!(
-        output.status.success(),
-        "git hash-object failed for {path}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout)
-        .expect("Git object ID is UTF-8")
-        .trim()
-        .to_owned()
 }
 
 macro_rules! corpus_tests {

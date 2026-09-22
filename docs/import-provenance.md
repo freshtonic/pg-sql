@@ -22,7 +22,9 @@ root `.gitmodules`; `vendor/postgres` remains the exact legacy gitlink.
 
 Run `scripts/verify-import-provenance` to verify the recorded legacy commit and
 tree, the exact source-import checkpoint manifest, and the PostgreSQL gitlink
-without requiring the legacy repository as a sibling checkout. The verifier
+without requiring the legacy repository as a sibling checkout. The import used
+the PostgreSQL 17.9 gitlink, and the verifier checks that gitlink in the
+checkpoint. HEAD now pins PostgreSQL 17.11 (`REL_17_11`, `083ac033419`, #71). The verifier
 checks the checkpoint's Git objects rather than the current files: after the
 one-shot grammar migration, those current files are the reviewed output rather
 than immutable inputs.

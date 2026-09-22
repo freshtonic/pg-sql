@@ -20,7 +20,7 @@ pub enum Equal {
     ErrorRight,
 }
 
-/// True iff PostgreSQL 17.9's raw parser accepts `sql`.
+/// True iff PostgreSQL 17.11's raw parser accepts `sql`.
 pub fn parse_ok(sql: &str) -> bool {
     let c = CString::new(sql).expect("NUL in SQL");
     let _guard = LOCK.lock().unwrap();

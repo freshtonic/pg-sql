@@ -44,6 +44,9 @@ API.
 - **PostgreSQL oracle**: the target version's authoritative raw-parser result.
 - **Differential baseline**: the pinned corpus membership and outcome counts
   against the PostgreSQL oracle.
+- **Frozen corpus**: the PostgreSQL 17.9 regression SQL files that the
+  differential baseline splits into statements. Tests read them by Git blob
+  ID, so a move of the oracle pin does not change them.
 - **Grammar migration**: the reproducible transformation from the immutable
   legacy grammar into current Recursa declarations.
 - **Parity gate**: geomean of per-benchmark pg-sql/sqlparser medians at or

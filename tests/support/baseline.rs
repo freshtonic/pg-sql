@@ -1,4 +1,9 @@
-//! Frozen PostgreSQL 17.9 differential expectations.
+//! Frozen differential expectations over the PostgreSQL 17.9 regression corpus.
+//!
+//! The corpus is frozen: every file is read by its Git blob ID from the
+//! `vendor/postgres` object database, not from the checked-out tree. The
+//! submodule pin (the oracle release) can therefore move to a later minor
+//! release while the statement spans and legacy item kinds stay valid.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
@@ -163,6 +168,26 @@ impl LegacyItemKind {
 }
 
 impl FrozenFile {
+    /// The frozen corpus source, read by its Git blob ID from the
+    /// `vendor/postgres` object database. The pinned oracle release can be
+    /// later than the corpus release, so the checked-out file can differ.
+    pub fn source(&self) -> String {
+        let repository = concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/postgres");
+        let output = std::process::Command::new("git")
+            .args(["-C", repository, "cat-file", "blob", &self.source_git_blob])
+            .output()
+            .unwrap_or_else(|error| panic!("cannot run git cat-file: {error}"));
+        assert!(
+            output.status.success(),
+            "cannot read frozen corpus blob {} from {repository} \
+             (is the submodule checked out with full history?): {}",
+            self.source_git_blob,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout)
+            .unwrap_or_else(|_| panic!("frozen corpus blob {} is not UTF-8", self.source_git_blob))
+    }
+
     pub fn statements<'source>(&self, source: &'source str) -> Result<Vec<&'source str>, String> {
         if source.len() != self.source_bytes {
             return Err(format!(
@@ -238,9 +263,11 @@ impl AcceptedLegacyGaps {
             document["postgres_gitlink"].as_str(),
             Some(POSTGRES_GITLINK)
         );
+        // The entries name statements of the frozen 17.9 corpus; the pinned
+        // oracle that verifies their outcomes is 17.11.
         assert_eq!(
             document["verification"]["oracle"].as_str(),
-            Some("PostgreSQL 17.9 raw_parser")
+            Some("PostgreSQL 17.11 raw_parser")
         );
 
         let baseline = Baseline::pinned();

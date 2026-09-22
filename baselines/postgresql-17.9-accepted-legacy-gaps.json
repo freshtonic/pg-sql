@@ -114,7 +114,7 @@
     }
   ],
   "verification": {
-    "oracle": "PostgreSQL 17.9 raw_parser",
+    "oracle": "PostgreSQL 17.11 raw_parser",
     "command": "cargo test --locked -p pg-sql --features postgres-oracle --test accepted_legacy_gaps frozen_accepted_legacy_gap_contracts_are_exact -- --exact"
   }
 }
