@@ -228,6 +228,9 @@ recursa::ast_node! {
     /// fixed-shape variants first preserves longest-match-wins semantics).
     #[derive(Debug)]
     pub enum CopyGenericOptionArg {
+        // Added in 17: research, PostgreSQL 17, "Changes to existing statements"
+        // (REL_17_11 gram.y 3539 `copy_generic_opt_arg`).
+        #[cfg(feature = "since-pg17")]
         #[tok(DEFAULT)]
         Default,
         #[tok(STAR)]
@@ -343,8 +346,15 @@ recursa::ast_node! {
     /// `FORCE NOT NULL { * | columnList }` — legacy force-not-null option.
     #[derive(Debug)]
     pub struct CopyForceNotNullOpt {
+        // `*` is added in 17: research, PostgreSQL 17, "Changes to existing
+        // statements" (REL_17_11 gram.y 3475, 3483). REL_16_15 gram.y 3419
+        // takes only a `columnList`.
+        #[cfg(feature = "since-pg17")]
         #[tok(FORCE, NOT, NULL, this)]
         pub target: CopyForceTarget,
+        #[cfg(not(feature = "since-pg17"))]
+        #[tok(FORCE, NOT, NULL, this)]
+        pub target: CopyForceColumns,
     }
 }
 
@@ -352,8 +362,15 @@ recursa::ast_node! {
     /// `FORCE NULL { * | columnList }` — legacy force-null option.
     #[derive(Debug)]
     pub struct CopyForceNullOpt {
+        // `*` is added in 17: research, PostgreSQL 17, "Changes to existing
+        // statements" (REL_17_11 gram.y 3475, 3483). REL_16_15 gram.y 3419
+        // takes only a `columnList`.
+        #[cfg(feature = "since-pg17")]
         #[tok(FORCE, NULL, this)]
         pub target: CopyForceTarget,
+        #[cfg(not(feature = "since-pg17"))]
+        #[tok(FORCE, NULL, this)]
+        pub target: CopyForceColumns,
     }
 }
 
@@ -366,6 +383,19 @@ recursa::ast_node! {
         #[tok(STAR)]
         Star,
         Columns(#[sep(COMMA)] one_or_many!(crate::tokens::ColId)),
+    }
+}
+
+// Before 17, `FORCE NOT NULL` and `FORCE NULL` take a `columnList` and no `*`
+// (research, PostgreSQL 17, "Changes to existing statements"; REL_16_15
+// gram.y 3419-3424).
+#[cfg(not(feature = "since-pg17"))]
+recursa::ast_node! {
+    /// The `columnList` target of a `FORCE NOT NULL` or `FORCE NULL` legacy
+    /// option before 17: a [`CopyForceTarget`] without `*`.
+    #[restricts(CopyForceTarget)]
+    pub enum CopyForceColumns {
+        Columns,
     }
 }
 

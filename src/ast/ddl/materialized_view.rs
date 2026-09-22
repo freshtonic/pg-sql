@@ -77,6 +77,10 @@ recursa::ast_node! {
     /// Variant ordering: `Default` (keyword) before `Name` (`Ident`).
     #[derive(Debug)]
     pub enum SetAccessMethodTarget {
+        // Added in 17: research, PostgreSQL 17, "Changes to existing statements"
+        // (REL_17_11 gram.y 3098 `set_access_method_name`). REL_16_15 gram.y
+        // 2838 takes only `name`.
+        #[cfg(feature = "since-pg17")]
         #[tok(DEFAULT)]
         Default,
         Name(crate::tokens::ColId),

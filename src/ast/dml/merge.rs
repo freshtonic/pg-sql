@@ -9,7 +9,9 @@
 /// [RETURNING ...]
 /// ```
 use crate::ast::dml::select::{PlainTable, TableRef};
-use crate::ast::dml::update::{ReturningClause, SetAssignment};
+#[cfg(feature = "since-pg17")]
+use crate::ast::dml::update::ReturningClause;
+use crate::ast::dml::update::SetAssignment;
 use crate::ast::shared::expr::Expr;
 use crate::tokens::literal;
 
@@ -119,6 +121,9 @@ recursa::ast_node! {
     pub enum MatchedKind {
         #[tok(WHEN, MATCHED)]
         Matched,
+        // Added in 17: research, PostgreSQL 17, "Changes to existing statements"
+        // (REL_17_11 gram.y 12503 `merge_when_tgt_matched`).
+        #[cfg(feature = "since-pg17")]
         #[tok(WHEN, NOT, MATCHED, BY, SOURCE)]
         NotMatchedBySource,
     }
@@ -129,8 +134,13 @@ recursa::ast_node! {
     /// MATCHED BY TARGET`: the clauses whose row is absent from the target.
     /// `BY TARGET` is the spelled-out default.
     #[derive(Debug)]
-    #[tok(WHEN, NOT, MATCHED, this)]
+    #[cfg_attr(feature = "since-pg17", tok(WHEN, NOT, MATCHED, this))]
+    #[cfg_attr(not(feature = "since-pg17"), tok(WHEN, NOT, MATCHED))]
     pub struct NotMatchedKind {
+        // Added in 17: research, PostgreSQL 17, "Changes to existing
+        // statements" (REL_17_11 gram.y 12508 `merge_when_tgt_not_matched`).
+        // REL_16_15 gram.y 12289 has only `WHEN NOT MATCHED`.
+        #[cfg(feature = "since-pg17")]
         #[presence(BY, TARGET)]
         pub by_target: bool,
     }
@@ -188,6 +198,9 @@ recursa::ast_node! {
         pub condition: boxed!(Expr),
         /// PostgreSQL's `merge_when_list` is one-or-more.
         pub when_clauses: one_or_many!(WhenClause),
+        // Added in 17: research, PostgreSQL 17, "Changes to existing statements"
+        // (REL_17_11 gram.y 12433 `MergeStmt ... returning_clause`).
+        #[cfg(feature = "since-pg17")]
         pub returning: Option<boxed!(ReturningClause)>,
     }
 }

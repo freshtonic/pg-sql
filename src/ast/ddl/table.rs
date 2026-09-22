@@ -1851,6 +1851,8 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum AlterColumnAction {
         // SET ... — longest prefixes first.
+        // Added in 17: see `AlterColSetExpression`.
+        #[cfg(feature = "since-pg17")]
         SetExpressionAs(AlterColSetExpression),
         SetDataType(AlterColSetDataType),
         SetStatistics(AlterColSetStatistics),
@@ -1903,6 +1905,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Changes to existing statements"
+// (REL_17_11 gram.y 2441).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `SET EXPRESSION AS (expr)` — adjust a generated column's expression.
     #[derive(Debug)]

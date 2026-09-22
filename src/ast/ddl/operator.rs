@@ -374,8 +374,39 @@ recursa::ast_node! {
     /// CREATE OPERATOR / CREATE AGGREGATE / etc. and is captured by [`DefList`].
     #[derive(Debug)]
     pub struct AlterOperatorSetOptions {
+        #[cfg(feature = "since-pg17")]
         #[tok(SET, this)]
         pub options: DefList,
+        // Before 17, every option has a value: research, PostgreSQL 17,
+        // "Changes to existing statements" (REL_17_11 gram.y 10252 adds
+        // `operator_def_elem: ColLabel`; REL_16_15 gram.y 10103).
+        #[cfg(not(feature = "since-pg17"))]
+        #[tok(SET, this)]
+        pub options: OperatorDefList,
+    }
+}
+
+// Before 17, `operator_def_elem` has no form without a value: research,
+// PostgreSQL 17, "Changes to existing statements" (REL_16_15 gram.y 10103).
+#[cfg(not(feature = "since-pg17"))]
+recursa::ast_node! {
+    /// One `operator_def_elem` before 17: `ColLabel = {NONE | operator_def_arg}`.
+    #[derive(Debug)]
+    pub struct OperatorDefElem {
+        pub name: literal::AliasName,
+        pub value: crate::ast::ddl::role::DefElemValue,
+    }
+}
+
+// Before 17: see `OperatorDefElem`.
+#[cfg(not(feature = "since-pg17"))]
+recursa::ast_node! {
+    /// `( operator_def_list )` of `ALTER OPERATOR ... SET` before 17.
+    #[derive(Debug)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct OperatorDefList {
+        #[sep(COMMA)]
+        pub items: one_or_many!(OperatorDefElem),
     }
 }
 
