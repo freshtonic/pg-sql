@@ -188,4 +188,31 @@ mod tests {
         );
     }
 
+    /// Added in 19: the legacy `copy_opt_item: JSON` (gram.y b73d13c:3567;
+    /// research PostgreSQL 19, "Changes to existing statements", commit
+    /// 7dadd38cd).
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn legacy_json_copy_option_from_19() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "COPY t TO STDOUT JSON",
+                "COPY t TO STDOUT WITH JSON",
+                "COPY t FROM STDIN JSON",
+                "COPY (SELECT 1) TO STDOUT JSON HEADER",
+                "COPY t TO STDOUT (FORMAT json)",
+            ],
+            &["COPY t TO STDOUT JSON 'x'"],
+        );
+    }
+
+    /// Before 19, `JSON` is no legacy COPY option (the same research entry).
+    #[cfg(not(feature = "since-pg19"))]
+    #[test]
+    fn reject_legacy_json_copy_option_before_19() {
+        crate::ast::test_support::check_statement_forms(
+            &["COPY t TO STDOUT CSV"],
+            &["COPY t TO STDOUT JSON", "COPY t TO STDOUT WITH JSON"],
+        );
+    }
 }

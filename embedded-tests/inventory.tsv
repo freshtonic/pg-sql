@@ -1169,3 +1169,5 @@ embedded-tests/src/ast/ddl/foreign.tests.rs	fdw_connection_option_from_19	false	
 embedded-tests/src/ast/ddl/foreign.tests.rs	reject_fdw_connection_option_before_19	false	14-18
 embedded-tests/src/ast/ddl/subscription.tests.rs	subscription_server_and_refresh_sequences_from_19	false	19-
 embedded-tests/src/ast/ddl/subscription.tests.rs	reject_subscription_server_before_19	false	14-18
+embedded-tests/src/ast/utility/copy.tests.rs	legacy_json_copy_option_from_19	false	19-
+embedded-tests/src/ast/utility/copy.tests.rs	reject_legacy_json_copy_option_before_19	false	14-18
