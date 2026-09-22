@@ -108,6 +108,7 @@ recursa::ast_node! {
     }
 }
 
+#[cfg(not(feature = "since-pg19"))]
 recursa::ast_node! {
     /// `FOR ALL TABLES` — Postgres' `CREATE PUBLICATION ... FOR ALL TABLES`.
     #[derive(Debug)]
@@ -135,8 +136,101 @@ recursa::ast_node! {
     /// — longest match wins on the `FOR ALL TABLES` prefix.
     #[derive(Debug)]
     pub enum PublicationForClause {
+        /// Removed in 19: gram.y replaces `FOR ALL TABLES` by `FOR
+        /// pub_all_obj_type_list` (b73d13c:10781), which
+        /// [`PublicationForClause::AllObjects`] models.
+        #[cfg(not(feature = "since-pg19"))]
         AllTables(PublicationForAllTables),
+        /// Added in 19: `FOR pub_all_obj_type_list` (gram.y b73d13c:10781;
+        /// research PostgreSQL 19, "Changes to existing statements").
+        #[cfg(feature = "since-pg19")]
+        AllObjects(PublicationForAllObjects),
         Objects(PublicationForObjects),
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `FOR pub_all_obj_type_list` on CREATE PUBLICATION, added in 19.
+    #[derive(Debug)]
+    #[tok(FOR, this)]
+    pub struct PublicationForAllObjects {
+        /// Boxed so that `Statement` stays small.
+        pub objects: boxed!(PublicationAllObjects),
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// One more table of an `EXCEPT` list: `, [TABLE] relation_expr` — gram.y
+    /// `pub_except_obj_list ',' opt_table PublicationExceptObjSpec`
+    /// (b73d13c:10941).
+    #[derive(Debug)]
+    #[tok(COMMA, this)]
+    pub struct PublicationExceptMore {
+        #[presence(TABLE)]
+        pub table: bool,
+        pub relation: crate::ast::shared::names::RelationExpr,
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `EXCEPT (TABLE relation_expr [, [TABLE] relation_expr ...])` — gram.y
+    /// `opt_pub_except_clause` (b73d13c:10902). The first table needs
+    /// `TABLE`; the others do not (commits fd366065e, 493f8c643, 5984ea868).
+    #[derive(Debug)]
+    #[tok(EXCEPT, LPAREN, TABLE, this, RPAREN)]
+    pub struct PublicationExceptClause {
+        pub first: crate::ast::shared::names::RelationExpr,
+        pub more: zero_or_many!(PublicationExceptMore),
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `ALL TABLES [EXCEPT (...)]` — the first arm of gram.y
+    /// `PublicationAllObjSpec` (b73d13c:10907).
+    #[derive(Debug)]
+    #[tok(ALL, TABLES, this)]
+    pub struct PublicationAllTables {
+        pub except: Option<PublicationExceptClause>,
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `ALL TABLES [EXCEPT (...)] [, ALL SEQUENCES]`.
+    #[derive(Debug)]
+    pub struct PublicationAllTablesFirst {
+        pub tables: PublicationAllTables,
+        #[presence(COMMA, ALL, SEQUENCES)]
+        pub sequences: bool,
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `ALL SEQUENCES [, ALL TABLES [EXCEPT (...)]]`.
+    #[derive(Debug)]
+    #[tok(ALL, SEQUENCES, this)]
+    pub struct PublicationAllSequencesFirst {
+        #[tok(COMMA, this)]
+        pub tables: Option<PublicationAllTables>,
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// gram.y `pub_all_obj_type_list` (b73d13c:10923), a list of
+    /// `PublicationAllObjSpec`. The raw parser rejects a list that names
+    /// `ALL TABLES` or `ALL SEQUENCES` two times
+    /// (`preprocess_pub_all_objtype_list`), so the list has one or two
+    /// elements, one of each kind, in either order.
+    #[derive(Debug)]
+    pub enum PublicationAllObjects {
+        Tables(PublicationAllTablesFirst),
+        Sequences(PublicationAllSequencesFirst),
     }
 }
 
@@ -239,6 +333,22 @@ recursa::ast_node! {
         DropObjs(AlterPublicationDropObjects),
         SetDef(SetDefinitionClause),
         SetObjs(AlterPublicationSetObjects),
+        /// Added in 19: `ALTER PUBLICATION name SET pub_all_obj_type_list`
+        /// (gram.y b73d13c:11003; research PostgreSQL 19, "Changes to
+        /// existing statements").
+        #[cfg(feature = "since-pg19")]
+        SetAllObjs(AlterPublicationSetAllObjects),
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `SET pub_all_obj_type_list` on ALTER PUBLICATION, added in 19.
+    #[derive(Debug)]
+    #[tok(SET, this)]
+    pub struct AlterPublicationSetAllObjects {
+        /// Boxed so that `Statement` stays small.
+        pub objects: boxed!(PublicationAllObjects),
     }
 }
 

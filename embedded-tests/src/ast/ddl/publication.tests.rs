@@ -82,4 +82,52 @@ mod tests {
             "CREATE PUBLICATION p FOR TABLE testpub_rf_tbl1 (c, d) WHERE (c <> 'test' AND d < 5)",
         );
     }
+
+    /// Added in 19: `FOR pub_all_obj_type_list` and `SET
+    /// pub_all_obj_type_list` (gram.y b73d13c:10781, 11003,
+    /// `PublicationAllObjSpec` 10907, `opt_pub_except_clause` 10902; research
+    /// PostgreSQL 19, "Changes to existing statements"). Each kind comes at
+    /// most one time (`preprocess_pub_all_objtype_list`).
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn publication_all_object_lists_from_19() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE PUBLICATION p FOR ALL TABLES",
+                "CREATE PUBLICATION p FOR ALL SEQUENCES",
+                "CREATE PUBLICATION p FOR ALL TABLES, ALL SEQUENCES",
+                "CREATE PUBLICATION p FOR ALL SEQUENCES, ALL TABLES WITH (publish = 'insert')",
+                "CREATE PUBLICATION p FOR ALL TABLES EXCEPT (TABLE t1, TABLE ONLY t2, s.t3 *)",
+                "CREATE PUBLICATION p FOR ALL TABLES EXCEPT (TABLE t1), ALL SEQUENCES",
+                "ALTER PUBLICATION p SET ALL SEQUENCES",
+                "ALTER PUBLICATION p SET ALL TABLES EXCEPT (TABLE t1), ALL SEQUENCES",
+            ],
+            &[
+                "CREATE PUBLICATION p FOR ALL TABLES EXCEPT (t1)",
+                "CREATE PUBLICATION p FOR ALL TABLES EXCEPT TABLE t1",
+                "CREATE PUBLICATION p FOR ALL TABLES EXCEPT ()",
+                "CREATE PUBLICATION p FOR ALL TABLES, ALL TABLES",
+                "CREATE PUBLICATION p FOR ALL SEQUENCES, ALL SEQUENCES",
+                "CREATE PUBLICATION p FOR ALL TABLES, TABLE t",
+                "CREATE PUBLICATION p FOR ALL SEQUENCES EXCEPT (TABLE t)",
+                "CREATE PUBLICATION p FOR ALL TABLES EXCEPT (TABLE t1 (a))",
+                "ALTER PUBLICATION p ADD ALL TABLES",
+            ],
+        );
+    }
+
+    /// Before 19 there is only `FOR ALL TABLES` (the same research entry).
+    #[cfg(not(feature = "since-pg19"))]
+    #[test]
+    fn reject_publication_all_object_lists_before_19() {
+        crate::ast::test_support::check_statement_forms(
+            &["CREATE PUBLICATION p FOR ALL TABLES"],
+            &[
+                "CREATE PUBLICATION p FOR ALL SEQUENCES",
+                "CREATE PUBLICATION p FOR ALL TABLES, ALL SEQUENCES",
+                "CREATE PUBLICATION p FOR ALL TABLES EXCEPT (TABLE t1)",
+                "ALTER PUBLICATION p SET ALL TABLES",
+            ],
+        );
+    }
 }
