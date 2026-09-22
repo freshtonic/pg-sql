@@ -173,4 +173,39 @@ mod tests {
     fn create_server_version_null_roundtrips() {
         reparse_stable::<CreateServerStmt>("CREATE SERVER s VERSION NULL FOREIGN DATA WRAPPER foo");
     }
+
+    /// Added in 19: `fdw_option: CONNECTION handler_name | NO CONNECTION`
+    /// (gram.y b73d13c:5546; research PostgreSQL 19, "Changes to existing
+    /// statements", commit 8185bb534).
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn fdw_connection_option_from_19() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE FOREIGN DATA WRAPPER w CONNECTION f",
+                "CREATE FOREIGN DATA WRAPPER w NO CONNECTION",
+                "CREATE FOREIGN DATA WRAPPER w HANDLER h CONNECTION s.f VALIDATOR v",
+                "ALTER FOREIGN DATA WRAPPER w CONNECTION f",
+                "ALTER FOREIGN DATA WRAPPER w NO CONNECTION OPTIONS (a 'b')",
+            ],
+            &[
+                "CREATE FOREIGN DATA WRAPPER w CONNECTION",
+                "CREATE FOREIGN DATA WRAPPER w CONNECTION 'f'",
+            ],
+        );
+    }
+
+    /// Before 19 there is no `CONNECTION` FDW option (the same research
+    /// entry).
+    #[cfg(not(feature = "since-pg19"))]
+    #[test]
+    fn reject_fdw_connection_option_before_19() {
+        crate::ast::test_support::check_statement_forms(
+            &["CREATE FOREIGN DATA WRAPPER w NO HANDLER"],
+            &[
+                "CREATE FOREIGN DATA WRAPPER w CONNECTION f",
+                "ALTER FOREIGN DATA WRAPPER w NO CONNECTION",
+            ],
+        );
+    }
 }

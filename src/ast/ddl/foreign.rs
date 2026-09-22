@@ -411,8 +411,28 @@ recursa::ast_node! {
         NoHandler,
         #[tok(NO, VALIDATOR)]
         NoValidator,
+        /// Added in 19: `fdw_option: NO CONNECTION` (gram.y b73d13c:5547;
+        /// research PostgreSQL 19, "Changes to existing statements").
+        #[cfg(feature = "since-pg19")]
+        #[tok(NO, CONNECTION)]
+        NoConnection,
         Handler(FdwHandlerOption),
         Validator(FdwValidatorOption),
+        /// Added in 19: `fdw_option: CONNECTION handler_name` (gram.y
+        /// b73d13c:5546).
+        #[cfg(feature = "since-pg19")]
+        Connection(FdwConnectionOption),
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `CONNECTION handler_name` — Postgres' `fdw_option` CONNECTION branch,
+    /// added in 19 (commit 8185bb534).
+    #[derive(Debug)]
+    pub struct FdwConnectionOption {
+        #[tok(CONNECTION, this)]
+        pub name: QualifiedName,
     }
 }
 
