@@ -45,17 +45,6 @@ mod tests {
         assert!(input.is_eof());
     }
 
-    #[test]
-    fn parse_merge_not_matched_by_source_default_values() {
-        let sql = "MERGE INTO t USING s ON t.a = s.a WHEN NOT MATCHED BY SOURCE THEN INSERT DEFAULT VALUES";
-        let lexed = crate::lex(sql);
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt_parsed = MergeStmt::parse(&mut input).unwrap();
-        let _stmt = _stmt_parsed.ast();
-        assert!(input.is_eof());
-    }
-
     /// `WHEN NOT MATCHED BY SOURCE` accepts `UPDATE` / `DELETE` (PG17),
     /// and a MERGE may carry a `RETURNING` clause.
     #[test]
@@ -93,25 +82,87 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    /// gram.y:12459 `merge_when_clause` pairs each match kind with its actions:
+    /// `WHEN MATCHED` and `WHEN NOT MATCHED BY SOURCE` (gram.y:12503
+    /// `merge_when_tgt_matched`) update, delete or do nothing; `WHEN NOT
+    /// MATCHED [BY TARGET]` (gram.y:12508) inserts or does nothing.
+    /// `merge_insert` (gram.y:12544) has no `INTO`, and `DEFAULT VALUES` takes
+    /// no column list and no `OVERRIDING`; `merge_values_clause`
+    /// (gram.y:12592) is one row. merge.sql tests these as syntax errors, and
+    /// PostgreSQL 17.9 agrees with every line here.
     #[test]
-    fn parse_merge_insert_multi_values() {
-        let sql = "MERGE INTO t USING s ON t.a = s.a WHEN NOT MATCHED THEN INSERT VALUES (1,1), (2,2)";
-        let lexed = crate::lex(sql);
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
+    fn parse_merge_when_clauses_with_gram_y_actions() {
+        use crate::ast::dml::merge::{InsertAction, MatchedKind, NotMatchedAction, WhenClause};
+
+        let head = "MERGE INTO t USING s ON t.k = s.k ";
+        for tail in [
+            "WHEN MATCHED THEN UPDATE SET v = s.v",
+            "WHEN MATCHED THEN DELETE",
+            "WHEN MATCHED AND s.v > 1 THEN DO NOTHING",
+            "WHEN NOT MATCHED BY SOURCE THEN UPDATE SET v = 1",
+            "WHEN NOT MATCHED BY SOURCE THEN DELETE",
+            "WHEN NOT MATCHED BY SOURCE AND t.v > 1 THEN DO NOTHING",
+            "WHEN NOT MATCHED THEN INSERT VALUES (s.k, s.v)",
+            "WHEN NOT MATCHED THEN INSERT (k, v) VALUES (s.k, s.v)",
+            "WHEN NOT MATCHED THEN INSERT (k) OVERRIDING SYSTEM VALUE VALUES (1)",
+            "WHEN NOT MATCHED THEN INSERT OVERRIDING USER VALUE VALUES (1)",
+            "WHEN NOT MATCHED THEN INSERT DEFAULT VALUES",
+            "WHEN NOT MATCHED BY TARGET THEN INSERT VALUES (1)",
+            "WHEN NOT MATCHED BY TARGET AND s.v > 1 THEN DO NOTHING",
+            "WHEN MATCHED THEN DELETE WHEN NOT MATCHED BY SOURCE THEN UPDATE SET v = 0 \
+             WHEN NOT MATCHED THEN INSERT VALUES (s.k, s.v) RETURNING merge_action(), t.*",
+        ] {
+            let src: &'static str = format!("{head}{tail}").leak();
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            MergeStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+        }
+
+        // The tree names the match kind and the action's shape.
+        let lexed = crate::lex(
+            "MERGE INTO t USING s ON true WHEN NOT MATCHED BY SOURCE THEN DELETE \
+             WHEN NOT MATCHED BY TARGET THEN INSERT (k) VALUES (1) \
+             WHEN NOT MATCHED THEN INSERT DEFAULT VALUES",
+        );
         let mut input = lexed.input();
-        let _stmt_parsed = MergeStmt::parse(&mut input).unwrap();
-        let _stmt = _stmt_parsed.ast();
-        assert!(input.is_eof());
+        let parsed = MergeStmt::parse(&mut input).unwrap();
+        let clauses = parsed.ast().when_clauses.as_slice();
+        assert!(matches!(
+            clauses,
+            [WhenClause::Matched(source), WhenClause::NotMatched(target), WhenClause::NotMatched(plain)]
+                if matches!(source.kind, MatchedKind::NotMatchedBySource)
+                    && target.kind.by_target
+                    && !plain.kind.by_target
+                    && matches!(&target.action, NotMatchedAction::Insert(InsertAction::Values(values)) if values.columns.is_some())
+                    && matches!(&plain.action, NotMatchedAction::Insert(InsertAction::Default))
+        ));
+
+        for tail in [
+            "WHEN MATCHED THEN INSERT VALUES (1)",
+            "WHEN MATCHED THEN INSERT DEFAULT VALUES",
+            "WHEN NOT MATCHED BY SOURCE THEN INSERT VALUES (1)",
+            "WHEN NOT MATCHED BY SOURCE THEN INSERT DEFAULT VALUES",
+            "WHEN NOT MATCHED THEN UPDATE SET v = 1",
+            "WHEN NOT MATCHED THEN DELETE",
+            "WHEN NOT MATCHED BY TARGET THEN UPDATE SET v = 1",
+            "WHEN NOT MATCHED BY TARGET THEN DELETE",
+            "WHEN NOT MATCHED THEN INSERT INTO t VALUES (1)",
+            "WHEN NOT MATCHED THEN INSERT VALUES (1, 1), (2, 2)",
+            "WHEN NOT MATCHED THEN INSERT VALUES ()",
+            "WHEN NOT MATCHED THEN INSERT (k) DEFAULT VALUES",
+            "WHEN NOT MATCHED THEN INSERT OVERRIDING SYSTEM VALUE DEFAULT VALUES",
+            "WHEN MATCHED THEN",
+            "",
+        ] {
+            let src: &'static str = format!("{head}{tail}").trim_end().to_owned().leak();
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let parsed = MergeStmt::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
     }
 
-    #[test]
-    fn parse_merge_insert_into_default_values() {
-        let sql = "MERGE INTO target t USING source s ON t.tid = s.sid WHEN NOT MATCHED THEN INSERT INTO target DEFAULT VALUES";
-        let lexed = crate::lex(sql);
-        assert_eq!(lexed.errors().count(), 0, "lex errors in input");
-        let mut input = lexed.input();
-        let _stmt_parsed = MergeStmt::parse(&mut input).unwrap();
-        let _stmt = _stmt_parsed.ast();
-        assert!(input.is_eof());
-    }
 }
