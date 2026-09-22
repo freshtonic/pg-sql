@@ -1822,6 +1822,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JsonType` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14744). In 16, `json` is an unreserved keyword, so
+// `json '...'` is a `NamedTypeCastFunc`.
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// Function-style typed literal for `json`: `json '{"a": 1}'`.
     ///
@@ -1850,6 +1854,8 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum TypeCastFunc {
         Fixed(FixedTypeCastFunc),
+        // Added in 17: see `JsonTypeCastFunc`.
+        #[cfg(feature = "since-pg17")]
         Json(JsonTypeCastFunc),
         Named(NamedTypeCastFunc),
     }
@@ -2731,6 +2737,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// Inner contents of `JSON ( ‹expr› [FORMAT JSON ...] [{WITH|WITHOUT} UNIQUE [KEYS]] )`.
     #[derive(Debug)]
@@ -2741,6 +2750,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `JSON ( ‹expr› [FORMAT JSON ...] [{WITH|WITHOUT} UNIQUE [KEYS]] )`.
     #[derive(Debug)]
@@ -2750,6 +2762,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `JSON_SCALAR ( ‹expr› )`.
     #[derive(Debug)]
@@ -2759,6 +2774,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// Inner contents of `JSON_SERIALIZE ( ‹expr› [FORMAT JSON ...] [RETURNING ...] )`.
     #[derive(Debug)]
@@ -2769,6 +2787,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `JSON_SERIALIZE ( ‹expr› [FORMAT JSON ...] [RETURNING ‹type› ...] )`.
     #[derive(Debug)]
@@ -2942,6 +2963,9 @@ recursa::ast_node! {
 // `ON EMPTY`/`ON ERROR` behavior clauses that no function-argument list can
 // express. Modeled as dedicated atoms before `Func`.
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// One `‹value› AS ‹name›` binding of a `PASSING` clause.
     #[derive(Debug)]
@@ -2952,6 +2976,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `PASSING ‹value› AS ‹name› [, ...]` — jsonpath variable bindings.
     #[derive(Debug)]
@@ -2962,6 +2989,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `DEFAULT ‹expr›` — the default-value form of an `ON EMPTY`/`ON ERROR` behavior.
     #[derive(Debug)]
@@ -2971,6 +3001,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// The behavior of an `ON EMPTY` / `ON ERROR` clause — the union of every
     /// query function's accepted behaviors (`JSON_EXISTS` uses the boolean
@@ -3001,6 +3034,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `EMPTY` or `ERROR` — the trigger of an `ON` behavior clause.
     #[derive(Debug)]
@@ -3012,6 +3048,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `‹behavior› ON {EMPTY|ERROR}` clause.
     #[derive(Debug)]
@@ -3022,6 +3061,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// gram.y `json_behavior_clause_opt`: `json_behavior ON EMPTY`,
     /// `json_behavior ON ERROR`, or both. Each `JsonOnBehavior` names its own
@@ -3035,6 +3077,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `CONDITIONAL` / `UNCONDITIONAL` modifier of a `WITH ... WRAPPER` clause.
     #[derive(Debug)]
@@ -3046,6 +3091,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `{WITH [CONDITIONAL|UNCONDITIONAL] | WITHOUT} [ARRAY] WRAPPER` — the
     /// `JSON_QUERY` array-wrapper clause.
@@ -3059,6 +3107,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `ON SCALAR STRING` suffix of a `JSON_QUERY` quotes clause.
     #[derive(Debug)]
@@ -3068,6 +3119,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `KEEP` / `OMIT` lead-in of a `JSON_QUERY` quotes clause.
     #[derive(Debug)]
@@ -3079,6 +3133,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `{KEEP|OMIT} QUOTES [ON SCALAR STRING]` — the `JSON_QUERY` quotes clause.
     #[derive(Debug)]
@@ -3089,6 +3146,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// Required `QUOTES` keyword in a `JSON_QUERY` quotes clause.
     #[derive(Debug)]
@@ -3098,6 +3158,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// Inner contents of `JSON_EXISTS ( ‹context› , ‹path› [PASSING ...] [‹behavior› ON ERROR] )`.
     #[derive(Debug)]
@@ -3111,6 +3174,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `JSON_EXISTS ( ... )` — tests whether a jsonpath matches.
     #[derive(Debug)]
@@ -3120,6 +3186,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// Inner contents of `JSON_VALUE`.
     #[derive(Debug)]
@@ -3135,6 +3204,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `JSON_VALUE ( ... )` — extracts a scalar SQL value via a jsonpath.
     #[derive(Debug)]
@@ -3144,6 +3216,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// Inner contents of `JSON_QUERY`.
     #[derive(Debug)]
@@ -3161,6 +3236,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `JSON_QUERY ( ... )` — extracts a JSON value via a jsonpath.
     #[derive(Debug)]
@@ -3478,6 +3556,9 @@ recursa::ast_node! {
         /// `AtTimeZone` so `AT LOCAL` wins (distinct second token `LOCAL` vs `TIME`).
         /// gram.y:14799 `a_expr AT LOCAL %prec AT`.
         #[parse(prec = AT)]
+        // Added in 17: research, PostgreSQL 17, "Queries and expressions"
+        // (REL_17_11 gram.y 14798).
+        #[cfg(feature = "since-pg17")]
         AtLocal(#[tok(this, AT, LOCAL)] boxed!(Self)),
         /// `expr AT TIME ZONE zone_expr` — convert to specified timezone.
         /// gram.y:14792 `a_expr AT TIME ZONE a_expr %prec AT`.
@@ -3883,20 +3964,32 @@ recursa::ast_node! {
         /// `EXTRACT(field FROM source)`. Before `Func`.
         Extract(ExtractCall),
         /// `JSON(...)` SQL/JSON value constructor. Before `Func`.
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonCtor(boxed!(JsonConstructor)),
         /// `JSON_SCALAR(...)`. Before `Func`.
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonScalar(boxed!(JsonScalar)),
         /// `JSON_SERIALIZE(...)`. Before `Func`.
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonSerialize(boxed!(JsonSerialize)),
         /// `JSON_OBJECT(...)` SQL/JSON object constructor. Before `Func`.
         JsonObject(boxed!(JsonObject)),
         /// `JSON_ARRAY(...)` SQL/JSON array constructor. Before `Func`.
         JsonArray(boxed!(JsonArray)),
         /// `JSON_EXISTS(...)` SQL/JSON path predicate. Before `Func`.
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonExists(boxed!(JsonExists)),
         /// `JSON_VALUE(...)` SQL/JSON scalar extraction. Before `Func`.
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonValue(boxed!(JsonValue)),
         /// `JSON_QUERY(...)` SQL/JSON value extraction. Before `Func`.
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonQuery(boxed!(JsonQuery)),
         /// `JSON_OBJECTAGG(...)` SQL/JSON object aggregate. Before `Func`.
         JsonObjectAgg(boxed!(JsonObjectAgg)),
@@ -4132,13 +4225,25 @@ recursa::ast_node! {
         Position,
         Overlay,
         Extract,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonCtor,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonScalar,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonSerialize,
         JsonObject,
         JsonArray,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonExists,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonValue,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonQuery,
         JsonObjectAgg,
         JsonArrayAgg,
@@ -4198,13 +4303,25 @@ recursa::ast_node! {
         Position,
         Overlay,
         Extract,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonCtor,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonScalar,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonSerialize,
         JsonObject,
         JsonArray,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonExists,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonValue,
+        // Added in 17: see its node.
+        #[cfg(feature = "since-pg17")]
         JsonQuery,
         Coalesce,
         Greatest,

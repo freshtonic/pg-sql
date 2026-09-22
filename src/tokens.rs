@@ -31,7 +31,11 @@ recursa::tokens! {
     // Orthogonal per-keyword booleans. `bare_label` marks keywords that
     // PG admits as bare-form column labels (no `AS` required); composes
     // with the category to derive `BareColLabel`'s admit set.
-    flags { bare_label }
+    // `json_type` marks the `COL_NAME` keyword `json`, which gram.y admits as
+    // a type name through its own `JsonType` production (17 and later). In
+    // 16, `json` is unreserved, so `UNRESERVED` admits it and no entry has
+    // the flag.
+    flags { bare_label, json_type }
     keywords {
         SELECT       => r"SELECT" in RESERVED + bare_label,
         FROM         => r"FROM" in RESERVED,
@@ -131,34 +135,80 @@ recursa::tokens! {
     // (see `UnquotedIdent`'s `token_kind_is_soft` check). Covers Postgres
     // non-reserved / col-name / type-name keywords plus the SQL/JSON
     // function family — all common identifiers, so none may be reserved.
-        JSON            => r"JSON" in COL_NAME + bare_label,
+    //
+    // Version gates (ADR 0009): "research" in a gate comment is
+    // docs/research/postgres-14-19-sql-syntax-changes.md. A keyword that 17
+    // added is absent before 17, so PostgreSQL 16 lexes the word as an
+    // identifier (REL_16_15 kwlist.h).
+        // `json` changes category in 17 from UNRESERVED to COL_NAME: research,
+        // PostgreSQL 17, "Keywords"; REL_16_15 kwlist.h line 233.
+        #[cfg(feature = "since-pg17")]
+        JSON            => r"JSON" in COL_NAME + bare_label + json_type,
+        #[cfg(not(feature = "since-pg17"))]
+        JSON            => r"JSON" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         JSON_VALUE      => r"JSON_VALUE" in COL_NAME + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         JSON_QUERY      => r"JSON_QUERY" in COL_NAME + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         JSON_EXISTS     => r"JSON_EXISTS" in COL_NAME + bare_label,
         JSON_OBJECT     => r"JSON_OBJECT" in COL_NAME + bare_label,
         JSON_ARRAY      => r"JSON_ARRAY" in COL_NAME + bare_label,
         JSON_OBJECTAGG  => r"JSON_OBJECTAGG" in COL_NAME + bare_label,
         JSON_ARRAYAGG   => r"JSON_ARRAYAGG" in COL_NAME + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         JSON_SERIALIZE  => r"JSON_SERIALIZE" in COL_NAME + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         JSON_SCALAR     => r"JSON_SCALAR" in COL_NAME + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         JSON_TABLE      => r"JSON_TABLE" in COL_NAME + bare_label,
         FORMAT          => r"FORMAT" in UNRESERVED + bare_label,
         ENCODING        => r"ENCODING" in UNRESERVED + bare_label,
         PASSING         => r"PASSING" in UNRESERVED + bare_label,
+        // Added in 17 (research, PostgreSQL 17, "Keywords"), but not gated:
+        // the `precedence` block names it, and a `precedence` entry takes no
+        // `cfg`. A 16 build therefore lexes it as a keyword where 16 has an
+        // identifier.
         PATH            => r"PATH" in UNRESERVED + bare_label,
         COLUMNS         => r"COLUMNS" in UNRESERVED + bare_label,
         KEYS            => r"KEYS" in UNRESERVED + bare_label,
         SCALAR          => r"SCALAR" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         QUOTES          => r"QUOTES" in UNRESERVED + bare_label,
+        // Added in 17 (research, PostgreSQL 17, "Keywords"), but not gated:
+        // the `precedence` block names it, and a `precedence` entry takes no
+        // `cfg`. A 16 build therefore lexes it as a keyword where 16 has an
+        // identifier.
         NESTED          => r"NESTED" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         OMIT            => r"OMIT" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         KEEP            => r"KEEP" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         CONDITIONAL     => r"CONDITIONAL" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         UNCONDITIONAL   => r"UNCONDITIONAL" in UNRESERVED + bare_label,
         ABSENT          => r"ABSENT" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         ERROR           => r"ERROR" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         EMPTY           => r"EMPTY" in UNRESERVED + bare_label,
         OBJECT          => r"OBJECT" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         STRING          => r"STRING" in UNRESERVED + bare_label,
         UNKNOWN         => r"UNKNOWN" in UNRESERVED + bare_label,
         INSERT          => r"INSERT" in UNRESERVED + bare_label,
@@ -330,7 +380,11 @@ recursa::tokens! {
         EXCLUDE         => r"EXCLUDE" in UNRESERVED + bare_label,
         OTHERS          => r"OTHERS" in UNRESERVED + bare_label,
         TIES            => r"TIES" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         SOURCE          => r"SOURCE" in UNRESERVED + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         TARGET          => r"TARGET" in UNRESERVED + bare_label,
         STRICT          => r"STRICT" in UNRESERVED + bare_label,
         STABLE          => r"STABLE" in UNRESERVED + bare_label,
@@ -825,7 +879,7 @@ recursa::tokens! {
         AllWordKinds = keywords,
         ColId = UNRESERVED + COL_NAME,
         type_function_name = UNRESERVED + TYPE_FUNC_NAME,
-        TypeNameIdent = UNRESERVED + TYPE_FUNC_NAME + { JSON }
+        TypeNameIdent = UNRESERVED + TYPE_FUNC_NAME + json_type
             - { BOOL, TEXT, SERIAL, UNKNOWN },
         NonReservedWord = UNRESERVED + COL_NAME + TYPE_FUNC_NAME,
         ColLabel = UNRESERVED + COL_NAME + TYPE_FUNC_NAME + RESERVED,
@@ -1352,8 +1406,22 @@ pub mod literal {
             // PostgreSQL `quotecontinue`: the whole concatenated value is one
             // token, including every qualifying newline gap. This prevents the
             // general trivia skipper from erasing a block comment between parts.
-            #[lex(
-                pattern = r"'[^']*(?:''[^']*)*'(?:(?:[ \t\f\v]|--[^\r\n]*)*(?:\r\n|\r|\n)(?:[ \t\r\n\f\v]+|--[^\r\n]*(?:\r\n|\r|\n))*'[^']*(?:''[^']*)*')+"
+            //
+            // Vertical tab is `space` and `non_newline_space` from 17: research,
+            // PostgreSQL 17, "Lexical and literal syntax" (commit ae6d06f0968).
+            // REL_16_15 scan.l 222-240 has `space [ \t\n\r\f]` and
+            // `horiz_space [ \t\f]`.
+            #[cfg_attr(
+                feature = "since-pg17",
+                lex(
+                    pattern = r"'[^']*(?:''[^']*)*'(?:(?:[ \t\f\v]|--[^\r\n]*)*(?:\r\n|\r|\n)(?:[ \t\r\n\f\v]+|--[^\r\n]*(?:\r\n|\r|\n))*'[^']*(?:''[^']*)*')+"
+                )
+            )]
+            #[cfg_attr(
+                not(feature = "since-pg17"),
+                lex(
+                    pattern = r"'[^']*(?:''[^']*)*'(?:(?:[ \t\f]|--[^\r\n]*)*(?:\r\n|\r|\n)(?:[ \t\r\n\f]+|--[^\r\n]*(?:\r\n|\r|\n))*'[^']*(?:''[^']*)*')+"
+                )
             )]
             pub string_sequence: StringLitSequence,
             #[lex(pattern = r"'[^']*(?:''[^']*)*'")]
