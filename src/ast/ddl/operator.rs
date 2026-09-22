@@ -91,8 +91,8 @@ recursa::ast_node! {
     /// (`OPERATOR Iconst any_operator opclass_purpose opt_recheck`) accepts the
     /// no-argtypes spelling, while the second
     /// (`OPERATOR Iconst operator_with_argtypes opclass_purpose opt_recheck`)
-    /// requires it. `RECHECK` is the legacy no-op modifier — still accepted by
-    /// PG for old-dump portability and round-tripped here.
+    /// requires it. `RECHECK` is the legacy no-op modifier. PostgreSQL 14 to
+    /// 17 accept it for old-dump portability; 18 removes it.
     #[derive(Debug)]
     pub struct OpclassItemOperator {
         #[tok(OPERATOR, this)]
@@ -100,6 +100,10 @@ recursa::ast_node! {
         pub name: crate::ast::shared::names::QualifiedOperatorName,
         pub argtypes: Option<crate::ast::shared::names::OperatorArgtypes>,
         pub purpose: Option<OpclassPurpose>,
+        /// Removed in 18: gram.y `opclass_item` has no `opt_recheck`
+        /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+        /// "Removed or changed syntax"; commit 7da1bdc2c2f).
+        #[cfg(not(feature = "since-pg18"))]
         #[presence(RECHECK)]
         pub recheck: bool,
     }
