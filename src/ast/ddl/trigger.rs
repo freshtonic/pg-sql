@@ -268,12 +268,12 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A single `ConstraintAttributeElem` — one of
-    /// `NOT DEFERRABLE | DEFERRABLE | INITIALLY IMMEDIATE | INITIALLY DEFERRED`.
+    /// A single `ConstraintAttributeElem` — one of `NOT DEFERRABLE |
+    /// DEFERRABLE | INITIALLY IMMEDIATE | INITIALLY DEFERRED | NOT VALID |
+    /// NO INHERIT`, and from 18 `NOT ENFORCED | ENFORCED`.
     ///
-    /// The `NOT VALID` / `NO INHERIT` forms are also in gram.y but never appear
-    /// on a CONSTRAINT TRIGGER in practice; PG accepts them syntactically. We
-    /// include them so the union matches gram.y faithfully.
+    /// A CONSTRAINT TRIGGER uses [`ConstraintTriggerAttr`] instead, because
+    /// the raw parser rejects some of these attributes there.
     ///
     /// Variant ordering: longer/multi-keyword forms first
     /// (`NOT DEFERRABLE`/`NOT VALID`/`INITIALLY …`/`NO INHERIT`).
@@ -306,6 +306,43 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// One attribute of a CONSTRAINT TRIGGER: the part of gram.y
+    /// `ConstraintAttributeSpec` that the raw parser accepts in the
+    /// constraint arm of `CreateTrigStmt`.
+    ///
+    /// The grammar parses the full `ConstraintAttributeElem` list here, and
+    /// the actions reject the other attributes, so the raw parser rejects
+    /// them. `processCASbits` gets no `not_valid` and no `no_inherit` pointer,
+    /// so it rejects `NOT VALID` and `NO INHERIT` in every version (REL_17_11
+    /// gram.y 5947-5949 and 19318-19342; REL_18_6 gram.y 6062-6064 and
+    /// 19487-19511). In 18 it also gets no `is_enforced` pointer, so it
+    /// rejects `ENFORCED` and `NOT ENFORCED` (REL_18_6 gram.y 19513-19546). In
+    /// 19 the action rejects `NOT VALID`, `NO INHERIT` and `NOT ENFORCED`
+    /// itself, and passes a dummy `is_enforced`, so `ENFORCED` is accepted
+    /// (b73d13c gram.y 6128-6145 and 6164-6166).
+    ///
+    /// Variant ordering: multi-keyword forms first.
+    #[derive(Debug)]
+    pub enum ConstraintTriggerAttr {
+        #[tok(NOT, DEFERRABLE)]
+        NotDeferrable,
+        #[tok(INITIALLY, IMMEDIATE)]
+        InitiallyImmediate,
+        #[tok(INITIALLY, DEFERRED)]
+        InitiallyDeferred,
+        #[tok(DEFERRABLE)]
+        Deferrable,
+        /// Added in 19: `CREATE CONSTRAINT TRIGGER ... ENFORCED` is accepted
+        /// and has no effect (docs/research/postgres-14-19-sql-syntax-changes.md,
+        /// PostgreSQL 19, "Changes to existing statements"; commit
+        /// 87251e11496; b73d13c gram.y 6126 and 6164-6166).
+        #[cfg(feature = "since-pg19")]
+        #[tok(ENFORCED)]
+        Enforced,
+    }
+}
+
+recursa::ast_node! {
     /// `CREATE [OR REPLACE] CONSTRAINT TRIGGER name AFTER events ON table
     /// [FROM ref_table] ConstraintAttributeSpec FOR EACH ROW [WHEN (expr)]
     /// EXECUTE {FUNCTION|PROCEDURE} func_name(args)` — Postgres'
@@ -324,7 +361,7 @@ recursa::ast_node! {
         #[tok(ON, this)]
         pub table: QualifiedName,
         pub from_table: Option<ConstrFromTable>,
-        pub constraint_attrs: zero_or_many!(ConstraintAttributeElem),
+        pub constraint_attrs: zero_or_many!(ConstraintTriggerAttr),
         pub for_each_row: ForEachRow,
         pub when_clause: Option<TriggerWhenClause>,
         pub execute_clause: TriggerExecuteClause,

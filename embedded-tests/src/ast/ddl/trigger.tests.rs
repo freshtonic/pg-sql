@@ -161,6 +161,65 @@ mod tests {
         );
     }
 
+    // The raw parser rejects NOT VALID and NO INHERIT on a CONSTRAINT
+    // TRIGGER in every version: `processCASbits` gets no pointer for them
+    // (REL_17_11 gram.y 5947-5949; REL_18_6 gram.y 6062-6064), and in 19 the
+    // `CreateTrigStmt` action rejects them (b73d13c gram.y 6128-6139).
+    #[test]
+    fn constraint_trigger_rejects_not_valid_and_no_inherit() {
+        check_statement_forms(
+            &[
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION f()",
+            ],
+            &[
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl NOT VALID FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl NO INHERIT FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl DEFERRABLE NOT VALID FOR EACH ROW EXECUTE FUNCTION f()",
+            ],
+        );
+    }
+
+    // Added in 19: `CREATE CONSTRAINT TRIGGER ... ENFORCED`
+    // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 19,
+    // "Changes to existing statements"; commit 87251e11496; b73d13c gram.y
+    // 6126-6145 and 6164-6166). NOT ENFORCED stays rejected.
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn constraint_trigger_enforced_from_19() {
+        let stmt = parse_stmt::<CreateConstraintTriggerStmt>(
+            "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl ENFORCED FOR EACH ROW EXECUTE FUNCTION f()",
+        );
+        let stmt = stmt.ast();
+        assert_eq!(stmt.constraint_attrs.len(), 1);
+        assert!(matches!(stmt.constraint_attrs[0], ConstraintTriggerAttr::Enforced));
+        check_statement_forms(
+            &[
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl ENFORCED FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl FROM o DEFERRABLE ENFORCED INITIALLY DEFERRED FOR EACH ROW EXECUTE PROCEDURE f()",
+            ],
+            &[
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl NOT ENFORCED FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl ENFORCED NOT VALID FOR EACH ROW EXECUTE FUNCTION f()",
+            ],
+        );
+    }
+
+    // Before 19 the raw parser rejects ENFORCED and NOT ENFORCED on a
+    // CONSTRAINT TRIGGER. 18 has the keyword, but `processCASbits` gets no
+    // `is_enforced` pointer (REL_18_6 gram.y 6062-6064 and 19513-19546).
+    #[cfg(not(feature = "since-pg19"))]
+    #[test]
+    fn constraint_trigger_enforced_is_rejected_before_19() {
+        check_statement_forms(
+            &[],
+            &[
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl ENFORCED FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl NOT ENFORCED FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl DEFERRABLE ENFORCED FOR EACH ROW EXECUTE FUNCTION f()",
+            ],
+        );
+    }
+
     #[test]
     fn parse_create_event_trigger_minimal() {
         let stmt = parse_stmt::<CreateEventTriggerStmt>(
