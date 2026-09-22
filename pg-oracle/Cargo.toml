@@ -4,5 +4,21 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[features]
+# Target version (ADR 0009): the oracle builds the pinned PostgreSQL release
+# of the selected version (`pins.tsv`). Enable exactly one version feature.
+default = ["pg17"]
+pg14 = []
+pg15 = ["since-pg15"]
+pg16 = ["since-pg15", "since-pg16"]
+pg17 = ["since-pg15", "since-pg16", "since-pg17"]
+pg18 = ["since-pg15", "since-pg16", "since-pg17", "since-pg18"]
+pg19-beta = ["since-pg15", "since-pg16", "since-pg17", "since-pg18", "since-pg19"]
+since-pg15 = []
+since-pg16 = []
+since-pg17 = []
+since-pg18 = []
+since-pg19 = []
+
 [build-dependencies]
 cc = "1"
