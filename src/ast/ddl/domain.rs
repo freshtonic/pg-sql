@@ -105,6 +105,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `DomainConstraint` (research, PostgreSQL 17, "Changes to existing
+// statements"; REL_17_11 gram.y 4254-4307, 11552).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `CHECK (expr) ConstraintAttributeSpec` — Postgres' CHECK arm of
     /// `DomainConstraintElem` (the ALTER DOMAIN-specific form). Differs from
@@ -118,6 +121,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `DomainConstraint` (research, PostgreSQL 17, "Changes to existing
+// statements"; REL_17_11 gram.y 4254-4307, 11552).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `NOT NULL ConstraintAttributeSpec` — Postgres' NOT NULL arm of
     /// `DomainConstraintElem` (ALTER DOMAIN-specific form). The corpus
@@ -135,6 +141,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `DomainConstraint` (research, PostgreSQL 17, "Changes to existing
+// statements"; REL_17_11 gram.y 4254-4307, 11552).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// One body of an ALTER DOMAIN ADD constraint — Postgres'
     /// `DomainConstraintElem`.
@@ -148,6 +157,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `DomainConstraint` (research, PostgreSQL 17, "Changes to existing
+// statements"; REL_17_11 gram.y 4254-4307, 11552).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `[CONSTRAINT name] DomainConstraintElem` on ALTER DOMAIN ADD —
     /// reuses the shared `DomainConstraintName` prefix from CREATE DOMAIN.
@@ -160,10 +172,19 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// `ADD [CONSTRAINT name] DomainConstraintElem` — ADD action on ALTER DOMAIN.
+    /// Before 17 it is `ADD TableConstraint`.
     #[derive(Debug)]
     pub struct AlterDomainAdd {
+        // Changed in 17: research, PostgreSQL 17, "Changes to existing
+        // statements". REL_17_11 gram.y 11552 takes `DomainConstraint`;
+        // REL_16_15 gram.y 11392 takes `TableConstraint`, and execution
+        // rejects the kinds other than `CHECK`.
+        #[cfg(feature = "since-pg17")]
         #[tok(ADD, this)]
         pub constraint: AlterDomainConstraint,
+        #[cfg(not(feature = "since-pg17"))]
+        #[tok(ADD, this)]
+        pub constraint: crate::ast::ddl::table::TableConstraint,
     }
 }
 

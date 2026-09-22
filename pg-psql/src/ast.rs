@@ -281,7 +281,19 @@ recursa::ast_node! {
         /// whole name is one token, as `psqlscanslash.l` reads it, so a longer
         /// name always beats a send-command prefix. See freshtonic/pg-sql#11,
         /// #12, #13.
-        MetaCommand(#[lex(pattern = r"\\[A-Za-z][A-Za-z0-9_]*")] MetaCommandText),
+        ///
+        /// Before 17, a vertical tab is not `space` in `psqlscanslash.l`, so
+        /// it does not end a command name: `\g<VT>` is one unknown command,
+        /// not `\g` (`docs/research/psql-14-19-syntax-changes.md`, item A4;
+        /// REL_16_15 psqlscanslash.l 111, commit ae6d06f0968).
+        MetaCommand(
+            #[cfg_attr(feature = "since-pg17", lex(pattern = r"\\[A-Za-z][A-Za-z0-9_]*"))]
+            #[cfg_attr(
+                not(feature = "since-pg17"),
+                lex(pattern = r"\\[A-Za-z][A-Za-z0-9_\x0b]*")
+            )]
+            MetaCommandText,
+        ),
         /// A backslash starting no command name at all.
         #[tok(BACKSLASH)]
         Backslash,

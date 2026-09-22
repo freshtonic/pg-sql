@@ -45,6 +45,9 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    // `BY SOURCE` and `RETURNING` are added in 17: research, PostgreSQL 17,
+    // "Changes to existing statements".
+    #[cfg(feature = "since-pg17")]
     /// `WHEN NOT MATCHED BY SOURCE` accepts `UPDATE` / `DELETE` (PG17),
     /// and a MERGE may carry a `RETURNING` clause.
     #[test]
@@ -82,6 +85,9 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    // `BY SOURCE`, `BY TARGET` and `RETURNING` are added in 17: research, PostgreSQL 17,
+    // "Changes to existing statements".
+    #[cfg(feature = "since-pg17")]
     /// gram.y:12459 `merge_when_clause` pairs each match kind with its actions:
     /// `WHEN MATCHED` and `WHEN NOT MATCHED BY SOURCE` (gram.y:12503
     /// `merge_when_tgt_matched`) update, delete or do nothing; `WHEN NOT
@@ -165,4 +171,44 @@ mod tests {
         }
     }
 
+    // Before 17, the WHEN clauses are `WHEN MATCHED` and `WHEN NOT MATCHED`
+    // only: research, PostgreSQL 17, "Changes to existing statements" (REL_16_15 gram.y
+    // 12274-12315).
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn parse_merge_when_clauses_before_17() {
+        let lexed = crate::lex(
+            "MERGE INTO t USING s ON t.k = s.k WHEN MATCHED AND s.v > 1 THEN UPDATE SET v = s.v \
+             WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (k) VALUES (s.k) \
+             WHEN NOT MATCHED THEN DO NOTHING",
+        );
+        let mut input = lexed.input();
+        let parsed = MergeStmt::parse(&mut input).unwrap();
+        assert!(input.is_eof());
+        assert!(matches!(
+            parsed.ast().when_clauses.as_slice(),
+            [
+                WhenClause::Matched(update),
+                WhenClause::Matched(_),
+                WhenClause::NotMatched(insert),
+                WhenClause::NotMatched(_),
+            ] if matches!(update.kind, MatchedKind::Matched)
+                && matches!(&insert.action, NotMatchedAction::Insert(InsertAction::Values(_)))
+        ));
+    }
+
+    // Added in 17, so rejected before 17: research, PostgreSQL 17, "Changes to existing
+    // statements" (`BY SOURCE`, `BY TARGET`, `RETURNING`).
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn merge_17_clauses_are_rejected_before_17() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "MERGE INTO t USING s ON t.k = s.k WHEN NOT MATCHED BY SOURCE THEN DELETE",
+            "MERGE INTO t USING s ON t.k = s.k WHEN NOT MATCHED BY SOURCE THEN DO NOTHING",
+            "MERGE INTO t USING s ON t.k = s.k WHEN NOT MATCHED BY TARGET THEN INSERT DEFAULT VALUES",
+            "MERGE INTO t USING s ON t.k = s.k WHEN MATCHED THEN DELETE RETURNING *",
+            "MERGE INTO t USING s ON t.k = s.k WHEN MATCHED THEN DELETE RETURNING merge_action()",
+            "WITH m AS (MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE RETURNING *) SELECT 1",
+        ]);
+    }
 }

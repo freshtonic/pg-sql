@@ -283,4 +283,27 @@ mod tests {
         assert_eq!(stmt.items.iter().count(), 2);
         assert!(input.is_eof());
     }
+
+    // An `ALTER OPERATOR ... SET` option with no value is added in 17: research,
+    // PostgreSQL 17, "Changes to existing statements" (REL_17_11 gram.y 10252).
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn alter_operator_set_option_without_a_value() {
+        assert_statements_parse(&[
+            "ALTER OPERATOR === (int, int) SET (HASHES, MERGES)",
+            "ALTER OPERATOR === (int, int) SET (HASHES)",
+        ]);
+    }
+
+    // Added in 17, so rejected before 17: see
+    // `alter_operator_set_option_without_a_value`.
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn alter_operator_set_option_without_a_value_is_rejected_before_17() {
+        assert_statements_rejected(&[
+            "ALTER OPERATOR === (int, int) SET (HASHES, MERGES)",
+            "ALTER OPERATOR === (int, int) SET (RESTRICT = x, HASHES)",
+        ]);
+        assert_statements_parse(&["ALTER OPERATOR === (int, int) SET (RESTRICT = x, JOIN = NONE)"]);
+    }
 }

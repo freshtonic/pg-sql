@@ -457,6 +457,39 @@ fn a_send_command_name_is_read_whole() {
     }
 }
 
+// A vertical tab ends a command name from 17: psqlscanslash.l `space` gains
+// `\v` (docs/research/psql-14-19-syntax-changes.md, item A4; commit
+// ae6d06f0968).
+#[cfg(feature = "since-pg17")]
+#[test]
+fn a_vertical_tab_ends_a_send_command_name() {
+    let rendered = pg_psql::render("SELECT 1 \\g\u{b}", &Variables::new()).unwrap();
+    assert_eq!(rendered.sql(), "SELECT 1 ;\u{b}");
+}
+
+// Before 17, a vertical tab is not `space` in psqlscanslash.l, so `\g<VT>` is
+// an unknown command that psql rejects (REL_16_15 psqlscanslash.l 111).
+#[cfg(not(feature = "since-pg17"))]
+#[test]
+fn a_vertical_tab_does_not_end_a_send_command_name_before_17() {
+    let source = "SELECT 1 \\g\u{b}";
+    assert_eq!(
+        render_unbound(source),
+        source,
+        "{source:?} renders unchanged"
+    );
+    assert_eq!(
+        pg_psql::parse(source)
+            .unwrap()
+            .items
+            .iter()
+            .filter(|item| matches!(item, PsqlItem::Terminator(_)))
+            .count(),
+        0,
+        "{source:?} holds no terminator",
+    );
+}
+
 // --- The source map ---------------------------------------------------------
 
 #[test]

@@ -944,4 +944,39 @@ mod tests {
         assert!(matches!(body.source, super::CtasSource::Query(_)));
         assert!(input.is_eof());
     }
+
+    // Added in 17: research, PostgreSQL 17, "Changes to existing statements"
+    // (REL_17_11 gram.y 2441, 2470, 2480, 2882).
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn alter_table_17_column_and_access_method_forms() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "ALTER TABLE t ALTER COLUMN g SET EXPRESSION AS (a * 2)",
+            "ALTER TABLE t ALTER g SET EXPRESSION AS (a * 2)",
+            "ALTER TABLE t ALTER c SET STATISTICS DEFAULT",
+            "ALTER INDEX i ALTER 1 SET STATISTICS DEFAULT",
+            "ALTER TABLE t SET ACCESS METHOD DEFAULT",
+            "ALTER MATERIALIZED VIEW v SET ACCESS METHOD DEFAULT",
+        ]);
+    }
+
+    // Added in 17, so rejected before 17: research, PostgreSQL 17, "Changes to existing statements".
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn alter_table_17_forms_are_rejected_before_17() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "ALTER TABLE t ALTER COLUMN g SET EXPRESSION AS (a * 2)",
+            "ALTER TABLE t ALTER g SET EXPRESSION AS (a * 2)",
+            "ALTER TABLE t ALTER c SET STATISTICS DEFAULT",
+            "ALTER INDEX i ALTER 1 SET STATISTICS DEFAULT",
+            "ALTER TABLE t SET ACCESS METHOD DEFAULT",
+            "ALTER MATERIALIZED VIEW v SET ACCESS METHOD DEFAULT",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&[
+            "ALTER TABLE t ALTER COLUMN g DROP EXPRESSION",
+            "ALTER TABLE t ALTER c SET STATISTICS -1",
+            "ALTER INDEX i ALTER 1 SET STATISTICS 5",
+            "ALTER TABLE t SET ACCESS METHOD heap",
+        ]);
+    }
 }

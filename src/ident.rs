@@ -142,8 +142,13 @@ fn escape_byte(uescape: &str) -> Result<u8, FoldError> {
 }
 
 /// `scanner_isspace` (`scansup.c`).
+///
+/// Vertical tab (0x0b) is scanner space from 17: research
+/// (`docs/research/postgres-14-19-sql-syntax-changes.md`), PostgreSQL 17,
+/// "Lexical and literal syntax" (commit ae6d06f0968; REL_16_15 scansup.c 117).
 fn is_scanner_space(byte: u8) -> bool {
-    matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c)
+    matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | 0x0c)
+        || (cfg!(feature = "since-pg17") && byte == 0x0b)
 }
 
 /// The text between the quotes of `"..."`, which starts at byte `open`.

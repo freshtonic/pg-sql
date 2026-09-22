@@ -129,6 +129,10 @@ recursa::ast_node! {
     /// from a numeric literal), so order is for clarity.
     #[derive(Debug)]
     pub enum SetStatisticsValue {
+        // Added in 17: research, PostgreSQL 17, "Changes to existing statements"
+        // (REL_17_11 gram.y 3093 `set_statistics_value`). REL_16_15 gram.y 2426
+        // takes only `SignedIconst`.
+        #[cfg(feature = "since-pg17")]
         #[tok(DEFAULT)]
         Default,
         Value(SignedIconst),

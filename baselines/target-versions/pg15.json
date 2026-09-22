@@ -3,13 +3,8 @@
   "target_version": "pg15",
   "oracle": {"commit":"2ff1375b5dd8bf09d8cb0e795974528180fd75ca","ref":"REL_15_19"},
   "corpus": {"gitlink":"6d396980fc5aed4f1a525e0bd75cb16b25ed40ca","name":"postgresql-17.9"},
-  "totals": {"expected_version_gaps":4,"oracle_accepts":42510,"pass":43456,"skip":18,"statements":43474},
-  "expected_version_gaps": [
-    {"byte_range":"10:24","file":"sqljson.sql","oracle":"accept","pg_sql":"skip","statement_index":0},
-    {"byte_range":"1030:1051","file":"sqljson.sql","oracle":"accept","pg_sql":"skip","statement_index":22},
-    {"byte_range":"1574:1598","file":"sqljson.sql","oracle":"accept","pg_sql":"skip","statement_index":37},
-    {"byte_range":"75:148","file":"sqljson_jsontable.sql","oracle":"accept","pg_sql":"skip","statement_index":0}
-  ],
+  "totals": {"expected_version_gaps":0,"oracle_accepts":42510,"pass":43456,"skip":18,"statements":43474},
+  "expected_version_gaps": [],
   "files": [
     {"file":"advisory_lock.sql","oracle_accepts":"RAAAAAAAAAAAAAAAAAAAAAA"},
     {"file":"aggregates.sql","oracle_accepts":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},

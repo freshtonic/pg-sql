@@ -61,4 +61,26 @@ mod tests {
         assert!(stmt.on.is_some());
         assert!(input.is_eof());
     }
+
+    // `SET STATISTICS DEFAULT` is added in 17: research, PostgreSQL 17, "Changes to existing statements"
+    // (REL_17_11 gram.y 4662, 4671).
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn alter_statistics_set_statistics_default() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "ALTER STATISTICS s SET STATISTICS DEFAULT",
+            "ALTER STATISTICS IF EXISTS s SET STATISTICS DEFAULT",
+        ]);
+    }
+
+    // Added in 17, so rejected before 17: research, PostgreSQL 17, "Changes to existing statements".
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn alter_statistics_set_statistics_default_is_rejected_before_17() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "ALTER STATISTICS s SET STATISTICS DEFAULT",
+            "ALTER STATISTICS IF EXISTS s SET STATISTICS DEFAULT",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&["ALTER STATISTICS s SET STATISTICS 10"]);
+    }
 }

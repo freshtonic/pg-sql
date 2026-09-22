@@ -173,6 +173,8 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    // `JSON_QUERY` is added in 17: research, PostgreSQL 17, "Queries and expressions".
+    #[cfg(feature = "since-pg17")]
     /// A bare SQL/JSON function is a valid index element (Postgres allows
     /// any `func_expr_windowless`). It must not require extra parentheses.
     #[test]

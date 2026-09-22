@@ -54,6 +54,9 @@ recursa::ast_node! {
     }
 }
 
+// From 17, `CLUSTER (options)` takes no table: research, PostgreSQL 17,
+// "Changes to existing statements" (REL_17_11 gram.y 11739).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// ```sql
     /// CLUSTER '(' option [, ...] ')' [qualified_name [USING index]]
@@ -71,5 +74,50 @@ recursa::ast_node! {
         #[presence(VERBOSE)]
         pub verbose: bool,
         pub target: Option<ClusterTarget>,
+    }
+}
+
+// Before 17, `CLUSTER (options)` must name a table: research, PostgreSQL 17,
+// "Changes to existing statements" (REL_16_15 gram.y 11570-11600). The
+// option list and its table are one variant, so the list cannot occur alone.
+#[cfg(not(feature = "since-pg17"))]
+recursa::ast_node! {
+    /// `CLUSTER '(' option [, ...] ')' qualified_name [USING index]`.
+    #[derive(Debug)]
+    pub struct ClusterWithOptions {
+        #[tok(CLUSTER, this)]
+        pub options: VacuumOptions,
+        pub target: ClusterModernTarget,
+    }
+}
+
+// Before 17: see `ClusterWithOptions`.
+#[cfg(not(feature = "since-pg17"))]
+recursa::ast_node! {
+    /// `CLUSTER [VERBOSE] [qualified_name [USING index]]` and the pre-8.3
+    /// `CLUSTER [VERBOSE] index ON qualified_name`.
+    #[derive(Debug)]
+    #[tok(CLUSTER, this)]
+    pub struct ClusterWithoutOptions {
+        #[presence(VERBOSE)]
+        pub verbose: bool,
+        pub target: Option<ClusterTarget>,
+    }
+}
+
+// Before 17: see `ClusterWithOptions`.
+#[cfg(not(feature = "since-pg17"))]
+recursa::ast_node! {
+    /// ```sql
+    /// CLUSTER '(' option [, ...] ')' qualified_name [USING index]
+    /// CLUSTER [VERBOSE]              [qualified_name [USING index]]
+    /// CLUSTER [VERBOSE] index ON qualified_name              -- pre-8.3
+    /// ```
+    ///
+    /// Variant ordering: `Options` continues with `(` after `CLUSTER`.
+    #[derive(Debug)]
+    pub enum ClusterStmt {
+        Options(ClusterWithOptions),
+        Plain(ClusterWithoutOptions),
     }
 }

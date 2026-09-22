@@ -170,6 +170,10 @@ recursa::ast_node! {
     pub enum FunctionBuiltinTypeName {
         #[tok(BOOLEAN)]
         Boolean,
+        // Added in 17: `JsonType` (research, PostgreSQL 17, "Queries and
+        // expressions"). In 16, `json` is unreserved and is an identifier-spelled
+        // type name.
+        #[cfg(feature = "since-pg17")]
         #[tok(JSON)]
         Json,
         #[tok(INTEGER)]

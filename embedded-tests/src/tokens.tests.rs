@@ -1210,4 +1210,27 @@ mod tests {
         let id = id_parsed.ast();
         assert_eq!(id.text(), "pg_input_is_valid");
     }
+
+    // A vertical tab is `space` from 17, so it can separate the parts of a
+    // continued string: research, PostgreSQL 17, "Lexical and literal syntax"
+    // (commit ae6d06f0968).
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn vertical_tab_continues_a_string() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT 'a'\u{b}\n'b'",
+            "SELECT 'a'\n\u{b}'b'",
+        ]);
+    }
+
+    // Before 17, a vertical tab is not `space`: REL_16_15 scan.l 222-240.
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn vertical_tab_does_not_continue_a_string_before_17() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "SELECT 'a'\u{b}\n'b'",
+            "SELECT 'a'\n\u{b}'b'",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&["SELECT 'a'\n'b'"]);
+    }
 }

@@ -1,9 +1,13 @@
 /// SELECT statement AST.
 use crate::ast::dml::values::Subquery;
 use crate::ast::shared::expr::{
-    CastType, Expr, FunctionApplicationExpr, FunctionCallApplication, JsonBehaviorClause,
-    JsonEncoding, JsonOnBehavior, JsonPassing, JsonQuotes, JsonWrapper, ParenthesizedClose,
+    CastType, Expr, FunctionApplicationExpr, FunctionCallApplication, ParenthesizedClose,
     ParenthesizedOpen, XmlPassingBy,
+};
+// The SQL/JSON query clauses exist from 17, as `JSON_TABLE` does.
+#[cfg(feature = "since-pg17")]
+use crate::ast::shared::expr::{
+    JsonBehaviorClause, JsonEncoding, JsonOnBehavior, JsonPassing, JsonQuotes, JsonWrapper,
 };
 use crate::ast::shared::names::QualifiedName;
 use crate::tokens::literal;
@@ -284,6 +288,8 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum LateralBody {
         Subquery(LateralSubquery),
+        // Added in 17: see `JsonTableRef`.
+        #[cfg(feature = "since-pg17")]
         JsonTable(boxed!(JsonTableRef)),
         XmlTable(boxed!(XmlTableRef)),
         Func(boxed!(FuncTableRef)),
@@ -505,6 +511,9 @@ recursa::ast_node! {
 // construct with its own `COLUMNS ( ... )` clause, NESTED paths and
 // per-column behaviors — modeled as a dedicated `SimpleTableRef` variant.
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `[AS] ‹name›` — a path-variable name (after the JSON_TABLE path, or on a
     /// `NESTED PATH`).
@@ -515,6 +524,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `PATH '‹jsonpath›'` clause on a JSON_TABLE column.
     #[derive(Debug)]
@@ -533,6 +545,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// The typed-column tail: `‹type› [EXISTS] [FORMAT JSON ...] [PATH '...']
     /// [wrapper] [quotes] [behavior ON EMPTY] [behavior ON ERROR]`.
@@ -553,6 +568,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `FORMAT JSON [ENCODING name]` within JSON_TABLE.
     ///
@@ -565,6 +583,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// The tail of a non-`NESTED` column, after its name.
     ///
@@ -578,6 +599,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// A non-`NESTED` JSON_TABLE column: `‹name› {FOR ORDINALITY | ‹type› ...}`.
     #[derive(Debug)]
@@ -587,6 +611,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `NESTED [PATH] '‹jsonpath›' [AS ‹name›] COLUMNS ( ... )` — projects a
     /// nested jsonpath into additional columns.
@@ -599,6 +626,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// One column of a JSON_TABLE `COLUMNS ( ... )` list.
     ///
@@ -613,6 +643,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `COLUMNS ( ‹column› [, ...] )` — the JSON_TABLE column list (may be empty).
     #[derive(Debug)]
@@ -623,6 +656,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// Inner contents of `JSON_TABLE ( ‹ctx› , ‹path› [AS name] [PASSING ...]
     /// COLUMNS ( ... ) [behavior ON ERROR] )`.
@@ -639,6 +675,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// The `JSON_TABLE ( ... )` construct.
     #[derive(Debug)]
@@ -648,6 +687,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JSON_TABLE` (research, PostgreSQL 17, "Queries and expressions";
+// REL_17_11 gram.y 14138-14283, `table_ref` 13519).
+#[cfg(feature = "since-pg17")]
 recursa::ast_node! {
     /// `JSON_TABLE(...)` as a table reference, with an optional table alias.
     #[derive(Debug)]
@@ -981,12 +1023,21 @@ recursa::ast_node! {
     pub enum ColNameTableName {
         #[tok(VALUES)]
         Values,
+        // `json` is `COL_NAME` from 17 (research, PostgreSQL 17, "Keywords"). In 16
+        // it is unreserved, so `TableFunctionName` admits it.
+        #[cfg(feature = "since-pg17")]
         #[tok(JSON)]
         Json,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         #[tok(JSON_VALUE)]
         JsonValue,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         #[tok(JSON_QUERY)]
         JsonQuery,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         #[tok(JSON_EXISTS)]
         JsonExists,
         #[tok(JSON_OBJECT)]
@@ -997,10 +1048,16 @@ recursa::ast_node! {
         JsonObjectAgg,
         #[tok(JSON_ARRAYAGG)]
         JsonArrayAgg,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         #[tok(JSON_SERIALIZE)]
         JsonSerialize,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         #[tok(JSON_SCALAR)]
         JsonScalar,
+        // Added in 17: research, PostgreSQL 17, "Keywords".
+        #[cfg(feature = "since-pg17")]
         #[tok(JSON_TABLE)]
         JsonTable,
         #[tok(BOOLEAN)]
@@ -1114,6 +1171,8 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum SimpleTableRef {
         Lateral(LateralRef),
+        // Added in 17: see `JsonTableRef`.
+        #[cfg(feature = "since-pg17")]
         JsonTable(boxed!(JsonTableRef)),
         XmlTable(boxed!(XmlTableRef)),
         RowsFrom(boxed!(RowsFromRef)),
