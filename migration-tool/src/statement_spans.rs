@@ -202,40 +202,49 @@ pub fn validate_statement_spans(
     Ok(())
 }
 
+/// Validate every frozen source against the corpus commit in the PostgreSQL
+/// repository's object database. The checkout can pin a later PostgreSQL
+/// release than the corpus commit, so the checked-out files are not read.
 pub fn validate_statement_sources(
     spans: &StatementSpanBaseline,
     postgres_repository: &Path,
 ) -> Result<(), StatementSpanError> {
-    let head = git_stdout(postgres_repository, &["rev-parse", "HEAD"])?;
-    if head != spans.postgres.gitlink {
-        return Err(StatementSpanError::new(format!(
-            "PostgreSQL checkout is {head}, expected {}",
-            spans.postgres.gitlink
-        )));
-    }
+    let corpus_commit = &spans.postgres.gitlink;
     for file in &spans.files {
         let relative = Path::new(&spans.corpus_root)
             .strip_prefix("vendor/postgres")
             .expect("canonical corpus root is below vendor/postgres")
             .join(&file.file);
-        let source = fs::read(postgres_repository.join(&relative))?;
-        if source.len() != file.source_bytes {
-            return Err(StatementSpanError::new(format!(
-                "{} byte length differs from the frozen source",
-                file.file
-            )));
-        }
         let blob = git_stdout(
             postgres_repository,
             &[
-                "hash-object",
-                "--no-filters",
-                relative.to_string_lossy().as_ref(),
+                "rev-parse",
+                &format!("{corpus_commit}:{}", relative.to_string_lossy()),
             ],
         )?;
         if blob != file.source_git_blob {
             return Err(StatementSpanError::new(format!(
                 "{} content differs from the frozen source",
+                file.file
+            )));
+        }
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(postgres_repository)
+            .args(["cat-file", "blob", &blob])
+            .output()
+            .map_err(|error| StatementSpanError::new(format!("cannot run git: {error}")))?;
+        if !output.status.success() {
+            return Err(StatementSpanError::new(format!(
+                "cannot read frozen source {}: {}",
+                file.file,
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+        let source = output.stdout;
+        if source.len() != file.source_bytes {
+            return Err(StatementSpanError::new(format!(
+                "{} byte length differs from the frozen source",
                 file.file
             )));
         }

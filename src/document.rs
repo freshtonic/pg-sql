@@ -1,7 +1,7 @@
 //! The strict PostgreSQL server-language document interface.
 //!
 //! [`parse_sql`] accepts zero or more semicolon-separated PostgreSQL
-//! statements — PostgreSQL 17.9 `RAW_PARSE_DEFAULT` input — with an optional
+//! statements — PostgreSQL 17.11 `RAW_PARSE_DEFAULT` input — with an optional
 //! final semicolon and no psql-only syntax. Empty statements remain source
 //! and provenance occurrences without entering the semantic statement list.
 //! A COPY FROM STDIN header is ordinary SQL; the client payload and control

@@ -234,12 +234,9 @@ fn manifest_dir() -> PathBuf {
 /// Loads the frozen corpus items of one legacy kind without probing engines.
 fn load_corpus_items(kind: LegacyItemKind) -> Result<Vec<String>, String> {
     let frozen = FrozenStatements::pinned();
-    let corpus_dir = manifest_dir().join("vendor/postgres/src/test/regress/sql");
     let mut inputs = Vec::with_capacity(frozen.total_statements());
     for file_name in frozen.file_names() {
-        let path = corpus_dir.join(file_name);
-        let text = fs::read_to_string(&path)
-            .map_err(|e| format!("read corpus file {}: {e}", path.display()))?;
+        let text = frozen.file(file_name).source();
         let statements = frozen
             .file(file_name)
             .statements(&text)
@@ -537,7 +534,7 @@ fn parse_with_sqlparser(sql: &str) -> bool {
         .is_ok()
 }
 
-/// Strictly parse one extracted statement with PostgreSQL 17.9's raw parser,
+/// Strictly parse one extracted statement with PostgreSQL 17.11's raw parser,
 /// matching `parse_with_postgres` in `benches/parse.rs`. This is a workload
 /// membership probe only; it runs once during loading and never in the
 /// profiled loop.

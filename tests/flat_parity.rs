@@ -7,8 +7,8 @@
 //! declarations and the whole PostgreSQL 17.9 regression corpus.
 //!
 //! The statement membership is the one the differential suite pins
-//! (`tests/support/baseline.rs`, `FrozenStatements::pinned()`), read straight
-//! out of the vendored corpus under `vendor/postgres/src/test/regress/sql`, so
+//! (`tests/support/baseline.rs`, `FrozenStatements::pinned()`), read by Git
+//! blob ID from the frozen corpus in the `vendor/postgres` object database, so
 //! this suite and the differential suite cannot drift. No PostgreSQL oracle is
 //! needed: the assertions compare pg-sql against itself.
 //!
@@ -40,8 +40,6 @@
 mod support;
 
 use std::fmt::Write as _;
-use std::fs;
-use std::path::PathBuf;
 
 use pg_sql::ast::Statement;
 use pg_sql::ast::shared;
@@ -49,27 +47,15 @@ use recursa::Pretty as _;
 use support::baseline::FrozenStatements;
 use support::diff_check::lex_statement_source;
 
-/// The PostgreSQL regression SQL corpus, vendored as a submodule.
-fn corpus_sql_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/postgres/src/test/regress/sql")
-}
-
 /// Every pinned statement of every frozen corpus file, as `(file, index, sql)`.
 ///
 /// The statement text is the verbatim corpus slice, exactly what the
 /// differential suite and the benchmark harness feed their engines.
 fn pinned_statements() -> Vec<(String, usize, String)> {
     let frozen = FrozenStatements::pinned();
-    let corpus_dir = corpus_sql_dir();
     let mut out = Vec::new();
     for name in frozen.file_names() {
-        let path = corpus_dir.join(name);
-        let text = fs::read_to_string(&path).unwrap_or_else(|error| {
-            panic!(
-                "read corpus file {} (is the vendor/postgres submodule checked out?): {error}",
-                path.display()
-            )
-        });
+        let text = frozen.file(name).source();
         let statements = frozen
             .file(name)
             .statements(&text)

@@ -2,9 +2,9 @@
 //!
 //! A self-contained harness (no criterion): it times `pg-sql` (the nested
 //! arena AST), `pg-sql-flat` (the same grammar's Flat AST), `sqlparser` and
-//! PostgreSQL 17.9's raw parser (via `pg-oracle`) on the PostgreSQL
-//! regression corpus and the generated stress fixtures, then writes a per-run
-//! report directory under `docs/benchmarks/`.
+//! PostgreSQL 17.11's raw parser (via `pg-oracle`) on the frozen PostgreSQL
+//! 17.9 regression corpus and the generated stress fixtures, then writes a
+//! per-run report directory under `docs/benchmarks/`.
 //!
 //! `pg-sql-flat` runs the same lex pass and the same LR automaton as `pg-sql`;
 //! only the reduce actions differ, building the tiered flat store instead of
@@ -68,11 +68,6 @@ fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-/// The PostgreSQL regression SQL corpus, vendored as a submodule.
-fn corpus_sql_dir() -> PathBuf {
-    manifest_dir().join("vendor/postgres/src/test/regress/sql")
-}
-
 /// Generated stress fixtures (see `src/bin/gen_stress.rs`).
 fn stress_dir() -> PathBuf {
     manifest_dir().join("fixtures/stress")
@@ -124,7 +119,7 @@ fn parse_with_sqlparser(sql: &str) -> bool {
     SqlParser::parse_sql(&PostgreSqlDialect {}, sql).is_ok()
 }
 
-/// PostgreSQL 17.9's raw parser via the pg-oracle FFI bridge. The bridge
+/// PostgreSQL 17.11's raw parser via the pg-oracle FFI bridge. The bridge
 /// allocates a `CString` per call and serialises through a global mutex —
 /// both overheads count toward this parser's measured time, mirroring the
 /// "parse one SQL string from scratch" model used for the other two.
@@ -445,11 +440,8 @@ fn build_benches() -> Vec<Bench> {
     let mut disagreements: Vec<String> = Vec::new();
 
     let frozen = FrozenStatements::pinned();
-    let corpus_dir = corpus_sql_dir();
     for name in frozen.file_names() {
-        let path = corpus_dir.join(name);
-        let text = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read corpus file {}: {e}", path.display()));
+        let text = frozen.file(name).source();
         let statements = frozen
             .file(name)
             .statements(&text)
@@ -821,7 +813,7 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
          (the same grammar's Flat AST) vs \
          [`sqlparser`](https://crates.io/crates/sqlparser) vs PostgreSQL's \
          raw parser (via [`pg-oracle`](../../../pg-oracle/), linking the \
-         vendored PostgreSQL 17.9 source)"
+         vendored PostgreSQL 17.11 source)"
     );
     md.push('\n');
     let _ = writeln!(
@@ -924,7 +916,7 @@ fn build_report(rows: &[Row], totals: &BenchTotals, timestamp: &str, commit: &st
         md,
         "_Each benchmark shows four side-by-side bars — blue = **pg-sql** \
          (nested arena AST), violet = **pg-sql-flat** (Flat AST), amber = \
-         **sqlparser**, green = **postgres** (PostgreSQL 17.9 raw parser via \
+         **sqlparser**, green = **postgres** (PostgreSQL 17.11 raw parser via \
          pg-oracle). All bars cover the same accepted-by-all statement set._"
     );
 

@@ -48,7 +48,7 @@ The design lives in Recursa's `docs/flat-ast-design.md`.
 
 The `parse` bench measures pg-sql parser throughput and compares it against
 its own Flat AST (the `pg-sql-flat` engine), `sqlparser-rs`
-(`PostgreSqlDialect`), and PostgreSQL 17.9's raw parser. `pg-sql` and
+(`PostgreSqlDialect`), and PostgreSQL 17.11's raw parser. `pg-sql` and
 `pg-sql-flat` share the lex pass and the automaton, so the pair isolates the
 representation; the harness refuses to report timings unless the two accept
 exactly the same statements.

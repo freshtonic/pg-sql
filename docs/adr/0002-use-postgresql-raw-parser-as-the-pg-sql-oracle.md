@@ -18,3 +18,9 @@ checks, file-level recovery behaviour, benchmarks, and the comparison against
 `sqlparser` remain port targets. Recursa capabilities needed for file recovery
 or comment-preserving formatting require separate design sessions rather than
 `pg-sql`-specific parser exceptions.
+
+## Amendment (2026-09-22)
+
+ADR 0009 pins each target version to its latest minor release. For
+PostgreSQL 17, `vendor/postgres` now pins 17.11 (`REL_17_11`, #71). The
+differential corpus stays frozen at 17.9; see `docs/differential-baseline.md`.

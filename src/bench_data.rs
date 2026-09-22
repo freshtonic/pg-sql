@@ -15,7 +15,7 @@
 ///
 /// `pg_sql_ns` is pg-sql's nested arena AST and `pg_sql_flat_ns` the same
 /// grammar's Flat AST, both through the same lex pass and LR automaton.
-/// `postgres_ns` is the PostgreSQL 17.9 raw parser exercised via `pg-oracle`.
+/// `postgres_ns` is the PostgreSQL 17.11 raw parser exercised via `pg-oracle`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchRecord {
     pub name: String,

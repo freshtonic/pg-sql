@@ -14,17 +14,11 @@ use support::diff_check::{Outcome, StrictDiagnostic, check_statement, pgsql_form
 fn frozen_accepted_legacy_gap_contracts_are_exact() {
     let frozen = FrozenStatements::pinned();
     let gaps = AcceptedLegacyGaps::pinned();
-    let corpus = format!(
-        "{}/vendor/postgres/src/test/regress/sql",
-        env!("CARGO_MANIFEST_DIR")
-    );
     let mut derived_identities = BTreeSet::new();
 
     for file_name in frozen.file_names() {
         let file = frozen.file(file_name);
-        let path = format!("{corpus}/{file_name}");
-        let source = std::fs::read_to_string(&path)
-            .unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
+        let source = file.source();
         let statements = file
             .statements(&source)
             .unwrap_or_else(|error| panic!("cannot load {file_name}: {error}"));
@@ -60,9 +54,7 @@ fn frozen_accepted_legacy_gap_contracts_are_exact() {
     assert_eq!(contracted_identities, derived_identities);
 
     for gap in gaps.entries() {
-        let path = format!("{corpus}/{}", gap.file);
-        let source = std::fs::read_to_string(&path)
-            .unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
+        let source = frozen.file(&gap.file).source();
         let statement = frozen
             .file(&gap.file)
             .statements(&source)

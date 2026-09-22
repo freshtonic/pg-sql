@@ -1,6 +1,6 @@
 //! Identifier folding (`pg_sql::ident`), rule by rule.
 //!
-//! The rules are PostgreSQL 17.9's, read from the vendored scanner:
+//! The rules are PostgreSQL 17.11's, read from the vendored scanner:
 //! `scan.l` (`{identifier}`, `<xd>{xdstop}`, `<xui>{dquote}`), `scansup.c`
 //! (`downcase_identifier`, `truncate_identifier`) and `parser.c`
 //! (`base_yylex` `case UIDENT`, `str_udeescape`, `check_uescapechar`). They do
