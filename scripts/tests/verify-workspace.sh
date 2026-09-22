@@ -50,9 +50,11 @@ rg -q '^members = \["pg-oracle", "migration-tool", "pg-psql"\]$' Cargo.toml || f
 test -x scripts/verify-recursa-revision || fail "scripts/verify-recursa-revision is missing or not executable"
 test -x pg-oracle/scripts/build-pg.sh || fail "pg-oracle/scripts/build-pg.sh is not executable"
 
-if rg -q 'cd "\$PG_SRC"|make -C "\$PG_SRC"' pg-oracle/scripts/build-pg.sh; then
+if rg -q 'cd "\$PG_REPO"|make -C "\$PG_REPO"' pg-oracle/scripts/build-pg.sh; then
   fail "PostgreSQL must be configured and built outside the source submodule"
 fi
+test -f pg-oracle/pins.tsv || fail "pg-oracle/pins.tsv (the PostgreSQL pin table) is missing"
+test -x scripts/fetch-postgres-pins || fail "scripts/fetch-postgres-pins is missing or not executable"
 rg -q '^unset PROFILE$' pg-oracle/scripts/build-pg.sh || fail "PostgreSQL build does not isolate Cargo's PROFILE variable"
 
 for workflow in .github/workflows/ci.yml .github/workflows/recursa-main.yml; do

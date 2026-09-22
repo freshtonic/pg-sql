@@ -78,6 +78,8 @@ jobs:
         run: rustup toolchain install --no-self-update
       - name: Check out the reviewed Recursa revision
         run: git -C ../recursa checkout "$(tr -d '[:space:]' < .recursa-revision)"
+      - name: Fetch the pinned PostgreSQL releases (pg-oracle/pins.tsv)
+        run: scripts/fetch-postgres-pins
       - name: Install PostgreSQL build prerequisites
         run: |
           sudo apt-get update

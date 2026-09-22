@@ -1,0 +1,12 @@
+# The PostgreSQL release that each target version pins (ADR 0009). This is
+# the one pin table: the pg-oracle build script, scripts/build-pg.sh, CI and
+# the tests all read it. The pg17 commit must equal the vendor/postgres
+# gitlink (a pg-oracle test checks this).
+#
+# feature	ref	commit
+pg14	REL_14_24	6b3806732b7c5df06bdd0ed150e8a07b4ad62315
+pg15	REL_15_19	2ff1375b5dd8bf09d8cb0e795974528180fd75ca
+pg16	REL_16_15	7d3e000c5961a544302072058a1184e9a588837b
+pg17	REL_17_11	083ac033419f690758508e08c1736089384bbee8
+pg18	REL_18_6	724edf9bde9d356724ad384a2e196edc3c9f80f7
+pg19-beta	REL_19_STABLE	b73d13c32c834a2c8e1c60cb92f79530376cedf1

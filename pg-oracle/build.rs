@@ -1,220 +1,199 @@
 use std::path::{Path, PathBuf};
 
-/// PostgreSQL source tree, relative to this crate's manifest directory.
-/// This is the workspace's `vendor/postgres` Git submodule, pinned to 17.11.
-const PG_SOURCE_DIR: &str = "../vendor/postgres";
+#[path = "../build-support/target_version.rs"]
+mod target_version;
 
-fn pg_source_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(PG_SOURCE_DIR)
+/// The pin table: one row `feature<TAB>ref<TAB>commit` for each target version.
+const PINS: &str = "pins.tsv";
+
+/// The pinned PostgreSQL release of one target version.
+struct Pin {
+    feature: String,
+    reference: String,
+    commit: String,
 }
 
-fn pg_build_dir() -> PathBuf {
+fn pin_for(feature: &str) -> Pin {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(PINS);
+    let table = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    table
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+        .map(|line| {
+            let fields = line.split('\t').collect::<Vec<_>>();
+            assert_eq!(fields.len(), 3, "{PINS}: a row has three fields: {line:?}");
+            Pin {
+                feature: fields[0].to_owned(),
+                reference: fields[1].to_owned(),
+                commit: fields[2].to_owned(),
+            }
+        })
+        .find(|pin| pin.feature == feature)
+        .unwrap_or_else(|| panic!("{PINS} has no pin for the version feature {feature}"))
+}
+
+/// The PostgreSQL tree of this build: the pinned commit, extracted and built
+/// in place under `OUT_DIR`. `OUT_DIR` differs for each feature set, so each
+/// target version has its own tree.
+fn pg_tree_dir() -> PathBuf {
     PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo must set OUT_DIR")).join("postgres")
 }
 
 /// Files that only exist after `configure && make`. If any is missing, the
-/// checkout is not built.
-const REQUIRED_GENERATED: &[&str] = &[
-    "src/include/pg_config.h",
-    "src/backend/parser/gram.c",
-    "src/backend/parser/scan.c",
-    "src/backend/nodes/equalfuncs.funcs.c",
-    "src/backend/nodes/outfuncs.funcs.c",
-    "src/include/nodes/nodetags.h",
-    "src/common/libpgcommon.a",
-    "src/port/libpgport.a",
+/// tree is not built. The second field is the first PostgreSQL major that
+/// generates the file: the node support files are generated from 16.
+const REQUIRED_GENERATED: &[(&str, u32)] = &[
+    ("src/include/pg_config.h", 14),
+    ("src/backend/parser/gram.c", 14),
+    ("src/backend/parser/scan.c", 14),
+    ("src/backend/nodes/equalfuncs.funcs.c", 16),
+    ("src/backend/nodes/outfuncs.funcs.c", 16),
+    ("src/include/nodes/nodetags.h", 16),
+    ("src/common/libpgcommon.a", 14),
+    ("src/port/libpgport.a", 14),
 ];
 
 /// First `REQUIRED_GENERATED` entry that does not yet exist — `None` once the
-/// checkout is fully built.
-fn first_missing_generated(pg: &Path) -> Option<&'static str> {
+/// tree is fully built.
+fn first_missing_generated(tree: &Path, major: u32) -> Option<&'static str> {
     REQUIRED_GENERATED
         .iter()
-        .copied()
-        .find(|rel| !pg.join(rel).exists())
+        .filter(|(_, since)| major >= *since)
+        .map(|(rel, _)| *rel)
+        .find(|rel| !tree.join(rel).exists())
 }
 
-/// File in the build tree that records the PostgreSQL commit it was built from.
+/// File in the tree that records the PostgreSQL commit it was extracted from.
 const SOURCE_COMMIT_STAMP: &str = "pg-oracle-source-commit";
 
-/// The commit that the PostgreSQL checkout is at, or `None` when Git cannot
-/// tell (for example, a source tree that is not a Git checkout).
-fn pg_source_commit(source: &Path) -> Option<String> {
-    git_stdout(source, &["rev-parse", "HEAD"])
-}
-
-/// Run this build script again when the submodule moves to a different
-/// commit. Without this, Cargo keeps the oracle of the old pin.
-fn watch_pg_source_head(source: &Path) {
-    if let Some(head) = git_stdout(
-        source,
-        &["rev-parse", "--path-format=absolute", "--git-path", "HEAD"],
-    ) {
-        println!("cargo:rerun-if-changed={head}");
-    }
-}
-
-fn git_stdout(repository: &Path, arguments: &[&str]) -> Option<String> {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(repository)
-        .args(arguments)
-        .output()
-        .ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-}
-
-/// Ensure the PostgreSQL checkout is built far enough for pg-oracle to link.
+/// Ensure the pinned PostgreSQL tree is built far enough for pg-oracle to
+/// link.
 ///
-/// On a fresh clone the submodule carries only source — `configure && make`
-/// has not run, so the generated headers and static libs are missing. Rather
-/// than failing with a "run this script" message, build it automatically by
-/// invoking `scripts/build-pg.sh` (idempotent: a no-op once built, so the
-/// slow path runs only once per clone). When the submodule moves to a
-/// different commit, the build tree is removed and built again, so the
-/// oracle always comes from the pinned release.
-fn verify_pg_built(source: &Path, build: &Path) {
-    if !source.join("configure").exists() {
-        panic!(
-            "PostgreSQL source not found at {}.\n\
-             Initialize the submodule: git submodule update --init vendor/postgres",
-            source.display()
-        );
-    }
-
-    let commit = pg_source_commit(source);
-    let stamp = build.join(SOURCE_COMMIT_STAMP);
-    let built_from = std::fs::read_to_string(&stamp).ok();
-    let same_commit = match &commit {
-        Some(commit) => built_from.as_deref().map(str::trim) == Some(commit.as_str()),
-        None => true,
-    };
-    if first_missing_generated(build).is_none() && same_commit {
+/// The first build of each target version extracts the pinned commit from
+/// the `vendor/postgres` object store and runs `configure && make` with
+/// `scripts/build-pg.sh`. The script is idempotent, so the slow path runs
+/// only once. When the pin moves, the commit stamp does not agree, and the
+/// script builds the tree again from an empty directory, so the oracle always
+/// comes from the pinned release.
+fn verify_pg_built(pin: &Pin, major: u32, tree: &Path) {
+    let stamp = std::fs::read_to_string(tree.join(SOURCE_COMMIT_STAMP)).ok();
+    let same_commit = stamp.as_deref().map(str::trim) == Some(pin.commit.as_str());
+    if same_commit && first_missing_generated(tree, major).is_none() {
         return;
     }
-    if !same_commit && build.exists() {
-        // The build tree comes from a different commit. PostgreSQL is
-        // configured without dependency tracking, so `make` does not rebuild
-        // the objects whose headers changed. Start from an empty tree.
-        std::fs::remove_dir_all(build)
-            .unwrap_or_else(|e| panic!("cannot remove {}: {e}", build.display()));
-    }
 
-    // Not built yet, or built from a different commit — build it now. The
-    // PostgreSQL build is slow the first time; surface that to the user since
-    // build-script output is otherwise buffered until completion.
+    // The PostgreSQL build is slow the first time; surface that to the user
+    // since build-script output is otherwise buffered until completion.
     eprintln!(
-        "PostgreSQL is not built for the pinned commit — running \
-         pg-oracle/scripts/build-pg.sh (slow on the first build)"
+        "PostgreSQL {} is not built — running pg-oracle/scripts/build-pg.sh \
+         (slow on the first build)",
+        pin.reference
     );
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/build-pg.sh");
     let status = std::process::Command::new("bash")
         .arg(&script)
-        .arg(build)
+        .arg(&pin.feature)
+        .arg(tree)
         .status()
         .unwrap_or_else(|e| panic!("failed to launch {}: {e}", script.display()));
     if !status.success() {
         panic!(
             "PostgreSQL build ({}) failed with {status}.\n\
-             It needs a C toolchain plus `make`, `bison`, `flex` and `perl`.\n\
-             See the output above, or run it directly: ./pg-oracle/scripts/build-pg.sh",
-            script.display()
+             It needs a C toolchain plus `make`, `bison`, `flex` and `perl`, and the\n\
+             pinned commit {} in the vendor/postgres object store.\n\
+             See the output above, or run it directly: \
+             ./pg-oracle/scripts/build-pg.sh {}",
+            script.display(),
+            pin.commit,
+            pin.feature
         );
     }
 
-    if let Some(missing) = first_missing_generated(build) {
+    if let Some(missing) = first_missing_generated(tree, major) {
         panic!(
             "PostgreSQL build at {} is still missing {} after running \
              build-pg.sh.",
-            build.display(),
+            tree.display(),
             missing
         );
     }
-    if let Some(commit) = commit {
-        std::fs::write(&stamp, format!("{commit}\n"))
-            .unwrap_or_else(|e| panic!("cannot write {}: {e}", stamp.display()));
-    }
 }
 
-fn pg_source_file(source: &Path, build: &Path, relative: &str) -> PathBuf {
-    let generated = build.join(relative);
-    if generated.exists() {
-        generated
-    } else {
-        source.join(relative)
-    }
-}
-
-/// PostgreSQL backend `.c` files compiled into the oracle static lib.
+/// PostgreSQL backend `.c` files compiled into the oracle static lib, with
+/// the first PostgreSQL major that has each file.
 /// SEED LIST — extended empirically by the Task 4 link loop until the
 /// parser links. Reference: /tmp/libpg_query-ref Makefile + src/postgres/.
-const PG_SOURCES: &[&str] = &[
+const PG_SOURCES: &[(&str, u32)] = &[
     // Parser proper.
-    "src/backend/parser/parser.c",
-    "src/backend/parser/gram.c",
-    "src/backend/parser/scan.c",
-    "src/backend/parser/scansup.c",
+    ("src/backend/parser/parser.c", 14),
+    ("src/backend/parser/gram.c", 14),
+    ("src/backend/parser/scan.c", 14),
+    ("src/backend/parser/scansup.c", 14),
     // Node support.
-    "src/backend/nodes/makefuncs.c",
-    "src/backend/nodes/list.c",
-    "src/backend/nodes/value.c",
-    "src/backend/nodes/bitmapset.c",
-    "src/backend/nodes/nodeFuncs.c",
-    "src/backend/nodes/copyfuncs.c",
-    "src/backend/nodes/equalfuncs.c",
+    ("src/backend/nodes/makefuncs.c", 14),
+    ("src/backend/nodes/list.c", 14),
+    ("src/backend/nodes/value.c", 14),
+    ("src/backend/nodes/bitmapset.c", 14),
+    ("src/backend/nodes/nodeFuncs.c", 14),
+    ("src/backend/nodes/copyfuncs.c", 14),
+    ("src/backend/nodes/equalfuncs.c", 14),
     // outfuncs.c provides nodeToString; the generated outfuncs.funcs.c /
     // outfuncs.switch.c are #included by it, so they need no entry.
-    "src/backend/nodes/outfuncs.c",
-    "src/backend/nodes/extensible.c",
+    ("src/backend/nodes/outfuncs.c", 14),
+    ("src/backend/nodes/extensible.c", 14),
     // Memory management.
-    "src/backend/utils/mmgr/mcxt.c",
-    "src/backend/utils/mmgr/aset.c",
-    "src/backend/utils/mmgr/alignedalloc.c",
-    "src/backend/utils/mmgr/generation.c",
-    "src/backend/utils/mmgr/slab.c",
-    "src/backend/utils/mmgr/bump.c",
+    ("src/backend/utils/mmgr/mcxt.c", 14),
+    ("src/backend/utils/mmgr/aset.c", 14),
+    ("src/backend/utils/mmgr/alignedalloc.c", 16),
+    ("src/backend/utils/mmgr/generation.c", 14),
+    ("src/backend/utils/mmgr/slab.c", 14),
+    ("src/backend/utils/mmgr/bump.c", 17),
     // Common (frontend-shared) helpers.
-    "src/common/keywords.c",
-    "src/common/kwlookup.c",
-    "src/common/stringinfo.c",
-    "src/common/psprintf.c",
-    "src/common/encnames.c",
-    "src/common/wchar.c",
+    ("src/common/keywords.c", 14),
+    ("src/common/kwlookup.c", 14),
+    ("src/common/stringinfo.c", 14),
+    ("src/common/psprintf.c", 14),
+    ("src/common/encnames.c", 14),
+    ("src/common/wchar.c", 14),
     // Numeric literal scanning used by the grammar.
-    "src/backend/utils/adt/numutils.c",
+    ("src/backend/utils/adt/numutils.c", 14),
     // Datum copy/compare used by copyfuncs/equalfuncs.
-    "src/backend/utils/adt/datum.c",
-    "src/backend/utils/adt/expandeddatum.c",
+    ("src/backend/utils/adt/datum.c", 14),
+    ("src/backend/utils/adt/expandeddatum.c", 14),
     // Port helpers.
-    "src/port/snprintf.c",
-    "src/port/pgstrcasecmp.c",
-    "src/port/pg_bitutils.c",
+    ("src/port/snprintf.c", 14),
+    ("src/port/pgstrcasecmp.c", 14),
+    ("src/port/pg_bitutils.c", 14),
 ];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=csrc/oracle.c");
     println!("cargo:rerun-if-changed=csrc/pgo_elog_stub.c");
-    let pg_source = pg_source_dir();
-    let pg_build = pg_build_dir();
-    watch_pg_source_head(&pg_source);
-    verify_pg_built(&pg_source, &pg_build);
+    println!("cargo:rerun-if-changed=scripts/build-pg.sh");
+    println!("cargo:rerun-if-changed={PINS}");
+    println!("cargo:rerun-if-changed=../build-support/target_version.rs");
+    let feature = target_version::require_one_target_version("pg-oracle");
+    let major = target_version::VERSION_FEATURES
+        .iter()
+        .find(|(name, _)| *name == feature)
+        .map(|(_, major)| *major)
+        .expect("a version feature has a major version");
+    let pin = pin_for(feature);
+    // The tests compare these with the pin of their baseline.
+    println!("cargo:rustc-env=PG_ORACLE_POSTGRES_REF={}", pin.reference);
+    println!("cargo:rustc-env=PG_ORACLE_POSTGRES_COMMIT={}", pin.commit);
+    let tree = pg_tree_dir();
+    verify_pg_built(&pin, major, &tree);
 
     let mut build = cc::Build::new();
     build
-        .include(pg_build.join("src/include"))
-        .include(pg_source.join("src/include"))
-        .include(pg_build.join("src/backend"))
-        .include(pg_build.join("src/backend/parser"))
-        .include(pg_build.join("src/backend/nodes"))
-        .include(pg_build.join("src/common"))
-        .include(pg_source.join("src/backend"))
-        .include(pg_source.join("src/backend/parser"))
-        .include(pg_source.join("src/backend/nodes"))
-        .include(pg_source.join("src/common"))
+        .include(tree.join("src/include"))
+        .include(tree.join("src/backend"))
+        .include(tree.join("src/backend/parser"))
+        .include(tree.join("src/backend/nodes"))
+        .include(tree.join("src/common"))
         .include("csrc")
         .flag_if_supported("-w") // PG sources warn a lot
         .flag_if_supported("-fno-strict-aliasing")
@@ -224,9 +203,11 @@ fn main() {
     build.file("csrc/oracle.c");
     build.file("csrc/pgo_elog_stub.c");
 
-    // PostgreSQL backend sources.
-    for rel in PG_SOURCES {
-        build.file(pg_source_file(&pg_source, &pg_build, rel));
+    // PostgreSQL backend sources of this major.
+    for (rel, since) in PG_SOURCES {
+        if major >= *since {
+            build.file(tree.join(rel));
+        }
     }
 
     build.compile("pgoracle");
@@ -234,11 +215,11 @@ fn main() {
     // PostgreSQL's own static libs cover most remaining symbols.
     println!(
         "cargo:rustc-link-search=native={}",
-        pg_build.join("src/common").display()
+        tree.join("src/common").display()
     );
     println!(
         "cargo:rustc-link-search=native={}",
-        pg_build.join("src/port").display()
+        tree.join("src/port").display()
     );
     println!("cargo:rustc-link-lib=static=pgcommon");
     println!("cargo:rustc-link-lib=static=pgport");

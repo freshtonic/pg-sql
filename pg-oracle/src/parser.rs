@@ -20,7 +20,7 @@ pub enum Equal {
     ErrorRight,
 }
 
-/// True iff PostgreSQL 17.11's raw parser accepts `sql`.
+/// True iff the raw parser of the pinned PostgreSQL release accepts `sql`.
 pub fn parse_ok(sql: &str) -> bool {
     let c = CString::new(sql).expect("NUL in SQL");
     let _guard = LOCK.lock().unwrap();
@@ -75,9 +75,20 @@ mod tests {
         assert!(!parse_ok("SELECT FROM FROM"));
     }
 
+    // Added in 15: trailing junk after a numeric literal is a lexical error
+    // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 15,
+    // "Lexical and literal syntax"; commit 2549f0661).
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn over_permissive_numeric_junk_is_rejected_by_pg() {
         // PostgreSQL rejects trailing junk after a numeric literal.
         assert!(!parse_ok("SELECT 123abc"));
+    }
+
+    // Before 15, `123abc` is `123 AS abc` (the same research entry).
+    #[cfg(not(feature = "since-pg15"))]
+    #[test]
+    fn numeric_junk_is_a_column_label_before_15() {
+        assert!(parse_ok("SELECT 123abc"));
     }
 }
