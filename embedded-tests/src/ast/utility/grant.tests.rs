@@ -114,11 +114,15 @@ mod tests {
         reparse_stable::<GrantStmt>("GRANT role1 TO role2 WITH ADMIN OPTION");
     }
 
+    // Added in 16: research, PostgreSQL 16, "Changes to existing statements".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn grant_role_membership_with_inherit_false() {
         reparse_stable::<GrantStmt>("GRANT role1 TO role2 WITH INHERIT FALSE");
     }
 
+    // Added in 16: research, PostgreSQL 16, "Changes to existing statements".
+    #[cfg(feature = "since-pg16")]
     #[test]
     fn grant_role_membership_with_set_true() {
         reparse_stable::<GrantStmt>("GRANT role1 TO role2 WITH SET TRUE");
@@ -194,5 +198,39 @@ mod tests {
         reparse_stable::<AlterDefaultPrivilegesStmt>(
             "ALTER DEFAULT PRIVILEGES FOR ROLE r IN SCHEMA s GRANT ALL ON TABLES TO u2",
         );
+    }
+
+    // Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+    // (REL_16_15 gram.y `grant_role_opt_list` and `REVOKE ColId OPTION FOR`).
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn role_grant_options_from_16() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "GRANT r TO u WITH ADMIN TRUE",
+            "GRANT r TO u WITH INHERIT FALSE, SET TRUE, ADMIN OPTION",
+            "REVOKE INHERIT OPTION FOR r FROM u",
+            "REVOKE SET OPTION FOR r FROM u",
+        ]);
+    }
+
+    // Added in 16, so rejected before 16: REL_15_19 gram.y has only
+    // `opt_grant_admin_option: WITH ADMIN OPTION` and `REVOKE ADMIN OPTION FOR`.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn role_grant_options_before_16() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "GRANT r TO u WITH ADMIN TRUE",
+            "GRANT r TO u WITH INHERIT FALSE",
+            "GRANT r TO u WITH SET TRUE",
+            "GRANT r TO u WITH ADMIN OPTION, INHERIT TRUE",
+            "REVOKE INHERIT OPTION FOR r FROM u",
+            "REVOKE SET OPTION FOR r FROM u",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&[
+            "GRANT r TO u WITH ADMIN OPTION",
+            "GRANT r1, r2 TO u1, u2 WITH ADMIN OPTION GRANTED BY v",
+            "GRANT r TO u GRANTED BY CURRENT_USER",
+            "REVOKE ADMIN OPTION FOR r FROM u CASCADE",
+        ]);
     }
 }

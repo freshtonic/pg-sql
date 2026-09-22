@@ -979,4 +979,40 @@ mod tests {
             "ALTER TABLE t SET ACCESS METHOD heap",
         ]);
     }
+
+    // Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+    // (REL_16_15 gram.y `column_storage`, commits 784cedda0, b9424d014).
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn column_storage_forms() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "CREATE TABLE t (a text STORAGE EXTERNAL)",
+            "CREATE TABLE t (a text STORAGE DEFAULT)",
+            "CREATE TABLE t (a text STORAGE plain COMPRESSION lz4)",
+            "ALTER TABLE t ADD COLUMN a text STORAGE MAIN",
+            "ALTER TABLE t ALTER a SET STORAGE DEFAULT",
+        ]);
+    }
+
+    // Added in 16, so rejected before 16. REL_15_19 gram.y has no
+    // `column_storage`, and `ALTER opt_column ColId SET STORAGE ColId` takes a
+    // name, which excludes the reserved word `DEFAULT`.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn column_storage_is_rejected_before_16() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "CREATE TABLE t (a text STORAGE EXTERNAL)",
+            "CREATE TABLE t (a text STORAGE DEFAULT)",
+            "CREATE TABLE t (a text STORAGE plain COMPRESSION lz4)",
+            "ALTER TABLE t ADD COLUMN a text STORAGE MAIN",
+            "ALTER TABLE t ALTER a SET STORAGE DEFAULT",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&[
+            "ALTER TABLE t ALTER a SET STORAGE EXTERNAL",
+            "ALTER TABLE t ALTER COLUMN a SET STORAGE main",
+            "ALTER TABLE t ALTER a SET STORAGE foo",
+            "ALTER TABLE t ALTER a SET STORAGE \"default\"",
+            "CREATE TABLE t (LIKE u INCLUDING STORAGE)",
+        ]);
+    }
 }

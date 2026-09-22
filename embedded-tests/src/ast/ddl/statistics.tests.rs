@@ -33,6 +33,8 @@ mod tests {
         let stmt_parsed = CreateStatisticsStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
         assert!(stmt.if_not_exists.is_none());
+        // The name is a required field before 16.
+        #[cfg(feature = "since-pg16")]
         assert!(stmt.name.is_some());
         assert!(stmt.on.is_some());
         assert!(stmt.from.is_some());
@@ -82,5 +84,32 @@ mod tests {
             "ALTER STATISTICS IF EXISTS s SET STATISTICS DEFAULT",
         ]);
         crate::ast::test_support::assert_statements_parse(&["ALTER STATISTICS s SET STATISTICS 10"]);
+    }
+
+    // Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+    // (REL_16_15 gram.y `CreateStatsStmt`, commit 624aa2a13).
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn create_statistics_without_a_name() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "CREATE STATISTICS ON a, b FROM t",
+            "CREATE STATISTICS (ndistinct) ON a, b FROM t",
+        ]);
+    }
+
+    // Added in 16, so rejected before 16: REL_15_19 gram.y has
+    // `CREATE STATISTICS any_name`.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn create_statistics_needs_a_name_before_16() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "CREATE STATISTICS ON a, b FROM t",
+            "CREATE STATISTICS (ndistinct) ON a, b FROM t",
+            "CREATE STATISTICS IF NOT EXISTS ON a, b FROM t",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&[
+            "CREATE STATISTICS s ON a, b FROM t",
+            "CREATE STATISTICS IF NOT EXISTS s (ndistinct) ON a, b FROM t",
+        ]);
     }
 }
