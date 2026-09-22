@@ -1167,3 +1167,5 @@ embedded-tests/src/ast/session/set_reset.tests.rs	set_var_to_null_from_19	false	
 embedded-tests/src/ast/session/set_reset.tests.rs	reject_set_var_to_null_before_19	false	14-18
 embedded-tests/src/ast/ddl/foreign.tests.rs	fdw_connection_option_from_19	false	19-
 embedded-tests/src/ast/ddl/foreign.tests.rs	reject_fdw_connection_option_before_19	false	14-18
+embedded-tests/src/ast/ddl/subscription.tests.rs	subscription_server_and_refresh_sequences_from_19	false	19-
+embedded-tests/src/ast/ddl/subscription.tests.rs	reject_subscription_server_before_19	false	14-18
