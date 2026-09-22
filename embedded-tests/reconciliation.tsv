@@ -389,3 +389,7 @@ tests::support::tests::extracts_sql_skips_directives	superseded	-	-	frozen-state
 tests::support::tests::skips_psql_interpolation	superseded	-	-	frozen-statement-span-adapter
 tokens::tests::token_kind_is_soft_classifies_correctly	superseded	-	-	classified-token-public-coverage
 tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src/tokens.tests.rs	window_ref_name_rejects_clause_heads	closed-window-ref-admission
+-	introduced	embedded-tests/src/ast/dml/select.tests.rs	ignore_and_respect_need_as_from_19	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/dml/select.tests.rs	ignore_is_a_bare_label_before_19	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	parse_null_treatment_between_filter_and_over	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	reject_null_treatment_before_19	issue-9-generated-expression

@@ -1582,4 +1582,56 @@ mod tests {
         }
     }
 
+    /// A statement that `SelectStmt` parses to the end, or `None`.
+    fn select_alias(src: &'static str) -> Option<Option<String>> {
+        let lexed = crate::lex(src);
+        let mut input = lexed.input();
+        let parsed = SelectStmt::parse(&mut input).ok()?;
+        if !input.is_eof() {
+            return None;
+        }
+        let SelectItem::Expr(item) = parsed.ast().items().next()? else {
+            return None;
+        };
+        Some(item.alias.as_ref().map(|alias| alias.name().to_string()))
+    }
+
+    /// Added in 19: `ignore` and `respect` are UNRESERVED, AS_LABEL keywords
+    /// (`kwlist.h` at b73d13c; research PostgreSQL 19, "Keywords" and
+    /// "Removed or changed syntax"). A bare column label rejects them, `AS`
+    /// and `ColId` positions accept them. `lsn`, `repack` and `wait` are
+    /// BARE_LABEL.
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn ignore_and_respect_need_as_from_19() {
+        for src in ["SELECT 1 ignore", "SELECT 1 respect", "SELECT 1 IGNORE"] {
+            assert_eq!(select_alias(src), None, "{src:?} parsed completely");
+        }
+        for (src, alias) in [
+            ("SELECT 1 AS ignore", Some("ignore")),
+            ("SELECT 1 AS respect", Some("respect")),
+            ("SELECT 1 lsn", Some("lsn")),
+            ("SELECT 1 repack", Some("repack")),
+            ("SELECT 1 wait", Some("wait")),
+            ("SELECT ignore FROM respect", None),
+            ("SELECT ignore.respect FROM ignore", None),
+        ] {
+            assert_eq!(
+                select_alias(src),
+                Some(alias.map(str::to_string)),
+                "{src:?}"
+            );
+        }
+    }
+
+    /// Before 19, `ignore` and `respect` are no keywords, so a bare column
+    /// label accepts them (the same research entry).
+    #[cfg(not(feature = "since-pg19"))]
+    #[test]
+    fn ignore_is_a_bare_label_before_19() {
+        for (src, alias) in [("SELECT 1 ignore", "ignore"), ("SELECT 1 respect", "respect")] {
+            assert_eq!(select_alias(src), Some(Some(alias.to_string())), "{src:?}");
+        }
+    }
+
 }

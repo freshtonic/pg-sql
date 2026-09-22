@@ -1153,3 +1153,7 @@ embedded-tests/src/tokens.tests.rs	unquoted_rejects_keyword_select	false	14-
 embedded-tests/src/tokens.tests.rs	unquoted_rejects_keyword_true	false	14-
 embedded-tests/src/tokens.tests.rs	window_ref_name_accepts_plain_ident	false	14-
 embedded-tests/src/tokens.tests.rs	window_ref_name_rejects_clause_heads	false	14-
+embedded-tests/src/ast/dml/select.tests.rs	ignore_and_respect_need_as_from_19	false	19-
+embedded-tests/src/ast/dml/select.tests.rs	ignore_is_a_bare_label_before_19	false	14-18
+embedded-tests/src/ast/shared/expr.tests.rs	parse_null_treatment_between_filter_and_over	false	19-
+embedded-tests/src/ast/shared/expr.tests.rs	reject_null_treatment_before_19	false	14-18
