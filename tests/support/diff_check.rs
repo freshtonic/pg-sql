@@ -201,12 +201,24 @@ mod tests {
         assert_eq!(check("SELECT 1 AS one"), Outcome::Pass);
     }
 
-    #[cfg(feature = "postgres-oracle")]
+    // Added in 15: trailing junk after a numeric literal is a lexical error
+    // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 15,
+    // "Lexical and literal syntax"; commit 2549f0661).
+    #[cfg(all(feature = "postgres-oracle", feature = "since-pg15"))]
     #[test]
     fn pg_rejected_input_passes_when_pgsql_also_rejects() {
         // PostgreSQL rejects trailing junk; pg-sql must not "fix" it into
         // valid SQL.
         assert_eq!(check("SELECT 123abc"), Outcome::Pass);
+    }
+
+    // Before 15, PostgreSQL reads `123abc` as `123 AS abc` (the same research
+    // entry). The 14 grammar is not complete yet, so this is an expected
+    // version gap; #76 makes it pass.
+    #[cfg(all(feature = "postgres-oracle", not(feature = "since-pg15")))]
+    #[test]
+    fn numeric_junk_is_a_version_gap_before_15() {
+        assert!(matches!(check("SELECT 123abc"), Outcome::Skip(_)));
     }
 
     #[test]
