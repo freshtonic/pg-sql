@@ -188,4 +188,33 @@ mod tests {
         );
     }
 
+    // Added in 17: research, PostgreSQL 17, "Changes to existing statements"
+    // (REL_17_11 gram.y 3475, 3483, 3539).
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn copy_17_option_forms() {
+        assert_statements_parse(&[
+            "COPY t FROM STDIN CSV FORCE NOT NULL *",
+            "COPY t FROM STDIN CSV FORCE NULL *",
+            "COPY t FROM STDIN (ON_ERROR ignore, LOG_VERBOSITY default)",
+        ]);
+    }
+
+    // Added in 17, so rejected before 17: research, PostgreSQL 17, "Changes to existing statements".
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn copy_17_option_forms_are_rejected_before_17() {
+        assert_statements_rejected(&[
+            "COPY t FROM STDIN CSV FORCE NOT NULL *",
+            "COPY t FROM STDIN CSV FORCE NULL *",
+            "COPY t FROM STDIN (ON_ERROR ignore, LOG_VERBOSITY default)",
+            "COPY t FROM STDIN (null default)",
+        ]);
+        assert_statements_parse(&[
+            "COPY t FROM STDIN CSV FORCE NOT NULL a, b",
+            "COPY t FROM STDIN CSV FORCE NULL a",
+            "COPY t TO STDOUT CSV FORCE QUOTE *",
+            "COPY t FROM STDIN (force_not_null *)",
+        ]);
+    }
 }

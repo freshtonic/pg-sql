@@ -67,6 +67,8 @@ mod tests {
         ty_parsed
     }
 
+    // Added in 17: research, PostgreSQL 17, "Queries and expressions".
+    #[cfg(feature = "since-pg17")]
     #[test]
     fn parse_json_timestamp_cast_before_unique_keys() {
         assert!(matches!(
@@ -75,8 +77,11 @@ mod tests {
         ));
     }
 
+    // `JSON()`, `JSON_SCALAR()` and `JSON_SERIALIZE()` are added in 17:
+    // research, PostgreSQL 17, "Queries and expressions".
+    #[cfg(feature = "since-pg17")]
     #[test]
-    fn parse_json_constructors() {
+    fn parse_json_value_constructors() {
         // JSON()
         assert!(matches!(
             parse_expr_classified("JSON('{}' FORMAT JSON)").ast(),
@@ -96,6 +101,10 @@ mod tests {
             parse_expr_classified("JSON_SERIALIZE('{}' RETURNING bytea)").ast(),
             Expr::JsonSerialize(_)
         ));
+    }
+
+    #[test]
+    fn parse_json_constructors() {
         // JSON_OBJECT() — entries, KEY/VALUE, all clauses, empty, returning-only
         for src in [
             "JSON_OBJECT('a': 1, 'b': 2)",
@@ -140,6 +149,8 @@ mod tests {
         ));
     }
 
+    // Added in 17: research, PostgreSQL 17, "Queries and expressions".
+    #[cfg(feature = "since-pg17")]
     #[test]
     fn parse_json_query_functions() {
         // JSON_EXISTS — path, PASSING, ON ERROR.
@@ -609,7 +620,7 @@ mod tests {
         assert_eq!(qualified.object(), "json");
 
         assert_cast_type_families_track_type_name_spellings();
-        assert_cast_type_family_modifiers_and_json_unique_boundary_round_trip();
+        assert_cast_type_family_modifiers_round_trip();
     }
 
     fn assert_cast_type_families_track_type_name_spellings() {
@@ -671,7 +682,7 @@ mod tests {
         }
     }
 
-    fn assert_cast_type_family_modifiers_and_json_unique_boundary_round_trip() {
+    fn assert_cast_type_family_modifiers_round_trip() {
         use crate::formatter::format_tokens_sql;
         use recursa::PrettyConfig;
 
@@ -702,6 +713,15 @@ mod tests {
                 "cast type did not render canonically for {src:?}",
             );
         }
+    }
+
+    // `JSON()` is added in 17: research, PostgreSQL 17, "Queries and
+    // expressions".
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn json_constructor_owns_unique_keys_after_a_cast() {
+        use crate::formatter::format_tokens_sql;
+        use recursa::PrettyConfig;
 
         // The boundary itself is asserted structurally: the cast must not
         // consume `WITH`, and the JSON constructor must own `UNIQUE KEYS`.
@@ -1484,6 +1504,8 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    // Added in 17: research, PostgreSQL 17, "Queries and expressions".
+    #[cfg(feature = "since-pg17")]
     #[test]
     fn parse_at_local() {
         let lexed = crate::lex("f1 AT LOCAL");
@@ -3537,6 +3559,8 @@ mod tests {
         }
     }
 
+    // Added in 17: research, PostgreSQL 17, "Queries and expressions".
+    #[cfg(feature = "since-pg17")]
     /// `json '…'` — PostgreSQL's `JsonType` as a function-style typed
     /// literal. `JSON` is a COL_NAME keyword, so it reaches neither the
     /// identifier-named nor the typmod typed-literal form, and it must stay
@@ -4274,4 +4298,103 @@ mod tests {
         }
     }
 
+    // Before 17, `json` is an unreserved keyword and has no `JsonType`: research, PostgreSQL 17,
+    // "Keywords" and "Queries and expressions". So `json(...)` is an ordinary
+    // call, and the type `json` takes type modifiers like any `GenericType`.
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn json_is_an_unreserved_keyword_before_17() {
+        for src in [
+            "json('{}')",
+            "json(x, y)",
+            "json(*)",
+            "json(DISTINCT a)",
+            "json(a ORDER BY b)",
+            "json()",
+            "json(a) FILTER (WHERE a > 1) OVER ()",
+        ] {
+            assert!(matches!(parse_expr_classified(src).ast(), Expr::Func(_)), "{src}");
+        }
+        for src in ["json '{}'", "json(2) '{}'"] {
+            let tree = format!("{:?}", parse_expr_classified(src).ast());
+            assert!(!tree.contains("JsonCtor"), "{src}: {tree}");
+        }
+        for src in ["'1'::json(2)", "CAST('1' AS json(2))", "'1'::json.x"] {
+            assert!(matches!(parse_expr_classified(src).ast(), Expr::Cast(..) | Expr::CastCall(_)), "{src}");
+        }
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT public.json(1)",
+            "CREATE FUNCTION json(int) RETURNS int LANGUAGE sql AS 'select 1'",
+            "DROP FUNCTION json(int)",
+            "CREATE TABLE t (a json(10))",
+            "SELECT JSON_OBJECT('a': 1 RETURNING json(3))",
+        ]);
+    }
+
+    // Before 17, the SQL/JSON function names of 17 are identifiers: research, PostgreSQL 17,
+    // "Keywords". A call with any argument list is an ordinary call.
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn sql_json_17_names_are_ordinary_calls_before_17() {
+        for src in [
+            "json_scalar(1, 2)",
+            "json_serialize(a, b)",
+            "json_query(j)",
+            "json_value(j, '$.n', 3)",
+            "json_exists(j)",
+            "json_table(1, 2)",
+            "merge_action(1)",
+        ] {
+            assert!(matches!(parse_expr_classified(src).ast(), Expr::Func(_)), "{src}");
+        }
+        crate::ast::test_support::assert_statements_parse(&[
+            "CREATE FUNCTION json_exists(int) RETURNS int LANGUAGE sql AS 'select 1'",
+            "CREATE FUNCTION json_table() RETURNS int LANGUAGE sql AS 'select 1'",
+            "CREATE TABLE t (a json_value)",
+            "SELECT '1'::json_query",
+        ]);
+    }
+
+    // Added in 17, so rejected before 17: research, PostgreSQL 17, "Queries and expressions".
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn sql_json_17_syntax_is_rejected_before_17() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "SELECT JSON('{}' WITH UNIQUE KEYS)",
+            "SELECT JSON('{}' FORMAT JSON)",
+            "SELECT JSON_SERIALIZE('{}' RETURNING bytea)",
+            "SELECT JSON_SERIALIZE('{}' FORMAT JSON)",
+            "SELECT JSON_QUERY(j, '$.a' WITH CONDITIONAL WRAPPER OMIT QUOTES) FROM t",
+            "SELECT JSON_QUERY(j, '$.a' EMPTY ARRAY ON EMPTY) FROM t",
+            "SELECT JSON_VALUE(j, '$.n' RETURNING int DEFAULT -1 ON ERROR) FROM t",
+            "SELECT JSON_EXISTS(j, '$.a ? (@ > $x)' PASSING 1 AS x) FROM t",
+            "SELECT JSON_EXISTS(j, '$.a' FALSE ON ERROR) FROM t",
+        ]);
+    }
+
+    // `AT LOCAL` is added in 17, so rejected before 17: research, PostgreSQL 17, "Queries and
+    // expressions" (REL_17_11 gram.y 14798).
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn at_local_is_rejected_before_17() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "SELECT now() AT LOCAL",
+            "SELECT a AT LOCAL + 1 FROM t",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&["SELECT now() AT TIME ZONE 'UTC'", "SELECT 1 local"]);
+    }
+
+    // The words that 17 makes keywords are identifiers before 17: research, PostgreSQL 17,
+    // "Keywords". gram.y has positions that admit an `IDENT` and no keyword.
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn words_that_17_reserves_are_identifiers_before_17() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT 1 AS error, 2 empty, 3 keep, 4 omit, 5 quotes, 6 string, 7 conditional, \
+             8 unconditional, 9 source, 10 target",
+            "CREATE TABLE source (target int, error text, string text)",
+            "CREATE AGGREGATE a (basetype = int, sfunc = f, stype = int, error = 1)",
+            "SELECT EXTRACT(error FROM ts) FROM t",
+        ]);
+    }
 }

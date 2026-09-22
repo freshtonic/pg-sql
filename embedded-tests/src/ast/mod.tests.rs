@@ -825,42 +825,8 @@ mod tests {
             ("xmlserialize(DOCUMENT a AS text)", "XmlSerialize("),
             ("json_object('a': 1)", "JsonObject("),
             ("json_array(1, 2)", "JsonArray("),
-            ("json(a)", "JsonCtor("),
-            ("json_scalar(a)", "JsonScalar("),
-            ("json_serialize(a)", "JsonSerialize("),
-            ("json_query(a, '$')", "JsonQuery("),
-            ("json_exists(a, '$')", "JsonExists("),
-            ("json_value(a, '$')", "JsonValue("),
         ];
-        let positions = [
-            "SELECT * FROM {}",
-            "SELECT * FROM {} AS x (d int, e int)",
-            "SELECT * FROM {} WITH ORDINALITY x",
-            "SELECT * FROM ROWS FROM ({}, f(1)) x",
-            "CREATE INDEX ON t ({} DESC, b)",
-            "INSERT INTO t VALUES (1) ON CONFLICT ({}) DO NOTHING",
-            "CREATE TABLE p (a int) PARTITION BY RANGE ({})",
-        ];
-        for (form, node) in forms {
-            // The expression grammar builds the same variant for the same text.
-            let src: &'static str = format!("SELECT {form}").leak();
-            let lexed = crate::lex(src);
-            let mut input = lexed.input();
-            let parsed = Statement::parse(&mut input).unwrap_or_else(|e| panic!("{src:?}: {e}"));
-            assert!(format!("{:?}", parsed.ast()).contains(node), "{src:?} has no {node}");
-
-            for position in positions {
-                let src: &'static str = position.replace("{}", form).leak();
-                let lexed = crate::lex(src);
-                assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
-                let mut input = lexed.input();
-                let parsed =
-                    Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
-                assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
-                let tree = format!("{:?}", parsed.ast());
-                assert!(tree.contains(node), "{src:?} did not build {node}");
-            }
-        }
+        assert_special_forms_in_windowless_positions(&forms);
 
         // `USER` is the one form with no parentheses.
         for src in ["SELECT * FROM USER", "CREATE INDEX ON t (user)", "SELECT * FROM ROWS FROM (user) x"] {
@@ -896,6 +862,55 @@ mod tests {
             let parsed = Statement::parse(&mut input);
             assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
         }
+    }
+
+    /// Each special form parses in every windowless position, and builds the
+    /// same `Expr` variant as in the expression grammar.
+    fn assert_special_forms_in_windowless_positions(forms: &[(&str, &str)]) {
+        let positions = [
+            "SELECT * FROM {}",
+            "SELECT * FROM {} AS x (d int, e int)",
+            "SELECT * FROM {} WITH ORDINALITY x",
+            "SELECT * FROM ROWS FROM ({}, f(1)) x",
+            "CREATE INDEX ON t ({} DESC, b)",
+            "INSERT INTO t VALUES (1) ON CONFLICT ({}) DO NOTHING",
+            "CREATE TABLE p (a int) PARTITION BY RANGE ({})",
+        ];
+        for &(form, node) in forms {
+            // The expression grammar builds the same variant for the same text.
+            let src: &'static str = format!("SELECT {form}").leak();
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Statement::parse(&mut input).unwrap_or_else(|e| panic!("{src:?}: {e}"));
+            assert!(format!("{:?}", parsed.ast()).contains(node), "{src:?} has no {node}");
+
+            for position in positions {
+                let src: &'static str = position.replace("{}", form).leak();
+                let lexed = crate::lex(src);
+                assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+                let mut input = lexed.input();
+                let parsed =
+                    Statement::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+                assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+                let tree = format!("{:?}", parsed.ast());
+                assert!(tree.contains(node), "{src:?} did not build {node}");
+            }
+        }
+    }
+
+    // The SQL/JSON functions of 17: research, PostgreSQL 17, "Queries and
+    // expressions".
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn parse_sql_json_17_forms_in_windowless_positions() {
+        assert_special_forms_in_windowless_positions(&[
+            ("json(a)", "JsonCtor("),
+            ("json_scalar(a)", "JsonScalar("),
+            ("json_serialize(a)", "JsonSerialize("),
+            ("json_query(a, '$')", "JsonQuery("),
+            ("json_exists(a, '$')", "JsonExists("),
+            ("json_value(a, '$')", "JsonValue("),
+        ]);
     }
 
 }

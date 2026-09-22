@@ -64,3 +64,29 @@ where
     assert!(input.is_eof(), "unconsumed input after parsing {src:?}");
     format_tokens_sql(stmt.ast(), PrettyConfig::default())
 }
+
+/// Whether pg-sql rejects `src` as one complete statement: a lexical error, a
+/// parse error, or input left after the statement.
+pub fn statement_rejected(src: &'static str) -> bool {
+    let lexed = crate::lex(src);
+    if lexed.errors().count() > 0 {
+        return true;
+    }
+    let mut input = lexed.input();
+    let parsed = crate::ast::Statement::parse_arena(&mut input);
+    parsed.is_err() || !input.is_eof()
+}
+
+/// Asserts that pg-sql parses every statement in `sources` completely.
+pub fn assert_statements_parse(sources: &[&'static str]) {
+    for &src in sources {
+        assert!(!statement_rejected(src), "pg-sql rejects {src:?}");
+    }
+}
+
+/// Asserts that pg-sql rejects every statement in `sources`.
+pub fn assert_statements_rejected(sources: &[&'static str]) {
+    for &src in sources {
+        assert!(statement_rejected(src), "pg-sql accepts {src:?}");
+    }
+}

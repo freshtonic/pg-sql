@@ -134,6 +134,8 @@ mod tests {
         }
     }
 
+    // `JSON_TABLE` is added in 17: research, PostgreSQL 17, "Queries and expressions".
+    #[cfg(feature = "since-pg17")]
     #[test]
     fn parse_json_table() {
         for src in [
@@ -1582,4 +1584,20 @@ mod tests {
         }
     }
 
+    // `JSON_TABLE` is added in 17, so rejected before 17: research, PostgreSQL 17, "Queries
+    // and expressions". Before 17, `json_table(...)` is a function table.
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn json_table_is_rejected_before_17() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "SELECT * FROM JSON_TABLE(j, '$' COLUMNS (a int)) jt",
+            "SELECT * FROM t, LATERAL JSON_TABLE(t.j, '$' COLUMNS (a int EXISTS)) jt",
+            "SELECT * FROM JSON_TABLE(j, '$' COLUMNS (i FOR ORDINALITY))",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT * FROM json_table(1)",
+            "SELECT * FROM json_table(1, 2) AS x",
+            "SELECT json_table FROM json_table",
+        ]);
+    }
 }

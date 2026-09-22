@@ -51,6 +51,8 @@ mod tests {
         assert_eq!(stmt.type_name.array_suffixes.len(), 1);
         assert!(input.is_eof());
     }
+    // `ALTER DOMAIN ... ADD NOT NULL` is added in 17: research, PostgreSQL 17, "Changes to existing statements".
+    #[cfg(feature = "since-pg17")]
     #[test]
     fn parse_alter_domain_add_not_null() {
         // `ALTER DOMAIN d ADD NOT NULL` — bare NOT NULL domain constraint
@@ -71,6 +73,8 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    // Added in 17: see `parse_alter_domain_add_not_null`.
+    #[cfg(feature = "since-pg17")]
     #[test]
     fn parse_alter_domain_add_named_not_null() {
         let lexed = crate::lex("alter domain connotnull add constraint constr1 not null");
@@ -89,6 +93,8 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    // Added in 17: see `parse_alter_domain_add_not_null`.
+    #[cfg(feature = "since-pg17")]
     #[test]
     fn parse_alter_domain_add_not_null_with_attrs() {
         // The `ConstraintAttributeSpec` tail is still available on the
@@ -106,5 +112,46 @@ mod tests {
         };
         assert_eq!(not_null.attrs.len(), 1);
         assert!(input.is_eof());
+    }
+
+    // Before 17, `ALTER DOMAIN ... ADD` takes a `TableConstraint`: research, PostgreSQL 17,
+    // "Changes to existing statements" (REL_16_15 gram.y 11392). Execution
+    // rejects the kinds other than `CHECK`.
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn alter_domain_add_table_constraint_before_17() {
+        for (src, unique) in [
+            ("ALTER DOMAIN d ADD UNIQUE (a)", true),
+            ("ALTER DOMAIN d ADD CONSTRAINT c PRIMARY KEY (a)", false),
+            ("ALTER DOMAIN d ADD FOREIGN KEY (a) REFERENCES t", false),
+            ("ALTER DOMAIN d ADD EXCLUDE USING gist (a WITH =)", false),
+            ("ALTER DOMAIN d ADD CONSTRAINT c CHECK (VALUE > 0) NOT VALID", false),
+        ] {
+            let lexed = crate::lex(src);
+            assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
+            let mut input = lexed.input();
+            let stmt_parsed =
+                AlterDomainStmt::parse(&mut input).unwrap_or_else(|e| panic!("parse {src:?}: {e}"));
+            assert!(input.is_eof(), "parser cursor for {src:?}: {}", input.cursor());
+            let AlterDomainAction::Add(add) = &stmt_parsed.ast().action else {
+                panic!("expected an ADD action for {src:?}");
+            };
+            assert_eq!(
+                matches!(add.constraint.kind, crate::ast::ddl::table::TableConstraintKind::Unique(_)),
+                unique,
+                "{src:?}"
+            );
+        }
+    }
+
+    // `NOT NULL` is not a `TableConstraint`, so 16 rejects it here: research, PostgreSQL 17,
+    // "Changes to existing statements".
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn alter_domain_add_not_null_is_rejected_before_17() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "ALTER DOMAIN d ADD NOT NULL",
+            "ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL",
+        ]);
     }
 }
