@@ -291,6 +291,17 @@ recursa::ast_node! {
         InitiallyDeferred,
         #[tok(DEFERRABLE)]
         Deferrable,
+        /// Added in 18: gram.y `ConstraintAttributeElem: NOT ENFORCED |
+        /// ENFORCED` (docs/research/postgres-14-19-sql-syntax-changes.md,
+        /// PostgreSQL 18, items 4 and 5; REL_18_6 gram.y
+        /// `ConstraintAttributeElem`).
+        #[cfg(feature = "since-pg18")]
+        #[tok(NOT, ENFORCED)]
+        NotEnforced,
+        /// Added in 18: see [`Self::NotEnforced`].
+        #[cfg(feature = "since-pg18")]
+        #[tok(ENFORCED)]
+        Enforced,
     }
 }
 
