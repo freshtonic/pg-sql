@@ -9,9 +9,9 @@ Reference source: `vendor/postgres`, read from git objects only. The tags and co
 - `REL_16_0` (`c372fbbd8e9`)
 - `REL_17_0` (`d7ec59a63d7`)
 - `REL_18_0` (`3d6a828938a`)
-- PostgreSQL 19: `origin/REL_19_STABLE` (`7a74e5ed92d`, 2026-08-28)
+- PostgreSQL 19: `REL_19_STABLE` at `b73d13c` ("Stamp 19beta4", 2026-09-21), the pin of the `pg19-beta` target version. The first version of this document used `7a74e5ed92d` (2026-08-28).
 
-**PostgreSQL 19 is pre-release.** The document uses `origin/REL_19_STABLE` because it is newer than `REL_19_BETA3` (`3638289fb57`, 2026-08-10) and contains it. The commits after BETA3 include `3e8bcc8644f`, which reverts `ALTER TABLE ... MERGE/SPLIT PARTITION(S)`. The 19 grammar can change again before release.
+**PostgreSQL 19 is pre-release.** The document uses `b73d13c` on `REL_19_STABLE`. It contains `REL_19_BETA3` (`3638289fb57`, 2026-08-10) and `7a74e5ed92d`. The commits after BETA3 include `3e8bcc8644f`, which reverts `ALTER TABLE ... MERGE/SPLIT PARTITION(S)`, and the commits after `7a74e5ed92d` revert SQL/PGQ, `FOR PORTION OF` and the new `CREATE SCHEMA` elements. The section "PostgreSQL 19" lists these changes. The 19 grammar can change again before release.
 
 For version N, the change set is `REL_(N-1)_0 .. REL_N_0`. The sources are:
 
@@ -33,9 +33,9 @@ Scope. The document includes statements, clauses, options, operator syntax, lexi
 | 16 | SQL/JSON constructors (`JSON_OBJECT`, `JSON_ARRAY`, `JSON_OBJECTAGG`, `JSON_ARRAYAGG`) and `IS JSON`. Hexadecimal, octal and binary integer literals, and `_` digit separators. A subquery in `FROM` does not need an alias. `GRANT role ... WITH INHERIT/SET`. `SYSTEM_USER`. |
 | 17 | `JSON_TABLE`, `JSON_QUERY`, `JSON_VALUE`, `JSON_EXISTS`, `JSON()`, `JSON_SCALAR`, `JSON_SERIALIZE`. `MERGE ... WHEN NOT MATCHED BY SOURCE` and `MERGE ... RETURNING` with `merge_action()`. `AT LOCAL`. `ALTER COLUMN ... SET EXPRESSION`. |
 | 18 | Virtual generated columns, which become the default. Temporal `WITHOUT OVERLAPS` and `PERIOD` keys. `[NOT] ENFORCED`. Table-level `NOT NULL` constraints. `RETURNING old/new`. `VACUUM`/`ANALYZE ONLY`. |
-| 19 (pre-release) | SQL/PGQ: `CREATE/ALTER PROPERTY GRAPH` and `GRAPH_TABLE ... MATCH`. `UPDATE/DELETE ... FOR PORTION OF`. `ON CONFLICT DO SELECT`. `IGNORE/RESPECT NULLS`. `REPACK`. `WAIT FOR LSN`. `CHECKPOINT (options)`. `standard_conforming_strings` is always on. |
+| 19 (pre-release) | `ON CONFLICT DO SELECT`. `IGNORE/RESPECT NULLS`. `REPACK`. `WAIT FOR LSN`. `CHECKPOINT (options)`. Publication `ALL SEQUENCES` and `ALL TABLES EXCEPT`. `standard_conforming_strings` is always on. At `b73d13c`, SQL/PGQ and `FOR PORTION OF` are reverted. |
 
-Verdict on breaking changes. Each release breaks some syntax, but most breaks are small. The largest grammar breaks are the removal of postfix operators in 14 and the stricter numeric lexing in 15 (`123abc` and `0x1F` are errors). Keywords also cause breaks. `system_user` becomes reserved in 16. `json` changes from unreserved to `COL_NAME` in 17. The SQL/JSON words `json_*` and `merge_action` in 16 and 17, and `graph_table` in 19, are new `COL_NAME` keywords, so an unqualified user function or type with one of these names stops working. In 19, `ignore` and `respect` are new keywords that need `AS` when they are column labels. Three lexical changes alter meaning: `E'\v'` (17), `FORMAT JSON` lookahead (16) and the removal of `standard_conforming_strings = off` (19). The remaining breaks are rejections at execution time or changes of meaning, with no grammar change. The consolidated table at the end lists all of them.
+Verdict on breaking changes. Each release breaks some syntax, but most breaks are small. The largest grammar breaks are the removal of postfix operators in 14 and the stricter numeric lexing in 15 (`123abc` and `0x1F` are errors). Keywords also cause breaks. `system_user` becomes reserved in 16. `json` changes from unreserved to `COL_NAME` in 17. The SQL/JSON words `json_*` and `merge_action` in 16 and 17 are new `COL_NAME` keywords, so an unqualified user function or type with one of these names stops working. In 19, `ignore` and `respect` are new keywords that need `AS` when they are column labels. Three lexical changes alter meaning: `E'\v'` (17), `FORMAT JSON` lookahead (16) and the removal of `standard_conforming_strings = off` (19). The remaining breaks are rejections at execution time or changes of meaning, with no grammar change. The consolidated table at the end lists all of them.
 
 ## PostgreSQL 14
 
@@ -416,38 +416,49 @@ No keyword changes category.
 
 ## PostgreSQL 19 (pre-release)
 
-**PostgreSQL 19 is not released.** Change set `REL_18_0..origin/REL_19_STABLE` (`7a74e5ed92d`, 2026-08-28). That commit contains `REL_19_BETA3` (`3638289fb57`) and later commits. RN19 = `origin/REL_19_STABLE:doc/src/sgml/release-19.sgml`. gram.y = `origin/REL_19_STABLE:src/backend/parser/gram.y`. scan.l = the same commit.
+**PostgreSQL 19 is not released.** Change set `REL_18_0..b73d13c` (`REL_19_STABLE`, "Stamp 19beta4", 2026-09-21). This is the pin of the `pg19-beta` target version (`pg-oracle/pins.tsv`). RN19 = `b73d13c:doc/src/sgml/release-19.sgml`. gram.y, scan.l and kwlist.h = the same commit. Line numbers in this section refer to `b73d13c`, unless an item names another commit.
+
+The first version of this section used the snapshot `7a74e5ed92d` (2026-08-28). The subsection "Changes from `7a74e5ed92d` to `b73d13c`" gives the differences. Five commits changed the parser in that range. Three of them are reverts, and they remove much of the 19 syntax.
 
 The grammar wins over the notes in two cases:
 
-- RN19 "Utility Commands" still lists `ALTER TABLE ... MERGE PARTITIONS` and `SPLIT PARTITION` (f2e4cc427, 4b3d17362). Commit `3e8bcc8644f` (2026-08-27) removed both productions, and `kwlist.h` has no `split` or `partitions` keyword. 19 does not have this syntax.
+- RN19 at `7a74e5ed92d` listed `ALTER TABLE ... MERGE PARTITIONS` and `SPLIT PARTITION` (f2e4cc427, 4b3d17362). Commit `3e8bcc8644f` (2026-08-27) removed both productions. RN19 at `b73d13c` does not list them. 19 does not have this syntax.
 - `GROUP BY ALL` (ef38a4d9756) was added and then reverted by `372b8d1adb7` (2026-07-17). It is not in gram.y, and RN19 does not list it.
+
+### Changes from `7a74e5ed92d` to `b73d13c`
+
+Files compared: `src/backend/parser/gram.y`, `scan.l`, `parser.c`, `src/include/parser/kwlist.h` and `doc/src/sgml/release-19.sgml`. `parser.c` did not change.
+
+| Commit | Change | Effect on this section |
+|---|---|---|
+| `2b9e1aff4d3` (2026-09-07) | Reverts SQL/PGQ (2f094e7ac and the later fixes). | `CREATE/ALTER PROPERTY GRAPH`, `PROPERTY GRAPH` as an object type, `GRAPH_TABLE`, graph patterns and the `labeled_expr_list` use by PGQ are removed. The keywords `destination`, `edge`, `graph`, `graph_table`, `node`, `properties`, `property`, `relationship` and `vertex` are removed. In scan.l, the `RIGHT_ARROW` token (`->`) is removed, and `\|` is no longer a "self" character. In gram.y, the `RIGHT_ARROW` and `'\|'` arms of `a_expr`, `b_expr` and `MathOp` (8d2beee027a) are removed. `->` and `\|` are generic `Op` again, as in 18. The rename of `xml_attribute_list` to `labeled_expr_list` stays. |
+| `a9d2f728240` (2026-09-15) | Reverts `UPDATE/DELETE ... FOR PORTION OF` (8e72d914c). | `for_portion_of_clause` is removed, the keyword `portion` is removed, and the precedence changes for `TO` and `USING` and the `%prec IS` on `opt_interval` are removed. The precedence declarations are the same as in 18. |
+| `3c5d28ba64e` (2026-09-11) | Reverts "Support more object types within CREATE SCHEMA" (d51697484). | `schema_stmt` accepts only the 18 elements again. |
+| `f23de46e15b` (2026-08-29) | Disallows `ONLY` in `REPACK`. | `RepackStmt` uses `qualified_name opt_name_list`, not `vacuum_relation`. Thus `REPACK ONLY t` and `REPACK t *` are syntax errors. |
+| `7635a320679` (2026-09-02) | Query jumbling for `WAIT FOR LSN`. | `WaitStmt` records the location of the LSN literal. No syntax change. |
+
+RN19 at `b73d13c` also removes the items for SQL/PGQ, `FOR PORTION OF`, the new `CREATE SCHEMA` elements, `MERGE/SPLIT PARTITIONS`, online checksums and the `pg_get_*_ddl()` functions. It renames the `WAIT FOR` documentation page to `WAIT`. The grammar still starts the statement with `WAIT FOR LSN`. RN19 adds a `SUPPORT` clause for `CREATE AGGREGATE` (165aa5040). `CREATE AGGREGATE` takes a generic `definition`, so this has no gram.y change.
 
 ### New statements
 
 | Statement | Example | Source |
 |---|---|---|
-| `CREATE [TEMP] PROPERTY GRAPH name [{VERTEX\|NODE} TABLES (...)] [{EDGE\|RELATIONSHIP} TABLES (...)]`. A vertex table is `qualified_name [AS alias] [KEY (cols)] [labels and properties]`. An edge table also has `SOURCE [KEY (cols) REFERENCES] vtab [(cols)]` and `DESTINATION ...`. A label is `LABEL name` or `DEFAULT LABEL`. Properties are `NO PROPERTIES`, `PROPERTIES ALL COLUMNS` or `PROPERTIES (expr AS name, ...)`. gram.y does not accept the SQL-standard `PROPERTIES ARE ALL COLUMNS`. | `CREATE PROPERTY GRAPH g VERTEX TABLES (person KEY (id) LABEL person PROPERTIES (name AS n)) EDGE TABLES (knows SOURCE person DESTINATION person);` | RN19 "Query Commands", commit 2f094e7ac; `CreatePropGraphStmt` (9435), `element_table_properties` (9578) |
-| `ALTER PROPERTY GRAPH g`. The forms are: `ADD {VERTEX\|EDGE} TABLES (...)`; `DROP {VERTEX\|EDGE} TABLES (names) [CASCADE\|RESTRICT]`; `ALTER {VERTEX\|EDGE} TABLE t ADD LABEL l ...`, `... DROP LABEL l`, `... ALTER LABEL l ADD PROPERTIES (...)`, `... ALTER LABEL l DROP PROPERTIES (names)`; `RENAME TO`; `[IF EXISTS] ... SET SCHEMA`; `OWNER TO`. | `ALTER PROPERTY GRAPH g ALTER VERTEX TABLE person ADD LABEL p2 NO PROPERTIES;` | commit 2f094e7ac; `AlterPropGraphStmt` (9662), `RenameStmt` (9936), `AlterObjectSchemaStmt` (10622), `AlterOwnerStmt` (10978) |
-| `REPACK [(options)] [table [(cols)]] [USING INDEX [name]]`. It replaces `VACUUM FULL` and `CLUSTER`. `CONCURRENTLY` is an option in the list, not a keyword. | `REPACK (CONCURRENTLY, VERBOSE) t USING INDEX t_pkey;` | RN19 "Utility Commands", commits ac58465e0, 28d534e2a; `RepackStmt` (12534), `opt_usingindex` |
-| `WAIT FOR LSN 'lsn' [WITH (option [, ...])]` | `WAIT FOR LSN '0/3000060' WITH (MODE 'replay', TIMEOUT '1s');` | RN19 "Streaming Replication and Recovery", commits 447aae13b, 49a181b5d; `WaitStmt` (17208), `opt_wait_with_clause` |
+| `REPACK [(options)] [table [(cols)] [USING INDEX [name]]]`, and `REPACK [(options)] USING INDEX` with no table. The table is a `qualified_name`, so `ONLY` and `*` are not accepted (`f23de46e15b`). It replaces `VACUUM FULL` and `CLUSTER`. `CONCURRENTLY` is an option in the list, not a keyword. | `REPACK (CONCURRENTLY, VERBOSE) t USING INDEX t_pkey;` | RN19 "Utility Commands", commits ac58465e0, 28d534e2a, f23de46e15b; `RepackStmt` (12080), `opt_usingindex` (1148), `opt_name_list` (12268) |
+| `WAIT FOR LSN 'lsn' [WITH (option [, ...])]`. RN19 names the command `WAIT`. | `WAIT FOR LSN '0/3000060' WITH (MODE 'replay', TIMEOUT '1s');` | RN19 "Streaming Replication and Recovery", commits 447aae13b, 49a181b5d; `WaitStmt` (16635), `opt_wait_with_clause` (16646) |
 
 ### Changes to existing statements
 
 | Change | Example | Source |
 |---|---|---|
-| `PROPERTY GRAPH` is an object type for `DROP`, `COMMENT ON`, `SECURITY LABEL` and `GRANT ... ON PROPERTY GRAPH` | `DROP PROPERTY GRAPH g;` | commit 2f094e7ac; `object_type_any_name` (7194), `privilege_target` (8090) |
-| `UPDATE` and `DELETE` accept `FOR PORTION OF col FROM a TO b` or `FOR PORTION OF col (range_expr)`. The alias comes after the clause. | `UPDATE t FOR PORTION OF valid_at FROM '2025-01-01' TO '2026-01-01' SET v = 1;` | RN19 "Query Commands", commit 8e72d914c; `for_portion_of_clause` (14794), `for_portion_of_opt_alias` (14776), `UpdateStmt` (13231), `DeleteStmt` (13146) |
-| `INSERT ... ON CONFLICT [target] DO SELECT [FOR UPDATE\|NO KEY UPDATE\|SHARE\|KEY SHARE] [WHERE ...] RETURNING ...` | `INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT FOR UPDATE RETURNING *;` | RN19 "Query Commands", commit 88327092f; `opt_on_conflict` (13033), `opt_for_locking_strength` |
-| `CHECKPOINT [(option [, ...])]`, for example `MODE`, `FLUSH_UNLOGGED`. The option list is shared with `REINDEX`, `ANALYZE` and `CLUSTER` (1dfe3ef3f96). That refactor does not change what those statements accept. | `CHECKPOINT (MODE SPREAD, FLUSH_UNLOGGED);` | RN19 "Utility Commands", commits a4f126516, 2f698d7f4, 8d33fbacb; `CheckPointStmt` (2141), `opt_utility_option_list` (1197) |
-| Publications: `FOR ALL SEQUENCES`, and a list of `ALL` objects. `ALTER PUBLICATION ... SET ALL SEQUENCES`. | `CREATE PUBLICATION p FOR ALL TABLES, ALL SEQUENCES;` | RN19 "Logical Replication", commit 96b378497; `PublicationAllObjSpec` (11361), `pub_all_obj_type_list`, `CreatePublicationStmt` (11226), `AlterPublicationStmt` (11425) |
-| Publications: `FOR ALL TABLES EXCEPT (TABLE t1 [, [TABLE] t2 ...])`, and `ALTER PUBLICATION ... SET ALL TABLES EXCEPT (...)` | `CREATE PUBLICATION p FOR ALL TABLES EXCEPT (TABLE t1, t2);` | RN19 "Logical Replication", commits fd366065e, 493f8c643, 5984ea868; `opt_pub_except_clause` (11356) |
-| Subscriptions: `CREATE SUBSCRIPTION s SERVER fsrv PUBLICATION p`, `ALTER SUBSCRIPTION s SERVER fsrv`, `ALTER SUBSCRIPTION s REFRESH SEQUENCES` | `ALTER SUBSCRIPTION s REFRESH SEQUENCES;` | RN19 "Logical Replication", commits 8185bb534, f0b3573c3; `CreateSubscriptionStmt` (11499), `AlterSubscriptionStmt` (11558) |
-| `CREATE/ALTER FOREIGN DATA WRAPPER ... CONNECTION func \| NO CONNECTION` | `CREATE FOREIGN DATA WRAPPER w CONNECTION f;` | RN19 "Utility Commands", commit 8185bb534; `fdw_option` (5587) |
-| `CREATE SCHEMA` elements also accept `CREATE DOMAIN`, `CREATE FUNCTION/PROCEDURE`, and the `DefineStmt` family (`CREATE AGGREGATE`, `OPERATOR`, `TYPE`, `TEXT SEARCH ...`, `COLLATION`) | `CREATE SCHEMA s CREATE DOMAIN d AS int CREATE FUNCTION f() RETURNS int RETURN 1;` | RN19 "Utility Commands", commit d51697484; `schema_stmt` (1675) |
-| `SET var TO NULL` / `SET var = NULL` empties a list-valued setting | `SET search_path TO NULL;` | RN19 "Server Configuration", commit ff4597acd; `generic_set` (1768) |
-| `COPY ... TO ... (FORMAT json)`. The production needs a new `FORMAT_LA copy_generic_opt_arg` arm, because `json` is a COL_NAME keyword. The legacy unparenthesized `COPY t TO STDOUT JSON` is also accepted. | `COPY t TO STDOUT (FORMAT json);` | RN19 "COPY", commit 7dadd38cd; `copy_opt_item` (3608), `copy_generic_opt_elem` (3694) |
-| `CREATE CONSTRAINT TRIGGER ... ENFORCED` is accepted and has no effect. `NOT VALID`, `NO INHERIT` and `NOT ENFORCED` get a new error message. RN19 does not list this change. | `CREATE CONSTRAINT TRIGGER ... ENFORCED ...` | commit 87251e11496; `CreateTrigStmt` |
+| `INSERT ... ON CONFLICT [target] DO SELECT [FOR UPDATE\|NO KEY UPDATE\|SHARE\|KEY SHARE] [WHERE ...] RETURNING ...` | `INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT FOR UPDATE RETURNING *;` | RN19 "Query Commands", commit 88327092f; `opt_on_conflict` (12579), `opt_for_locking_strength` (13826) |
+| `CHECKPOINT [(option [, ...])]`, for example `MODE`, `FLUSH_UNLOGGED`. The option list is shared with `REINDEX`, `ANALYZE` and `CLUSTER` (1dfe3ef3f96). That refactor does not change what those statements accept. | `CHECKPOINT (MODE SPREAD, FLUSH_UNLOGGED);` | RN19 "Utility Commands", commits a4f126516, 2f698d7f4, 8d33fbacb; `CheckPointStmt` (2100), `opt_utility_option_list` (1159) |
+| Publications: `FOR ALL SEQUENCES`, and a list of `ALL` objects. `ALTER PUBLICATION ... SET ALL SEQUENCES`. The raw parser rejects a list that names `ALL TABLES` or `ALL SEQUENCES` two times (`preprocess_pub_all_objtype_list`). | `CREATE PUBLICATION p FOR ALL TABLES, ALL SEQUENCES;` | RN19 "Logical Replication", commit 96b378497; `PublicationAllObjSpec` (10907), `pub_all_obj_type_list` (10923), `CreatePublicationStmt` (10772), `AlterPublicationStmt` (10971) |
+| Publications: `FOR ALL TABLES EXCEPT (TABLE t1 [, [TABLE] t2 ...])`, and `ALTER PUBLICATION ... SET ALL TABLES EXCEPT (...)`. Each table is a `relation_expr`. | `CREATE PUBLICATION p FOR ALL TABLES EXCEPT (TABLE t1, t2);` | RN19 "Logical Replication", commits fd366065e, 493f8c643, 5984ea868; `opt_pub_except_clause` (10902), `pub_except_obj_list` (10941) |
+| Subscriptions: `CREATE SUBSCRIPTION s SERVER fsrv PUBLICATION p`, `ALTER SUBSCRIPTION s SERVER fsrv`, `ALTER SUBSCRIPTION s REFRESH SEQUENCES` | `ALTER SUBSCRIPTION s REFRESH SEQUENCES;` | RN19 "Logical Replication", commits 8185bb534, f0b3573c3; `CreateSubscriptionStmt` (11034), `AlterSubscriptionStmt` (11063) |
+| `CREATE/ALTER FOREIGN DATA WRAPPER ... CONNECTION func \| NO CONNECTION` | `CREATE FOREIGN DATA WRAPPER w CONNECTION f;` | RN19 "Utility Commands", commit 8185bb534; `fdw_option` (5541) |
+| `SET var TO NULL` / `SET var = NULL` empties a list-valued setting | `SET search_path TO NULL;` | RN19 "Server Configuration", commit ff4597acd; `generic_set` (1706) |
+| `COPY ... TO ... (FORMAT json)`. The production needs a new `FORMAT_LA copy_generic_opt_arg` arm, because `json` is a COL_NAME keyword and `parser.c` changes `FORMAT` before `JSON` to `FORMAT_LA`. 18 rejects `(FORMAT json)`. The legacy unparenthesized `COPY t TO STDOUT JSON` is also accepted. | `COPY t TO STDOUT (FORMAT json);` | RN19 "COPY", commit 7dadd38cd; `copy_opt_item` (3546), `copy_generic_opt_elem` (3648) |
+| `CREATE CONSTRAINT TRIGGER ... ENFORCED` is accepted and has no effect. In 18, `processCASbits` rejects it, because the trigger passes no `is_enforced` pointer. `NOT VALID`, `NO INHERIT` and `NOT ENFORCED` are still rejected, with a new error message. RN19 does not list this change. | `CREATE CONSTRAINT TRIGGER tr AFTER INSERT ON t ENFORCED FOR EACH ROW EXECUTE FUNCTION f();` | commit 87251e11496; `CreateTrigStmt` (6096), `processCASbits` (19753) |
 
 These RN19 items have no gram.y change:
 
@@ -457,51 +468,40 @@ These RN19 items have no gram.y change:
 - `ALTER CONSTRAINT ... [NOT] ENFORCED` works on `CHECK` constraints (342051d73).
 - `EXPLAIN (IO)` (681daed93).
 - `CLUSTER` builds a `RepackStmt` node, but it accepts the same syntax (ac58465e0).
+- `ANALYZE` uses `opt_utility_option_list`, and `FETCH` records its direction keyword. Neither changes the syntax.
+- The `SUPPORT` clause of `CREATE AGGREGATE` (165aa5040).
 
 ### Queries and expressions
 
-- **`GRAPH_TABLE` in `FROM` (SQL/PGQ).** The syntax is `GRAPH_TABLE (graph MATCH pattern [, pattern ...] [WHERE ...] COLUMNS (expr AS name, ...)) [alias]`. RN19 "Query Commands", commit 2f094e7ac; `table_ref` (14415), `graph_pattern` (18115), `path_primary` (18161). A pattern is a sequence of elements:
-  - A vertex: `(var IS label_expr WHERE cond)`.
-  - Edges: `-[e IS l WHERE ...]->` (right), `<-[...]-` (left) and `-[...]-` (any direction).
-  - Abbreviated edges: `->`, `<-` and `-`.
-  - A sub-pattern in parentheses.
-  - A quantifier `{n}`, `{,m}` or `{n,m}` after an element (`opt_graph_pattern_quantifier` 18289).
-  - A label expression `l1 | l2` (`label_expression` 18300).
-
-  Example: `SELECT * FROM GRAPH_TABLE (g MATCH (a IS person)-[k IS knows]->(b) COLUMNS (a.n AS x, b.n AS y));`
-- **`IGNORE NULLS` / `RESPECT NULLS`** after `FILTER` and before `OVER`. RN19 says that `lead`, `lag`, `first_value`, `last_value` and `nth_value` support it. The grammar accepts it after any `func_application`. Example: `lag(x) IGNORE NULLS OVER w`. RN19 "Query Commands", commit 25a30bbd4; `func_expr` (16590), `null_treatment` (17240).
-- **`->` and `|` are grammar tokens.** They are now `RIGHT_ARROW` and `'|'`, not generic `Op`. gram.y adds infix and prefix `a_expr`/`b_expr` arms at `Op` precedence (15835, 15839) and adds both tokens to `MathOp` (17514). Thus `a -> 'k'`, `OPERATOR(pg_catalog.->)`, `CREATE OPERATOR |` and `x | ANY(...)` still parse. Commit 8d2beee027a (bug #19558) restores the prefix forms. RN19 does not list this change.
-- **Precedence in `FOR PORTION OF`.** In `FROM t + INTERVAL '1' YEAR TO MONTH`, `TO MONTH` binds to the interval. `opt_interval` gets `%prec IS`, and `TO` and `USING` get IDENT precedence (15665). Use parentheses to get the other meaning.
-- A rename with no language change: `xml_attribute_list` is now `labeled_expr_list`. `GRAPH_TABLE` and `PROPERTIES` use it too.
+- **`IGNORE NULLS` / `RESPECT NULLS`** after `FILTER` and before `OVER`. RN19 says that `lead`, `lag`, `first_value`, `last_value` and `nth_value` support it. The grammar accepts it after any `func_application`, also with no `OVER`. Example: `lag(x) IGNORE NULLS OVER w`. RN19 "Query Commands", commit 25a30bbd4; `func_expr` (16017), `null_treatment` (16668).
+- A rename with no language change: `xml_attribute_list` is now `labeled_expr_list` (16568).
 - Semantic changes only: `IS JSON` works on domains (3b4c2b9db). `GROUP BY` accepts target-list subqueries that refer to grouped columns (415100aa6).
+- Removed before the pin (see "Changes from `7a74e5ed92d` to `b73d13c`"): `GRAPH_TABLE` and graph patterns, `FOR PORTION OF`, and the `RIGHT_ARROW` and `'|'` arms of `a_expr` and `b_expr`.
 
 ### Lexical and literal syntax
 
-- **`standard_conforming_strings` is always on.** `SET standard_conforming_strings = off` gives an error. A plain `'...'` literal always uses the standard state, so a backslash in it is literal. The `escape_string_warning` setting is removed. `E'...'` does not change. RN19 "Migration to Version 19", commit 457620845; scan.l `{xqstart}` (543).
-- **New token `RIGHT_ARROW` for `->`.** scan.l `right_arrow` (352), rule at 858. Operator trimming also returns `RIGHT_ARROW` when the remainder is `->`. There is no `<-` token.
-- **`|` is a "self" character.** A single `|` is the token `'|'`, not `Op`. `||` and `|/` are still `Op`. scan.l `self` (364); commit 2f094e7ac.
+- **`standard_conforming_strings` is always on.** `SET standard_conforming_strings = off` gives an error. A plain `'...'` literal always uses the standard state, so a backslash in it is literal. The `escape_string_warning` setting is removed. `E'...'` does not change. RN19 "Migration to Version 19", commit 457620845; scan.l `{xqstart}` (541).
+- At `b73d13c`, scan.l has no other change from 18. The `RIGHT_ARROW` token and the single-character `|` of `7a74e5ed92d` are reverted (`2b9e1aff4d3`).
 
 ### Keywords
 
 | Keyword | Change | Category |
 |---|---|---|
-| `destination`, `edge`, `graph`, `lsn`, `node`, `portion`, `properties`, `property`, `relationship`, `repack`, `vertex`, `wait` | new | UNRESERVED, BARE_LABEL |
+| `lsn`, `repack`, `wait` | new | UNRESERVED, BARE_LABEL |
 | `ignore`, `respect` | new | UNRESERVED, **AS_LABEL** |
-| `graph_table` | new | COL_NAME, BARE_LABEL |
 
-No keyword is removed. No existing keyword changes category. Source: `kwlist.h` diff `REL_18_0..7a74e5ed92d`.
+No keyword is removed. No existing keyword changes category. Source: `kwlist.h` diff `REL_18_0..b73d13c`. At `7a74e5ed92d`, the list also had `destination`, `edge`, `graph`, `node`, `portion`, `properties`, `property`, `relationship`, `vertex` (UNRESERVED, BARE_LABEL) and `graph_table` (COL_NAME, BARE_LABEL). The reverts removed them.
 
 ### Removed or changed syntax (breaking)
 
 - **`ignore` and `respect` need `AS` as column labels.** `SELECT 1 ignore;` is a syntax error. Write `SELECT 1 AS ignore;`. Both words are still valid as `ColId`. Commit 25a30bbd4.
-- **`graph_table` is a COL_NAME keyword.** A function or type named `graph_table` must be quoted or qualified. It is still valid as a column name. Commit 2f094e7ac.
 - **A backslash in a plain string literal is always literal.** `SET standard_conforming_strings = off` gives an error. With that setting off, `'a\nb'` contained a newline. Dumps made with the setting off do not load correctly. RN19 "Migration", commit 457620845.
 - **`COPY FROM ... WHERE` rejects system columns.** The check is in analysis. RN19 "Migration", commit 21c69dc73.
 - **CR or LF in database, role and tablespace names is rejected.** RN19 "Migration", commit b380a56a3.
 - **Change of meaning: `JSON_ARRAY(query)` with no rows returns `[]`, not NULL.** RN19 "Migration", commit 8d829f5a0.
-- **Change of meaning: `CREATE SCHEMA` runs its elements in the order written and creates foreign keys last.** It no longer reorders them. RN19 "Migration", commits a9c350d9e, 404db8f9e.
 - **Change of meaning: `USING gist (inetcol)` selects the core `inet_ops` opclass,** not the btree_gist opclass. RN19 "Migration", commit b352d3d80.
 - **The `MULE_INTERNAL` encoding is rejected.** RN19 "Migration", commit 77645d44e.
+- At `7a74e5ed92d`, `graph_table` was a new COL_NAME keyword, and `CREATE SCHEMA` ran its elements in the order written (a9c350d9e). Both are reverted at `b73d13c` (`2b9e1aff4d3`, `e0fdc3f54b4`).
 
 ## Breaking changes across 14–19
 
@@ -536,13 +536,11 @@ No keyword is removed. No existing keyword changes category. Source: `kwlist.h` 
 | 18 | `RULE` privilege | `GRANT RULE ON t TO r` accepted, did nothing | Error | RN18 "Migration"; fefa76f70 |
 | 18 | `COPY FREEZE` into a foreign table | Accepted, `FREEZE` ignored | Error | RN18 "COPY"; 401a6956f |
 | 18 | Parameter number overflow | `$99999999999` lexed, and the value wrapped | Lexer error "parameter number too large" | `REL_18_0` scan.l 994; d35cd061998 (not in RN18) |
-| 19 | `ignore`, `respect` need `AS` | `SELECT 1 ignore` | Syntax error | kwlist.h at 7a74e5ed92d; 25a30bbd4 |
-| 19 | `graph_table` is COL_NAME | Function or type named `graph_table` | Syntax error unless quoted or qualified | kwlist.h; 2f094e7ac |
+| 19 | `ignore`, `respect` need `AS` | `SELECT 1 ignore` | Syntax error | kwlist.h at b73d13c; 25a30bbd4 |
 | 19 | `standard_conforming_strings` always on | `SET standard_conforming_strings = off`; `'a\nb'` as an escape | `SET` errors; the backslash is literal | RN19 "Migration to Version 19"; 457620845 |
 | 19 | System columns in `COPY FROM ... WHERE` | `COPY t FROM stdin WHERE xmin <> 0` | Rejected | RN19 "Migration"; 21c69dc73 |
 | 19 | CR/LF in database, role, tablespace names | `CREATE ROLE "a<LF>b"` | Rejected | RN19 "Migration"; b380a56a3 |
 | 19 | `JSON_ARRAY(query)` with no rows (meaning) | NULL | `[]` | RN19 "Migration"; 8d829f5a0 |
-| 19 | `CREATE SCHEMA` element order (meaning) | Elements reordered by dependency | Written order; foreign keys last | RN19 "Migration"; a9c350d9e, 404db8f9e |
 | 19 | Default GiST opclass for `inet`/`cidr` (meaning) | btree_gist opclass | Core `inet_ops` | RN19 "Migration"; b352d3d80 |
 | 19 | `MULE_INTERNAL` encoding | `ENCODING 'MULE_INTERNAL'` | Rejected | RN19 "Migration"; 77645d44e |
 
@@ -564,22 +562,20 @@ PostgreSQL 18:
 - The removal of `RECHECK`. pg-sql still accepts it, as 17 does (`src/ast/ddl/operator.rs:103`, `src/tokens.rs:649`).
 - The lexer error for a parameter number that overflows `int32`. Not checked.
 
-PostgreSQL 19 (pre-release):
+PostgreSQL 19 (pre-release), at `b73d13c`:
 
-- `CREATE PROPERTY GRAPH`, `ALTER PROPERTY GRAPH`, and `PROPERTY GRAPH` as an object type in `DROP`, `COMMENT`, `SECURITY LABEL` and `GRANT`.
-- `GRAPH_TABLE (... MATCH ... COLUMNS (...))` and graph patterns (vertex and edge elements, quantifiers, label expressions).
 - `REPACK`.
 - `WAIT FOR LSN`.
-- `UPDATE ... FOR PORTION OF` and `DELETE ... FOR PORTION OF`.
 - `IGNORE NULLS` / `RESPECT NULLS`, and the AS_LABEL status of `ignore` and `respect`.
 - `INSERT ... ON CONFLICT ... DO SELECT`.
 - `CHECKPOINT (options)`. `src/ast/utility/checkpoint.rs` has only the bare form.
 - Publication `FOR ALL SEQUENCES`, lists of `ALL` objects, and `ALL TABLES EXCEPT (TABLE ...)`.
 - `CREATE/ALTER SUBSCRIPTION ... SERVER`, and `ALTER SUBSCRIPTION ... REFRESH SEQUENCES`.
 - `FOREIGN DATA WRAPPER ... CONNECTION func | NO CONNECTION`.
-- The new `CREATE SCHEMA` elements: `DOMAIN`, `FUNCTION`, `PROCEDURE` and the `DefineStmt` family.
 - `SET var TO NULL`.
-- The legacy unparenthesized `COPY ... JSON` option. The `(FORMAT json)` form can possibly go through the generic option path already. Not confirmed.
-- The `RIGHT_ARROW` token for `->`, and `|` as a single-character token.
-- `CREATE CONSTRAINT TRIGGER ... ENFORCED`. Not checked.
-- The `standard_conforming_strings = off` removal (lexer state).
+- The legacy unparenthesized `COPY ... JSON` option, and `(FORMAT json)`, which needs the `FORMAT_LA` arm.
+- `CREATE CONSTRAINT TRIGGER ... ENFORCED`. It needs the 18 `ENFORCED` constraint attribute first.
+- The keywords `lsn`, `repack`, `wait`, `ignore` and `respect`.
+- The `standard_conforming_strings = off` removal (lexer state). pg-sql always lexes as if the setting is on (ADR 0009), so there is nothing to do.
+
+The snapshot `7a74e5ed92d` also had property graphs, `GRAPH_TABLE`, `FOR PORTION OF`, the new `CREATE SCHEMA` elements, the `RIGHT_ARROW` token and the single-character `|`. `b73d13c` reverts all of them, so the `pg19-beta` target version does not add them.

@@ -764,7 +764,25 @@ recursa::ast_node! {
         pub close: FunctionCallClose,
         pub within_group: Option<WithinGroupClause>,
         pub filter: Option<FilterClause>,
+        /// Added in 19: gram.y `func_expr ... filter_clause null_treatment
+        /// over_clause` (b73d13c:16017, `null_treatment` 16668; research
+        /// PostgreSQL 19, "Queries and expressions", commit 25a30bbd4).
+        #[cfg(feature = "since-pg19")]
+        pub null_treatment: Option<NullTreatment>,
         pub window: Option<WindowSpec>,
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `IGNORE NULLS | RESPECT NULLS` — gram.y `null_treatment` (b73d13c:16668).
+    /// Added in 19 (research PostgreSQL 19, "Queries and expressions").
+    #[derive(Debug)]
+    pub enum NullTreatment {
+        #[tok(IGNORE, NULLS)]
+        Ignore,
+        #[tok(RESPECT, NULLS)]
+        Respect,
     }
 }
 

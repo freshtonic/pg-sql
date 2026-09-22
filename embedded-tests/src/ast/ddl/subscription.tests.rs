@@ -62,4 +62,43 @@ mod tests {
             "CREATE SUBSCRIPTION s CONNECTION 'dbname=x' PUBLICATION p1, p2, p3 WITH (connect = false)",
         );
     }
+
+    /// Added in 19: `CREATE SUBSCRIPTION name SERVER name PUBLICATION ...`,
+    /// `ALTER SUBSCRIPTION name SERVER name` and `ALTER SUBSCRIPTION name
+    /// REFRESH SEQUENCES` (gram.y b73d13c:11045, 11084, 11104; research
+    /// PostgreSQL 19, "Changes to existing statements").
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn subscription_server_and_refresh_sequences_from_19() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE SUBSCRIPTION s SERVER fsrv PUBLICATION p",
+                "CREATE SUBSCRIPTION s SERVER fsrv PUBLICATION p, q WITH (enabled = false)",
+                "ALTER SUBSCRIPTION s SERVER fsrv",
+                "ALTER SUBSCRIPTION s REFRESH SEQUENCES",
+                "ALTER SUBSCRIPTION s REFRESH PUBLICATION",
+            ],
+            &[
+                "CREATE SUBSCRIPTION s SERVER fsrv CONNECTION 'x' PUBLICATION p",
+                "CREATE SUBSCRIPTION s SERVER 'fsrv' PUBLICATION p",
+                "ALTER SUBSCRIPTION s REFRESH SEQUENCES WITH (copy_data = false)",
+                "ALTER SUBSCRIPTION s SERVER",
+            ],
+        );
+    }
+
+    /// Before 19 a subscription has only `CONNECTION` and `REFRESH
+    /// PUBLICATION` (the same research entry).
+    #[cfg(not(feature = "since-pg19"))]
+    #[test]
+    fn reject_subscription_server_before_19() {
+        crate::ast::test_support::check_statement_forms(
+            &["CREATE SUBSCRIPTION s CONNECTION 'x' PUBLICATION p"],
+            &[
+                "CREATE SUBSCRIPTION s SERVER fsrv PUBLICATION p",
+                "ALTER SUBSCRIPTION s SERVER fsrv",
+                "ALTER SUBSCRIPTION s REFRESH SEQUENCES",
+            ],
+        );
+    }
 }

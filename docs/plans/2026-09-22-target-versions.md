@@ -109,8 +109,9 @@ the merge.
 8. **`pg18`** (#77). Add the 18 syntax from the research ("Notes for pg-sql") and
    remove `RECHECK`.
 9. **`pg19-beta`** (#78). First compare `REL_19_STABLE` at `b73d13c` with the
-   research snapshot `7a74e5ed92d`. Then add the 19 syntax, the
-   `RIGHT_ARROW` and `|` tokens, and the AS_LABEL status of `ignore` and
-   `respect`.
+   research snapshot `7a74e5ed92d`. Then add the 19 syntax and the AS_LABEL
+   status of `ignore` and `respect`. The comparison showed that `b73d13c`
+   reverts SQL/PGQ (with the `RIGHT_ARROW` and `|` tokens), `FOR PORTION OF`
+   and the new `CREATE SCHEMA` elements, so the increment does not add them.
 10. **Follow-up: psqlscan oracle** (#79). An FFI oracle for the psql lexer, built
     from the tree for each version. This does not block increments 5 to 9.

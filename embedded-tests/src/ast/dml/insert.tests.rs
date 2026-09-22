@@ -146,4 +146,43 @@ mod tests {
         assert!(stmt.on_conflict.is_some());
         assert!(input.is_eof());
     }
+
+    /// Added in 19: `ON CONFLICT opt_conf_expr DO SELECT
+    /// opt_for_locking_strength where_clause` (gram.y b73d13c:12580,
+    /// `opt_for_locking_strength` 13826; research PostgreSQL 19, "Changes to
+    /// existing statements", commit 88327092f).
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn on_conflict_do_select_from_19() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT RETURNING *",
+                "INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT FOR UPDATE RETURNING *",
+                "INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT FOR NO KEY UPDATE WHERE t.a > 0 RETURNING *",
+                "INSERT INTO t VALUES (1) ON CONFLICT DO SELECT FOR KEY SHARE",
+                "INSERT INTO t VALUES (1) ON CONFLICT ON CONSTRAINT c DO SELECT FOR SHARE WHERE true",
+                "WITH x AS (INSERT INTO t VALUES (1) ON CONFLICT DO SELECT RETURNING *) SELECT * FROM x",
+            ],
+            &[
+                "INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT FOR UPDATE OF t",
+                "INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT FOR UPDATE NOWAIT",
+                "INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT *",
+                "INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT FOR READ ONLY",
+                "INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT WHERE a FOR UPDATE",
+            ],
+        );
+    }
+
+    /// Before 19 there is no `DO SELECT` (the same research entry).
+    #[cfg(not(feature = "since-pg19"))]
+    #[test]
+    fn reject_on_conflict_do_select_before_19() {
+        crate::ast::test_support::check_statement_forms(
+            &["INSERT INTO t VALUES (1) ON CONFLICT (id) DO NOTHING"],
+            &[
+                "INSERT INTO t VALUES (1) ON CONFLICT (id) DO SELECT RETURNING *",
+                "INSERT INTO t VALUES (1) ON CONFLICT DO SELECT FOR UPDATE",
+            ],
+        );
+    }
 }

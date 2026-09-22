@@ -147,6 +147,34 @@ recursa::ast_node! {
         DoUpdate(boxed!(DoUpdateAction)),
         #[tok(DO, NOTHING)]
         DoNothing,
+        /// Added in 19: `ON CONFLICT opt_conf_expr DO SELECT
+        /// opt_for_locking_strength where_clause` (gram.y b73d13c:12580;
+        /// research PostgreSQL 19, "Changes to existing statements").
+        #[cfg(feature = "since-pg19")]
+        DoSelect(DoSelectAction),
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `FOR {UPDATE | NO KEY UPDATE | SHARE | KEY SHARE}` — gram.y
+    /// `for_locking_strength`, with no `OF` list and no wait clause, as
+    /// `opt_for_locking_strength` (b73d13c:13826) takes it.
+    #[derive(Debug)]
+    pub struct ForLockingStrength {
+        #[tok(FOR, this)]
+        pub mode: crate::ast::dml::select::LockingMode,
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `DO SELECT [FOR lock_strength] [WHERE ...]`, added in 19.
+    #[derive(Debug)]
+    #[tok(DO, SELECT, this)]
+    pub struct DoSelectAction {
+        pub strength: Option<ForLockingStrength>,
+        pub where_clause: Option<WhereClause>,
     }
 }
 

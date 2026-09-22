@@ -283,6 +283,11 @@ recursa::ast_node! {
         Oids,
         #[tok(CSV)]
         Csv,
+        /// Added in 19: `copy_opt_item: JSON` (gram.y b73d13c:3567; research
+        /// PostgreSQL 19, "Changes to existing statements", commit 7dadd38cd).
+        #[cfg(feature = "since-pg19")]
+        #[tok(JSON)]
+        Json,
         #[tok(HEADER)]
         Header,
     }

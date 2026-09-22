@@ -4397,4 +4397,59 @@ mod tests {
             "SELECT EXTRACT(error FROM ts) FROM t",
         ]);
     }
+    /// Added in 19: gram.y `func_expr: func_application within_group_clause
+    /// filter_clause null_treatment over_clause` (b73d13c:16017,
+    /// `null_treatment` 16668; research PostgreSQL 19, "Queries and
+    /// expressions", commit 25a30bbd4). The grammar takes it after any
+    /// function application, also with no `OVER`.
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn parse_null_treatment_between_filter_and_over() {
+        use crate::ast::shared::expr::{FunctionCallSuffix, NullTreatment};
+        for (src, ignore) in [
+            ("lag(x) IGNORE NULLS OVER w", true),
+            ("lag(x) RESPECT NULLS OVER (ORDER BY y)", false),
+            ("count(*) FILTER (WHERE x > 1) IGNORE NULLS OVER ()", true),
+            ("f(x) respect nulls", false),
+            ("percentile_cont(0.5) WITHIN GROUP (ORDER BY x) IGNORE NULLS", true),
+        ] {
+            let parsed = parse_expr_classified(src);
+            let Expr::Func(call) = parsed.ast() else {
+                panic!("expected a function call for {src:?}");
+            };
+            let FunctionCallTail::Call(FunctionCallSuffix {
+                null_treatment: Some(treatment),
+                ..
+            }) = &call.tail
+            else {
+                panic!("expected a null treatment for {src:?}");
+            };
+            assert_eq!(matches!(treatment, NullTreatment::Ignore), ignore, "{src:?}");
+        }
+        for src in [
+            "lag(x) IGNORE OVER ()",
+            "lag(x) NULLS OVER ()",
+            "lag(x) OVER () IGNORE NULLS",
+            "lag(x) IGNORE NULLS RESPECT NULLS",
+            "lag(x) IGNORE NULLS FILTER (WHERE true)",
+        ] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+    }
+
+    /// Before 19 there is no `null_treatment` (the same research entry).
+    #[cfg(not(feature = "since-pg19"))]
+    #[test]
+    fn reject_null_treatment_before_19() {
+        for src in ["lag(x) IGNORE NULLS OVER w", "lag(x) RESPECT NULLS"] {
+            let lexed = crate::lex(src);
+            let mut input = lexed.input();
+            let parsed = Expr::parse(&mut input);
+            assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
+        }
+    }
+
 }

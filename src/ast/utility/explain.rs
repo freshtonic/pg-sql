@@ -126,3 +126,67 @@ impl<'input> ExplainStmt<'input> {
         }
     }
 }
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// gram.y `Sconst`: a string constant in any of its spellings. `B'...'`
+    /// and `X'...'` are other tokens (`BCONST`, `XCONST`).
+    #[derive(Debug)]
+    pub enum Sconst {
+        Unicode(literal::UnicodeStringLit),
+        Escape(literal::EscapeStringLit),
+        Dollar(literal::DollarStringLit),
+        Plain(literal::StringLit),
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// gram.y `utility_option_arg` (b73d13c:1188): `opt_boolean_or_string |
+    /// NumericOnly`. `opt_boolean_or_string` is `TRUE | FALSE | ON |
+    /// NonReservedWord | Sconst`; `NumericOnly` is a numeric constant with an
+    /// optional sign.
+    #[derive(Debug)]
+    pub enum UtilityOptionArg {
+        #[tok(TRUE)]
+        True,
+        #[tok(FALSE)]
+        False,
+        #[tok(ON)]
+        On,
+        Word(crate::tokens::NonReservedWord),
+        String(Sconst),
+        Signed(crate::ast::session::set_reset::SignedNumericLit),
+        Unsigned(crate::ast::session::set_reset::UnsignedNumericLit),
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// gram.y `utility_option_elem: utility_option_name utility_option_arg`
+    /// (b73d13c:1175). The argument is optional (`utility_option_arg` has an
+    /// empty arm).
+    #[derive(Debug)]
+    pub struct UtilityOptionElem {
+        pub name: literal::UtilityOptionName,
+        pub value: Option<UtilityOptionArg>,
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `'(' utility_option_list ')'` — gram.y `opt_utility_option_list`
+    /// (b73d13c:1159) with its option present. 19 moved the list to the head
+    /// of gram.y and gave it to `CHECKPOINT`, `REPACK` and `WAIT FOR LSN`
+    /// (research PostgreSQL 19, "Changes to existing statements" and "New
+    /// statements"). Only those 19 statements use this node; the older
+    /// statements keep their own option nodes, so their behavior does not
+    /// change.
+    #[derive(Debug, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct UtilityOptionList(
+        #[sep(COMMA)]
+        #[deref]
+        pub one_or_many!(UtilityOptionElem),
+    );
+}

@@ -90,3 +90,26 @@ pub fn assert_statements_rejected(sources: &[&'static str]) {
         assert!(statement_rejected(src), "pg-sql accepts {src:?}");
     }
 }
+
+/// Whether `Statement` parses `src` to the end.
+pub fn statement_parses(src: &'static str) -> bool {
+    let lexed = crate::lex(src);
+    if lexed.errors().count() != 0 {
+        return false;
+    }
+    let mut input = lexed.input();
+    crate::ast::Statement::parse_arena(&mut input).is_ok() && input.is_eof()
+}
+
+/// Asserts that each accepted statement parses and formats to a fixed point,
+/// and that each rejected statement does not parse to the end. The version
+/// tests of the target versions use it.
+pub fn check_statement_forms(accepted: &[&'static str], rejected: &[&'static str]) {
+    for &src in accepted {
+        assert!(statement_parses(src), "{src:?} did not parse");
+        reparse_stable::<crate::ast::Statement>(src);
+    }
+    for &src in rejected {
+        assert!(!statement_parses(src), "{src:?} parsed completely");
+    }
+}

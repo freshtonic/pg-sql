@@ -448,6 +448,20 @@ recursa::ast_node! {
     }
 }
 
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `SET config_param { = | TO } NULL` function option, added in 19: the
+    /// `generic_set: var_name TO NULL_P` arm (gram.y b73d13c:1727; research
+    /// PostgreSQL 19, "Changes to existing statements").
+    #[derive(Debug)]
+    pub struct SetFuncNullOption {
+        #[tok(SET, this)]
+        pub name: literal::AliasName,
+        #[tok(this, NULL)]
+        pub sep: SetAssignSep,
+    }
+}
+
 recursa::ast_node! {
     /// `STRICT` / `CALLED ON NULL INPUT` / `RETURNS NULL ON NULL INPUT`.
     ///
@@ -488,6 +502,9 @@ recursa::ast_node! {
         Volatility(VolatilityOption),
         Parallel(ParallelOption),
         Set(SetFuncOption),
+        /// Added in 19: `SET var TO NULL` (gram.y b73d13c:1727).
+        #[cfg(feature = "since-pg19")]
+        SetNull(SetFuncNullOption),
         Language(LanguageOption),
         /// `SECURITY DEFINER` / `SECURITY INVOKER`.
         Security(SecurityOption),
@@ -888,6 +905,10 @@ recursa::ast_node! {
         // `SET name = value` and `RESET name | RESET ALL` — the
         // FunctionSetResetClause branch of common_func_opt_item.
         Set(crate::ast::session::set_reset::SetStmt),
+        /// Added in 19: `SET var TO NULL` (gram.y b73d13c:1727; research
+        /// PostgreSQL 19, "Changes to existing statements").
+        #[cfg(feature = "since-pg19")]
+        SetNull(crate::ast::session::set_reset::SetNullStmt),
         Reset(crate::ast::session::set_reset::ResetStmt),
         // Single-keyword forms.
         #[tok(LEAKPROOF)]

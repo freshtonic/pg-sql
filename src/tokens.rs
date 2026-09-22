@@ -701,6 +701,20 @@ recursa::tokens! {
         // compatibility. Soft so it stays reclaimable as an identifier outside
         // opclass-item positions.
         RECHECK         => r"RECHECK" in UNRESERVED + bare_label,
+        // Added in 19: `kwlist.h` at `b73d13c` (docs/research/
+        // postgres-14-19-sql-syntax-changes.md, PostgreSQL 19, "Keywords").
+        // Before 19 each word is no keyword at all, so it lexes as an
+        // identifier. `IGNORE` and `RESPECT` are AS_LABEL: no `bare_label`.
+        #[cfg(feature = "since-pg19")]
+        IGNORE          => r"IGNORE" in UNRESERVED,
+        #[cfg(feature = "since-pg19")]
+        RESPECT         => r"RESPECT" in UNRESERVED,
+        #[cfg(feature = "since-pg19")]
+        LSN             => r"LSN" in UNRESERVED + bare_label,
+        #[cfg(feature = "since-pg19")]
+        REPACK          => r"REPACK" in UNRESERVED + bare_label,
+        #[cfg(feature = "since-pg19")]
+        WAIT            => r"WAIT" in UNRESERVED + bare_label,
     },
     punctuation {
         SEMI      => ";",

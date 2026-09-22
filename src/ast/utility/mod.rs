@@ -12,5 +12,11 @@ pub mod lock;
 pub mod ownership;
 pub mod refresh;
 pub mod reindex;
+// Added in 19 (research PostgreSQL 19, "New statements"): gram.y
+// `RepackStmt` and `WaitStmt` at b73d13c.
+#[cfg(feature = "since-pg19")]
+pub mod repack;
 pub mod truncate;
 pub mod vacuum;
+#[cfg(feature = "since-pg19")]
+pub mod wait;

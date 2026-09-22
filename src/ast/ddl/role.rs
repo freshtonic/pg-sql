@@ -497,6 +497,10 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum SetResetClause {
         Set(crate::ast::session::set_reset::SetStmt),
+        /// Added in 19: `SET var TO NULL` (gram.y b73d13c:1727; research
+        /// PostgreSQL 19, "Changes to existing statements").
+        #[cfg(feature = "since-pg19")]
+        SetNull(crate::ast::session::set_reset::SetNullStmt),
         Reset(crate::ast::session::set_reset::ResetStmt),
     }
 }

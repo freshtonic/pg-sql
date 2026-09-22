@@ -31,14 +31,40 @@ recursa::ast_node! {
     }
 }
 
+#[cfg(feature = "since-pg19")]
 recursa::ast_node! {
-    /// `CREATE SUBSCRIPTION name CONNECTION sconst PUBLICATION name_list
-    /// [WITH (def_list)]` — Postgres' `CreateSubscriptionStmt`.
+    /// `SERVER name` — the foreign server of a subscription, added in 19
+    /// (gram.y b73d13c:11045, 11084; research PostgreSQL 19, "Changes to
+    /// existing statements", commit 8185bb534).
+    #[derive(Debug)]
+    pub struct SubscriptionServerClause {
+        #[tok(SERVER, this)]
+        pub server: crate::tokens::ColId,
+    }
+}
+
+recursa::ast_node! {
+    /// Where a subscription connects: `CONNECTION sconst`, or from 19 a
+    /// foreign `SERVER name`.
+    #[derive(Debug)]
+    pub enum SubscriptionSource {
+        Connection(SubscriptionConnectionClause),
+        /// Added in 19: `CREATE SUBSCRIPTION name SERVER name PUBLICATION
+        /// name_list opt_definition` (gram.y b73d13c:11045).
+        #[cfg(feature = "since-pg19")]
+        Server(SubscriptionServerClause),
+    }
+}
+
+recursa::ast_node! {
+    /// `CREATE SUBSCRIPTION name { CONNECTION sconst | SERVER name }
+    /// PUBLICATION name_list [WITH (def_list)]` — Postgres'
+    /// `CreateSubscriptionStmt`. The `SERVER` form is 19 only.
     #[derive(Debug)]
     pub struct CreateSubscriptionStmt {
         #[tok(CREATE, SUBSCRIPTION, this)]
         pub name: crate::tokens::ColId,
-        pub connection: SubscriptionConnectionClause,
+        pub source: SubscriptionSource,
         pub publication_clause: SubscriptionPublicationClause,
         pub with: Option<WithDefinition>,
     }
@@ -135,7 +161,17 @@ recursa::ast_node! {
         Rename(RenameTo),
         Owner(OwnerTo),
         Connection(SubscriptionConnectionClause),
+        /// Added in 19: `ALTER SUBSCRIPTION name SERVER name` (gram.y
+        /// b73d13c:11084; research PostgreSQL 19, "Changes to existing
+        /// statements").
+        #[cfg(feature = "since-pg19")]
+        Server(SubscriptionServerClause),
         Refresh(AlterSubscriptionRefresh),
+        /// Added in 19: `ALTER SUBSCRIPTION name REFRESH SEQUENCES` (gram.y
+        /// b73d13c:11104, commit f0b3573c3).
+        #[cfg(feature = "since-pg19")]
+        #[tok(REFRESH, SEQUENCES)]
+        RefreshSequences,
         AddPublication(AlterSubscriptionAddPublication),
         DropPublication(AlterSubscriptionDropPublication),
         Skip(AlterSubscriptionSkip),
