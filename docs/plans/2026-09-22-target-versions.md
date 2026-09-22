@@ -79,38 +79,38 @@ lexer of one target version. The version features `pg14`, `pg15`, `pg16`,
 Each increment is one branch and one GitHub issue. The gate must be green before
 the merge.
 
-1. **recursa: `cfg` for keywords and resolutions.** `#[cfg]` on `keywords`
+1. **recursa: `cfg` for keywords and resolutions** (freshtonic/recursa#133). `#[cfg]` on `keywords`
    entries in `tokens!`, the duplicate-active-name error, and `#[cfg]` on
    scoped LR resolutions. Tests in recursa-codegen.
-2. **Move the 17 pin to 17.11.** Move the submodule, rebuild the oracle and
+2. **Move the 17 pin to 17.11** (#71). Move the submodule, rebuild the oracle and
    regenerate the differential baseline. Examine every outcome change. This
    comes before the feature work, so each baseline change has one cause.
-3. **psql research.** `docs/research/psql-14-19-syntax-changes.md`, with the
+3. **psql research** (#72). `docs/research/psql-14-19-syntax-changes.md`, with the
    same method as the SQL research and the pins above. It covers
    `psqlscan.l`, `psqlscanslash.l`, the meta-commands in `command.c`, and the
    psql sections of the release notes. It includes back-patched changes such
    as `\restrict`. Increments 1, 2 and 3 can run in parallel.
-4. **Infrastructure.** Version and `since-*` features in `pg-sql`, `pg-psql`
+4. **Infrastructure** (#73). Version and `since-*` features in `pg-sql`, `pg-psql`
    and `pg-oracle`. The enforcement, `TARGET_VERSION`, oracle trees for each
    version, baselines for each version, the ledger column, the six-version
    gate, and the `CLAUDE.md` changes (principle 5, principle 8 ledgers,
    intermediate crates). There is no grammar change: the `pg17` behavior is
    the same, and the other versions build but have 17 grammar until their
    increments land.
-5. **`pg16`.** Gate out what 17 added (SQL/JSON query functions and
+5. **`pg16`** (#74). Gate out what 17 added (SQL/JSON query functions and
    `JSON_TABLE`, the MERGE `BY SOURCE`/`RETURNING` clauses, `AT LOCAL`, the
    17 keywords and the `json` category) and restore what 17 changed. Also the
    16 psql differences.
-6. **`pg15`.** Also gate out the 16 additions (SQL/JSON constructors, `IS
+6. **`pg15`** (#75). Also gate out the 16 additions (SQL/JSON constructors, `IS
    JSON`, non-decimal and underscore literals, `FORMAT_LA`, `SYSTEM_USER`).
-7. **`pg14`.** Also gate out the 15 additions (`MERGE`, publication objects,
+7. **`pg14`** (#76). Also gate out the 15 additions (`MERGE`, publication objects,
    `NULLS NOT DISTINCT`), and restore the lexing without the trailing-junk
    check (`123abc` is `123 AS abc`).
-8. **`pg18`.** Add the 18 syntax from the research ("Notes for pg-sql") and
+8. **`pg18`** (#77). Add the 18 syntax from the research ("Notes for pg-sql") and
    remove `RECHECK`.
-9. **`pg19-beta`.** First compare `REL_19_STABLE` at `b73d13c` with the
+9. **`pg19-beta`** (#78). First compare `REL_19_STABLE` at `b73d13c` with the
    research snapshot `7a74e5ed92d`. Then add the 19 syntax, the
    `RIGHT_ARROW` and `|` tokens, and the AS_LABEL status of `ignore` and
    `respect`.
-10. **Follow-up: psqlscan oracle.** An FFI oracle for the psql lexer, built
+10. **Follow-up: psqlscan oracle** (#79). An FFI oracle for the psql lexer, built
     from the tree for each version. This does not block increments 5 to 9.
