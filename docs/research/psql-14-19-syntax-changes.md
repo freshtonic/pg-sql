@@ -9,9 +9,9 @@ Reference source: `vendor/postgres`, read from git objects only. The tags and co
 - `REL_16_15` (`7d3e000c596`)
 - `REL_17_11` (`083ac033419`)
 - `REL_18_6` (`724edf9bde9`)
-- PostgreSQL 19: `7a74e5ed92d` (local `origin/REL_19_STABLE`, 2026-08-28)
+- PostgreSQL 19: `b73d13c` (`REL_19_STABLE`, "Stamp 19beta4", 2026-09-21), the planned pin. The first version of this document used `7a74e5ed92d` (2026-08-28).
 
-**The 19 pin is not the planned pin.** The plan names `REL_19_STABLE` at `b73d13c`. That commit is not in the local submodule (`git cat-file -t b73d13c` fails). `git ls-remote` shows that the remote `REL_19_STABLE` is now `b73d13c32c8`, so the local copy is not current. This research does not fetch. It uses `7a74e5ed92d`, the newest local `REL_19_STABLE` commit. It contains `REL_19_BETA3` (`3638289fb57`, 2026-08-10). This is also the snapshot of the SQL research. Increment 9 (#78) must compare `7a74e5ed92d` with `b73d13c` for the files in this document.
+**The 19 pin.** The first version of this document used `7a74e5ed92d`, because `b73d13c` was not in the local submodule then. Increment #78 fetched `b73d13c` and compared the two for `psqlscan.l`, `psqlscan_int.h`, `psqlscanslash.l`, `command.c` and RN19. The section "PostgreSQL 19" gives the result. `b73d13c` reverts the two lexer changes and `\dG`, because PostgreSQL reverted SQL/PGQ (`2b9e1aff4d3`) and the new `CREATE SCHEMA` elements (`3c5d28ba64e`). Facts in this document that come from `7a74e5ed92d` say so.
 
 **PostgreSQL 19 is pre-release.** Its psql can change before 19.0.
 
@@ -43,7 +43,7 @@ Terms. This document uses the terms of `CONTEXT.md`: **target version**, **versi
 | 16 | Copies the non-decimal integers and `_` digit separators of `scan.l`. The token extents that matter to interpolation do not change. | No new send command. `\bind` sets parameters for the next send. | New: `\bind`, `\drg`. `\dpS`, `\zS`. `\watch` takes named options `i=` and `c=`. |
 | 17 | Vertical tab (`\v`) is whitespace. | Vertical tab ends a command name and an argument. Whole-line arguments of `\sf`, `\ef`, `\sv`, `\ev` lose trailing `;`. | `\watch` takes `m=` (`min_rows`). |
 | 18 | No lexing change. | **Nine new commands end the query buffer**: `\parse`, `\sendpipeline`, `\startpipeline`, `\syncpipeline`, `\endpipeline`, `\flushrequest`, `\flush`, `\getresults`, `\close_prepared`. | New: `\bind_named`, `\close_prepared`, `\parse` and the pipeline commands. An `x` suffix on list commands. |
-| 19 (pre-release) | New `->` rule and `\|` as a single character, copied from `scan.l`. `BEGIN ... END` tracking also applies inside `CREATE SCHEMA ... CREATE FUNCTION`. | No change. | New: `\dG`. `\dX+`. |
+| 19 (pre-release) | No lexing change at `b73d13c`. (`7a74e5ed92d` had a `->` rule, `\|` as a single character and `BEGIN ... END` tracking inside `CREATE SCHEMA`. They are reverted.) | No change. | `\dX+`. (`\dG` at `7a74e5ed92d` is reverted.) |
 
 Verdict. The psql language changes little between 14 and 19. Only three changes alter what pg-psql models in a way that a user can see:
 
@@ -68,7 +68,7 @@ The pins are minor releases from August 2026. These changes went into several br
 
 | Change | Class | Commits (per branch) | First minor release | Source |
 |---|---|---|---|---|
-| `\restrict key` enters restricted mode. In restricted mode, psql rejects every backslash command except `\unrestrict key`. CVE-2025-8714. | B | master `71ea0d67954`; 18 `67a2fbb8f9e`; 17 `575f54d4cee`; 16 `7ad8e790988`; 15 `42404050685`; 14 `e4998d089d9` (also 13) | 14.19, 15.14, 16.10, 17.6, 18.0, 19 | RN14 "Release 14.19" (line 6072), RN15 15.14, RN16 16.10, RN17 17.6. RN18 and RN19 do not list it, but `REL_18_0` and `7a74e5ed92d` contain it. `REL_14_24:command.c` 236, 399, 417, 2279, 2616 |
+| `\restrict key` enters restricted mode. In restricted mode, psql rejects every backslash command except `\unrestrict key`. CVE-2025-8714. | B | master `71ea0d67954`; 18 `67a2fbb8f9e`; 17 `575f54d4cee`; 16 `7ad8e790988`; 15 `42404050685`; 14 `e4998d089d9` (also 13) | 14.19, 15.14, 16.10, 17.6, 18.0, 19 | RN14 "Release 14.19" (line 6072), RN15 15.14, RN16 16.10, RN17 17.6. RN18 and RN19 do not list it, but `REL_18_0` and `b73d13c` contain it. `REL_14_24:command.c` 236, 399, 417, 2279, 2616 |
 | `\unrestrict` reads the whole rest of the line as its key (`OT_WHOLE_LINE`). It does no backquote or variable expansion, and it removes trailing spaces and `;`. CVE-2026-18408. | B | 19 `0119aa30e0f`; 18 `71ca694c73c`; 17 `0bfac9e1f94`; 16 `33d0c63fb34`; 15 `df245c37458`; 14 `2006fca401e` | 14.24, 15.19, 16.15, 17.11, 18.6, 19 | RN16 "Release 16.15" (line 784) and the same entry in the other branches |
 | `psqlscan.l` recognises `COPY ... FROM STDIN` (and `STDOUT`, as the grammar does). psql then skips the in-line data up to `\.`, also when the `COPY` fails. The `\;` rule now resets the statement tracking only at the outer level. CVE-2026-6464. | A (all pins) | 19 `d6ab88d374a`; 18 `29921259e83`; 17 `46fa1f6f373`; 16 `2bdfd5cdcc0`; 15 `3fdcfa8f793`; 14 `5c51ae4556f` | 14.24, 15.19, 16.15, 17.11, 18.6, 19 | RN16 "Release 16.15" (line 179); `REL_14_24:psqlscan.l` 650–663 (`;`), 670–683 (`\;`), 973 (`psqlscan_is_copy_from_stdin`) |
 | `\if` saves and restores all lexer state (not only the parenthesis depth) over skipped text. This is a prerequisite of the `COPY` fix. | none | 19 `8cf01e213cc`; 18 `900894d35ca`; 17 `dca6627de0f`; 16 `db96e87f930`; 15 `8cdbabea74a`; 14 `7215c7e9643` | same as the `COPY` fix | `REL_14_24:psqlscanslash.l` `psql_scan_get_lex_state` |
@@ -91,7 +91,7 @@ Change set `REL_13_0..REL_14_24`. RN14 = `REL_14_24:doc/src/sgml/release-14.sgml
 | 1 | A `;` inside a `BEGIN ... END` block does not end the query buffer when the statement starts with `CREATE [OR REPLACE] {FUNCTION\|PROCEDURE}`. The lexer counts `BEGIN` and `END`, and counts `CASE` only inside a `BEGIN`. It ignores words inside parentheses. It is a heuristic: `CREATE FUNCTION begin() ...` can fool it. The prompt shows continuation while the depth is above zero. | A | `CREATE FUNCTION f() RETURNS int BEGIN ATOMIC SELECT 1; SELECT 2; END;` is one query | `psqlscan.l` 650 (`;` checks `begin_depth == 0`), 961 `psqlscan_is_create_routine`, 1015 `psqlscan_track_identifier`, 1216; commits e717a9a18, 029c5ac03db, d9a9f4b4b92. RN14 lists only the SQL feature (e717a9a18, line 28634), not the psql lexing. |
 | 2 | Back-patched `COPY ... FROM STDIN` tracking (see "Back-patched changes"). | A (all pins) | `COPY t FROM STDIN;` followed by data and `\.` | `psqlscan.l` 973; 5c51ae4556f |
 
-The rules for interpolation (`:name`, `:'name'`, `:"name"`, `:{?name}`) do not change between `REL_13_0` and `7a74e5ed92d`. Neither do the rules for strings, quoted identifiers, dollar quotes and comments, apart from the items in this document.
+The rules for interpolation (`:name`, `:'name'`, `:"name"`, `:{?name}`) do not change between `REL_13_0` and `b73d13c`. Neither do the rules for strings, quoted identifiers, dollar quotes and comments, apart from the items in this document.
 
 Note on 13 behavior that 15 changes: in 13 and 14 the `{whitespace}` rule does not echo a `--` comment (`REL_14_24:psqlscan.l` 388, `if (!(output_buf->len == 0 || yytext[0] == '-'))`). psql 14 therefore removes every `--` comment from the query that it sends. See 15 item 2.
 
@@ -235,27 +235,30 @@ RN18 "Migration" also says that the server no longer treats `\.` as end of data 
 
 ## PostgreSQL 19 (pre-release)
 
-Change set `REL_18_6..7a74e5ed92d`. RN19 = `7a74e5ed92d:doc/src/sgml/release-19.sgml`.
+Change set `REL_18_6..b73d13c`. RN19 = `b73d13c:doc/src/sgml/release-19.sgml`.
+
+### Changes from `7a74e5ed92d` to `b73d13c`
+
+| File | Change | Source |
+|---|---|---|
+| `psqlscan.l` | The `right_arrow "->"` rule is removed, and `\|` leaves `self`. These copied the SQL/PGQ changes of `scan.l`, which are reverted. | `2b9e1aff4d3` |
+| `psqlscan.l`, `psqlscan_int.h`, `psqlscanslash.l` | The `BEGIN ... END` tracking inside `CREATE SCHEMA ... CREATE FUNCTION` (`sub_idents`) is removed, because `CREATE SCHEMA` does not accept a function element again. | `3c5d28ba64e` (reverts d516974840f) |
+| `command.c` | `\dG` is removed, and `\d` with no argument does not list property graphs. | `2b9e1aff4d3` |
+| RN19 | No psql item changes. | |
 
 ### `psqlscan.l`
 
-| # | Change | Class | Source |
-|---|---|---|---|
-| 1 | New rule `right_arrow "->"`, and `\|` joins `self`. These copy the SQL/PGQ changes of `scan.l`. In psql both only echo, and neither can start a string, comment or interpolation. | A (no effect) | `psqlscan.l` 301, 313, 661; 2f094e7ac69 |
-| 2 | `BEGIN ... END` tracking also applies inside `CREATE SCHEMA`, but only inside a `CREATE [OR REPLACE] {FUNCTION\|PROCEDURE}` element. 19 is the first version where `CREATE SCHEMA` accepts a function element (d516974840f). | A | `psqlscan.l` 977, 998, 1070, 1097; `psqlscan_int.h` `sub_idents`; d516974840f, 049b742daad. RN19 lists only the SQL change (d51697484, line 1925). |
-
-Example for item 2: `CREATE SCHEMA s CREATE FUNCTION f() RETURNS int BEGIN ATOMIC SELECT 1; END;` is one query in 19. In 18 the `SELECT 1;` ends the query, but the 18 server also rejects the statement. `CREATE SCHEMA s CREATE VIEW begin AS SELECT 1;` is one query in both, because of 049b742daad.
+No lexing change. The diff `REL_18_6..b73d13c` has only memory-allocation macros (`pg_malloc_object`, `pg_malloc_array`). At `7a74e5ed92d` there were two changes: a `->` rule with `\|` as a single character (2f094e7ac69), and `BEGIN ... END` tracking inside `CREATE SCHEMA ... CREATE FUNCTION` (d516974840f, 049b742daad). Both are reverted (see above).
 
 ### Send commands and `psqlscanslash.l`
 
-No syntax change. The range has out-of-memory fixes (9d4505b7f82, e793e51abab), and `\getresults` with an invalid value no longer affects the next query (2b0d50e39c5). It removes the obsolete `psql_scan_get_paren_depth` API.
+No syntax change. The range has out-of-memory fixes (9d4505b7f82, e793e51abab), and `\getresults` with an invalid value no longer affects the next query (2b0d50e39c5). It removes the obsolete `psql_scan_get_paren_depth` API. `HandleSlashCmds` rejects a missing command name (`cmd == NULL`), which does not change the syntax.
 
 ### Meta-commands
 
 | Change | Class | Source |
 |---|---|---|
-| New `\dG[Sx+] [pattern]` lists property graphs. RN19 does not list it. | B | `command.c` 1195 (`case 'G'`); `psql-ref.sgml`; 2f094e7ac69 |
-| `\dX` accepts `+` (`\dX[x+]`). | B | RN19 line 2519; aecc558666a |
+| `\dX` accepts `+` (`\dX[x+]`). | B | RN19 "psql" (`b73d13c:release-19.sgml` 2376); aecc558666a; `command.c` `listExtendedStats(pattern, show_verbose)` |
 
 The other RN19 psql items (prompt escapes `%S` and `%i`, `\pset display_true`/`display_false`, `SERVICEFILE`) are display or variables, and out of scope.
 
@@ -270,7 +273,6 @@ A "break" here is psql input that a newer psql lexes or runs differently. Change
 | 15 | `--` comments inside a query | A | 14 removed them from the query text | 15 sends them | `REL_15_19:psqlscan.l` 393; 83884682f |
 | 17 | Vertical tab | A | Ordinary character in SQL text and in command names | Whitespace; it ends a command name | `REL_17_11:psqlscan.l` 162; `psqlscanslash.l` 113; ae6d06f0968 |
 | 18 | Nine new buffer-ending commands | A | `\parse` and the others were invalid commands | They end the query buffer | `REL_18_6:command.c` 350–452; `mainloop.c` 513 |
-| 19 | `BEGIN ... END` inside `CREATE SCHEMA ... CREATE FUNCTION` | A | 18 ended the query at the first `;` | The query continues to the `;` after `END` | `7a74e5ed92d:psqlscan.l` 1097; d516974840f, 049b742daad |
 | 14.24, 15.19, 16.15, 17.11, 18.6, 19 | In-line `COPY ... FROM STDIN` data after a failed `COPY` | A (all pins) | psql ran the data lines as SQL | psql skips the data up to `\.`; a failed `COPY` in a script needs a `\.` line | RN16 "Release 16.15"; 5c51ae4556f and back-patches |
 | 14.19, 15.14, 16.10, 17.6, 18.0, 19 | Restricted mode | B | No `\restrict` | After `\restrict key`, every backslash command except `\unrestrict key` is an error, also `\g` | RN14 "Release 14.19"; e4998d089d9 and back-patches |
 | 14.24, 15.19, 16.15, 17.11, 18.6, 19 | `\unrestrict` argument | B | One normal argument, with backquote and variable expansion | The whole rest of the line, with no expansion | RN16 "Release 16.15"; 2006fca401e and back-patches |
@@ -287,10 +289,10 @@ pg-psql models `psqlscan.l` text runs, the four interpolation forms, `;`, and th
 | A2 | `pg15` and later vs `pg14` | Trailing-junk tokens: a number or `$n` that an identifier follows directly is one token. | Behaves as 14: `Digits` (`ast.rs` 263) or `DollarNumber` (241), then `EscapeString` (225) for `1e'...'`. | For `since-pg15`, add a junk token, `[0-9]+` / `\$[0-9]+` / decimal followed by an identifier, so that `1e'\''` lexes as `1e` and a standard string. Keep the current behavior with `not(since-pg15)`. Add a gated test with the example in 15. |
 | A3 | `pg14` only | psql 14 removes `--` comments inside a query from the sent text. | Rendering copies the source, so comments stay (15 behavior). | The server ignores comments, so the SQL parse does not change. Only the rendered text and the source map differ. Decide whether version parity for rendering includes comment removal. If yes, gate with `not(since-pg15)`. |
 | A4 | `pg14` to `pg16` vs `pg17` and later | Vertical tab is whitespace from 17, and it ends a command name from 17. | `ignore` includes `\x0b` (`tokens.rs` 19), and `MetaCommand` ends at any character outside `[A-Za-z0-9_]`: 17 behavior. | Low priority. Rendering copies the source, so the only visible difference is `\g<VT>` in 14 to 16, which psql rejects as an invalid command. A gate is possible with `not(since-pg17)`. |
-| A5 | `pg19-beta` vs earlier | `BEGIN ... END` tracking inside `CREATE SCHEMA ... CREATE FUNCTION`. | No tracking, and no query splitting. | No gate now. If pg-psql ever reports query boundaries, it needs the 14 tracking for all targets and the 19 extension with `since-pg19`. |
+| A5 | none at `b73d13c` | `BEGIN ... END` tracking inside `CREATE SCHEMA ... CREATE FUNCTION`. It was in `7a74e5ed92d`, and `3c5d28ba64e` reverts it. | No tracking, and no query splitting (`pg-psql/src/ast.rs` `Terminator::Semi`). The tracking only moves query boundaries, and pg-psql renders one SQL string, so it is invisible to pg-psql. #78 confirmed this. | No gate. If 19 gets the extension again, and pg-psql reports query boundaries, gate it with `since-pg19`. |
 | A6 | all targets | `BEGIN ... END` tracking in `CREATE FUNCTION/PROCEDURE` (14). | No tracking; invisible in the rendered text. | No gate, because every target has it. Same condition as A5. |
 | A7 | all targets | `COPY ... FROM STDIN` in-line data. psql reads it raw up to `\.`, with no interpolation. From the 2026 back-patches, the lexer decides this without the server. | Not modelled. pg-psql treats the data as SQL text and substitutes `:name` in it. | No gate, because every pin has the back-patch. This is a gap for all targets. A document item for in-line data would fix it. |
-| A8 | none | 16 non-decimal and `_` literals, 16.4 parameter digits, 19 `->` and `\|`. | Not modelled; no need. | No gate. The token extents that matter do not change. |
+| A8 | none | 16 non-decimal and `_` literals, 16.4 parameter digits. (`7a74e5ed92d` also had `->` and `\|`; `b73d13c` reverts them.) | Not modelled; no need. | No gate. The token extents that matter do not change. |
 
 ### Class (B): meta-commands for #11, #12 and #13
 
@@ -301,7 +303,7 @@ These need no version gate while they stay in the `MetaCommand` token. When #11�
 - 16: `\bind`, `\drg[S]`, `\dpS`, `\zS`, the `\watch` options `i=` and `c=`.
 - 17: the `\watch` option `m=`; trailing `;` removal for `\sf`, `\ef`, `\sv`, `\ev`.
 - 18: `\bind_named`, and the `x` suffix on list commands.
-- 19: `\dG`, `\dX+`.
+- 19: `\dX+`. (`\dG` at `7a74e5ed92d` is reverted.)
 - All pins (back-patched): `\restrict`, and `\unrestrict` with a whole-line argument.
 
 Two class (B) items interact with the rendered SQL now:
@@ -320,6 +322,6 @@ These are true for 14 to 19 alike. They are not in scope for version gates, but 
 
 ### Open doubts
 
-- The 19 pin. This document uses `7a74e5ed92d`. The planned pin `b73d13c` is newer and is not in the local submodule. Increment #78 must compare the two for `psqlscan.l`, `psqlscanslash.l` and `command.c`.
+- The 19 pin. Resolved by #78: the document now uses `b73d13c`. 19 is still pre-release, so its psql can change again before 19.0.
 - The plan (`docs/plans/2026-09-22-target-versions.md`) gives `REL_17_11` as `6af8851`. In the submodule, `6af885119b5` is "Stamp 17.8". `REL_17_11` is `083ac033419`.
 - The lexing examples (A2, A4, 16 item 1) come from the flex rules. They were not run against a psql binary. The psqlscan oracle (#79) can confirm them.
