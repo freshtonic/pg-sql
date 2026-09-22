@@ -1157,3 +1157,7 @@ embedded-tests/src/ast/dml/select.tests.rs	ignore_and_respect_need_as_from_19	fa
 embedded-tests/src/ast/dml/select.tests.rs	ignore_is_a_bare_label_before_19	false	14-18
 embedded-tests/src/ast/shared/expr.tests.rs	parse_null_treatment_between_filter_and_over	false	19-
 embedded-tests/src/ast/shared/expr.tests.rs	reject_null_treatment_before_19	false	14-18
+embedded-tests/src/ast/mod.tests.rs	checkpoint_takes_utility_options_from_19	false	19-
+embedded-tests/src/ast/mod.tests.rs	repack_statement_forms_from_19	false	19-
+embedded-tests/src/ast/mod.tests.rs	wait_for_lsn_forms_from_19	false	19-
+embedded-tests/src/ast/mod.tests.rs	reject_19_utility_statements_before_19	false	14-18

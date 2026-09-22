@@ -898,4 +898,119 @@ mod tests {
         }
     }
 
+    /// Whether `Statement` parses `src` to the end.
+    fn statement_parses(src: &'static str) -> bool {
+        let lexed = crate::lex(src);
+        if lexed.errors().count() != 0 {
+            return false;
+        }
+        let mut input = lexed.input();
+        Statement::parse(&mut input).is_ok() && input.is_eof()
+    }
+
+    /// Asserts that each accepted form parses and formats to a fixed point,
+    /// and that each rejected form does not parse to the end.
+    fn check_statement_forms(accepted: &[&'static str], rejected: &[&'static str]) {
+        for &src in accepted {
+            assert!(statement_parses(src), "{src:?} did not parse");
+            crate::ast::test_support::reparse_stable::<Statement>(src);
+        }
+        for &src in rejected {
+            assert!(!statement_parses(src), "{src:?} parsed completely");
+        }
+    }
+
+    /// Added in 19: `CHECKPOINT opt_utility_option_list` (gram.y b73d13c:2100,
+    /// `utility_option_list` 1164; research PostgreSQL 19, "Changes to
+    /// existing statements").
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn checkpoint_takes_utility_options_from_19() {
+        check_statement_forms(
+            &[
+                "CHECKPOINT",
+                "CHECKPOINT (MODE SPREAD, FLUSH_UNLOGGED)",
+                "CHECKPOINT (flush_unlogged false, mode 'fast')",
+                "CHECKPOINT (verbose verbose, analyze, format json)",
+                "CHECKPOINT (x -1, y +2.5, z on, w E'a')",
+            ],
+            &[
+                "CHECKPOINT ()",
+                "CHECKPOINT MODE SPREAD",
+                "CHECKPOINT (x null)",
+                "CHECKPOINT (x default)",
+                "CHECKPOINT (select)",
+            ],
+        );
+    }
+
+    /// Added in 19: gram.y `RepackStmt` (b73d13c:12080; research PostgreSQL
+    /// 19, "New statements"). The table is a `qualified_name`, so `ONLY` and
+    /// `*` are rejected (f23de46e15b).
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn repack_statement_forms_from_19() {
+        check_statement_forms(
+            &[
+                "REPACK",
+                "REPACK s.t",
+                "REPACK t (a, b)",
+                "REPACK t USING INDEX",
+                "REPACK t (a) USING INDEX i",
+                "REPACK (CONCURRENTLY, VERBOSE) t USING INDEX t_pkey",
+                "REPACK (VERBOSE)",
+                "REPACK USING INDEX",
+                "REPACK (analyze) USING INDEX",
+            ],
+            &[
+                "REPACK ONLY t",
+                "REPACK t *",
+                "REPACK t USING i",
+                "REPACK VERBOSE t",
+                "REPACK () t",
+                "REPACK USING INDEX i",
+                "REPACK t ()",
+            ],
+        );
+    }
+
+    /// Added in 19: gram.y `WaitStmt` (b73d13c:16635, `opt_wait_with_clause`
+    /// 16646; research PostgreSQL 19, "New statements"). The LSN is an
+    /// `Sconst`.
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn wait_for_lsn_forms_from_19() {
+        check_statement_forms(
+            &[
+                "WAIT FOR LSN '0/3000060'",
+                "WAIT FOR LSN '0/3000060' WITH (MODE 'replay', TIMEOUT '1s')",
+                "WAIT FOR LSN E'0/1' WITH (no_throw)",
+                "WAIT FOR LSN $$0/1$$",
+            ],
+            &[
+                "WAIT FOR LSN 12",
+                "WAIT FOR LSN B'01'",
+                "WAIT FOR LSN '0/1' WITH ()",
+                "WAIT FOR LSN '0/1' (timeout 1)",
+                "WAIT LSN '0/1'",
+            ],
+        );
+    }
+
+    /// Before 19 there is no `CHECKPOINT` option list, no `REPACK` and no
+    /// `WAIT FOR LSN` (the research entries above).
+    #[cfg(not(feature = "since-pg19"))]
+    #[test]
+    fn reject_19_utility_statements_before_19() {
+        check_statement_forms(
+            &["CHECKPOINT"],
+            &[
+                "CHECKPOINT (MODE SPREAD)",
+                "REPACK",
+                "REPACK t USING INDEX i",
+                "WAIT FOR LSN '0/1'",
+            ],
+        );
+    }
+
 }

@@ -260,6 +260,14 @@ recursa::ast_node! {
         Refresh(RefreshStmt),
         Cluster(boxed!(ClusterStmt)),
         Checkpoint(CheckpointStmt),
+        /// Added in 19: gram.y `RepackStmt` (b73d13c:12080; research
+        /// PostgreSQL 19, "New statements").
+        #[cfg(feature = "since-pg19")]
+        Repack(boxed!(crate::ast::utility::repack::RepackStmt)),
+        /// Added in 19: gram.y `WaitStmt` (b73d13c:16635; research
+        /// PostgreSQL 19, "New statements").
+        #[cfg(feature = "since-pg19")]
+        Wait(crate::ast::utility::wait::WaitStmt),
         Vacuum(boxed!(VacuumStmt)),
         Lock(LockStmt),
         Notify(NotifyStmt),
