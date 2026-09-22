@@ -53,7 +53,7 @@ release of that version, from `pg-oracle/pins.tsv`:
 
 | Feature | Oracle | Expected version gaps |
 |---|---|---|
-| `pg14` | `REL_14_24` | 53 |
+| `pg14` | `REL_14_24` | 0 |
 | `pg15` | `REL_15_19` | 0 |
 | `pg16` | `REL_16_15` | 0 |
 | `pg17` | `REL_17_11` | 0 |
@@ -78,17 +78,17 @@ pg-sql outcome and the oracle outcome:
 - `"pg_sql": "fail"`: pg-sql over-accepts the statement, or its output
   changes the parse tree, or the oracle rejects its output.
 
-The gaps exist because the grammar of each version is not complete. Until its
-increment lands, a `pg14` build has the 15 grammar, and a `pg18` or
-`pg19-beta` build has the 17 grammar. The current gaps are the trailing junk
-after numbers that 14 accepts (`numerology.sql`), which include the
-non-decimal and `_` forms: 14 lexes `0x42F` as `0 AS x42F`, and a `pg14`
-build has the 15 lexing, which rejects it. The `pg16` grammar (#74)
-and the `pg15` grammar (#75) are complete, so their lists are empty.
+A gap exists when the grammar of a version is not complete. The `pg14`
+list had 53 gaps before #76: the trailing junk after numbers that 14 accepts
+(`numerology.sql`), which include the non-decimal and `_` forms. 14 lexes
+`0x42F` as `0 AS x42F`, and a `pg14` build had the 15 lexing, which rejects
+it. The `pg14` build now lexes numbers as the 14 scanner does. The grammars
+of `pg14` (#76), `pg15` (#75) and `pg16` (#74) are complete, so their lists
+are empty.
 
 An empty list does not show that a version is complete: the check below
 cannot find newer syntax that a build accepts. Explicit negative tests cover
-that (`14-15` and `14-16` in `embedded-tests/inventory.tsv`). The keywords
+that (`14-14`, `14-15` and `14-16` in `embedded-tests/inventory.tsv`). The keywords
 that a version does not have are gated with their `lookahead` and
 `precedence` entries, so a build accepts them where gram.y takes a bare
 `IDENT`: `format`, `json`, `keys` and `scalar` before 16, and `path` and
