@@ -1,4 +1,5 @@
-//! Frozen differential expectations over the PostgreSQL 17.9 regression corpus.
+//! Frozen differential expectations over the PostgreSQL 17.9 regression corpus,
+//! and the version baseline of each target version over the same corpus.
 //!
 //! The corpus is frozen: every file is read by its Git blob ID from the
 //! `vendor/postgres` object database, not from the checked-out tree. The
@@ -13,6 +14,35 @@ const PINNED_BASELINE: &str = include_str!("../../baselines/postgresql-17.9.json
 const PINNED_STATEMENTS: &str = include_str!("../../baselines/postgresql-17.9-statements.json");
 const PINNED_ACCEPTED_LEGACY_GAPS: &str =
     include_str!("../../baselines/postgresql-17.9-accepted-legacy-gaps.json");
+/// One version baseline for each target version (`docs/differential-baseline.md`).
+const VERSION_BASELINES: &[(&str, &str)] = &[
+    (
+        "pg14",
+        include_str!("../../baselines/target-versions/pg14.json"),
+    ),
+    (
+        "pg15",
+        include_str!("../../baselines/target-versions/pg15.json"),
+    ),
+    (
+        "pg16",
+        include_str!("../../baselines/target-versions/pg16.json"),
+    ),
+    (
+        "pg17",
+        include_str!("../../baselines/target-versions/pg17.json"),
+    ),
+    (
+        "pg18",
+        include_str!("../../baselines/target-versions/pg18.json"),
+    ),
+    (
+        "pg19-beta",
+        include_str!("../../baselines/target-versions/pg19-beta.json"),
+    ),
+];
+/// The pin table of the oracle: `feature<TAB>ref<TAB>commit`.
+const ORACLE_PINS: &str = include_str!("../../pg-oracle/pins.tsv");
 const LEGACY_COMMIT: &str = "1e71421d66baac15c8c5264e8f29b5f80122f50e";
 const LEGACY_TREE: &str = "f3191ab707c8a957d1bb5fe142e74fc624fe6661";
 const LEGACY_PG_SQL_TREE: &str = "50e1376d16796e5f05db88d99dab42252a9f78a4";
@@ -393,6 +423,385 @@ impl AcceptedLegacyGaps {
     pub fn entries(&self) -> &[AcceptedLegacyGap] {
         &self.entries
     }
+}
+
+/// The pg-sql outcome of a statement in an expected version gap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum GapOutcome {
+    /// pg-sql cannot parse a statement that the oracle accepts.
+    Skip,
+    /// The differential check fails: pg-sql over-accepts, or its output
+    /// changes the parse tree or is rejected.
+    Fail,
+}
+
+impl GapOutcome {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Skip => "skip",
+            Self::Fail => "fail",
+        }
+    }
+}
+
+/// One statement where a build of the target version disagrees with that
+/// version's oracle, because the grammar of the version is not complete.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VersionGap {
+    pub file: String,
+    pub statement_index: usize,
+    pub byte_range: Range<usize>,
+    pub pg_sql: GapOutcome,
+    pub oracle_accepts: bool,
+}
+
+/// The differential baseline of one target version: the oracle outcome of
+/// every frozen corpus statement, and the expected version gaps.
+#[derive(Debug)]
+pub struct VersionBaseline {
+    pub feature: String,
+    pub oracle_ref: String,
+    pub oracle_commit: String,
+    oracle_accepts: BTreeMap<String, Vec<bool>>,
+    gaps: Vec<VersionGap>,
+}
+
+/// The pin of `feature` in `pg-oracle/pins.tsv`: `(ref, commit)`.
+pub fn oracle_pin(feature: &str) -> (&'static str, &'static str) {
+    ORACLE_PINS
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+        .map(|line| {
+            let fields = line.split('\t').collect::<Vec<_>>();
+            assert_eq!(fields.len(), 3, "pins.tsv row {line:?}");
+            (fields[0], fields[1], fields[2])
+        })
+        .find(|(name, _, _)| *name == feature)
+        .map(|(_, reference, commit)| (reference, commit))
+        .unwrap_or_else(|| panic!("pins.tsv has no pin for {feature}"))
+}
+
+/// The version features that have a version baseline.
+pub fn version_features() -> impl Iterator<Item = &'static str> {
+    VERSION_BASELINES.iter().map(|(feature, _)| *feature)
+}
+
+impl VersionBaseline {
+    /// The version baseline of the target version of this build.
+    pub fn active() -> &'static Self {
+        Self::of(pg_sql::TARGET_VERSION.feature())
+    }
+
+    /// The version baseline of the version feature `feature`.
+    pub fn of(feature: &str) -> &'static Self {
+        static BASELINES: OnceLock<BTreeMap<&'static str, VersionBaseline>> = OnceLock::new();
+        BASELINES
+            .get_or_init(|| {
+                VERSION_BASELINES
+                    .iter()
+                    .map(|(feature, source)| (*feature, Self::load(feature, source)))
+                    .collect()
+            })
+            .get(feature)
+            .unwrap_or_else(|| panic!("no version baseline for {feature}"))
+    }
+
+    fn load(feature: &str, source: &str) -> Self {
+        let document: serde_json::Value = serde_json::from_str(source)
+            .unwrap_or_else(|error| panic!("parse the {feature} version baseline: {error}"));
+        assert_eq!(document["schema_version"].as_u64(), Some(1), "{feature}");
+        assert_eq!(document["target_version"].as_str(), Some(feature));
+        assert_eq!(
+            document["corpus"]["name"].as_str(),
+            Some("postgresql-17.9"),
+            "{feature}: the version baselines share the frozen corpus"
+        );
+        assert_eq!(
+            document["corpus"]["gitlink"].as_str(),
+            Some(POSTGRES_GITLINK),
+            "{feature}"
+        );
+        let (pin_ref, pin_commit) = oracle_pin(feature);
+        let oracle_ref = document["oracle"]["ref"]
+            .as_str()
+            .expect("oracle ref")
+            .to_owned();
+        let oracle_commit = document["oracle"]["commit"]
+            .as_str()
+            .expect("oracle commit")
+            .to_owned();
+        assert_eq!(
+            (oracle_ref.as_str(), oracle_commit.as_str()),
+            (pin_ref, pin_commit),
+            "{feature}: the version baseline is not from the pinned oracle; regenerate it"
+        );
+
+        let frozen = FrozenStatements::pinned();
+        let oracle_accepts = document["files"]
+            .as_array()
+            .expect("version baseline files")
+            .iter()
+            .map(|file| {
+                let name = file["file"].as_str().expect("file name").to_owned();
+                let accepts = file["oracle_accepts"]
+                    .as_str()
+                    .expect("oracle outcomes")
+                    .bytes()
+                    .map(|outcome| match outcome {
+                        b'A' => true,
+                        b'R' => false,
+                        _ => panic!("{feature}: invalid oracle outcome {outcome:?} in {name}"),
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    accepts.len(),
+                    frozen.file(&name).ranges().len(),
+                    "{feature}: oracle outcome count for {name}"
+                );
+                (name, accepts)
+            })
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(
+            oracle_accepts
+                .keys()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+            frozen.file_names(),
+            "{feature}: the version baseline covers every frozen corpus file"
+        );
+
+        let mut previous = None;
+        let gaps = document["expected_version_gaps"]
+            .as_array()
+            .expect("expected version gaps")
+            .iter()
+            .map(|gap| {
+                let file = gap["file"].as_str().expect("gap file").to_owned();
+                let statement_index = as_usize(&gap["statement_index"], "gap statement index");
+                let byte_range = parse_range(gap["byte_range"].as_str().expect("gap byte range"));
+                let identity = (file.clone(), statement_index);
+                assert!(
+                    previous
+                        .as_ref()
+                        .is_none_or(|previous| previous < &identity),
+                    "{feature}: version gaps are not unique and in file/index order at \
+                     {file}:{statement_index}"
+                );
+                previous = Some(identity);
+                assert_eq!(
+                    frozen.file(&file).ranges().get(statement_index),
+                    Some(&byte_range),
+                    "{feature}: version gap {file}:{statement_index} byte range"
+                );
+                let pg_sql = match gap["pg_sql"].as_str().expect("gap pg_sql outcome") {
+                    "skip" => GapOutcome::Skip,
+                    "fail" => GapOutcome::Fail,
+                    other => panic!("{feature}: invalid gap pg_sql outcome {other:?}"),
+                };
+                let oracle_accepts = match gap["oracle"].as_str().expect("gap oracle outcome") {
+                    "accept" => true,
+                    "reject" => false,
+                    other => panic!("{feature}: invalid gap oracle outcome {other:?}"),
+                };
+                assert_eq!(
+                    oracle_accepts,
+                    oracle_accepts_at(&document, &file, statement_index),
+                    "{feature}: version gap {file}:{statement_index} oracle outcome"
+                );
+                assert!(
+                    pg_sql != GapOutcome::Skip || oracle_accepts,
+                    "{feature}: a skip gap is a statement that the oracle accepts \
+                     ({file}:{statement_index})"
+                );
+                VersionGap {
+                    file,
+                    statement_index,
+                    byte_range,
+                    pg_sql,
+                    oracle_accepts,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let baseline = Self {
+            feature: feature.to_owned(),
+            oracle_ref,
+            oracle_commit,
+            oracle_accepts,
+            gaps,
+        };
+        let totals = &document["totals"];
+        let expected = baseline.expected_totals();
+        assert_eq!(
+            (
+                as_usize(&totals["statements"], "total statements"),
+                as_usize(&totals["oracle_accepts"], "total oracle accepts"),
+                as_usize(&totals["pass"], "total pass"),
+                as_usize(&totals["skip"], "total skip"),
+                as_usize(&totals["expected_version_gaps"], "total gaps"),
+            ),
+            (
+                frozen.total_statements(),
+                baseline
+                    .oracle_accepts
+                    .values()
+                    .flatten()
+                    .filter(|a| **a)
+                    .count(),
+                expected.pass,
+                expected.skip,
+                baseline.gaps.len(),
+            ),
+            "{feature}: version baseline totals"
+        );
+        baseline
+    }
+
+    /// The oracle outcome of every statement of `file`.
+    pub fn oracle_accepts(&self, file: &str) -> &[bool] {
+        self.oracle_accepts
+            .get(file)
+            .unwrap_or_else(|| panic!("{file} is absent from the {} baseline", self.feature))
+    }
+
+    pub fn gaps(&self) -> &[VersionGap] {
+        &self.gaps
+    }
+
+    /// The expected version gaps of `file`, by statement index.
+    pub fn gaps_in(&self, file: &str) -> BTreeMap<usize, &VersionGap> {
+        self.gaps
+            .iter()
+            .filter(|gap| gap.file == file)
+            .map(|gap| (gap.statement_index, gap))
+            .collect()
+    }
+
+    /// The frozen-identity outcome counts of `file` with this oracle: a
+    /// legacy parse error that the oracle accepts is a skip, and every
+    /// other statement is a pass.
+    pub fn expected_outcomes(&self, file: &str) -> OutcomeCounts {
+        let kinds = FrozenStatements::pinned().file(file).legacy_item_kinds();
+        let mut counts = OutcomeCounts {
+            pass: 0,
+            skip: 0,
+            fail: 0,
+        };
+        for (kind, accepts) in kinds.iter().zip(self.oracle_accepts(file)) {
+            match kind.expected_outcome(*accepts) {
+                BaselineOutcome::Pass => counts.pass += 1,
+                BaselineOutcome::Skip => counts.skip += 1,
+            }
+        }
+        counts
+    }
+
+    pub fn expected_totals(&self) -> OutcomeCounts {
+        self.oracle_accepts.keys().fold(
+            OutcomeCounts {
+                pass: 0,
+                skip: 0,
+                fail: 0,
+            },
+            |totals, file| {
+                let counts = self.expected_outcomes(file);
+                OutcomeCounts {
+                    pass: totals.pass + counts.pass,
+                    skip: totals.skip + counts.skip,
+                    fail: totals.fail + counts.fail,
+                }
+            },
+        )
+    }
+}
+
+fn oracle_accepts_at(document: &serde_json::Value, file: &str, index: usize) -> bool {
+    let outcomes = document["files"]
+        .as_array()
+        .expect("version baseline files")
+        .iter()
+        .find(|entry| entry["file"].as_str() == Some(file))
+        .unwrap_or_else(|| panic!("version gap file {file} has no oracle outcomes"))["oracle_accepts"]
+        .as_str()
+        .expect("oracle outcomes");
+    match outcomes.as_bytes().get(index) {
+        Some(b'A') => true,
+        Some(b'R') => false,
+        _ => panic!("version gap {file}:{index} has no oracle outcome"),
+    }
+}
+
+/// Render a version baseline file. The regeneration test writes it; see
+/// `docs/differential-baseline.md`.
+pub fn render_version_baseline(
+    feature: &str,
+    oracle_accepts: &BTreeMap<String, Vec<bool>>,
+    gaps: &[VersionGap],
+) -> String {
+    let (reference, commit) = oracle_pin(feature);
+    let frozen = FrozenStatements::pinned();
+    let kinds_and_accepts = oracle_accepts.iter().flat_map(|(file, accepts)| {
+        frozen
+            .file(file)
+            .legacy_item_kinds()
+            .iter()
+            .zip(accepts)
+            .map(|(kind, accepts)| kind.expected_outcome(*accepts))
+    });
+    let (pass, skip) = kinds_and_accepts.fold((0, 0), |(pass, skip), outcome| match outcome {
+        BaselineOutcome::Pass => (pass + 1, skip),
+        BaselineOutcome::Skip => (pass, skip + 1),
+    });
+    // One gap and one file on each line, so a change is a small diff.
+    let line = |value: serde_json::Value| serde_json::to_string(&value).expect("render JSON");
+    let gaps = gaps
+        .iter()
+        .map(|gap| {
+            line(serde_json::json!({
+                "file": gap.file,
+                "statement_index": gap.statement_index,
+                "byte_range": format!("{}:{}", gap.byte_range.start, gap.byte_range.end),
+                "pg_sql": gap.pg_sql.name(),
+                "oracle": if gap.oracle_accepts { "accept" } else { "reject" },
+            }))
+        })
+        .collect::<Vec<_>>();
+    let files = oracle_accepts
+        .iter()
+        .map(|(file, accepts)| {
+            line(serde_json::json!({
+                "file": file,
+                "oracle_accepts": accepts
+                    .iter()
+                    .map(|accepts| if *accepts { 'A' } else { 'R' })
+                    .collect::<String>(),
+            }))
+        })
+        .collect::<Vec<_>>();
+    let list = |items: Vec<String>| {
+        if items.is_empty() {
+            "[]".to_owned()
+        } else {
+            format!("[\n    {}\n  ]", items.join(",\n    "))
+        }
+    };
+    format!(
+        "{{\n  \"schema_version\": 1,\n  \"target_version\": {},\n  \"oracle\": {},\n  \
+         \"corpus\": {},\n  \"totals\": {},\n  \"expected_version_gaps\": {},\n  \
+         \"files\": {}\n}}\n",
+        line(serde_json::json!(feature)),
+        line(serde_json::json!({ "ref": reference, "commit": commit })),
+        line(serde_json::json!({ "name": "postgresql-17.9", "gitlink": POSTGRES_GITLINK })),
+        line(serde_json::json!({
+            "statements": frozen.total_statements(),
+            "oracle_accepts": oracle_accepts.values().flatten().filter(|a| **a).count(),
+            "pass": pass,
+            "skip": skip,
+            "expected_version_gaps": gaps.len(),
+        })),
+        list(gaps),
+        list(files),
+    )
 }
 
 impl FrozenStatements {

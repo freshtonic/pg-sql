@@ -700,5 +700,6 @@ fn every_regression_script_is_a_psql_document() {
         }
     }
 
-    assert_eq!(read, 225, "the vendored regression corpus changed size");
+    // 17.11 (#71) added `compression_pglz.sql` to the 17.9 scripts.
+    assert_eq!(read, 226, "the vendored regression corpus changed size");
 }

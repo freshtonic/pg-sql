@@ -14,6 +14,34 @@ Postgres-flavoured SQL parser based on `recursa`.
 - [x] Support "super flat" ASTs https://jhwlr.io/super-flat-ast/ — see
       [Flat AST](#flat-ast)
 
+## Target versions
+
+A pg-sql build reproduces the raw parser of one PostgreSQL major version, its
+target version. Select it with exactly one Cargo feature:
+
+| Feature | PostgreSQL release |
+|---|---|
+| `pg14` | 14.24 |
+| `pg15` | 15.19 |
+| `pg16` | 16.15 |
+| `pg17` (default) | 17.11 |
+| `pg18` | 18.6 |
+| `pg19-beta` | `REL_19_STABLE` at `b73d13c` |
+
+```toml
+pg-sql = { path = "../pg-sql", default-features = false, features = ["pg16", "spans"] }
+```
+
+The features are mutually exclusive: the build stops with an error for zero
+or for two or more. Cargo feature unification is the usual cause of two. A
+crate between your crate and pg-sql must use `default-features = false` on
+pg-sql and forward the version features, as `pg-psql` does.
+`pg_sql::TARGET_VERSION` reports the selection. The grammar of versions other
+than 17 is not complete yet (#74 to #78). See ADR 0009 and
+`docs/plans/2026-09-22-target-versions.md`.
+
+`scripts/gate-versions` builds and tests every target version.
+
 ## Toolchain
 
 `rust-toolchain.toml` pins a dated nightly. The dev loop compiles the
@@ -48,7 +76,8 @@ The design lives in Recursa's `docs/flat-ast-design.md`.
 
 The `parse` bench measures pg-sql parser throughput and compares it against
 its own Flat AST (the `pg-sql-flat` engine), `sqlparser-rs`
-(`PostgreSqlDialect`), and PostgreSQL 17.11's raw parser. `pg-sql` and
+(`PostgreSqlDialect`), and the raw parser of the target version's pinned
+PostgreSQL release (17.11 by default). `pg-sql` and
 `pg-sql-flat` share the lex pass and the automaton, so the pair isolates the
 representation; the harness refuses to report timings unless the two accept
 exactly the same statements.

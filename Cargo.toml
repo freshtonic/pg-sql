@@ -33,6 +33,32 @@ test = false
 doctest = false
 
 [features]
+# Target version (ADR 0009). Enable exactly one version feature; the build
+# script stops a build with zero or with two or more. A crate between a
+# consumer and pg-sql uses `default-features = false` on pg-sql and forwards
+# these features. `postgres-oracle` builds the oracle of the same version.
+default = ["pg17"]
+pg14 = ["pg-oracle?/pg14"]
+pg15 = ["since-pg15", "pg-oracle?/pg15"]
+pg16 = ["since-pg15", "since-pg16", "pg-oracle?/pg16"]
+pg17 = ["since-pg15", "since-pg16", "since-pg17", "pg-oracle?/pg17"]
+pg18 = ["since-pg15", "since-pg16", "since-pg17", "since-pg18", "pg-oracle?/pg18"]
+pg19-beta = [
+    "since-pg15",
+    "since-pg16",
+    "since-pg17",
+    "since-pg18",
+    "since-pg19",
+    "pg-oracle?/pg19-beta",
+]
+# Cumulative helpers for version gates: "added in N" is
+# `feature = "since-pgN"`, "removed in N" is `not(feature = "since-pgN")`.
+# Only the version features enable them.
+since-pg15 = []
+since-pg16 = []
+since-pg17 = []
+since-pg18 = []
+since-pg19 = []
 arbitrary = ["dep:arbitrary", "recursa/arbitrary"]
 postgres-oracle = ["dep:pg-oracle"]
 spans = ["recursa/spans", "recursa-codegen/spans"]
@@ -44,7 +70,7 @@ regex = "1"
 derive_more = { version = "2.1.1", features = ["deref"] }
 arbitrary = { version = "1", features = ["derive"], optional = true }
 vec1 = "1"
-pg-oracle = { path = "pg-oracle", optional = true }
+pg-oracle = { path = "pg-oracle", optional = true, default-features = false }
 
 [dev-dependencies]
 sqlparser = "0.52"

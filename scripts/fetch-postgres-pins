@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Fetches the pinned PostgreSQL release of every target version
+# (pg-oracle/pins.tsv) into the vendor/postgres submodule's object store.
+# The pg-oracle build extracts each pin from there with `git archive`.
+# The submodule checkout does not change.
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+pins=pg-oracle/pins.tsv
+
+refspecs=()
+while IFS=$'\t' read -r feature ref commit; do
+  case "$feature" in ''|'#'*) continue ;; esac
+  if git -C vendor/postgres cat-file -e "$commit^{commit}" 2>/dev/null \
+    && { [[ "$ref" == *_STABLE ]] || git -C vendor/postgres rev-parse -q --verify "refs/tags/$ref" >/dev/null; }; then
+    continue
+  fi
+  if [[ "$ref" == *_STABLE ]]; then
+    refspecs+=("$commit")
+  else
+    refspecs+=("refs/tags/$ref:refs/tags/$ref")
+  fi
+done < "$pins"
+
+if [ "${#refspecs[@]}" -eq 0 ]; then
+  echo "every pinned PostgreSQL release is present"
+  exit 0
+fi
+git -C vendor/postgres fetch --no-tags origin "${refspecs[@]}"

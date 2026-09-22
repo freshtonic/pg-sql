@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# The target-version part of the merge gate (ADR 0009; decision 13 of
+# docs/plans/2026-09-22-target-versions.md).
+#
+# Usage: scripts/gate-versions [FEATURE...]
+#
+# FEATURE is a version feature: pg14, pg15, pg16, pg17, pg18 or pg19-beta.
+# With no argument, the script runs all six, one after the other. For each
+# version it builds pg-sql with `FEATURE,spans` (the configuration that
+# consumers use) and runs the core test targets, the differential against
+# that version's oracle, pg-psql and pg-oracle. For pg17 it also runs the
+# no-spans and `arbitrary` combinations.
+#
+# Each version is a different build of the generated grammar, and the first
+# oracle build of each version builds PostgreSQL. A full run is slow and needs
+# several GB of disk for each version.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+# A RUSTUP_TOOLCHAIN from the shell overrides rust-toolchain.toml.
+unset RUSTUP_TOOLCHAIN
+
+versions=("$@")
+if [ "${#versions[@]}" -eq 0 ]; then
+  versions=(pg14 pg15 pg16 pg17 pg18 pg19-beta)
+fi
+
+run() {
+  echo "+ $*" >&2
+  "$@"
+}
+
+for version in "${versions[@]}"; do
+  case "$version" in
+    pg14|pg15|pg16|pg17|pg18|pg19-beta) ;;
+    *) echo "unknown version feature: $version" >&2; exit 2 ;;
+  esac
+  echo "=== target version $version" >&2
+  spans=(--no-default-features --features "$version,spans")
+  oracle=(--no-default-features --features "$version,spans,postgres-oracle")
+
+  run cargo build --locked -p pg-sql "${spans[@]}"
+  run cargo test --locked -p pg-sql "${spans[@]}" \
+    --test embedded --test embedded_inventory --test differential_baseline \
+    --test target_version --test strict_statement --test fmt --test flat_parity
+  run cargo test --locked -p pg-sql "${oracle[@]}" \
+    --test differential --test accepted_legacy_gaps
+  run cargo test --locked -p pg-psql --no-default-features --features "$version"
+  run cargo test --locked -p pg-oracle --no-default-features --features "$version"
+
+  if [ "$version" = pg17 ]; then
+    # The no-spans and arbitrary combinations run on pg17 only.
+    run cargo test --locked -p pg-sql \
+      --test embedded --test embedded_inventory --test differential_baseline \
+      --test flat_parity
+    run cargo test --locked -p pg-sql --features postgres-oracle \
+      --test differential --test accepted_legacy_gaps
+    run cargo build --locked -p pg-sql --features arbitrary
+  fi
+done
+
+echo "target-version gate passed: ${versions[*]}" >&2
