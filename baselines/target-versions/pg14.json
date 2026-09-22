@@ -3,7 +3,7 @@
   "target_version": "pg14",
   "oracle": {"commit":"6b3806732b7c5df06bdd0ed150e8a07b4ad62315","ref":"REL_14_24"},
   "corpus": {"gitlink":"6d396980fc5aed4f1a525e0bd75cb16b25ed40ca","name":"postgresql-17.9"},
-  "totals": {"expected_version_gaps":24,"oracle_accepts":42137,"pass":43436,"skip":38,"statements":43474},
+  "totals": {"expected_version_gaps":20,"oracle_accepts":42137,"pass":43436,"skip":38,"statements":43474},
   "expected_version_gaps": [
     {"byte_range":"1116:1130","file":"numerology.sql","oracle":"accept","pg_sql":"skip","statement_index":27},
     {"byte_range":"1131:1143","file":"numerology.sql","oracle":"accept","pg_sql":"skip","statement_index":28},
@@ -24,11 +24,7 @@
     {"byte_range":"1345:1373","file":"numerology.sql","oracle":"accept","pg_sql":"skip","statement_index":44},
     {"byte_range":"1672:1684","file":"numerology.sql","oracle":"accept","pg_sql":"skip","statement_index":56},
     {"byte_range":"1685:1701","file":"numerology.sql","oracle":"accept","pg_sql":"skip","statement_index":57},
-    {"byte_range":"1791:1966","file":"numerology.sql","oracle":"accept","pg_sql":"skip","statement_index":63},
-    {"byte_range":"10:24","file":"sqljson.sql","oracle":"accept","pg_sql":"skip","statement_index":0},
-    {"byte_range":"1030:1051","file":"sqljson.sql","oracle":"accept","pg_sql":"skip","statement_index":22},
-    {"byte_range":"1574:1598","file":"sqljson.sql","oracle":"accept","pg_sql":"skip","statement_index":37},
-    {"byte_range":"75:148","file":"sqljson_jsontable.sql","oracle":"accept","pg_sql":"skip","statement_index":0}
+    {"byte_range":"1791:1966","file":"numerology.sql","oracle":"accept","pg_sql":"skip","statement_index":63}
   ],
   "files": [
     {"file":"advisory_lock.sql","oracle_accepts":"RAAAAAAAAAAAAAAAAAAAAAA"},

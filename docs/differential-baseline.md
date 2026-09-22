@@ -53,8 +53,8 @@ release of that version, from `pg-oracle/pins.tsv`:
 
 | Feature | Oracle | Expected version gaps |
 |---|---|---|
-| `pg14` | `REL_14_24` | 24 |
-| `pg15` | `REL_15_19` | 4 |
+| `pg14` | `REL_14_24` | 20 |
+| `pg15` | `REL_15_19` | 0 |
 | `pg16` | `REL_16_15` | 0 |
 | `pg17` | `REL_17_11` | 0 |
 | `pg18` | `REL_18_6` | 0 |
@@ -81,9 +81,12 @@ pg-sql outcome and the oracle outcome:
 The gaps exist because the grammar of each version is not complete. Until its
 increment lands, a `pg14`, `pg15`, `pg18` or `pg19-beta` build has the 17
 grammar. The current gaps are the trailing junk after numbers that 14 accepts
-(`numerology.sql`) and the `json()` function calls that 14 and 15 accept
-(`sqljson.sql`, `sqljson_jsontable.sql`). The `pg16` grammar is complete (#74),
-so its list is empty.
+(`numerology.sql`). The `pg16` grammar is complete (#74), so its list is
+empty. A `pg14` or `pg15` build has the 16 grammar, so the `json()` function
+calls that 14, 15 and 16 accept (`sqljson.sql`, `sqljson_jsontable.sql`) are
+no longer gaps, and the `pg15` list is empty too. An empty list does not
+show that a version is complete: the check below cannot find the 16 syntax
+that a `pg15` build accepts.
 
 **Each version increment (#74 to #78) must drain the list of its version to
 empty.** The `pg17` list is empty, and the `pg17` baseline must give the frozen
