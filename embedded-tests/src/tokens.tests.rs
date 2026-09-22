@@ -971,6 +971,38 @@ mod tests {
         assert_eq!(num.text(), "$1");
     }
 
+    // Added in 18: a parameter number that does not fit in `int32` is a
+    // lexer error (docs/research/postgres-14-19-sql-syntax-changes.md,
+    // PostgreSQL 18, item 13; REL_18_6 scan.l `{param}`).
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn dollar_num_above_int32_is_a_lexical_error_from_18() {
+        for src in ["$2147483647", "$0", "$00000000002147483647", "$1999999999"] {
+            assert!(
+                first_token_is(src, crate::TokenKind::DollarNum, src.len()),
+                "{src:?} is one parameter"
+            );
+            assert_eq!(crate::lex(src).errors().count(), 0, "{src:?}");
+        }
+        for src in ["$2147483648", "$99999999999", "$0002147483650", "$10000000000"] {
+            assert!(crate::lex(src).errors().count() > 0, "{src:?} must not lex");
+        }
+    }
+
+    // Before 18 the value overflows without an error, so any digit run is one
+    // parameter (the same research entry).
+    #[cfg(not(feature = "since-pg18"))]
+    #[test]
+    fn dollar_num_above_int32_lexes_before_18() {
+        for src in ["$2147483648", "$99999999999"] {
+            assert!(
+                first_token_is(src, crate::TokenKind::DollarNum, src.len()),
+                "{src:?} is one parameter"
+            );
+            assert_eq!(crate::lex(src).errors().count(), 0, "{src:?}");
+        }
+    }
+
     // --- Soft keyword tests ---
 
     /// A soft (non-reserved) keyword is reclaimable as an identifier when a

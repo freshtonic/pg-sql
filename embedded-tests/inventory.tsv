@@ -1215,6 +1215,8 @@ embedded-tests/src/tokens.tests.rs	window_ref_name_accepts_plain_ident	false	14-
 embedded-tests/src/tokens.tests.rs	window_ref_name_rejects_clause_heads	false	14-
 embedded-tests/src/tokens.tests.rs	vertical_tab_continues_a_string	false	17-
 embedded-tests/src/tokens.tests.rs	vertical_tab_does_not_continue_a_string_before_17	false	14-16
+embedded-tests/src/tokens.tests.rs	dollar_num_above_int32_is_a_lexical_error_from_18	false	18-
+embedded-tests/src/tokens.tests.rs	dollar_num_above_int32_lexes_before_18	false	14-17
 embedded-tests/src/ast/dml/select.tests.rs	ignore_and_respect_need_as_from_19	false	19-
 embedded-tests/src/ast/dml/select.tests.rs	ignore_is_a_bare_label_before_19	false	14-18
 embedded-tests/src/ast/shared/expr.tests.rs	parse_null_treatment_between_filter_and_over	false	19-

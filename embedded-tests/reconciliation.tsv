@@ -473,3 +473,5 @@ tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src
 -	introduced	embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_before_16	issue-9-generated-statement
 -	introduced	embedded-tests/src/tokens.tests.rs	numeric_literal_trailing_dot_after_underscores	issue-9-generated-statement
 -	introduced	embedded-tests/src/tokens.tests.rs	non_decimal_and_underscore_literals_are_rejected_before_16	issue-9-generated-statement
+-	introduced	embedded-tests/src/tokens.tests.rs	dollar_num_above_int32_is_a_lexical_error_from_18	issue-9-generated-statement
+-	introduced	embedded-tests/src/tokens.tests.rs	dollar_num_above_int32_lexes_before_18	issue-9-generated-statement
