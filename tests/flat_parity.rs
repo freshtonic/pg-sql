@@ -25,8 +25,10 @@
 //!    every typed pool and finds no same-pool child that follows its parent
 //!    (invariant I1 of `docs/flat-ast-design.md` in Recursa).
 //!
-//! A second test, behind the `spans` feature, parses with `parse_flat` and
-//! asserts the root span covers the whole statement.
+//! A second test, behind the `spans` feature, parses with `parse_flat`, the
+//! span-capturing entry point a consumer runs, asserts it gives the verdict
+//! `parse_flat_without_spans` gives, and asserts the root span covers the
+//! whole statement.
 //!
 //! Run with `cargo test -p pg-sql --test flat_parity` and, for the span half,
 //! `cargo test -p pg-sql --features spans --test flat_parity`.
@@ -243,10 +245,29 @@ fn a_flat_parse_with_spans_gives_the_root_a_span_covering_the_statement() {
         if lexed.errors().next().is_some() {
             continue;
         }
+        // Recognition parity for the span-capturing entry point: `parse_flat`
+        // is the parse a consumer such as pg-analyze runs, and it must give the
+        // verdict `parse_flat_without_spans` gives, which the test above holds
+        // to the nested parse. A divergence here is a defect in the spans path
+        // of the generated parser, and it used to pass silently.
+        let without_spans = flat_outcome(sql);
         let mut input = lexed.input();
-        let Ok(flat) = Statement::parse_flat(&mut input) else {
+        let parsed = Statement::parse_flat(&mut input);
+        assert_eq!(
+            parsed.is_ok(),
+            without_spans.accepted,
+            "{file}:{index}: `parse_flat` and `parse_flat_without_spans` disagree on acceptance — {:?}",
+            truncate(sql),
+        );
+        let Ok(flat) = parsed else {
             continue;
         };
+        assert_eq!(
+            input.is_eof(),
+            without_spans.is_eof,
+            "{file}:{index}: `parse_flat` and `parse_flat_without_spans` disagree on is_eof — {:?}",
+            truncate(sql),
+        );
         if !input.is_eof() {
             continue;
         }
