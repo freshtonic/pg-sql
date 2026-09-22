@@ -40,6 +40,7 @@ enum Rationale {
     CorrectedAdr0004,
     FrozenStatementSpanAdapter,
     Issue68PsqlCrate,
+    RaisedAcceptanceGramY,
     Issue8OmittedTooling,
     Issue9GeneratedExpression,
     Issue9GeneratedStatement,
@@ -187,6 +188,7 @@ fn disposition_ledger(source: &str) -> Result<Vec<DispositionRow>, String> {
                 "corrected-adr-0004" => Rationale::CorrectedAdr0004,
                 "frozen-statement-span-adapter" => Rationale::FrozenStatementSpanAdapter,
                 "issue-68-psql-crate" => Rationale::Issue68PsqlCrate,
+                "raised-acceptance-gram-y" => Rationale::RaisedAcceptanceGramY,
                 "issue-8-omitted-tooling" => Rationale::Issue8OmittedTooling,
                 "issue-9-generated-expression" => Rationale::Issue9GeneratedExpression,
                 "issue-9-generated-statement" => Rationale::Issue9GeneratedStatement,
@@ -619,6 +621,17 @@ fn validate_disposition_rationale(row: &DispositionRow) -> Result<(), String> {
             | Some("ast::utility::copy::tests::copy_table_psql_var_target") => {
                 Rationale::Issue68PsqlCrate
             }
+            // These three asserted MERGE forms that gram.y rejects and
+            // merge.sql tests as syntax errors: `WHEN NOT MATCHED BY SOURCE
+            // THEN INSERT`, a multi-row `merge_values_clause`, and `INSERT
+            // INTO` inside a merge action. The introduced
+            // `parse_merge_when_clauses_with_gram_y_actions` holds each to
+            // gram.y's rule instead.
+            Some("ast::dml::merge::tests::parse_merge_not_matched_by_source_default_values")
+            | Some("ast::dml::merge::tests::parse_merge_insert_multi_values")
+            | Some("ast::dml::merge::tests::parse_merge_insert_into_default_values") => {
+                Rationale::RaisedAcceptanceGramY
+            }
             _ => {
                 return Err(format!(
                     "superseded row has no reviewed rationale mapping: {:?}",
@@ -648,7 +661,7 @@ fn all_imported_embedded_tests_and_ignored_statuses_are_accounted_for() {
     let included_paths = included_test_modules(root, &discovered_paths);
     let actual = actual_inventory(root, &discovered_paths);
 
-    assert_eq!(expected.len(), 1_157);
+    assert_eq!(expected.len(), 1_155);
     assert_eq!(discovered_paths, expected_paths);
     assert_eq!(
         included_paths,
@@ -686,7 +699,7 @@ fn every_frozen_legacy_test_and_new_relocated_test_has_a_disposition() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
 
     assert_eq!(legacy.len(), 1_318);
-    assert_eq!(current.len(), 1_157);
+    assert_eq!(current.len(), 1_155);
     validate_reconciliation(
         &legacy,
         &current,

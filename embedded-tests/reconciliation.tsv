@@ -21,6 +21,7 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_legacy_oids_clauses	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_create_table_tablespace_as_execute	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_partition_of_multiple_column_options	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_clauses_with_gram_y_actions	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_coalesce_family_as_function_tables	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_rollup_and_cube_as_grouping_clauses	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_join_chained_after_using	issue-9-generated-statement
@@ -109,6 +110,9 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/shared/with_clause.tests.rs	immediate_recursive_is_the_clause_modifier	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/shared/with_clause.tests.rs	parse_later_cte_named_recursive	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/shared/with_clause.tests.rs	parse_with_recursive_cte_named_recursive	issue-9-generated-statement
+ast::dml::merge::tests::parse_merge_insert_into_default_values	superseded	-	-	raised-acceptance-gram-y
+ast::dml::merge::tests::parse_merge_insert_multi_values	superseded	-	-	raised-acceptance-gram-y
+ast::dml::merge::tests::parse_merge_not_matched_by_source_default_values	superseded	-	-	raised-acceptance-gram-y
 ast::file::tests::copy_data_preserves_blank_lines	file-recovery-scope	-	-	adr-0005-file-recovery
 ast::file::tests::corpus_uses_structured_alter_foreign	file-recovery-scope	-	-	adr-0005-file-recovery
 ast::file::tests::corpus_uses_structured_copy	file-recovery-scope	-	-	adr-0005-file-recovery
@@ -347,9 +351,9 @@ ast::file::tests::parse_write_parallel_sql_fixture	file-recovery-scope	-	-	adr-0
 ast::file::tests::parse_xid_sql_fixture	file-recovery-scope	-	-	adr-0005-file-recovery
 ast::file::tests::parse_xml_sql_fixture	file-recovery-scope	-	-	adr-0005-file-recovery
 ast::file::tests::parse_xmlmap_sql_fixture	file-recovery-scope	-	-	adr-0005-file-recovery
+ast::shared::expr::tests::parse_adjacent_string_literals	renamed	embedded-tests/src/ast/shared/expr.tests.rs	reject_same_line_adjacent_string_literals	reviewed-rename
 ast::shared::expr::tests::parse_psql_var	superseded	-	-	issue-68-psql-crate
 ast::shared::expr::tests::parse_psql_var_in_func_call	superseded	-	-	issue-68-psql-crate
-ast::shared::expr::tests::parse_adjacent_string_literals	renamed	embedded-tests/src/ast/shared/expr.tests.rs	reject_same_line_adjacent_string_literals	reviewed-rename
 ast::shared::expr::tests::reject_string_continuation_across_comment	superseded	embedded-tests/src/ast/shared/expr.tests.rs	reject_string_continuation_across_block_comment	corrected-adr-0004
 ast::tests::parse_psql_command_directive	superseded	embedded-tests/src/ast/mod.tests.rs	psql_directive_is_not_a_strict_statement	strict-entry-point
 ast::tests::parse_psql_command_statement	superseded	embedded-tests/src/ast/mod.tests.rs	parse_strict_statement_to_end_of_input	strict-entry-point

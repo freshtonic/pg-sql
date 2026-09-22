@@ -440,11 +440,9 @@ embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_with_columns	false
 embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_without_columns	false
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_basic	false
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_do_nothing_both	false
-embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_insert_into_default_values	false
-embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_insert_multi_values	false
-embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_not_matched_by_source_default_values	false
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_not_matched_by_source_update_delete	false
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_target_alias	false
+embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_clauses_with_gram_y_actions	false
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_matched_and	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_coalesce_family_as_function_tables	false
 embedded-tests/src/ast/dml/select.tests.rs	parse_fetch_first_row_with_ties	false

@@ -23,18 +23,7 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `BY SOURCE` or `BY TARGET`.
-    #[derive(Debug)]
-    pub enum NotMatchedBy {
-        #[tok(BY, SOURCE)]
-        Source,
-        #[tok(BY, TARGET)]
-        Target,
-    }
-}
-
-recursa::ast_node! {
-    /// `UPDATE SET col = expr, ...` action body (the part after THEN).
+    /// `UPDATE SET set_clause_list`: gram.y:12518 `merge_update`.
     #[derive(Debug)]
     #[tok(UPDATE, SET, this)]
     pub struct UpdateAction {
@@ -44,11 +33,9 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Action allowed after `WHEN MATCHED ... THEN`.
-    ///
-    /// Variant ordering: `DoNothing` (`DO NOTHING`) and `Update` (`UPDATE`) and
-    /// `Delete` (`DELETE`) all start with distinct keywords, so order is by
-    /// declaration only.
+    /// The action of a `WHEN MATCHED` or `WHEN NOT MATCHED BY SOURCE` clause:
+    /// gram.y:12459 gives `merge_when_tgt_matched` the actions `merge_update`,
+    /// `merge_delete` and `DO NOTHING`, and never an insert.
     #[derive(Debug)]
     pub enum MatchedAction {
         Update(UpdateAction),
@@ -60,46 +47,20 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A single row of values: `(expr, ...)`.
+    /// gram.y:12592 `merge_values_clause: VALUES '(' expr_list ')'`: exactly
+    /// one row, with at least one value. `INSERT VALUES (1, 1), (2, 2)` is a
+    /// syntax error in a `MERGE`, where the same text is an `INSERT`
+    /// statement's `values_clause`.
     #[derive(Debug)]
-    #[tok(LPAREN, this, RPAREN)]
-    pub struct ValueRow(#[sep(COMMA)] pub zero_or_many!(Expr));
-}
-
-recursa::ast_node! {
-    /// `VALUES (row), (row), ...` body.
-    #[derive(Debug)]
-    #[tok(VALUES, this)]
-    pub struct InsertValuesBody {
+    #[tok(VALUES, LPAREN, this, RPAREN)]
+    pub struct MergeValuesClause {
         #[sep(COMMA)]
-        pub rows: zero_or_many!(ValueRow),
+        pub values: one_or_many!(Expr),
     }
 }
 
 recursa::ast_node! {
-    /// Body of an INSERT inside MERGE: `VALUES ...` or `DEFAULT VALUES`.
-    ///
-    /// Variant ordering: `Default` (`DEFAULT VALUES`) is matched before
-    /// `Values` (`VALUES`) since they begin with different keywords.
-    #[derive(Debug)]
-    pub enum InsertBody {
-        #[tok(DEFAULT, VALUES)]
-        Default,
-        Values(InsertValuesBody),
-    }
-}
-
-recursa::ast_node! {
-    /// Optional `INTO target_name` after `INSERT`.
-    #[derive(Debug)]
-    pub struct InsertInto {
-        #[tok(INTO, this)]
-        pub name: crate::tokens::ColId,
-    }
-}
-
-recursa::ast_node! {
-    /// Parenthesized `insert_column_list` on a MERGE `INSERT` action.
+    /// gram.y `insert_column_list` in a `merge_insert`.
     #[derive(Debug, derive_more :: Deref)]
     #[tok(LPAREN, this, RPAREN)]
     pub struct MergeInsertColumnList(
@@ -110,54 +71,77 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `INSERT [INTO target] [(cols)] { VALUES ... | DEFAULT VALUES }`
+    /// gram.y:12544 `merge_insert`: `INSERT [(columns)] [OVERRIDING {SYSTEM |
+    /// USER} VALUE] merge_values_clause | INSERT DEFAULT VALUES`. There is no
+    /// `INTO`: the target is the statement's.
+    ///
+    /// Variant ordering: `Default` leads with `DEFAULT`; `Values` with `(`,
+    /// `OVERRIDING` or `VALUES`.
     #[derive(Debug)]
-    #[tok(INSERT, this)]
-    pub struct InsertAction {
-        pub into: Option<InsertInto>,
-        pub columns: Option<MergeInsertColumnList>,
-        /// `OVERRIDING {SYSTEM|USER} VALUE` between the columns and the body.
-        pub overriding: Option<crate::ast::dml::insert::OverridingClause>,
-        pub body: InsertBody,
+    pub enum InsertAction {
+        /// `INSERT DEFAULT VALUES`, which takes no column list and no
+        /// `OVERRIDING`.
+        #[tok(INSERT, DEFAULT, VALUES)]
+        Default,
+        Values(#[tok(INSERT, this)] MergeInsertValues),
     }
 }
 
 recursa::ast_node! {
-    /// Action allowed after `WHEN NOT MATCHED ... THEN`.
-    ///
-    /// `WHEN NOT MATCHED [BY TARGET]` takes an `INSERT` (or `DO NOTHING`);
-    /// `WHEN NOT MATCHED BY SOURCE` takes an `UPDATE` / `DELETE` instead
-    /// (the target row exists, the source row does not). Which `by` form
-    /// permits which action is a semantic rule, so all four are accepted
-    /// grammatically.
+    /// `[(columns)] [OVERRIDING {SYSTEM | USER} VALUE] merge_values_clause`.
+    #[derive(Debug)]
+    pub struct MergeInsertValues {
+        pub columns: Option<MergeInsertColumnList>,
+        pub overriding: Option<crate::ast::dml::insert::OverridingClause>,
+        pub values: MergeValuesClause,
+    }
+}
+
+recursa::ast_node! {
+    /// The action of a `WHEN NOT MATCHED [BY TARGET]` clause: gram.y:12459
+    /// gives `merge_when_tgt_not_matched` the actions `merge_insert` and `DO
+    /// NOTHING`, and never an update or a delete.
     #[derive(Debug)]
     pub enum NotMatchedAction {
         Insert(InsertAction),
-        Update(UpdateAction),
-        #[tok(DELETE)]
-        Delete,
         #[tok(DO, NOTHING)]
         DoNothing,
     }
 }
 
 recursa::ast_node! {
-    /// `WHEN NOT MATCHED [BY {SOURCE|TARGET}] [AND cond] THEN action`.
+    /// gram.y:12503 `merge_when_tgt_matched: WHEN MATCHED | WHEN NOT MATCHED
+    /// BY SOURCE`: the clauses whose row exists in the target, with the
+    /// actions that need one.
+    ///
+    /// Variant ordering: the two lead with `WHEN MATCHED` and `WHEN NOT`.
     #[derive(Debug)]
-    #[tok(WHEN, NOT, MATCHED, this)]
-    pub struct WhenNotMatched {
-        pub by: Option<NotMatchedBy>,
-        pub and: Option<AndCondition>,
-        #[tok(THEN, this)]
-        pub action: NotMatchedAction,
+    pub enum MatchedKind {
+        #[tok(WHEN, MATCHED)]
+        Matched,
+        #[tok(WHEN, NOT, MATCHED, BY, SOURCE)]
+        NotMatchedBySource,
     }
 }
 
 recursa::ast_node! {
-    /// `WHEN MATCHED [AND cond] THEN action`.
+    /// gram.y:12508 `merge_when_tgt_not_matched: WHEN NOT MATCHED | WHEN NOT
+    /// MATCHED BY TARGET`: the clauses whose row is absent from the target.
+    /// `BY TARGET` is the spelled-out default.
     #[derive(Debug)]
-    #[tok(WHEN, MATCHED, this)]
+    #[tok(WHEN, NOT, MATCHED, this)]
+    pub struct NotMatchedKind {
+        #[presence(BY, TARGET)]
+        pub by_target: bool,
+    }
+}
+
+recursa::ast_node! {
+    /// `merge_when_tgt_matched opt_merge_when_condition THEN {merge_update |
+    /// merge_delete | DO NOTHING}`.
+    #[derive(Debug)]
     pub struct WhenMatched {
+        pub kind: MatchedKind,
         pub and: Option<AndCondition>,
         #[tok(THEN, this)]
         pub action: MatchedAction,
@@ -165,10 +149,26 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A WHEN clause in MERGE.
+    /// `merge_when_tgt_not_matched opt_merge_when_condition THEN {merge_insert
+    /// | DO NOTHING}`.
+    #[derive(Debug)]
+    pub struct WhenNotMatched {
+        pub kind: NotMatchedKind,
+        pub and: Option<AndCondition>,
+        #[tok(THEN, this)]
+        pub action: NotMatchedAction,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y:12459 `merge_when_clause`. gram.y splits the clauses by whether
+    /// the target row exists, because that decides the actions: `WHEN MATCHED`
+    /// and `WHEN NOT MATCHED BY SOURCE` update, delete or do nothing; `WHEN NOT
+    /// MATCHED [BY TARGET]` inserts or does nothing. A clause with the wrong
+    /// action is a syntax error, which merge.sql tests.
     ///
-    /// Variant ordering: `NotMatched` (`WHEN NOT MATCHED`) is longer than
-    /// `Matched` (`WHEN MATCHED`); list it first.
+    /// Variant ordering: both lead with `WHEN`; the parser decides at `BY
+    /// SOURCE` or at the token after `MATCHED`.
     #[derive(Debug)]
     pub enum WhenClause {
         NotMatched(WhenNotMatched),
