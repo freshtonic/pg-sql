@@ -9,6 +9,9 @@ mod tests {
     /// this syntactically (`TABLES IN SCHEMA ColId` has no opt_column_list),
     /// but pg-sql accepts it over-permissively so the publication.sql corpus
     /// statement parses into a structured AST.
+    // Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+    // (REL_15_19 gram.y `PublicationObjSpec`).
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn parse_alter_publication_add_tables_in_schema_with_columns() {
         let lexed = crate::lex("ALTER PUBLICATION testpub1_forschema ADD TABLES IN SCHEMA foo (a, b)");
@@ -21,6 +24,9 @@ mod tests {
 
     /// Sanity: `ALTER PUBLICATION ... ADD TABLES IN SCHEMA name` (bare,
     /// PG-accepted form) still parses.
+    // Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+    // (REL_15_19 gram.y `PublicationObjSpec`).
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn parse_alter_publication_add_tables_in_schema_bare() {
         let lexed = crate::lex("ALTER PUBLICATION p ADD TABLES IN SCHEMA foo");
@@ -55,6 +61,9 @@ mod tests {
         );
     }
 
+    // Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+    // (REL_15_19 gram.y `PublicationObjSpec`).
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn create_publication_for_table_only_where_roundtrips() {
         reparse_stable::<CreatePublicationStmt>(
@@ -62,6 +71,9 @@ mod tests {
         );
     }
 
+    // Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+    // (REL_15_19 gram.y `PublicationObjSpec`).
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn create_publication_for_tables_in_schema_roundtrips() {
         reparse_stable::<CreatePublicationStmt>(
@@ -69,6 +81,9 @@ mod tests {
         );
     }
 
+    // Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+    // (REL_15_19 gram.y `PublicationObjSpec`).
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn create_publication_mixed_tables_and_schema_roundtrips() {
         reparse_stable::<CreatePublicationStmt>(
@@ -76,6 +91,9 @@ mod tests {
         );
     }
 
+    // Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+    // (REL_15_19 gram.y `PublicationObjSpec`).
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn create_publication_with_columns_and_where_roundtrips() {
         reparse_stable::<CreatePublicationStmt>(
@@ -127,6 +145,42 @@ mod tests {
                 "CREATE PUBLICATION p FOR ALL TABLES, ALL SEQUENCES",
                 "CREATE PUBLICATION p FOR ALL TABLES EXCEPT (TABLE t1)",
                 "ALTER PUBLICATION p SET ALL TABLES",
+            ],
+        );
+    }
+
+    // Before 15, a publication takes only a table list: REL_14_24 gram.y
+    // `publication_for_tables: FOR TABLE relation_expr_list | FOR ALL TABLES`,
+    // and `ALTER PUBLICATION name { ADD_P | SET | DROP } TABLE
+    // relation_expr_list`. Object lists, `TABLES IN SCHEMA`, column lists and
+    // row filters are added in 15 (research, PostgreSQL 15, "Changes to
+    // existing statements").
+    #[cfg(not(feature = "since-pg15"))]
+    #[test]
+    fn publication_table_lists_before_15() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE PUBLICATION p FOR TABLE t",
+                "CREATE PUBLICATION p FOR TABLE t, s.u, ONLY v, w *, ONLY (x) WITH (publish = 'insert')",
+                "ALTER PUBLICATION p ADD TABLE t, ONLY u, v *",
+                "ALTER PUBLICATION p SET TABLE t",
+                "ALTER PUBLICATION p DROP TABLE t, u",
+                "ALTER PUBLICATION p SET (publish = 'insert')",
+            ],
+            &[
+                "CREATE PUBLICATION p FOR TABLE t (a, b)",
+                "CREATE PUBLICATION p FOR TABLE t WHERE (a > 1)",
+                "CREATE PUBLICATION p FOR TABLES IN SCHEMA s",
+                "CREATE PUBLICATION p FOR TABLE t, TABLES IN SCHEMA s",
+                "CREATE PUBLICATION p FOR TABLE t, TABLE u",
+                "CREATE PUBLICATION p FOR t",
+                "ALTER PUBLICATION p ADD TABLE t (a)",
+                "ALTER PUBLICATION p ADD TABLE t WHERE (a > 1)",
+                "ALTER PUBLICATION p ADD TABLES IN SCHEMA s",
+                "ALTER PUBLICATION p SET TABLES IN SCHEMA s",
+                "ALTER PUBLICATION p DROP TABLES IN SCHEMA s",
+                "ALTER PUBLICATION p ADD TABLE t, TABLE u",
+                "ALTER PUBLICATION p ADD t",
             ],
         );
     }

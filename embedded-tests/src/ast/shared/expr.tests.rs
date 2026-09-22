@@ -4602,4 +4602,46 @@ mod tests {
             "CREATE DATABASE d scalar = 1",
         ]);
     }
+
+    // The keywords that 15 added are identifiers before 15: research,
+    // PostgreSQL 15, "Keywords" (REL_14_24 kwlist.h has no `merge`, `matched`
+    // or `parameter`). So each is a name where gram.y takes only `IDENT`.
+    #[cfg(not(feature = "since-pg15"))]
+    #[test]
+    fn words_that_15_adds_are_identifiers_before_15() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT merge, matched, parameter FROM t",
+            "SELECT 1 merge, 2 matched, 3 parameter",
+            "CREATE TABLE merge (matched int, parameter int)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, merge = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, matched = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, parameter = 1)",
+            "CREATE DATABASE d merge = 1",
+            "CREATE DATABASE d matched = 1",
+            "CREATE DATABASE d parameter = 1",
+            "SELECT EXTRACT(merge FROM x)",
+        ]);
+    }
+
+    // From 15, the 15 keywords are unreserved keywords: still column names
+    // and labels, but no `IDENT` (REL_15_19 gram.y `old_aggr_elem`,
+    // `createdb_opt_name`).
+    #[cfg(feature = "since-pg15")]
+    #[test]
+    fn words_that_15_adds_are_no_ident_from_15() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT merge, matched, parameter FROM t",
+            "SELECT 1 merge, 2 matched, 3 parameter",
+            "CREATE TABLE merge (matched int, parameter int)",
+        ]);
+        crate::ast::test_support::assert_statements_rejected(&[
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, merge = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, matched = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, parameter = 1)",
+            "CREATE DATABASE d merge = 1",
+            "CREATE DATABASE d matched = 1",
+            "CREATE DATABASE d parameter = 1",
+        ]);
+    }
 }
+

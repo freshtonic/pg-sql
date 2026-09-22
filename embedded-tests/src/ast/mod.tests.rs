@@ -264,10 +264,6 @@ mod tests {
                 size_of::<crate::ast::dml::delete::DeleteStmt<'_>>(),
             ),
             (
-                "MergeStmt",
-                size_of::<crate::ast::dml::merge::MergeStmt<'_>>(),
-            ),
-            (
                 "ExplainStmt",
                 size_of::<crate::ast::utility::explain::ExplainStmt<'_>>(),
             ),
@@ -545,6 +541,12 @@ mod tests {
                 size_of::<crate::ast::dml::values::Subquery<'_>>(),
             ),
         ];
+        // MERGE is added in 15: research, PostgreSQL 15, "New statements".
+        #[cfg(feature = "since-pg15")]
+        sizes.push((
+            "MergeStmt",
+            size_of::<crate::ast::dml::merge::MergeStmt<'_>>(),
+        ));
         sizes.sort_by_key(|b| std::cmp::Reverse(b.1));
         eprintln!("\n=== AST sizes (bytes) ===");
         for (name, size) in &sizes {
@@ -689,7 +691,11 @@ mod tests {
             assert!(parsed.is_err() || !input.is_eof(), "{src:?} parsed completely");
         }
 
-        let statements = [
+        #[cfg_attr(
+            not(feature = "since-pg15"),
+            allow(unused_mut, reason = "the 15 forms extend the list")
+        )]
+        let mut statements = vec![
             "LOCK TABLE {}",
             "LOCK TABLE {}, {} IN SHARE MODE",
             "TRUNCATE {}",
@@ -703,13 +709,20 @@ mod tests {
             "UPDATE {} AS x SET a = 1",
             "DELETE FROM {}",
             "DELETE FROM {} x WHERE true",
-            "MERGE INTO {} USING u ON true WHEN MATCHED THEN DO NOTHING",
             "CREATE PUBLICATION p FOR TABLE {}",
-            "ALTER PUBLICATION p ADD TABLE {} (a) WHERE (a > 1)",
+            "ALTER PUBLICATION p ADD TABLE {}",
             "TABLE {}",
             "CREATE VIEW v AS TABLE {}",
             "SELECT * FROM {}",
         ];
+        // MERGE, and the column list and row filter of a published table, are
+        // added in 15: research, PostgreSQL 15, "New statements" and "Changes
+        // to existing statements".
+        #[cfg(feature = "since-pg15")]
+        statements.extend([
+            "MERGE INTO {} USING u ON true WHEN MATCHED THEN DO NOTHING",
+            "ALTER PUBLICATION p ADD TABLE {} (a) WHERE (a > 1)",
+        ]);
         for statement in statements {
             for (form, accepted) in [
                 ("t", true),
@@ -1017,4 +1030,92 @@ mod tests {
         );
     }
 
+
+    // --- PostgreSQL 15 (docs/research/postgres-14-19-sql-syntax-changes.md,
+    // PostgreSQL 15, "New statements" and "Changes to existing statements") ---
+
+    /// The 15 statements and clauses. REL_15_19 gram.y `MergeStmt` (also in
+    /// `PreparableStmt`, `ExplainableStmt` and so in a CTE and in `COPY`),
+    /// `AlterSubscriptionStmt ... SKIP`, `AlterDatabaseRefreshCollStmt`,
+    /// `alter_table_cmd: SET ACCESS METHOD`, `opt_unique_null_treatment`,
+    /// `key_action: SET NULL_P opt_column_list`, `privilege: ALTER SYSTEM_P`,
+    /// `privilege_target: PARAMETER parameter_name_list` and `SeqOptElem:
+    /// UNLOGGED`.
+    #[cfg(feature = "since-pg15")]
+    #[test]
+    fn statement_forms_added_in_15() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "MERGE INTO t USING s ON t.a = s.a WHEN MATCHED THEN DELETE",
+                "WITH x AS (SELECT 1) MERGE INTO t USING x ON true WHEN MATCHED THEN DO NOTHING",
+                "EXPLAIN MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE",
+                "PREPARE p AS MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE",
+                "COPY (MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE) TO STDOUT",
+                "WITH m AS (MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE) SELECT 1",
+                "ALTER SUBSCRIPTION s SKIP (lsn = '0/14C0378')",
+                "ALTER DATABASE d REFRESH COLLATION VERSION",
+                "ALTER TABLE t SET ACCESS METHOD heap2",
+                "ALTER MATERIALIZED VIEW m SET ACCESS METHOD heap2",
+                "CREATE TABLE t (a int UNIQUE NULLS NOT DISTINCT, b int UNIQUE NULLS DISTINCT)",
+                "CREATE TABLE t (a int, UNIQUE NULLS NOT DISTINCT (a))",
+                "ALTER TABLE t ADD UNIQUE NULLS DISTINCT (a)",
+                "CREATE UNIQUE INDEX i ON t (a) INCLUDE (b) NULLS NOT DISTINCT WITH (fillfactor = 70)",
+                "CREATE INDEX i ON t (a) NULLS NOT DISTINCT",
+                "CREATE TABLE t (a int REFERENCES p ON DELETE SET NULL (a))",
+                "CREATE TABLE t (a int, b int, FOREIGN KEY (a, b) REFERENCES p ON DELETE SET DEFAULT (b))",
+                "GRANT SET, ALTER SYSTEM ON PARAMETER work_mem, a.b.c TO r",
+                "REVOKE GRANT OPTION FOR ALTER SYSTEM ON PARAMETER work_mem FROM r",
+                "GRANT ALL ON PARAMETER \"select\" TO r",
+                "GRANT SELECT ON parameter, t TO r",
+                "CREATE SEQUENCE s UNLOGGED",
+            ],
+            &[
+                "MERGE INTO t USING s ON true WHEN MATCHED THEN INSERT VALUES (1)",
+                "GRANT SET ON PARAMETER select TO r",
+            ],
+        );
+    }
+
+    /// Before 15, each form of `statement_forms_added_in_15` is rejected
+    /// (REL_14_24 gram.y).
+    #[cfg(not(feature = "since-pg15"))]
+    #[test]
+    fn statement_forms_added_in_15_are_rejected_before_15() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int REFERENCES p ON DELETE SET NULL ON UPDATE SET DEFAULT)",
+                "CREATE TABLE t (a int UNIQUE, UNIQUE (a))",
+                "CREATE UNIQUE INDEX i ON t (a) INCLUDE (b) WITH (fillfactor = 70)",
+                "GRANT SELECT ON parameter, t TO r",
+                "CREATE UNLOGGED SEQUENCE s",
+                "ALTER TABLE t SET TABLESPACE x",
+            ],
+            &[
+                "MERGE INTO t USING s ON t.a = s.a WHEN MATCHED THEN DELETE",
+                "WITH x AS (SELECT 1) MERGE INTO t USING x ON true WHEN MATCHED THEN DO NOTHING",
+                "EXPLAIN MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE",
+                "PREPARE p AS MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE",
+                "COPY (MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE) TO STDOUT",
+                "WITH m AS (MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE) SELECT 1",
+                "ALTER SUBSCRIPTION s SKIP (lsn = '0/14C0378')",
+                "ALTER DATABASE d REFRESH COLLATION VERSION",
+                "ALTER TABLE t SET ACCESS METHOD heap2",
+                "ALTER MATERIALIZED VIEW m SET ACCESS METHOD heap2",
+                "CREATE TABLE t (a int UNIQUE NULLS NOT DISTINCT)",
+                "CREATE TABLE t (a int UNIQUE NULLS DISTINCT)",
+                "CREATE TABLE t (a int, UNIQUE NULLS NOT DISTINCT (a))",
+                "ALTER TABLE t ADD UNIQUE NULLS DISTINCT (a)",
+                "CREATE UNIQUE INDEX i ON t (a) NULLS NOT DISTINCT",
+                "CREATE INDEX i ON t (a) NULLS DISTINCT",
+                "CREATE TABLE t (a int REFERENCES p ON DELETE SET NULL (a))",
+                "CREATE TABLE t (a int, b int, FOREIGN KEY (a, b) REFERENCES p ON DELETE SET DEFAULT (b))",
+                "GRANT SET ON PARAMETER work_mem TO r",
+                "GRANT ALTER SYSTEM ON PARAMETER work_mem TO r",
+                "GRANT ALTER SYSTEM ON t TO r",
+                "REVOKE ALL ON PARAMETER work_mem FROM r",
+                "CREATE SEQUENCE s UNLOGGED",
+            ],
+        );
+    }
 }
+

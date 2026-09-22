@@ -215,6 +215,9 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    // The column list is added in 15: research, PostgreSQL 15, "Changes to
+    // existing statements" (REL_15_19 gram.y `key_action`).
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn parse_table_foreign_key_set_null_columns() {
         let lexed = crate::lex(
@@ -227,6 +230,9 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    // The column list is added in 15: research, PostgreSQL 15, "Changes to
+    // existing statements" (REL_15_19 gram.y `key_action`).
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn parse_table_foreign_key_set_default_columns() {
         let lexed = crate::lex(
@@ -976,8 +982,11 @@ mod tests {
             "ALTER TABLE t ALTER COLUMN g DROP EXPRESSION",
             "ALTER TABLE t ALTER c SET STATISTICS -1",
             "ALTER INDEX i ALTER 1 SET STATISTICS 5",
-            "ALTER TABLE t SET ACCESS METHOD heap",
         ]);
+        // `SET ACCESS METHOD name` is added in 15: research, PostgreSQL 15,
+        // "Changes to existing statements".
+        #[cfg(feature = "since-pg15")]
+        crate::ast::test_support::assert_statements_parse(&["ALTER TABLE t SET ACCESS METHOD heap"]);
     }
 
     // --- PostgreSQL 18 (docs/research/postgres-14-19-sql-syntax-changes.md,
