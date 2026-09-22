@@ -17,7 +17,7 @@ lexer of one target version. The version features `pg14`, `pg15`, `pg16`,
 | `pg14` | `REL_14_24` (`6b38067`) |
 | `pg15` | `REL_15_19` (`2ff1375`) |
 | `pg16` | `REL_16_15` (`7d3e000`) |
-| `pg17` | `REL_17_11` (`6af8851`) |
+| `pg17` | `REL_17_11` (`083ac03`) |
 | `pg18` | `REL_18_6` (`724edf9`) |
 | `pg19-beta` | `REL_19_STABLE` at `b73d13c`. Rename to `pg19` at the `REL_19_0` tag. |
 
