@@ -1161,3 +1161,5 @@ embedded-tests/src/ast/mod.tests.rs	checkpoint_takes_utility_options_from_19	fal
 embedded-tests/src/ast/mod.tests.rs	repack_statement_forms_from_19	false	19-
 embedded-tests/src/ast/mod.tests.rs	wait_for_lsn_forms_from_19	false	19-
 embedded-tests/src/ast/mod.tests.rs	reject_19_utility_statements_before_19	false	14-18
+embedded-tests/src/ast/dml/insert.tests.rs	on_conflict_do_select_from_19	false	19-
+embedded-tests/src/ast/dml/insert.tests.rs	reject_on_conflict_do_select_before_19	false	14-18
