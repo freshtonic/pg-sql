@@ -452,6 +452,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+// (REL_16_15 gram.y `grant_role_opt_list`, commits e3ce2de09, 3d14e171e).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `{ADMIN|INHERIT|SET}` — the keyword on a role-grant `WITH` option.
     #[derive(Debug)]
@@ -465,6 +468,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+// (REL_16_15 gram.y `grant_role_opt_list`, commits e3ce2de09, 3d14e171e).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `{OPTION|TRUE|FALSE}` — the value of a role-grant `WITH` option.
     #[derive(Debug)]
@@ -478,6 +484,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+// (REL_16_15 gram.y `grant_role_opt_list`, commits e3ce2de09, 3d14e171e).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `kind value` pair — Postgres' `grant_role_opt`.
     #[derive(Debug)]
@@ -487,6 +496,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+// (REL_16_15 gram.y `grant_role_opt_list`, commits e3ce2de09, 3d14e171e).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `WITH opt [, …]` — role-grant trailing options block.
     #[derive(Debug)]
@@ -494,6 +506,19 @@ recursa::ast_node! {
     pub struct WithRoleOpts {
         #[sep(COMMA)]
         pub opts: one_or_many!(WithRoleOpt),
+    }
+}
+
+// Removed in 16: REL_15_19 gram.y `opt_grant_admin_option: WITH ADMIN OPTION`.
+// 16 replaces it with `WITH grant_role_opt_list` (research, PostgreSQL 16,
+// "Changes to existing statements").
+#[cfg(not(feature = "since-pg16"))]
+recursa::ast_node! {
+    /// `WITH ADMIN OPTION` — the only role-grant option before 16.
+    #[derive(Debug)]
+    pub enum WithAdminOption {
+        #[tok(WITH, ADMIN, OPTION)]
+        Value,
     }
 }
 
@@ -516,7 +541,12 @@ recursa::ast_node! {
     pub struct GrantRoleBody {
         #[tok(TO, this)]
         pub roles: RoleList,
+        // Added in 16: see `WithRoleOpts`.
+        #[cfg(feature = "since-pg16")]
         pub with: Option<WithRoleOpts>,
+        // Removed in 16: see `WithAdminOption`.
+        #[cfg(not(feature = "since-pg16"))]
+        pub with: Option<WithAdminOption>,
         pub granted_by: Option<GrantedBy>,
     }
 }
@@ -599,6 +629,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+// (REL_16_15 gram.y `REVOKE ColId OPTION FOR`, commit e3ce2de09). REL_15_19
+// gram.y has only `REVOKE ADMIN OPTION FOR`.
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `INHERIT OPTION FOR` — strips just INHERIT.
     #[derive(Debug)]
@@ -608,6 +642,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+// (REL_16_15 gram.y `REVOKE ColId OPTION FOR`, commit e3ce2de09). REL_15_19
+// gram.y has only `REVOKE ADMIN OPTION FOR`.
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `SET OPTION FOR` — strips just SET.
     #[derive(Debug)]
@@ -625,7 +663,11 @@ recursa::ast_node! {
     pub enum RevokeOptionFor {
         GrantOption(RevokeGrantOptionFor),
         AdminOption(RevokeAdminOptionFor),
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         InheritOption(RevokeInheritOptionFor),
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         SetOption(RevokeSetOptionFor),
     }
 }
