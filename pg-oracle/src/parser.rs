@@ -70,6 +70,13 @@ mod tests {
     }
 
     #[test]
+    fn statement_length_is_not_compared() {
+        // Before 17, RawStmt.stmt_len is a field that equal() compares.
+        assert_eq!(parse_equal("BEGIN;", "BEGIN"), Equal::Equal);
+        assert_eq!(parse_equal("SELECT 1;", "SELECT  1"), Equal::Equal);
+    }
+
+    #[test]
     fn parse_check_outcomes() {
         assert!(parse_ok("SELECT 1"));
         assert!(!parse_ok("SELECT FROM FROM"));

@@ -2,6 +2,7 @@
 #include "parser/parser.h"
 #include "nodes/pg_list.h"
 #include "nodes/nodes.h"
+#include "nodes/parsenodes.h"
 #include "utils/memutils.h"
 #include <setjmp.h>
 #include <string.h>
@@ -42,6 +43,18 @@ int pgo_raw_parse_check(const char *sql, char **errmsg) {
     return rc;
 }
 
+/* equal() must not compare where a statement ends. PostgreSQL 17 made
+ * RawStmt.stmt_len a ParseLoc, which equal() ignores like every location.
+ * Before 17 it is a plain int that equal() compares, so "BEGIN;" and "BEGIN"
+ * differ. Clear it, so the comparison is the same for every target version. */
+static void clear_statement_lengths(List *stmts) {
+    ListCell *lc;
+    foreach(lc, stmts) {
+        RawStmt *raw = lfirst_node(RawStmt, lc);
+        raw->stmt_len = 0;
+    }
+}
+
 /* Both parse OK + trees equal -> 0; trees differ -> 1; a invalid -> 2;
  * b invalid -> 3. equal() ignores `location` fields by construction. */
 int pgo_raw_parse_equal(const char *a, const char *b) {
@@ -57,6 +70,8 @@ int pgo_raw_parse_equal(const char *a, const char *b) {
     if (sigsetjmp(jmp, 1) == 0) {
         List *ta = raw_parser(a, RAW_PARSE_DEFAULT);
         List *tb = raw_parser(b, RAW_PARSE_DEFAULT);
+        clear_statement_lengths(ta);
+        clear_statement_lengths(tb);
         rc = equal(ta, tb) ? 0 : 1;
     } else {
         /* One of the two failed; re-run singly to attribute the error. */
