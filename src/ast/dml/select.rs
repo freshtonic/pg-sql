@@ -750,9 +750,16 @@ recursa::ast_node! {
     /// `PATH '‹xpath›'` clause on an XMLTABLE column.
     #[derive(Debug)]
     pub struct XmlTableColumnPath {
+        /// Before 17, `path` is no keyword and the option is REL_16_15 gram.y
+        /// 13883 `xmltable_column_option_el: IDENT b_expr`. The action of
+        /// `xmltable_column_el` (13805-13858) then rejects every name other
+        /// than `path`; pg-sql accepts any `IDENT` here. Research, PostgreSQL
+        /// 17, "Keywords" and "Queries and expressions" (`XMLTABLE`).
+        #[cfg(not(feature = "since-pg17"))]
+        pub option: crate::tokens::literal::IdentOnly,
         /// gram.y `xmltable_column_option_el: PATH b_expr` (exclusions as in
         /// `PositionInner`), so the path ends before a following `NOT NULL`.
-        #[tok(PATH, this)]
+        #[cfg_attr(feature = "since-pg17", tok(PATH, this))]
         pub xpath: boxed!(crate::ast::shared::expr::BExpr),
     }
 }

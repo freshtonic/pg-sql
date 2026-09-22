@@ -452,3 +452,6 @@ tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src
 -	introduced	embedded-tests/src/ast/utility/copy.tests.rs	reject_legacy_json_copy_option_before_19	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/publication.tests.rs	publication_all_object_lists_from_19	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/publication.tests.rs	reject_publication_all_object_lists_before_19	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/aggregate.tests.rs	old_style_aggregate_takes_path_and_nested_before_17	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/aggregate.tests.rs	old_style_aggregate_rejects_path_and_nested_from_17	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/dml/select.tests.rs	xmltable_path_option_is_an_identifier_before_17	issue-9-generated-statement
