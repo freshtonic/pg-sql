@@ -88,12 +88,11 @@ and the `pg15` grammar (#75) are complete, so their lists are empty.
 
 An empty list does not show that a version is complete: the check below
 cannot find newer syntax that a build accepts. Explicit negative tests cover
-that (`14-15` and `14-16` in `embedded-tests/inventory.tsv`). Two known
-differences remain, because recursa does not yet accept `cfg` on `lookahead`
-and `precedence` entries. In a `pg15` build, `format`, `json`, `keys` and
-`scalar` are unreserved keywords, so they are not accepted where gram.y takes
-a bare `IDENT`. In a `pg15` or `pg16` build, the same is true of `path` and
-`nested`.
+that (`14-15` and `14-16` in `embedded-tests/inventory.tsv`). The keywords
+that a version does not have are gated with their `lookahead` and
+`precedence` entries, so a build accepts them where gram.y takes a bare
+`IDENT`: `format`, `json`, `keys` and `scalar` before 16, and `path` and
+`nested` before 17.
 
 **Each version increment (#74 to #78) must drain the list of its version to
 empty.** The `pg17` list is empty, and the `pg17` baseline must give the frozen

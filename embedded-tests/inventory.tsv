@@ -917,6 +917,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	xmlserialize_indent_is_rejected_befo
 embedded-tests/src/ast/shared/expr.tests.rs	sql_json_16_names_are_ordinary_calls_before_16	false	14-15
 embedded-tests/src/ast/shared/expr.tests.rs	sql_json_16_syntax_is_rejected_before_16	false	14-15
 embedded-tests/src/ast/shared/expr.tests.rs	words_that_16_adds_are_identifiers_before_16	false	14-15
+embedded-tests/src/ast/shared/expr.tests.rs	words_that_16_adds_are_no_ident_from_16	false	16-
 embedded-tests/src/ast/shared/with_clause.tests.rs	immediate_recursive_is_the_clause_modifier	false	14-
 embedded-tests/src/ast/shared/with_clause.tests.rs	parse_later_cte_named_recursive	false	14-
 embedded-tests/src/ast/shared/with_clause.tests.rs	parse_simple_with	false	14-

@@ -146,12 +146,10 @@ recursa::tokens! {
         // PostgreSQL 17, "Keywords"; REL_16_15 kwlist.h line 233.
         #[cfg(feature = "since-pg17")]
         JSON            => r"JSON" in COL_NAME + bare_label + json_type,
-        // Added in 16 (research, PostgreSQL 16, "Keywords"), but a 15 build
-        // keeps this entry: the `FORMAT_LA` lookahead filter names `JSON` as
-        // its trigger, and a `lookahead` entry takes no `cfg`. A 15 build
-        // therefore lexes `json` as an unreserved keyword where 15 has an
-        // identifier. Only the positions that take a bare `IDENT` see this.
-        #[cfg(not(feature = "since-pg17"))]
+        // Added in 16 as an unreserved keyword: research, PostgreSQL 16,
+        // "Keywords". REL_15_19 kwlist.h has no `json`. The `FORMAT_LA`
+        // lookahead entry names it under the same predicate.
+        #[cfg(all(feature = "since-pg16", not(feature = "since-pg17")))]
         JSON            => r"JSON" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
@@ -183,10 +181,9 @@ recursa::tokens! {
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
         JSON_TABLE      => r"JSON_TABLE" in COL_NAME + bare_label,
-        // Added in 16 (research, PostgreSQL 16, "Keywords"), but not gated:
-        // the `lookahead` block names it, and a `lookahead` entry takes no `cfg`.
-        // A 15 build therefore lexes it as a keyword where 15 has an
-        // identifier.
+        // Added in 16: research, PostgreSQL 16, "Keywords". The `FORMAT_LA`
+        // lookahead entry names it under the same predicate.
+        #[cfg(feature = "since-pg16")]
         FORMAT          => r"FORMAT" in UNRESERVED + bare_label,
         ENCODING        => r"ENCODING" in UNRESERVED + bare_label,
         PASSING         => r"PASSING" in UNRESERVED + bare_label,
@@ -195,15 +192,13 @@ recursa::tokens! {
         #[cfg(feature = "since-pg17")]
         PATH            => r"PATH" in UNRESERVED + bare_label,
         COLUMNS         => r"COLUMNS" in UNRESERVED + bare_label,
-        // Added in 16 (research, PostgreSQL 16, "Keywords"), but not gated:
-        // the `precedence` block names it, and a `precedence` entry takes no `cfg`.
-        // A 15 build therefore lexes it as a keyword where 15 has an
-        // identifier.
+        // Added in 16: research, PostgreSQL 16, "Keywords". The `precedence`
+        // block names it under the same predicate.
+        #[cfg(feature = "since-pg16")]
         KEYS            => r"KEYS" in UNRESERVED + bare_label,
-        // Added in 16 (research, PostgreSQL 16, "Keywords"), but not gated:
-        // the `precedence` block names it, and a `precedence` entry takes no `cfg`.
-        // A 15 build therefore lexes it as a keyword where 15 has an
-        // identifier.
+        // Added in 16: research, PostgreSQL 16, "Keywords". The `precedence`
+        // block names it under the same predicate.
+        #[cfg(feature = "since-pg16")]
         SCALAR          => r"SCALAR" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
@@ -918,8 +913,29 @@ recursa::tokens! {
         // omitted here.
         #[node(omit(Arbitrary))]
         DollarStringLit => same_delimiter(opener = r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$"),
+        // The numeric literals of scan.l. A literal that an identifier
+        // character follows directly is a lexical error from 15 (`excluded`):
+        // scan.l `integer_junk`, `numeric_junk` (`decimal_junk` before 16),
+        // `real_junk` and `realfail`.
+        //
+        // REL_16_15 scan.l 395-437: `decinteger {decdigit}(_?{decdigit})*`,
+        // the `0x`/`0o`/`0b` integers, and `_` separators in `numeric` and
+        // `real`.
+        #[cfg(feature = "since-pg16")]
         NumericLit => next_exclusion(pattern = r"(?:(?:[0-9](?:_?[0-9])*\.[0-9](?:_?[0-9])*|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\.)", excluded = r"[A-Za-z0-9_]"),
+        #[cfg(feature = "since-pg16")]
         IntegerLit => next_exclusion(pattern = r"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)", excluded = r"[A-Za-z0-9_]"),
+        // Before 16 there are no non-decimal integers and no `_` separators:
+        // research, PostgreSQL 16, "Lexical and literal syntax" (commits
+        // 6fcda9aba, faff8f8e4). REL_15_19 scan.l 395-403: `integer
+        // {digit}+`, `decimal (({digit}*\.{digit}+)|({digit}+\.{digit}*))`,
+        // `real ({integer}|{decimal})[Ee][-+]?{digit}+`. So `0x1F` and `1_000`
+        // are `integer_junk`, `1.5_0` is `decimal_junk` and `1e1_0` is
+        // `real_junk`, and each is an error.
+        #[cfg(not(feature = "since-pg16"))]
+        NumericLit => next_exclusion(pattern = r"(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)[eE][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*", excluded = r"[A-Za-z0-9_]"),
+        #[cfg(not(feature = "since-pg16"))]
+        IntegerLit => next_exclusion(pattern = r"[0-9]+", excluded = r"[A-Za-z0-9_]"),
         DollarNum => next_exclusion(pattern = r"\$[0-9]+", excluded = r"[A-Za-z0-9_]"),
         CustomOp => operator_run(
             characters = "-+*/<>=~!@#%^&|?",
@@ -993,7 +1009,11 @@ recursa::tokens! {
         // (gram.y `ConstDatetime`, `opt_timezone`).
         WITHOUT_LA = WITHOUT before { TIME },
         // `parser.c`: `case FORMAT:` -> `FORMAT_LA` before JSON (gram.y
-        // `json_format_clause`, `utility_option_name`).
+        // `json_format_clause`, `utility_option_name`). Added in 16 with its
+        // two keywords: research, PostgreSQL 16, "Lexical and literal syntax"
+        // (REL_16_15 parser.c, case `FORMAT`). REL_15_19 parser.c has no such
+        // case.
+        #[cfg(feature = "since-pg16")]
         FORMAT_LA = FORMAT before { JSON },
         // `parser.c`: `case NOT:` -> `NOT_LA` before BETWEEN, IN_P, LIKE,
         // ILIKE, SIMILAR (gram.y `a_expr NOT_LA BETWEEN ...`, and the
@@ -1087,7 +1107,9 @@ recursa::tokens! {
         //
         // `NESTED` and `PATH` (below) are keywords from 17 on: research,
         // PostgreSQL 17, "Keywords". REL_16_15 gram.y 853-854 has
-        // `%nonassoc UNBOUNDED` and the IDENT level without `PATH`.
+        // `%nonassoc UNBOUNDED` and the IDENT level without `PATH`. `KEYS` and
+        // `SCALAR` (below) are keywords from 16 on: research, PostgreSQL 16,
+        // "Keywords". REL_15_19 gram.y has the IDENT level without them.
         nonassoc(bp = 100) {
             UNBOUNDED,
             #[cfg(feature = "since-pg17")]
@@ -1112,8 +1134,10 @@ recursa::tokens! {
             CUBE,
             ROLLUP,
             SET,
+            #[cfg(feature = "since-pg16")]
             KEYS,
             OBJECT,
+            #[cfg(feature = "since-pg16")]
             SCALAR,
             VALUE,
             WITH,
@@ -1513,23 +1537,6 @@ pub mod literal {
             pub integer: IntegerLit,
             #[lex(matcher)]
             pub numeric: NumericLit,
-            // Before 16, the scanner has no non-decimal integers and no `_`
-            // digit separators: research, PostgreSQL 16, "Lexical and literal
-            // syntax" (commits 6fcda9aba, faff8f8e4). In REL_15_19 scan.l,
-            // `0x1F` and `1_000` match `integer_junk` (`{integer}{identifier}`),
-            // `1.5_0` matches `decimal_junk` and `1e1_0` matches `real_junk`, and
-            // each is an error. The `IntegerLit` and `NumericLit` matchers have
-            // the 16 patterns, and a `matchers` entry takes no `cfg`. So a 15
-            // build adds this token: it matches every such literal at the same
-            // length as the matchers or longer, and wins a tie by priority. No
-            // grammar rule takes it, so the statement is rejected, as the 15
-            // scanner rejects it.
-            #[cfg(not(feature = "since-pg16"))]
-            #[lex(
-                pattern = r"0[xXoObB][0-9A-Za-z_]*|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?_(?:[eE][+-]|[0-9A-Za-z_.])*",
-                priority = 100
-            )]
-            pub numeric_junk: NumericJunk,
             #[lex(matcher)]
             pub custom_operator: CustomOp,
         }
