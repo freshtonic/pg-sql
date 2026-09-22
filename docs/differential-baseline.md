@@ -79,14 +79,19 @@ pg-sql outcome and the oracle outcome:
   changes the parse tree, or the oracle rejects its output.
 
 The gaps exist because the grammar of each version is not complete. Until its
-increment lands, a `pg14`, `pg15`, `pg18` or `pg19-beta` build has the 17
-grammar. The current gaps are the trailing junk after numbers that 14 accepts
-(`numerology.sql`). The `pg16` grammar is complete (#74), so its list is
-empty. A `pg14` or `pg15` build has the 16 grammar, so the `json()` function
-calls that 14, 15 and 16 accept (`sqljson.sql`, `sqljson_jsontable.sql`) are
-no longer gaps, and the `pg15` list is empty too. An empty list does not
-show that a version is complete: the check below cannot find the 16 syntax
-that a `pg15` build accepts.
+increment lands, a `pg14` build has the 15 grammar, and a `pg18` or
+`pg19-beta` build has the 17 grammar. The current gaps are the trailing junk
+after numbers that 14 accepts (`numerology.sql`). The `pg16` grammar (#74)
+and the `pg15` grammar (#75) are complete, so their lists are empty.
+
+An empty list does not show that a version is complete: the check below
+cannot find newer syntax that a build accepts. Explicit negative tests cover
+that (`14-15` and `14-16` in `embedded-tests/inventory.tsv`). Two known
+differences remain, because recursa does not yet accept `cfg` on `lookahead`
+and `precedence` entries. In a `pg15` build, `format`, `json`, `keys` and
+`scalar` are unreserved keywords, so they are not accepted where gram.y takes
+a bare `IDENT`. In a `pg15` or `pg16` build, the same is true of `path` and
+`nested`.
 
 **Each version increment (#74 to #78) must drain the list of its version to
 empty.** The `pg17` list is empty, and the `pg17` baseline must give the frozen
