@@ -375,6 +375,7 @@ recursa::tokens! {
         ASYMMETRIC      => r"ASYMMETRIC" in RESERVED + bare_label,
         SYMMETRIC       => r"SYMMETRIC" in RESERVED + bare_label,
         NORMALIZE       => r"NORMALIZE" in COL_NAME + bare_label,
+        TREAT           => r"TREAT" in COL_NAME + bare_label,
         XMLCONCAT       => r"XMLCONCAT" in COL_NAME + bare_label,
         PRESERVE        => r"PRESERVE" in UNRESERVED + bare_label,
         INCREMENT       => r"INCREMENT" in UNRESERVED + bare_label,

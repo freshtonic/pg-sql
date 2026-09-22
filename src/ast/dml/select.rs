@@ -485,46 +485,13 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// One of the SQL-standard special-form function expressions allowed in a
-    /// `FROM` clause (PG `func_expr_common_subexpr` reachable from `func_table`).
-    ///
-    /// gram.y `func_table → func_expr_windowless` admits both `func_application`
-    /// (modelled by `FuncTableRef`) and `func_expr_common_subexpr` — the
-    /// special-form atoms with their own keyword-led grammar (CAST, COALESCE,
-    /// COLLATION FOR, …). pg-sql models several of these as dedicated `Expr`
-    /// atoms (`CastCall`, `CollationForCall`, …); a `FROM`-clause variant
-    /// re-uses those types so the special forms can appear as table sources.
-    ///
-    /// Currently covers the forms exercised by the regression corpus:
-    /// `CAST(expr AS type)`, `COLLATION FOR (expr)` and the `COALESCE` family
-    /// (create_view, rangefuncs). Extend this
-    /// enum as new corpus statements demand additional special forms.
-    ///
-    /// Each keyword-led form has a distinct leading token.
-    #[derive(Debug)]
-    pub enum SpecialFuncTableExpr {
-        /// `CAST(expr AS type [COLLATE "c"])`.
-        Cast(crate::ast::shared::expr::CastCall),
-        /// `COLLATION FOR (expr)`.
-        CollationFor(crate::ast::shared::expr::CollationForCall),
-        /// `COALESCE(...)`, `GREATEST(...)`, `LEAST(...)`, `NULLIF(a, b)`,
-        /// `XMLCONCAT(...)` or `NORMALIZE(...)`.
-        Common(crate::ast::shared::expr::CommonSubexprCall),
-        #[tok(USER)]
-        /// `USER` — the reserved-keyword spelling of `CURRENT_USER`. Used as a
-        /// zero-arg function reference in FROM (`SELECT * FROM USER`). The
-        /// other reserved-feeling spellings (CURRENT_TIMESTAMP, LOCALTIMESTAMP,
-        /// ...) lex as `UnquotedIdent` and parse as `PlainTable.name`; only
-        /// `USER` is a hard keyword in pg-sql and so needs an explicit variant.
-        User,
-    }
-}
-
-recursa::ast_node! {
     /// `FROM`-clause special-form function expression with optional alias.
     #[derive(Debug)]
     pub struct SpecialFuncTableRef {
-        pub func: SpecialFuncTableExpr,
+        /// gram.y `func_table: func_expr_windowless opt_ordinality`, its
+        /// `func_expr_common_subexpr` half. The field holds an [`Expr`]: the
+        /// node `SELECT coalesce(a, b)` builds for the same text.
+        pub func: boxed!(crate::ast::shared::expr::FuncExprCommonSubexpr),
         #[presence(WITH, ORDINALITY)]
         pub ordinality: bool,
         pub alias: Option<FuncTableAlias>,
@@ -869,7 +836,8 @@ recursa::ast_node! {
     /// `COL_NAME` keyword is never a `func_application` name.
     #[derive(Debug)]
     pub enum RowsFromFunc {
-        Common(crate::ast::shared::expr::CommonSubexprCall),
+        /// A `func_expr_common_subexpr`, held as an [`Expr`].
+        Special(boxed!(crate::ast::shared::expr::FuncExprCommonSubexpr)),
         Func(FunctionApplicationExpr),
     }
 }
