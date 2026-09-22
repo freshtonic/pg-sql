@@ -1,5 +1,7 @@
 //! Fast, oracle-free validation of the frozen differential baseline.
 
+// This target uses only part of the shared baseline module.
+#[allow(dead_code)]
 #[path = "support/baseline.rs"]
 mod baseline;
 
