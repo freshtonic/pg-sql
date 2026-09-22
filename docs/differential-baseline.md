@@ -1,4 +1,4 @@
-# Differential baseline: PostgreSQL 17.9 corpus, PostgreSQL 17.11 oracle
+# Differential baseline: PostgreSQL 17.9 corpus, one oracle per target version
 
 `baselines/postgresql-17.9.json` is the named, machine-readable floor for
 PostgreSQL statement parity. It records the immutable legacy Git identities,
@@ -15,15 +15,19 @@ The corpus and the oracle are two different inputs:
   statement spans. The tests read each file by its Git blob ID from the
   `vendor/postgres` object database, not from the checked-out tree. The
   baseline file names and their `postgres` fields name this corpus.
-- The **oracle** is the raw parser of the pinned PostgreSQL release. The
-  `vendor/postgres` submodule pins PostgreSQL 17.11 (`REL_17_11`,
-  `083ac033419`). `pg-oracle` builds that release and runs `make` again when
-  the submodule moves to a different commit.
+- The **oracle** is the raw parser of the pinned PostgreSQL release of the
+  target version. `pg-oracle/pins.tsv` is the one pin table. For `pg17`, the
+  pin is PostgreSQL 17.11 (`REL_17_11`, `083ac033419`), and the
+  `vendor/postgres` submodule gitlink must be the same commit (a pg-oracle
+  test checks this). `pg-oracle` extracts the pinned commit with
+  `git archive` and builds it again when the pin moves.
 
 Thus a move of the pin changes only the oracle. The statement spans, the
 legacy item kinds and the per-file counts stay valid, so each outcome change
 has one cause: a change in the raw parser. The submodule must contain the
-history back to 17.9, because the tests read the frozen blobs from it.
+history back to 17.9, because the tests read the frozen blobs from it. Its
+object store must also contain the pin of each target version
+(`scripts/fetch-postgres-pins`).
 
 ### Pin move from 17.9 to 17.11 (#71)
 
@@ -39,6 +43,94 @@ The 17.11 regression files change 40 corpus files. A simple split of these
 files gives 345 statements that are not in the frozen corpus. They are not in
 the baseline. A one-time probe of these statements with the differential check
 and the 17.11 oracle found no failure.
+
+## One baseline for each target version
+
+Each target version (ADR 0009) has its own version baseline in
+`baselines/target-versions/<feature>.json`, for example `pg16.json`. All six
+use the same frozen 17.9 corpus. The oracle is the raw parser of the pinned
+release of that version, from `pg-oracle/pins.tsv`:
+
+| Feature | Oracle | Expected version gaps |
+|---|---|---|
+| `pg14` | `REL_14_24` | 24 |
+| `pg15` | `REL_15_19` | 4 |
+| `pg16` | `REL_16_15` | 4 |
+| `pg17` | `REL_17_11` | 0 |
+| `pg18` | `REL_18_6` | 0 |
+| `pg19-beta` | `REL_19_STABLE` at `b73d13c` | 0 |
+
+A version baseline records:
+
+- the oracle ref and commit, which must equal the pin of the version;
+- the corpus name and gitlink (`postgresql-17.9`);
+- for each corpus file, the oracle outcome of each statement: `A` (accept) or
+  `R` (reject), in statement order;
+- the totals, and the expected version gaps.
+
+An **expected version gap** is a statement where a build of the version does
+not pass the differential check with that version's oracle. Each gap records
+the statement identity (file, zero-based statement index and byte range), the
+pg-sql outcome and the oracle outcome:
+
+- `"pg_sql": "skip"` with `"oracle": "accept"`: the oracle accepts the
+  statement, and pg-sql cannot parse it.
+- `"pg_sql": "fail"`: pg-sql over-accepts the statement, or its output
+  changes the parse tree, or the oracle rejects its output.
+
+The gaps exist because the grammar of each version is not complete. Until its
+increment lands, a `pg14`, `pg15`, `pg16`, `pg18` or `pg19-beta` build has the
+17 grammar. The current gaps are the trailing junk after numbers that 14
+accepts (`numerology.sql`) and the `json()` function calls that 14, 15 and 16
+accept (`sqljson.sql`, `sqljson_jsontable.sql`).
+
+**Each version increment (#74 to #78) must drain the list of its version to
+empty.** The `pg17` list is empty, and the `pg17` baseline must give the frozen
+legacy outcome counts of `baselines/postgresql-17.9.json` (the fast test checks
+this).
+
+The differential check finds an over-acceptance only when the oracle accepts
+the output of pg-sql. A statement that a version rejects is normally rejected
+again after the format step, so an older version's build that accepts newer
+syntax (for example `MERGE` in `pg14`) has no gap in this list. The version
+increments therefore need explicit negative tests for each "removed in N" and
+"added in N" change (decision 11 of `docs/plans/2026-09-22-target-versions.md`).
+
+### How the tests use the version baseline
+
+The differential test reads the baseline of the build's target version. For
+each corpus file, it fails if:
+
+- the live oracle outcome of a statement differs from the recorded outcome;
+- a listed gap now agrees with the oracle, or has a different outcome; or
+- a statement that is not listed disagrees with the oracle.
+
+Thus the list cannot become stale in either direction. The accepted legacy
+gap test keeps the exact 17 contract for `pg17`. For another version, it skips
+the ledger statements that the version rejects or that are expected gaps. A
+legacy parse error that only that version accepts must pass or be an expected
+gap.
+
+The fast test (`differential_baseline`) checks all six files without an
+oracle: the pins, the corpus identity, the outcome counts and the order and
+ranges of the gaps.
+
+### Regenerate a version baseline
+
+Regenerate the file after a change of pin, of oracle, or of the grammar of the
+version, and review the diff. The ignored test writes the file of the build's
+target version and prints the reason of each gap:
+
+```sh
+cargo test -p pg-sql --no-default-features --features pg16,spans,postgres-oracle \
+  --test differential -- --ignored regenerate_version_baseline --nocapture
+```
+
+The first oracle build of each version extracts the pinned commit from the
+`vendor/postgres` object store and builds PostgreSQL under Cargo's `OUT_DIR`.
+Fetch the pins first with `scripts/fetch-postgres-pins`.
+
+## Frozen corpus rules
 
 The inclusion rule is the exact `corpus_tests!` declaration at legacy commit
 `1e71421d66baac15c8c5264e8f29b5f80122f50e`. The only excluded files are the

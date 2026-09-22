@@ -110,6 +110,18 @@ or superseded rows, to the reviewed target path or immutable source identity.
 Changing a reason therefore requires changing the executable reconciliation
 contract, not merely replacing it with another nonempty string.
 
+`embedded-tests/inventory.tsv` has four tab-separated columns: the relocated
+source path, the test function name, the ignored status (`true` or `false`),
+and the version range. The version range names the target versions (ADR 0009)
+that the test runs for. It is `LO-` (from PostgreSQL major LO, with no upper
+limit) or `LO-HI` (majors LO to HI, both included). LO is 14 or more, and 19
+is the `pg19-beta` target. A test without a version gate is `14-`. The checker
+reads the `cfg` attributes of the test function and of the modules around it:
+`feature = "since-pgN"` sets LO to N, `not(feature = "since-pgN")` sets HI to
+N - 1, and `all(...)` combines them. The range in the inventory must agree
+with the gate. The checker also pins the count of tests that run for each
+target version.
+
 The checker rejects duplicate sources or targets, omissions, targets absent
 from the live modules, and misuse of either scoped exclusion. It also derives
 the expected ignored set from the immutable identities, preserving

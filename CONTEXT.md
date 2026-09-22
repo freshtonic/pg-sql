@@ -43,7 +43,12 @@ API.
   as psql runs before the server.
 - **PostgreSQL oracle**: the target version's authoritative raw-parser result.
 - **Differential baseline**: the pinned corpus membership and outcome counts
-  against the PostgreSQL oracle.
+  against the PostgreSQL oracle. Each target version has its own version
+  baseline over the same frozen corpus.
+- **Expected version gap**: a frozen corpus statement where a build of a
+  target version does not pass the differential check with that version's
+  oracle, because the grammar of that version is not complete. The version
+  baseline lists them, and the increment of the version drains the list.
 - **Frozen corpus**: the PostgreSQL 17.9 regression SQL files that the
   differential baseline splits into statements. Tests read them by Git blob
   ID, so a move of the oracle pin does not change them.
