@@ -920,7 +920,17 @@ recursa::tokens! {
         DollarStringLit => same_delimiter(opener = r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$"),
         NumericLit => next_exclusion(pattern = r"(?:(?:[0-9](?:_?[0-9])*\.[0-9](?:_?[0-9])*|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\.)", excluded = r"[A-Za-z0-9_]"),
         IntegerLit => next_exclusion(pattern = r"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)", excluded = r"[A-Za-z0-9_]"),
+        #[cfg(not(feature = "since-pg18"))]
         DollarNum => next_exclusion(pattern = r"\$[0-9]+", excluded = r"[A-Za-z0-9_]"),
+        // Added in 18: a parameter number that does not fit in `int32` is a
+        // lexer error, "parameter number too large"
+        // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+        // item 13; REL_18_6 scan.l `{param}`, commit d35cd061998). The
+        // pattern accepts only the values 0 to 2147483647, with any leading
+        // zeros. A longer number matches only an in-range prefix, and the
+        // next digit is excluded, so the lexer reports an error.
+        #[cfg(feature = "since-pg18")]
+        DollarNum => next_exclusion(pattern = r"\$0*(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])", excluded = r"[A-Za-z0-9_]"),
         CustomOp => operator_run(
             characters = "-+*/<>=~!@#%^&|?",
             fences = ["/*", "--"],
