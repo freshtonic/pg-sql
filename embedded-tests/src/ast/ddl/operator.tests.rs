@@ -266,10 +266,15 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    // Removed in 18: `opt_recheck` is gone from `opclass_item`
+    // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+    // "Removed or changed syntax"; commit 7da1bdc2c2f).
+    #[cfg(not(feature = "since-pg18"))]
     #[test]
     fn parse_create_operator_class_recheck_modifier() {
-        // Legacy `RECHECK` modifier on opclass operator items — PG accepts it
-        // for old-dump portability (no-op since 8.4) and we round-trip it.
+        // Legacy `RECHECK` modifier on opclass operator items — PostgreSQL 14
+        // to 17 accept it for old-dump portability (no-op since 8.4) and we
+        // round-trip it.
         let lexed = crate::lex(
             "CREATE OPERATOR CLASS legacy_ops FOR TYPE int4 USING gist AS \
              OPERATOR 1 < RECHECK, STORAGE int4",
@@ -282,5 +287,36 @@ mod tests {
         let stmt = stmt_parsed.ast();
         assert_eq!(stmt.items.iter().count(), 2);
         assert!(input.is_eof());
+    }
+
+    /// Whether `src` parses as one complete statement.
+    #[cfg(feature = "since-pg18")]
+    fn statement_parses(src: &str) -> bool {
+        let lexed = crate::lex(src);
+        if lexed.errors().count() > 0 {
+            return false;
+        }
+        let mut input = lexed.input();
+        crate::ast::Statement::parse(&mut input).is_ok() && input.is_eof()
+    }
+
+    // Removed in 18: `RECHECK` is a syntax error, and `recheck` is an ordinary
+    // name (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+    // "Removed or changed syntax" and "Keywords"; commit 7da1bdc2c2f).
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn opclass_recheck_is_rejected_from_18() {
+        for src in [
+            "CREATE OPERATOR CLASS c FOR TYPE int4 USING gist AS OPERATOR 1 < RECHECK",
+            "CREATE OPERATOR CLASS c FOR TYPE int4 USING btree AS OPERATOR 1 < (int4, int4) RECHECK",
+            "CREATE OPERATOR CLASS c FOR TYPE int4 USING gist AS OPERATOR 1 < FOR SEARCH RECHECK",
+            "ALTER OPERATOR FAMILY f USING btree ADD OPERATOR 1 < RECHECK",
+        ] {
+            assert!(!statement_parses(src), "{src:?} must not parse from 18");
+        }
+        assert!(statement_parses(
+            "CREATE OPERATOR CLASS c FOR TYPE int4 USING gist AS OPERATOR 1 <, STORAGE int4"
+        ));
+        assert!(statement_parses("CREATE TABLE recheck (recheck int)"));
     }
 }

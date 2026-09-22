@@ -944,4 +944,244 @@ mod tests {
         assert!(matches!(body.source, super::CtasSource::Query(_)));
         assert!(input.is_eof());
     }
+
+    // --- PostgreSQL 18 (docs/research/postgres-14-19-sql-syntax-changes.md,
+    // PostgreSQL 18, items 1 to 7) ---
+
+    /// Whether `src` parses as one complete statement.
+    fn statement_parses(src: &str) -> bool {
+        let lexed = crate::lex(src);
+        if lexed.errors().count() > 0 {
+            return false;
+        }
+        let mut input = lexed.input();
+        crate::ast::Statement::parse(&mut input).is_ok() && input.is_eof()
+    }
+
+    /// The constraints of the first column of a `CREATE TABLE`.
+    #[cfg(feature = "since-pg18")]
+    fn first_column_kinds(src: &'static str) -> Vec<String> {
+        let parsed = crate::ast::test_support::parse_stmt::<CreateTableStmt>(src);
+        let stmt = parsed.ast();
+        let items = stmt.items().expect("a column body");
+        let ColumnOrConstraint::Column(column) = &items[0] else {
+            panic!("the first item of {src:?} is a column");
+        };
+        column
+            .constraints
+            .iter()
+            .map(|constraint| format!("{:?}", constraint.kind))
+            .collect()
+    }
+
+    /// The table constraint kinds of a `CREATE TABLE`.
+    #[cfg(feature = "since-pg18")]
+    fn table_constraints(src: &'static str) -> Vec<String> {
+        let parsed = crate::ast::test_support::parse_stmt::<CreateTableStmt>(src);
+        let stmt = parsed.ast();
+        stmt.items()
+            .expect("a column body")
+            .iter()
+            .filter_map(|item| match item {
+                ColumnOrConstraint::Constraint(constraint) => {
+                    Some(format!("{:?}", constraint.kind))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn parse_virtual_generated_column() {
+        for (src, spelled) in [
+            ("CREATE TABLE t (c int GENERATED ALWAYS AS (a * 2) VIRTUAL)", true),
+            ("CREATE TABLE t (c int GENERATED ALWAYS AS (a * 2))", false),
+        ] {
+            let parsed = crate::ast::test_support::parse_stmt::<CreateTableStmt>(src);
+            let stmt = parsed.ast();
+            let ColumnOrConstraint::Column(column) = &stmt.items().unwrap()[0] else {
+                panic!("{src:?} holds a column");
+            };
+            let ColumnConstraintKind::Generated(generated) = &column.constraints[0].kind else {
+                panic!("{src:?} holds a generated column");
+            };
+            let GeneratedBody::Virtual(tail) = &generated.body else {
+                panic!("{src:?} is a virtual generated column");
+            };
+            assert_eq!(tail.virtual_keyword, spelled, "{src:?}");
+            crate::ast::test_support::reparse_stable::<CreateTableStmt>(src);
+        }
+        // `STORED` stays the stored form.
+        let kinds = first_column_kinds("CREATE TABLE t (c int GENERATED ALWAYS AS (a) STORED)");
+        assert!(kinds[0].contains("Stored"), "{kinds:?}");
+        crate::ast::test_support::reparse_stable::<AlterTableStmt>(
+            "ALTER TABLE t ADD COLUMN c int GENERATED ALWAYS AS (a) VIRTUAL",
+        );
+    }
+
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn parse_temporal_keys_without_overlaps() {
+        for src in [
+            "CREATE TABLE t (id int, v daterange, PRIMARY KEY (id, v WITHOUT OVERLAPS))",
+            "CREATE TABLE t (id int, v daterange, UNIQUE (id, v WITHOUT OVERLAPS))",
+        ] {
+            let kinds = table_constraints(src);
+            assert_eq!(kinds.len(), 1, "{src:?}");
+            crate::ast::test_support::reparse_stable::<CreateTableStmt>(src);
+        }
+        let parsed = crate::ast::test_support::parse_stmt::<CreateTableStmt>(
+            "CREATE TABLE t (id int, PRIMARY KEY (id, v WITHOUT OVERLAPS))",
+        );
+        let stmt = parsed.ast();
+        let ColumnOrConstraint::Constraint(constraint) = &stmt.items().unwrap()[1] else {
+            panic!("the second item is a constraint");
+        };
+        let TableConstraintKind::PrimaryKey(key) = &constraint.kind else {
+            panic!("a primary key");
+        };
+        let IndexedConstraintBody::Columns(columns) = &key.body else {
+            panic!("a column list");
+        };
+        assert_eq!(columns.columns.len(), 2);
+        assert!(columns.columns.1, "WITHOUT OVERLAPS is recorded");
+        crate::ast::test_support::reparse_stable::<AlterTableStmt>(
+            "ALTER TABLE t ADD CONSTRAINT k UNIQUE (id, v WITHOUT OVERLAPS)",
+        );
+    }
+
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn parse_temporal_foreign_key_period() {
+        let src = "CREATE TABLE t (id int, v daterange, \
+                   FOREIGN KEY (id, PERIOD v) REFERENCES p (id, PERIOD v))";
+        let parsed = crate::ast::test_support::parse_stmt::<CreateTableStmt>(src);
+        let stmt = parsed.ast();
+        let ColumnOrConstraint::Constraint(constraint) = &stmt.items().unwrap()[2] else {
+            panic!("the third item is a constraint");
+        };
+        let TableConstraintKind::ForeignKey(key) = &constraint.kind else {
+            panic!("a foreign key");
+        };
+        assert_eq!(key.columns.len(), 1);
+        assert_eq!(key.columns.1.as_ref().unwrap().column.text(), "v");
+        let referenced = key.references.columns.as_ref().unwrap();
+        assert_eq!(referenced.len(), 1);
+        assert_eq!(referenced.1.as_ref().unwrap().column.text(), "v");
+        crate::ast::test_support::reparse_stable::<CreateTableStmt>(src);
+        // `period` is still an ordinary column name.
+        crate::ast::test_support::reparse_stable::<CreateTableStmt>(
+            "CREATE TABLE t (period int, FOREIGN KEY (period, PERIOD v) REFERENCES p (period))",
+        );
+        crate::ast::test_support::reparse_stable::<AlterTableStmt>(
+            "ALTER TABLE t ADD FOREIGN KEY (id, PERIOD v) REFERENCES p (id, PERIOD v) ON DELETE CASCADE",
+        );
+        // A column-level `REFERENCES` has no `PERIOD` (gram.y `opt_column_list`).
+        assert!(!statement_parses("CREATE TABLE t (a int REFERENCES p (a, PERIOD b))"));
+    }
+
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn parse_enforced_constraint_attributes() {
+        let kinds = first_column_kinds(
+            "CREATE TABLE t (a int CHECK (a > 0) NOT ENFORCED REFERENCES p ENFORCED)",
+        );
+        assert_eq!(kinds.len(), 4, "{kinds:?}");
+        assert_eq!(kinds[1], "Attr(NotEnforced)");
+        assert_eq!(kinds[3], "Attr(Enforced)");
+        let kinds = table_constraints(
+            "CREATE TABLE t (a int, CHECK (a > 0) NOT ENFORCED, \
+             FOREIGN KEY (a) REFERENCES p ENFORCED)",
+        );
+        assert!(kinds[0].contains("NotEnforced"), "{kinds:?}");
+        assert!(
+            kinds[1].contains("Enforced") && !kinds[1].contains("NotEnforced"),
+            "{kinds:?}"
+        );
+        crate::ast::test_support::reparse_stable::<CreateTableStmt>(
+            "CREATE TABLE t (a int CHECK (a > 0) NOT ENFORCED, CHECK (a < 9) ENFORCED)",
+        );
+    }
+
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn parse_alter_constraint_enforced_and_inherit() {
+        for src in [
+            "ALTER TABLE t ALTER CONSTRAINT c NOT ENFORCED",
+            "ALTER TABLE t ALTER CONSTRAINT c ENFORCED",
+            "ALTER TABLE t ALTER CONSTRAINT c NO INHERIT",
+            "ALTER TABLE t ALTER CONSTRAINT c INHERIT",
+        ] {
+            crate::ast::test_support::reparse_stable::<AlterTableStmt>(src);
+        }
+        let rendered = format!(
+            "{:?}",
+            crate::ast::test_support::parse_stmt::<AlterTableStmt>(
+                "ALTER TABLE t ALTER CONSTRAINT c INHERIT"
+            )
+            .ast()
+        );
+        assert!(rendered.contains("AlterConstraintInherit"), "{rendered}");
+        // `INHERIT` takes no constraint attributes after it.
+        assert!(!statement_parses("ALTER TABLE t ALTER CONSTRAINT c INHERIT DEFERRABLE"));
+    }
+
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn parse_not_null_constraints_of_18() {
+        let kinds = table_constraints(
+            "CREATE TABLE t (a int, b int, NOT NULL a, CONSTRAINT nn NOT NULL b NO INHERIT NOT VALID)",
+        );
+        assert_eq!(kinds.len(), 2);
+        assert!(kinds.iter().all(|kind| kind.starts_with("NotNull")), "{kinds:?}");
+        let kinds = first_column_kinds("CREATE TABLE t (a int NOT NULL NO INHERIT DEFAULT 1)");
+        assert_eq!(kinds[0], "NotNullNoInherit");
+        for src in [
+            "CREATE TABLE t (a int, CONSTRAINT nn NOT NULL a NOT VALID)",
+            "CREATE TABLE t (a int NOT NULL NO INHERIT)",
+            "CREATE TABLE p2 PARTITION OF p (NOT NULL a) FOR VALUES IN (1)",
+        ] {
+            crate::ast::test_support::reparse_stable::<CreateTableStmt>(src);
+        }
+        crate::ast::test_support::reparse_stable::<AlterTableStmt>("ALTER TABLE t ADD NOT NULL a");
+        assert!(!statement_parses("ALTER TABLE t ADD NOT NULL (a)"));
+    }
+
+    #[test]
+    fn the_keywords_of_18_are_names() {
+        // `enforced`, `objects`, `period` and `virtual` are unreserved,
+        // bare-label keywords in 18 and ordinary names before 18.
+        for src in [
+            "CREATE TABLE virtual (period int, enforced int, objects int)",
+            "CREATE TABLE t (a int, FOREIGN KEY (a, period) REFERENCES p (a, period))",
+        ] {
+            crate::ast::test_support::reparse_stable::<CreateTableStmt>(src);
+        }
+        assert!(statement_parses("SELECT 1 virtual, 1 enforced, 1 objects, 1 period"));
+    }
+
+    // Before 18 PostgreSQL rejects each of these forms
+    // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+    // items 1 to 7).
+    #[cfg(not(feature = "since-pg18"))]
+    #[test]
+    fn the_table_forms_of_18_are_rejected_before_18() {
+        for src in [
+            "CREATE TABLE t (c int GENERATED ALWAYS AS (a) VIRTUAL)",
+            "CREATE TABLE t (c int GENERATED ALWAYS AS (a))",
+            "CREATE TABLE t (id int, PRIMARY KEY (id, v WITHOUT OVERLAPS))",
+            "CREATE TABLE t (id int, UNIQUE (id, v WITHOUT OVERLAPS))",
+            "CREATE TABLE t (id int, FOREIGN KEY (id, PERIOD v) REFERENCES p (id, PERIOD v))",
+            "CREATE TABLE t (a int CHECK (a > 0) NOT ENFORCED)",
+            "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES p ENFORCED)",
+            "ALTER TABLE t ALTER CONSTRAINT c NOT ENFORCED",
+            "ALTER TABLE t ALTER CONSTRAINT c INHERIT",
+            "CREATE TABLE t (a int, NOT NULL a)",
+            "ALTER TABLE t ADD NOT NULL a",
+            "CREATE TABLE t (a int NOT NULL NO INHERIT)",
+        ] {
+            assert!(!statement_parses(src), "{src:?} must not parse before 18");
+        }
+    }
 }

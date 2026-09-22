@@ -215,4 +215,63 @@ mod tests {
         assert_eq!(stmt.relation.name().object(), "a");
         assert!(input.is_eof());
     }
+
+    /// Whether `src` parses as one complete statement.
+    fn statement_parses(src: &str) -> bool {
+        let lexed = crate::lex(src);
+        if lexed.errors().count() > 0 {
+            return false;
+        }
+        let mut input = lexed.input();
+        crate::ast::Statement::parse(&mut input).is_ok() && input.is_eof()
+    }
+
+    // Added in 18: `returning_with_clause`
+    // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+    // item 12).
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn returning_with_old_and_new_aliases() {
+        let stmt = crate::ast::test_support::parse_stmt::<UpdateStmt>(
+            "UPDATE t SET a = 1 RETURNING WITH (OLD AS o, NEW AS n) o.a, n.a",
+        );
+        let stmt = stmt.ast();
+        let returning = stmt.returning.as_ref().unwrap();
+        let with = returning.with.as_ref().unwrap();
+        assert_eq!(with.len(), 2);
+        assert!(matches!(with.first().kind, ReturningOptionKind::Old));
+        assert_eq!(with.first().alias.text(), "o");
+        assert_eq!(returning.items.len(), 2);
+        for src in [
+            "UPDATE t SET v = v + 1 RETURNING old.v, new.v",
+            "UPDATE t SET a = 1 RETURNING WITH (NEW AS n) *",
+        ] {
+            crate::ast::test_support::reparse_stable::<UpdateStmt>(src);
+        }
+        for src in [
+            "DELETE FROM t RETURNING WITH (OLD AS o) o.*",
+            "INSERT INTO t VALUES (1) RETURNING WITH (OLD AS o, NEW AS n) o.a, n.a",
+            "MERGE INTO t USING s ON t.a = s.a WHEN MATCHED THEN DELETE RETURNING WITH (NEW AS n) n.*",
+        ] {
+            assert!(statement_parses(src), "{src:?}");
+        }
+        for src in [
+            "DELETE FROM t RETURNING WITH () *",
+            "DELETE FROM t RETURNING WITH (OLD o) *",
+            "DELETE FROM t RETURNING WITH (OLD AS o)",
+        ] {
+            assert!(!statement_parses(src), "{src:?}");
+        }
+    }
+
+    #[cfg(not(feature = "since-pg18"))]
+    #[test]
+    fn returning_with_is_rejected_before_18() {
+        for src in [
+            "DELETE FROM t RETURNING WITH (OLD AS o) o.*",
+            "UPDATE t SET a = 1 RETURNING WITH (NEW AS n) *",
+        ] {
+            assert!(!statement_parses(src), "{src:?} must not parse before 18");
+        }
+    }
 }
