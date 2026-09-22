@@ -1473,6 +1473,23 @@ pub mod literal {
             pub integer: IntegerLit,
             #[lex(matcher)]
             pub numeric: NumericLit,
+            // Before 16, the scanner has no non-decimal integers and no `_`
+            // digit separators: research, PostgreSQL 16, "Lexical and literal
+            // syntax" (commits 6fcda9aba, faff8f8e4). In REL_15_19 scan.l,
+            // `0x1F` and `1_000` match `integer_junk` (`{integer}{identifier}`),
+            // `1.5_0` matches `decimal_junk` and `1e1_0` matches `real_junk`, and
+            // each is an error. The `IntegerLit` and `NumericLit` matchers have
+            // the 16 patterns, and a `matchers` entry takes no `cfg`. So a 15
+            // build adds this token: it matches every such literal at the same
+            // length as the matchers or longer, and wins a tie by priority. No
+            // grammar rule takes it, so the statement is rejected, as the 15
+            // scanner rejects it.
+            #[cfg(not(feature = "since-pg16"))]
+            #[lex(
+                pattern = r"0[xXoObB][0-9A-Za-z_]*|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?_(?:[eE][+-]|[0-9A-Za-z_.])*",
+                priority = 100
+            )]
+            pub numeric_junk: NumericJunk,
             #[lex(matcher)]
             pub custom_operator: CustomOp,
         }
