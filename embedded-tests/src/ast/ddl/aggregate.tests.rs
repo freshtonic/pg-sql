@@ -227,4 +227,28 @@ mod tests {
         assert!(stmt.signature.definition.is_some());
         assert!(input.is_eof());
     }
+
+    // `path` and `nested` are keywords from 17 on: research, PostgreSQL 17,
+    // "Keywords" (REL_17_11 kwlist.h; not in REL_16_15 kwlist.h). Before 17
+    // they are identifiers, so they are valid `old_aggr_elem: IDENT '='
+    // def_arg` names (REL_16_15 gram.y 6324).
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn old_style_aggregate_takes_path_and_nested_before_17() {
+        assert_statements_parse(&[
+            "CREATE AGGREGATE a (basetype = int, sfunc = f, stype = int, path = 1)",
+            "CREATE AGGREGATE a (basetype = int, sfunc = f, stype = int, nested = 1)",
+        ]);
+    }
+
+    // From 17, `path` and `nested` are keywords and no `IDENT`: see
+    // `old_style_aggregate_takes_path_and_nested_before_17`.
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn old_style_aggregate_rejects_path_and_nested_from_17() {
+        assert_statements_rejected(&[
+            "CREATE AGGREGATE a (basetype = int, sfunc = f, stype = int, path = 1)",
+            "CREATE AGGREGATE a (basetype = int, sfunc = f, stype = int, nested = 1)",
+        ]);
+    }
 }

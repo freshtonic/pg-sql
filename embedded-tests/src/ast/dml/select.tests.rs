@@ -1600,4 +1600,19 @@ mod tests {
             "SELECT json_table FROM json_table",
         ]);
     }
+
+    // Before 17, `path` is no keyword and an `XMLTABLE` column option is
+    // REL_16_15 gram.y 13883 `xmltable_column_option_el: IDENT b_expr`, so a
+    // quoted `"path"` names the option. REL_17_11 gram.y 14108 adds the
+    // keyword form `PATH b_expr`: research, PostgreSQL 17, "Keywords" and
+    // "Queries and expressions".
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn xmltable_path_option_is_an_identifier_before_17() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int PATH 'a' NOT NULL)",
+            "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"path\" 'a')",
+            "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS path int PATH 'a', nested text)",
+        ]);
+    }
 }

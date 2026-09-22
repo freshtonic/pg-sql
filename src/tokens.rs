@@ -171,10 +171,9 @@ recursa::tokens! {
         FORMAT          => r"FORMAT" in UNRESERVED + bare_label,
         ENCODING        => r"ENCODING" in UNRESERVED + bare_label,
         PASSING         => r"PASSING" in UNRESERVED + bare_label,
-        // Added in 17 (research, PostgreSQL 17, "Keywords"), but not gated:
-        // the `precedence` block names it, and a `precedence` entry takes no
-        // `cfg`. A 16 build therefore lexes it as a keyword where 16 has an
-        // identifier.
+        // Added in 17: research, PostgreSQL 17, "Keywords". The `precedence`
+        // block names it under the same predicate.
+        #[cfg(feature = "since-pg17")]
         PATH            => r"PATH" in UNRESERVED + bare_label,
         COLUMNS         => r"COLUMNS" in UNRESERVED + bare_label,
         KEYS            => r"KEYS" in UNRESERVED + bare_label,
@@ -182,10 +181,9 @@ recursa::tokens! {
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
         QUOTES          => r"QUOTES" in UNRESERVED + bare_label,
-        // Added in 17 (research, PostgreSQL 17, "Keywords"), but not gated:
-        // the `precedence` block names it, and a `precedence` entry takes no
-        // `cfg`. A 16 build therefore lexes it as a keyword where 16 has an
-        // identifier.
+        // Added in 17: research, PostgreSQL 17, "Keywords". The `precedence`
+        // block names it under the same predicate.
+        #[cfg(feature = "since-pg17")]
         NESTED          => r"NESTED" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[cfg(feature = "since-pg17")]
@@ -1022,7 +1020,15 @@ recursa::tokens! {
         // gram.y:886 `%nonassoc UNBOUNDED NESTED` ("ideally would have same
         // precedence as IDENT"): deliberately just under the IDENT level so
         // `UNBOUNDED PRECEDING` and `NESTED PATH` shift.
-        nonassoc(bp = 100) { UNBOUNDED, NESTED },
+        //
+        // `NESTED` and `PATH` (below) are keywords from 17 on: research,
+        // PostgreSQL 17, "Keywords". REL_16_15 gram.y 853-854 has
+        // `%nonassoc UNBOUNDED` and the IDENT level without `PATH`.
+        nonassoc(bp = 100) {
+            UNBOUNDED,
+            #[cfg(feature = "since-pg17")]
+            NESTED
+        },
         // gram.y:887-888 `%nonassoc IDENT PARTITION RANGE ROWS GROUPS
         // PRECEDING FOLLOWING CUBE ROLLUP SET KEYS OBJECT_P SCALAR VALUE_P
         // WITH WITHOUT PATH`: gram.y's reference level for keywords with no
@@ -1048,6 +1054,7 @@ recursa::tokens! {
             VALUE,
             WITH,
             WITHOUT,
+            #[cfg(feature = "since-pg17")]
             PATH
         },
         // gram.y:889 `%left Op OPERATOR` ("multi-character ops and

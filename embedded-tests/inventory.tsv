@@ -26,6 +26,8 @@ embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_ordered_set
 embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_create_aggregate_zero_args	false	14-
 embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_drop_aggregate_star	false	14-
 embedded-tests/src/ast/ddl/aggregate.tests.rs	parse_drop_aggregate_typed	false	14-
+embedded-tests/src/ast/ddl/aggregate.tests.rs	old_style_aggregate_takes_path_and_nested_before_17	false	14-16
+embedded-tests/src/ast/ddl/aggregate.tests.rs	old_style_aggregate_rejects_path_and_nested_from_17	false	17-
 embedded-tests/src/ast/ddl/cast.tests.rs	parse_create_cast_with_function_assignment	false	14-
 embedded-tests/src/ast/ddl/cast.tests.rs	parse_create_cast_with_inout_implicit	false	14-
 embedded-tests/src/ast/ddl/cast.tests.rs	parse_create_cast_without_function	false	14-
@@ -537,6 +539,7 @@ embedded-tests/src/ast/dml/select.tests.rs	reject_distinct_without_a_target_list
 embedded-tests/src/ast/dml/select.tests.rs	reject_select_duplicate_limit_offset_clauses	false	14-
 embedded-tests/src/ast/dml/select.tests.rs	reject_select_from_without_from_list	false	14-
 embedded-tests/src/ast/dml/select.tests.rs	json_table_is_rejected_before_17	false	14-16
+embedded-tests/src/ast/dml/select.tests.rs	xmltable_path_option_is_an_identifier_before_17	false	14-16
 embedded-tests/src/ast/dml/update.tests.rs	parse_update_multiple_assignments_and_returning_items	false	14-
 embedded-tests/src/ast/dml/update.tests.rs	parse_update_only	false	14-
 embedded-tests/src/ast/dml/update.tests.rs	parse_update_plain_assignment_still_parses	false	14-
