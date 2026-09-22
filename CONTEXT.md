@@ -1,11 +1,35 @@
 # pg-sql Domain
 
-`pg-sql` is a PostgreSQL parser built with Recursa. The port targets
-PostgreSQL 17.9 and preserves language coverage and semantic information
-without promising compatibility with the legacy Rust API.
+`pg-sql` is a PostgreSQL parser built with Recursa. Each build targets one
+PostgreSQL version, PostgreSQL 17 by default. The port preserves language coverage
+and semantic information without promising compatibility with the legacy Rust
+API.
 
 ## Canonical terms
 
+- **Target version**: the one PostgreSQL major version whose raw parser a
+  pg-sql build reproduces, and whose psql client language a pg-psql build
+  reproduces. It is pinned to one exact release: the latest minor release of
+  that major, or a named commit for a pre-release major. A build has exactly
+  one target version, and the psql document and the SQL in it always come
+  from that same release.
+- **Version feature**: the Cargo feature that selects the target version:
+  `pg14`, `pg15`, `pg16`, `pg17`, `pg18` or `pg19-beta`. They are mutually
+  exclusive, and `pg17` is the default. `pg19-beta` becomes `pg19` when
+  PostgreSQL 19.0 is tagged.
+- **Version parity**: a build accepts exactly what its target version's raw
+  parser (`gram.y` and `scan.l`) accepts, and rejects exactly what it
+  rejects. Changes that only execution, the catalog or parse analysis enforce
+  are not part of it. Neither is the `standard_conforming_strings = off`
+  lexing mode: every target version lexes as if the setting is on. For a
+  pg-psql build, version parity covers only the psql language that pg-psql
+  models: `psqlscan.l` lexing and the send commands. Meta-commands that
+  pg-psql keeps as unparsed text have no version gate.
+- **Version gate**: a statement that one grammar element (a statement,
+  clause, field, lexer rule, keyword or keyword category) exists only from a
+  target version ("added in N"), or only before one ("removed in N"). Every
+  version gate cites the research entry or the `gram.y`/`scan.l` change that
+  justifies it.
 - **PostgreSQL statement**: one semantically typed statement accepted by the
   supported PostgreSQL grammar.
 - **SQL file item**: one statement, raw or COPY payload region, or the first
@@ -17,7 +41,7 @@ without promising compatibility with the legacy Rust API.
 - **Substitution**: the `pg-psql` step that turns a psql document into
   server SQL text plus a source map. It runs before any SQL parse, exactly
   as psql runs before the server.
-- **PostgreSQL oracle**: PostgreSQL 17.9's authoritative raw-parser result.
+- **PostgreSQL oracle**: the target version's authoritative raw-parser result.
 - **Differential baseline**: the pinned corpus membership and outcome counts
   against the PostgreSQL oracle.
 - **Grammar migration**: the reproducible transformation from the immutable
