@@ -85,6 +85,30 @@ recursa::ast_node! {
     }
 }
 
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// `param TO NULL` / `param = NULL` — the two `generic_set` arms that 19
+    /// adds (gram.y b73d13c:1727, 1737; research PostgreSQL 19, "Changes to
+    /// existing statements", commit ff4597acd). `NULL` is one value, never
+    /// an element of a list.
+    #[derive(Debug)]
+    pub struct GenericSetNull {
+        pub param: crate::ast::shared::names::QualifiedName,
+        #[tok(this, NULL)]
+        pub sep: SetSep,
+    }
+}
+
+#[cfg(feature = "since-pg19")]
+recursa::ast_node! {
+    /// Nested `SET param TO NULL`, the 19 twin of [`SetStmt`].
+    #[derive(Debug)]
+    #[tok(SET, this)]
+    pub struct SetNullStmt {
+        pub rest: GenericSetNull,
+    }
+}
+
 recursa::ast_node! {
     /// Generic nested `SET`: `SET param TO|= value [, value ...]`.
     ///
@@ -237,6 +261,9 @@ recursa::ast_node! {
         // `QualifiedName` admits several special-form keywords, so keep this
         // fallback after their literal-leading branches.
         Generic(GenericSetRest),
+        /// Added in 19: `generic_set: var_name TO NULL_P` (b73d13c:1727).
+        #[cfg(feature = "since-pg19")]
+        GenericNull(GenericSetNull),
     }
 }
 

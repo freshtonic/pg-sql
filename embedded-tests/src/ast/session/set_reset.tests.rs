@@ -325,4 +325,46 @@ mod tests {
         let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
     }
+
+    /// Added in 19: `generic_set: var_name TO NULL_P | var_name '=' NULL_P`
+    /// (gram.y b73d13c:1727, 1737; research PostgreSQL 19, "Changes to
+    /// existing statements", commit ff4597acd). `NULL` is one value, not a
+    /// list element. Every `generic_set` position takes it.
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn set_var_to_null_from_19() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SET search_path TO NULL",
+                "SET search_path = NULL",
+                "SET LOCAL search_path TO NULL",
+                "SET SESSION s.x = NULL",
+                "ALTER ROLE r IN DATABASE d SET search_path = NULL",
+                "ALTER FUNCTION f() SET search_path TO NULL",
+                "CREATE FUNCTION f() RETURNS int LANGUAGE sql SET search_path TO NULL RETURN 1",
+            ],
+            &[
+                "SET search_path TO NULL, public",
+                "SET search_path TO public, NULL",
+                "SET TIME ZONE NULL",
+                "CREATE FUNCTION f() RETURNS int LANGUAGE sql SET search_path TO NULL, x RETURN 1",
+            ],
+        );
+    }
+
+    /// Before 19, `SET var TO NULL` is a syntax error (the same research
+    /// entry).
+    #[cfg(not(feature = "since-pg19"))]
+    #[test]
+    fn reject_set_var_to_null_before_19() {
+        crate::ast::test_support::check_statement_forms(
+            &["SET search_path TO DEFAULT"],
+            &[
+                "SET search_path TO NULL",
+                "SET search_path = NULL",
+                "ALTER ROLE r SET search_path TO NULL",
+                "ALTER FUNCTION f() SET search_path TO NULL",
+            ],
+        );
+    }
 }
