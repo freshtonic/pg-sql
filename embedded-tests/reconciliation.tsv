@@ -30,6 +30,9 @@ legacy_id	disposition	current_path	current_name	rationale
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	parse_virtual_generated_column	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	the_keywords_of_18_are_names	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	the_table_forms_of_18_are_rejected_before_18	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_enforced_from_19	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_enforced_is_rejected_before_19	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_rejects_not_valid_and_no_inherit	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_clauses_with_gram_y_actions	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_coalesce_family_as_function_tables	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/select.tests.rs	parse_group_by_rollup_and_cube_as_grouping_clauses	issue-9-generated-statement

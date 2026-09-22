@@ -220,12 +220,12 @@ const NEWEST_TARGET_MAJOR: u32 = 19;
 /// whose version range contains that major. Bump the count of each version
 /// that a new test runs for.
 const ROWS_PER_TARGET_VERSION: [(u32, usize); 6] = [
-    (14, 1_169),
-    (15, 1_169),
-    (16, 1_183),
-    (17, 1_188),
-    (18, 1_193),
-    (19, 1_195),
+    (14, 1_171),
+    (15, 1_171),
+    (16, 1_185),
+    (17, 1_190),
+    (18, 1_195),
+    (19, 1_197),
 ];
 
 /// The target versions that one embedded test runs for, written `LO-` (from
@@ -891,7 +891,7 @@ fn all_imported_embedded_tests_and_ignored_statuses_are_accounted_for() {
     let included_paths = included_test_modules(root, &discovered_paths);
     let actual = actual_inventory(root, &discovered_paths);
 
-    assert_eq!(expected.len(), 1_239);
+    assert_eq!(expected.len(), 1_242);
     assert_eq!(discovered_paths, expected_paths);
     assert_eq!(
         included_paths,
@@ -1017,7 +1017,7 @@ fn every_frozen_legacy_test_and_new_relocated_test_has_a_disposition() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
 
     assert_eq!(legacy.len(), 1_318);
-    assert_eq!(current.len(), 1_239);
+    assert_eq!(current.len(), 1_242);
     validate_reconciliation(
         &legacy,
         &current,
