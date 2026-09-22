@@ -1040,12 +1040,20 @@ recursa::ast_node! {
         #[cfg(feature = "since-pg17")]
         #[tok(JSON_EXISTS)]
         JsonExists,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         #[tok(JSON_OBJECT)]
         JsonObject,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         #[tok(JSON_ARRAY)]
         JsonArray,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         #[tok(JSON_OBJECTAGG)]
         JsonObjectAgg,
+        // Added in 16: research, PostgreSQL 16, "Keywords".
+        #[cfg(feature = "since-pg16")]
         #[tok(JSON_ARRAYAGG)]
         JsonArrayAgg,
         // Added in 17: research, PostgreSQL 17, "Keywords".

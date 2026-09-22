@@ -2101,6 +2101,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `xml_indent_option`).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `INDENT` / `NO INDENT` — output indentation option of `XMLSERIALIZE`.
     ///
@@ -2122,6 +2125,8 @@ recursa::ast_node! {
         pub value: boxed!(Expr),
         #[tok(AS, this)]
         pub ty: CastType,
+        // Added in 16: see `XmlIndentOption`.
+        #[cfg(feature = "since-pg16")]
         pub indent: Option<XmlIndentOption>,
     }
 }
@@ -2657,6 +2662,10 @@ recursa::ast_node! {
 // reclaims it as an identifier (the JSON keywords are soft), so a plain
 // comma-separated call falls through to the ordinary `Func` atom.
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `ENCODING ‹name›` suffix of a `FORMAT JSON` clause (e.g. `ENCODING UTF8`).
     #[derive(Debug)]
@@ -2666,6 +2675,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `FORMAT JSON [ENCODING ‹name›]` — SQL/JSON input/output format specifier.
     #[derive(Debug)]
@@ -2675,6 +2688,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `RETURNING ‹data_type› [FORMAT JSON [ENCODING ...]]` — output type clause.
     #[derive(Debug)]
@@ -2685,6 +2702,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `WITH` / `WITHOUT` lead-in of a `UNIQUE KEYS` constraint.
     #[derive(Debug)]
@@ -2696,6 +2717,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `{WITH|WITHOUT} UNIQUE [KEYS]` — duplicate-key handling for `JSON()` /
     /// `JSON_OBJECT()`.
@@ -2716,6 +2741,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `NULL` / `ABSENT` lead-in of an `ON NULL` clause.
     #[derive(Debug)]
@@ -2727,6 +2756,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `{NULL|ABSENT} ON NULL` — null-input handling for `JSON_OBJECT()` /
     /// `JSON_ARRAY()`.
@@ -2799,6 +2832,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// Key/value separator inside a `JSON_OBJECT` entry: `:` or the `VALUE` keyword.
     #[derive(Debug)]
@@ -2810,6 +2847,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// The `{: | VALUE} ‹value› [FORMAT JSON ...]` part of a `JSON_OBJECT` item.
     #[derive(Debug)]
@@ -2820,6 +2861,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// One item of a `JSON_OBJECT` list: either a SQL/JSON
     /// `[KEY] ‹key› {: | VALUE} ‹value› [FORMAT JSON ...]` entry, or one
@@ -2843,6 +2888,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// One `‹key› {: | VALUE} ‹value› [FORMAT JSON ...]` entry of
     /// `JSON_OBJECTAGG`, whose gram.y production admits only the SQL/JSON
@@ -2854,6 +2903,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// Non-empty item list of `JSON_OBJECT`, followed by the optional `ON NULL`,
     /// `UNIQUE` and `RETURNING` clauses. Those clauses belong to the SQL/JSON
@@ -2868,6 +2921,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `JSON_OBJECT` has distinct PostgreSQL productions for a non-empty item
     /// list and for the empty/returning-only form. Keeping those paths distinct
@@ -2882,6 +2939,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// One `‹expr› [FORMAT JSON ...]` element of a `JSON_ARRAY` element list.
     #[derive(Debug)]
@@ -2891,6 +2952,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// The value part of `JSON_ARRAY`: a subquery or a non-empty element list.
     ///
@@ -2913,6 +2978,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `select_no_parens json_format_clause_opt json_returning_clause_opt`: the
     /// query form has no `ON NULL` clause, so the query ends where its own
@@ -2926,6 +2995,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `json_value_expr_list json_array_constructor_null_clause_opt
     /// json_returning_clause_opt`.
@@ -2938,6 +3011,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `json_returning_clause_opt` alone.
     #[derive(Debug)]
@@ -2946,6 +3023,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `JSON_ARRAY ( ... )` — element-list or query form.
     #[derive(Debug)]
@@ -3255,6 +3336,10 @@ recursa::ast_node! {
 // value` entry, the array form an `ORDER BY`) and, being aggregates, accept
 // the ordinary `FILTER (WHERE ...)` and `OVER (...)` suffixes.
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// Inner contents of `JSON_OBJECTAGG`.
     #[derive(Debug)]
@@ -3266,6 +3351,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `JSON_OBJECTAGG ( ‹key› {: | VALUE} ‹value› ... ) [FILTER (...)] [OVER (...)]`.
     #[derive(Debug)]
@@ -3277,6 +3366,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// Inner contents of `JSON_ARRAYAGG`.
     #[derive(Debug)]
@@ -3289,6 +3382,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// `JSON_ARRAYAGG ( ‹value› [ORDER BY ...] ... ) [FILTER (...)] [OVER (...)]`.
     #[derive(Debug)]
@@ -3302,6 +3399,10 @@ recursa::ast_node! {
 
 // --- `IS JSON` predicate ---
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// The JSON item type tested by an `IS JSON` predicate.
     #[derive(Debug)]
@@ -3317,6 +3418,10 @@ recursa::ast_node! {
     }
 }
 
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
     /// The tail of an `IS JSON` predicate: `[NOT] JSON [{VALUE|SCALAR|ARRAY|OBJECT}]
     /// [{WITH|WITHOUT} UNIQUE [KEYS]]`.
@@ -3538,6 +3643,9 @@ recursa::ast_node! {
         /// UNIQUE [KEYS]]` — the SQL/JSON type predicate. Declared before
         /// `BoolTest` (both lead with `IS`); `BoolTest` rejects `JSON` as a
         /// `BoolTestKind`, so order is not load-bearing, only tidy.
+        // Added in 16: research, PostgreSQL 16, "Queries and expressions"
+        // (REL_16_15 gram.y `a_expr IS json_predicate_type_constraint`).
+        #[cfg(feature = "since-pg16")]
         IsJson(boxed!(Self), #[tok(IS, this)] IsJsonTail),
         /// `expr IS [NOT] [NFC|NFD|NFKC|NFKD] NORMALIZED` — the Unicode
         /// normalisation predicate (gram.y rules 15198/15205/15212/15220).
@@ -3976,8 +4084,12 @@ recursa::ast_node! {
         #[cfg(feature = "since-pg17")]
         JsonSerialize(boxed!(JsonSerialize)),
         /// `JSON_OBJECT(...)` SQL/JSON object constructor. Before `Func`.
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         JsonObject(boxed!(JsonObject)),
         /// `JSON_ARRAY(...)` SQL/JSON array constructor. Before `Func`.
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         JsonArray(boxed!(JsonArray)),
         /// `JSON_EXISTS(...)` SQL/JSON path predicate. Before `Func`.
         // Added in 17: see its node.
@@ -3992,8 +4104,12 @@ recursa::ast_node! {
         #[cfg(feature = "since-pg17")]
         JsonQuery(boxed!(JsonQuery)),
         /// `JSON_OBJECTAGG(...)` SQL/JSON object aggregate. Before `Func`.
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         JsonObjectAgg(boxed!(JsonObjectAgg)),
         /// `JSON_ARRAYAGG(...)` SQL/JSON array aggregate. Before `Func`.
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         JsonArrayAgg(boxed!(JsonArrayAgg)),
         /// Function call: `func(args)` -- must come before ColumnRef
         Func(boxed!(FuncCall)),
@@ -4234,7 +4350,11 @@ recursa::ast_node! {
         // Added in 17: see its node.
         #[cfg(feature = "since-pg17")]
         JsonSerialize,
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         JsonObject,
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         JsonArray,
         // Added in 17: see its node.
         #[cfg(feature = "since-pg17")]
@@ -4245,7 +4365,11 @@ recursa::ast_node! {
         // Added in 17: see its node.
         #[cfg(feature = "since-pg17")]
         JsonQuery,
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         JsonObjectAgg,
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         JsonArrayAgg,
         Func,
         User,
@@ -4312,7 +4436,11 @@ recursa::ast_node! {
         // Added in 17: see its node.
         #[cfg(feature = "since-pg17")]
         JsonSerialize,
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         JsonObject,
+        // Added in 16: see its node.
+        #[cfg(feature = "since-pg16")]
         JsonArray,
         // Added in 17: see its node.
         #[cfg(feature = "since-pg17")]
