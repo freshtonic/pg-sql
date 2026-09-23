@@ -288,6 +288,7 @@ embedded-tests/src/ast/ddl/statistics.tests.rs	alter_statistics_set_statistics_d
 embedded-tests/src/ast/ddl/statistics.tests.rs	alter_statistics_set_statistics_default_is_rejected_before_17	false	14-16
 embedded-tests/src/ast/ddl/statistics.tests.rs	create_statistics_without_a_name	false	16-
 embedded-tests/src/ast/ddl/statistics.tests.rs	create_statistics_needs_a_name_before_16	false	14-15
+embedded-tests/src/ast/ddl/statistics.tests.rs	create_statistics_needs_on_and_from	false	14-
 embedded-tests/src/ast/ddl/subscription.tests.rs	create_subscription_connection_publication_roundtrips	false	14-
 embedded-tests/src/ast/ddl/subscription.tests.rs	create_subscription_multi_publication_roundtrips	false	14-
 embedded-tests/src/ast/ddl/subscription.tests.rs	parse_alter_subscription_set_origin_any	false	14-

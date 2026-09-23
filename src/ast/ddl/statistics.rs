@@ -24,11 +24,15 @@ recursa::ast_node! {
     /// `(`. We
     /// model `func_expr_windowless` by re-using `Expr` and letting any
     /// expression that begins like a function call lex into the `Func` arm.
+    ///
+    /// `Bare` is a `ColId`, as gram.y writes it. A wider `NonReservedWord`
+    /// there put a second word nonterminal beside the function name's `ColId`
+    /// in one state, which is an `RCA0401` reduce/reduce conflict on `(`.
     #[derive(Debug)]
     pub enum StatsParam {
         Paren(#[tok(LPAREN, this, RPAREN)] boxed!(Expr)),
         Func(StatsFuncParam),
-        Bare(crate::tokens::NonReservedWord),
+        Bare(crate::tokens::ColId),
     }
 }
 
@@ -92,13 +96,12 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// `CREATE STATISTICS [IF NOT EXISTS] [name] [(stat_type, ...)]
-    /// [ON expr_list] [FROM from_list]`.
+    /// ON stats_params FROM from_list`.
     ///
-    /// PG's gram.y treats `ON` and `FROM` as mandatory; the corpus deliberately
-    /// tests partial forms (`CREATE STATISTICS tst;`) which PG rejects. Make all
-    /// trailers optional so the partial forms round-trip without pg-sql claiming
-    /// to fix PG-rejected SQL — the differential test verifies PG still rejects
-    /// the formatted output.
+    /// Both trailers are mandatory: every arm of gram.y `CreateStatsStmt` ends
+    /// with `ON stats_params FROM from_list`, so a statement without them is a
+    /// raw-parser error in every target version (REL_14_24 gram.y
+    /// `CreateStatsStmt`; b73d13c gram.y `CreateStatsStmt`).
     #[derive(Debug)]
     #[tok(CREATE, STATISTICS, this)]
     pub struct CreateStatisticsStmt {
@@ -111,8 +114,8 @@ recursa::ast_node! {
         #[cfg(not(feature = "since-pg16"))]
         pub name: QualifiedName,
         pub stat_types: Option<StatisticsTypeList>,
-        pub on: Option<StatisticsOnClause>,
-        pub from: Option<StatisticsFromClause>,
+        pub on: StatisticsOnClause,
+        pub from: StatisticsFromClause,
     }
 }
 
