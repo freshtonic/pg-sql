@@ -1254,3 +1254,10 @@ embedded-tests/src/ast/cursor/fetch.tests.rs	fetch_signed_count_is_modelled	fals
 embedded-tests/src/ast/cursor/fetch.tests.rs	fetch_and_move_signed_count_forms	false	14-
 embedded-tests/src/ast/ddl/sequence.tests.rs	sequence_logged_options_are_modelled	false	15-
 embedded-tests/src/ast/ddl/sequence.tests.rs	sequence_logged_options_are_rejected_before_15	false	14-14
+embedded-tests/src/ast/session/alter_system.tests.rs	alter_system_set_generic_set	false	14-
+embedded-tests/src/ast/session/alter_system.tests.rs	alter_system_reset_generic_reset	false	14-
+embedded-tests/src/ast/session/alter_system.tests.rs	alter_system_action_shapes	false	14-
+embedded-tests/src/ast/ddl/database.tests.rs	alter_database_set_reset_clause	false	14-
+embedded-tests/src/ast/session/set_reset.tests.rs	parse_reset_transaction_isolation_level	false	14-
+embedded-tests/src/ast/session/set_reset.tests.rs	set_schema_names_and_from_current	false	14-
+embedded-tests/src/ast/session/set_reset.tests.rs	default_is_not_a_var_list_element	false	14-

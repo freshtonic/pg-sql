@@ -348,6 +348,10 @@ recursa::tokens! {
         VACUUM          => r"VACUUM" in UNRESERVED + bare_label,
         ROLE            => r"ROLE" in UNRESERVED + bare_label,
         SCHEMA          => r"SCHEMA" in UNRESERVED + bare_label,
+        // `SET NAMES opt_encoding` needs the word. `kwlist.h` gives it the
+        // same two categories in every target version, so `names` stays a
+        // `ColId` and a bare label.
+        NAMES           => r"NAMES" in UNRESERVED + bare_label,
         SEQUENCE        => r"SEQUENCE" in UNRESERVED + bare_label,
         TYPE            => r"TYPE" in UNRESERVED + bare_label,
         DOMAIN          => r"DOMAIN" in UNRESERVED + bare_label,

@@ -51,6 +51,7 @@ use self::{
     dml::insert::InsertStmt,
     dml::update::UpdateStmt,
     dml::values::QueryBody,
+    session::alter_system::AlterSystemStmt,
     session::discard::*,
     session::notify::*,
     session::set_reset::{LoadStmt, ResetStmt, ShowStmt, VariableSetStmt},
@@ -193,6 +194,9 @@ recursa::ast_node! {
         AlterLargeObject(AlterLargeObjectStmt),
         AlterTablespace(AlterTablespaceStmt),
         AlterTable(boxed!(AlterTableStmt)),
+        // `ALTER SYSTEM { SET generic_set | RESET generic_reset }` — gram.y
+        // `AlterSystemStmt`. `SYSTEM` leads no other ALTER statement.
+        AlterSystem(AlterSystemStmt),
         AlterRule(AlterRuleStmt),
         AlterGroup(AlterGroupStmt),
         AlterRole(boxed!(AlterRoleStmt)),

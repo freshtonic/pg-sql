@@ -2,7 +2,12 @@
 use crate::tokens::literal;
 
 recursa::ast_node! {
-    /// The value in a SET statement: literal, keyword, or identifier.
+    /// PostgreSQL's `var_value`: one element of a `var_list`.
+    ///
+    /// `DEFAULT` is not one. It is a reserved keyword, and
+    /// `opt_boolean_or_string` takes a `NonReservedWord`, so `generic_set`
+    /// gives it two dedicated arms ([`GenericSetValue::Default`]) and
+    /// `SET x = DEFAULT, 1` is a syntax error.
     ///
     /// Variant ordering: NumericLit before IntegerLit so `77.7` is consumed as a
     /// numeric literal (longest-match-wins).
@@ -14,8 +19,6 @@ recursa::ast_node! {
         False,
         #[tok(TRUE)]
         True,
-        #[tok(DEFAULT)]
-        Default,
         StringLit(literal::StringLit),
         SignedNumeric(SignedNumericLit),
         NumericLit(literal::NumericLit),
@@ -68,8 +71,32 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// The generic `set_rest_more` form shared by top-level and nested `SET`
-    /// statements.
+    /// PostgreSQL's `var_list`: one or more comma-separated `var_value`.
+    #[derive(Debug, derive_more::Deref)]
+    pub struct VarList(
+        #[sep(COMMA)]
+        #[deref]
+        pub one_or_many!(SetValue),
+    );
+}
+
+recursa::ast_node! {
+    /// The right side of `generic_set`: a `var_list`, or the bare `DEFAULT`
+    /// of the two dedicated arms.
+    ///
+    /// Variant ordering: `DEFAULT` first. It is a reserved keyword and no
+    /// `var_value` takes it, so the two are disjoint after `TO` or `=`.
+    #[derive(Debug)]
+    pub enum GenericSetValue {
+        #[tok(DEFAULT)]
+        Default,
+        List(VarList),
+    }
+}
+
+recursa::ast_node! {
+    /// PostgreSQL's `generic_set`, the form shared by top-level and nested
+    /// `SET` statements.
     ///
     /// This deliberately has no leading `SET` or scope. PostgreSQL's
     /// `VariableSetStmt` owns those literal prefixes, before it enters
@@ -80,8 +107,7 @@ recursa::ast_node! {
     pub struct GenericSetRest {
         pub param: crate::ast::shared::names::QualifiedName,
         pub sep: SetSep,
-        #[sep(COMMA)]
-        pub values: one_or_many!(SetValue),
+        pub value: GenericSetValue,
     }
 }
 
@@ -110,10 +136,11 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Generic nested `SET`: `SET param TO|= value [, value ...]`.
+    /// `SET generic_set`: `SET param TO|= { value [, value ...] | DEFAULT }`.
     ///
-    /// `FunctionSetResetClause` and `SetResetClause` use PostgreSQL's
-    /// `set_rest_more`, which does not permit `LOCAL` or `SESSION`.
+    /// It is the `SET` half of `AlterSystemStmt`, and the `generic_set` part
+    /// of `FunctionSetResetClause`. Neither takes a `LOCAL` or `SESSION`
+    /// scope.
     #[derive(Debug)]
     #[tok(SET, this)]
     pub struct SetStmt {
@@ -226,6 +253,61 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// `SCHEMA Sconst`, the `set_rest_more` form that sets `search_path` to
+    /// one schema.
+    ///
+    /// The value is an `Sconst`, never an identifier, so `SET SCHEMA public`
+    /// is a syntax error while `SET SCHEMA = public` reaches `generic_set`
+    /// with `schema` as the `var_name`.
+    #[derive(Debug)]
+    pub struct SetSchemaStmt {
+        #[tok(SCHEMA, this)]
+        pub name: literal::StringLit,
+    }
+}
+
+recursa::ast_node! {
+    /// PostgreSQL's `opt_encoding`: `Sconst`, `DEFAULT`, or nothing.
+    #[derive(Debug)]
+    pub enum SetNamesEncoding {
+        #[tok(DEFAULT)]
+        Default,
+        Name(literal::StringLit),
+    }
+}
+
+recursa::ast_node! {
+    /// `NAMES opt_encoding`, the `set_rest_more` form that sets
+    /// `client_encoding`. With no encoding it sets the default, so
+    /// `SET NAMES` is a complete statement.
+    #[derive(Debug)]
+    #[tok(NAMES, this)]
+    pub struct SetNamesStmt {
+        pub encoding: Option<SetNamesEncoding>,
+    }
+}
+
+recursa::ast_node! {
+    /// The `FROM CURRENT` tail of the `set_rest_more` form below. It is its
+    /// own node so the two keywords follow the `var_name` as ordinary syntax.
+    #[derive(Debug)]
+    pub enum FromCurrent {
+        #[tok(FROM, CURRENT)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// `var_name FROM CURRENT`, the `set_rest_more` form that keeps the value
+    /// the variable has in the current session.
+    #[derive(Debug)]
+    pub struct SetFromCurrentStmt {
+        pub param: crate::ast::shared::names::QualifiedName,
+        pub from_current: FromCurrent,
+    }
+}
+
+recursa::ast_node! {
     /// Value of `SET XML OPTION`: `DOCUMENT` or `CONTENT`.
     #[derive(Debug)]
     pub enum SetXmlOptionValue {
@@ -248,8 +330,13 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// PostgreSQL's `set_rest`: the statements allowed after each literal
-    /// `SET`, `SET LOCAL`, or `SET SESSION` prefix.
+    /// PostgreSQL's `set_rest`, with its `set_rest_more` arms inlined: the
+    /// statements allowed after each literal `SET`, `SET LOCAL`, or `SET
+    /// SESSION` prefix.
+    ///
+    /// `set_rest_more: CATALOG_P Sconst` has no variant. Its gram.y action is
+    /// an unconditional `ereport(ERROR)`, so the raw parser of every target
+    /// version rejects `SET CATALOG 'x'`.
     #[derive(Debug)]
     pub enum VariableSetRest {
         Transaction(crate::ast::tcl::transaction::SetTransactionRest),
@@ -258,6 +345,12 @@ recursa::ast_node! {
         SessionAuthorization(SetSessionAuthStmt),
         TimeZone(SetTimeZoneStmt),
         XmlOption(SetXmlOptionStmt),
+        Schema(SetSchemaStmt),
+        Names(SetNamesStmt),
+        // `set_rest_more: var_name FROM CURRENT_P`. It shares its `var_name`
+        // head with `Generic`, and only the token after the name tells them
+        // apart, so it comes first.
+        FromCurrent(SetFromCurrentStmt),
         // `QualifiedName` admits several special-form keywords, so keep this
         // fallback after their literal-leading branches.
         Generic(GenericSetRest),
@@ -307,23 +400,43 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Target of a RESET statement.
+    /// PostgreSQL's `generic_reset`: `var_name | ALL`.
     ///
-    /// Variant ordering: multi-token variants before single-token variants.
+    /// This is the whole `RESET` target of `ALTER SYSTEM`. A top-level
+    /// `RESET` takes the wider [`ResetTarget`] (`reset_rest`), which adds the
+    /// three special names.
+    ///
+    /// Variant ordering: `ALL` is a reserved keyword and `var_name` starts
+    /// with a `ColId`, so the two are disjoint; `ALL` is first for clarity.
+    #[derive(Debug)]
+    pub enum GenericReset {
+        #[tok(ALL)]
+        All,
+        Name(crate::ast::shared::names::QualifiedName),
+    }
+}
+
+recursa::ast_node! {
+    /// PostgreSQL's `reset_rest`: `generic_reset`, plus the three special
+    /// names that spell out a GUC (`TIME ZONE` is `timezone`, and so on).
+    ///
+    /// Variant ordering: the multi-keyword names before `Generic`, whose
+    /// `var_name` is a `ColId` and would otherwise take `SESSION`, `TIME` and
+    /// `TRANSACTION` as a bare name.
     #[derive(Debug)]
     pub enum ResetTarget {
         #[tok(SESSION, AUTHORIZATION)]
         SessionAuth,
         #[tok(TIME, ZONE)]
         TimeZone,
-        #[tok(ALL)]
-        All,
-        Ident(crate::ast::shared::names::QualifiedName),
+        #[tok(TRANSACTION, ISOLATION, LEVEL)]
+        TransactionIsolationLevel,
+        Generic(GenericReset),
     }
 }
 
 recursa::ast_node! {
-    /// RESET statement: `RESET { param | ALL | ROLE | SESSION AUTHORIZATION | TIME ZONE }`.
+    /// PostgreSQL's `VariableResetStmt`: `RESET reset_rest`.
     #[derive(Debug)]
     pub struct ResetStmt {
         #[tok(RESET, this)]
