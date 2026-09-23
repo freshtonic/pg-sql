@@ -456,6 +456,7 @@ embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_simple	false	14-
 embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_with_as_alias	false	14-
 embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_with_bare_alias	false	14-
 embedded-tests/src/ast/dml/delete.tests.rs	delete_bare_alias_never_takes_set	false	14-
+embedded-tests/src/ast/dml/delete.tests.rs	returning_takes_a_non_empty_target_list	false	14-
 embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_column_indirection	false	14-
 embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_default_values_returning	false	14-
 embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_multiple_columns	false	14-
