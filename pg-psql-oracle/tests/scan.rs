@@ -41,12 +41,25 @@ fn forwarded_text_is_the_document_when_nothing_is_rewritten() {
     for source in [
         "SELECT 1;",
         "  SELECT 1;",
-        "\n-- a comment\nSELECT 1;\n",
         "/* block */ SELECT 1;",
         "SELECT 'a;b';",
     ] {
         assert_eq!(scan(source, &[]).sql(), source, "forwarding {source:?}");
     }
+}
+
+#[test]
+fn a_line_comment_is_forwarded_from_15() {
+    // psql 14 does not echo a `{whitespace}` match that starts with `-`, so
+    // it removes every `--` comment from the query it sends and keeps the
+    // line ending. 15 sends the comment
+    // (docs/research/psql-14-19-syntax-changes.md, class (A) item A3;
+    // `REL_14_24:psqlscan.l` 388, commit 83884682f).
+    let source = "\n-- a comment\nSELECT 1;\n";
+    #[cfg(feature = "since-pg15")]
+    assert_eq!(scan(source, &[]).sql(), source);
+    #[cfg(not(feature = "since-pg15"))]
+    assert_eq!(scan(source, &[]).sql(), "\n\nSELECT 1;\n");
 }
 
 #[test]
