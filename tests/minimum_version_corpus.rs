@@ -33,17 +33,24 @@ use pg_sql::{TargetVersion, ast::Statement, lex};
 /// The scan that a lexical gate answers, named as a construct.
 const LEXICAL: &str = "<lexical>";
 
-/// The constructs whose gate an older grammar reads as something else.
+/// The constructs whose report an older oracle may still accept.
 ///
 /// A report from one of these may name a version above the oldest one whose
-/// oracle accepts the text. A report from any other construct may not.
+/// oracle accepts the text. A report from any other construct may not. Two
+/// causes put a construct here, and `docs/minimum-version.md` says which is
+/// which.
 const REINTERPRETED_BY_AN_OLDER_GRAMMAR: &[&str] = &[
-    // A word that is a keyword only from 15 or later. Before it the word is
-    // an identifier, so the same text is a function call, a column reference,
-    // a type name, or an older form of the same clause.
+    // An unsplit widening: the 15 publication object list also covers the 14
+    // `FOR TABLE relation_expr_list`, so `FOR TABLE t` reports 15 although 14
+    // parses it. Splitting it needs gates on `TABLES IN SCHEMA`, on the
+    // column list and on the `WHERE` clause.
     "AlterPublicationAction::AddObjs",
     "AlterPublicationAction::DropObjs",
     "AlterPublicationAction::SetObjs",
+    "PublicationForClause::Objects",
+    // A reinterpretation: a word that is a keyword only from 16 or later.
+    // Before it the word is an identifier, so the same text is a function
+    // call, a column reference or a type name.
     "Expr::JsonArray",
     "Expr::JsonArrayAgg",
     "Expr::JsonCtor",
@@ -54,7 +61,6 @@ const REINTERPRETED_BY_AN_OLDER_GRAMMAR: &[&str] = &[
     "Expr::JsonSerialize",
     "Expr::JsonValue",
     "FunctionBuiltinTypeName::Json",
-    "PublicationForClause::Objects",
     "SqlValueFunction::SystemUser",
     "TypeCastFunc::Json",
     // A lexical gate: an older lexer reads the same characters as more than

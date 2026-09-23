@@ -845,14 +845,17 @@ recursa::ast_node! {
     #[derive(Debug, derive_more :: Deref)]
     #[tok(LPAREN, this, RPAREN)]
     pub struct IndexedConstraintColumnList(
-        #[config(before = pg18)]
+        // A narrowing, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // 18 accepts fewer lists than 14, so a list that 18 accepts needs no
+        // version above the baseline. Both arms only remove; neither records.
+        #[cfg(not(feature = "since-pg18"))]
         #[sep(COMMA)]
         #[deref]
         pub zero_or_many!(crate::tokens::ColId),
         /// From 18 the list is gram.y `columnList`, which is not empty: an
         /// empty list would let `(WITHOUT OVERLAPS)` parse, which REL_18_6
         /// gram.y `ConstraintElem` rejects.
-        #[config(since = pg18)]
+        #[cfg(feature = "since-pg18")]
         #[sep(COMMA)]
         #[deref]
         pub one_or_many!(crate::tokens::ColId),
@@ -934,14 +937,17 @@ recursa::ast_node! {
     #[derive(Debug, derive_more :: Deref)]
     #[tok(LPAREN, this, RPAREN)]
     pub struct ForeignKeyColumnList(
-        #[config(before = pg18)]
+        // A narrowing, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // 18 accepts fewer lists than 14, so a list that 18 accepts needs no
+        // version above the baseline. Both arms only remove; neither records.
+        #[cfg(not(feature = "since-pg18"))]
         #[sep(COMMA)]
         #[deref]
         pub zero_or_many!(crate::tokens::ColId),
         /// From 18 the list is gram.y `columnList`, which is not empty: an
         /// empty list would let `(, PERIOD c)` parse, which REL_18_6 gram.y
         /// `ConstraintElem` rejects.
-        #[config(since = pg18)]
+        #[cfg(feature = "since-pg18")]
         #[sep(COMMA)]
         #[deref]
         pub one_or_many!(crate::tokens::ColId),

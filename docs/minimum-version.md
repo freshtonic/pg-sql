@@ -99,6 +99,13 @@ not miss one gives these clauses its own check. The complete list:
 | `ANALYZE ONLY t`, `ANALYZE t *`, and the same for `VACUUM` | 18 | The extra shapes sit in the shared `RelationExpr`, where `ONLY t` is legal in 14 elsewhere. |
 | `FOREIGN KEY (a, PERIOD b) REFERENCES t (c, PERIOD d)` | 18 | The `PERIOD` element sits in a list shape that the wider type adds; it has no gate yet. |
 
+One widening is not split yet, and it reports a version that is too **high**.
+The 15 publication object list (`pub_obj_list`) also covers the 14 `FOR TABLE
+relation_expr_list`, so `CREATE PUBLICATION p FOR TABLE t` reports 15,
+although 14 parses it. The same holds for `ALTER PUBLICATION ...
+{ADD|SET|DROP}`. To split it, gate `TABLES IN SCHEMA`, the column list and the
+`WHERE` clause, which are the three shapes that 15 adds.
+
 Each of these needs its own node, or a shape rule on the wider node, before a
 gate can carry it. The frozen corpus exercises only the first three, and
 `tests/minimum_version_corpus.rs` pins those seven statements.
