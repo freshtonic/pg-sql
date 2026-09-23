@@ -111,3 +111,27 @@ fn the_check_rejects_a_helper_above_the_target_version() {
     assert!(message.contains("`pg15`"), "{message}");
     assert!(message.contains("feature unification"), "{message}");
 }
+
+#[test]
+fn target_versions_order_by_their_major_version() {
+    // A consumer that analyses SQL for an older server than the build's
+    // grammar compares its own version with `TARGET_VERSION`, so the order
+    // must follow the version numbers.
+    let versions = [
+        TargetVersion::Pg14,
+        TargetVersion::Pg15,
+        TargetVersion::Pg16,
+        TargetVersion::Pg17,
+        TargetVersion::Pg18,
+        TargetVersion::Pg19Beta,
+    ];
+    for pair in versions.windows(2) {
+        let (older, newer) = (pair[0], pair[1]);
+        assert!(older < newer, "{older:?} must come before {newer:?}");
+        assert!(older.major() < newer.major());
+    }
+    let mut sorted = versions;
+    sorted.sort();
+    assert_eq!(sorted, versions);
+    assert_eq!(versions.iter().copied().max(), Some(TargetVersion::Pg19Beta));
+}
