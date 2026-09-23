@@ -401,9 +401,18 @@ name = "pg-psql"
 version = "0.1.0"
 dependencies = [
  "derive_more",
+ "pg-psql-oracle",
  "pg-sql",
  "recursa",
  "recursa-codegen",
+ "serde_json",
+]
+
+[[package]]
+name = "pg-psql-oracle"
+version = "0.1.0"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

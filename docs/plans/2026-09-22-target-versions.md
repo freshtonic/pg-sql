@@ -78,9 +78,12 @@ lexer of one target version. The version features `pg14`, `pg15`, `pg16`,
 
 Increments 1 to 9 are merged. A build of each of the six target versions passes
 `scripts/gate-versions`, and each version baseline has no expected version gap.
-Increment 10 (#79) is open. The version work also found parity defects that are
-older than it: #80 (the oracle makes a hard error from a soft error) and #81 to
-#87 (over-rejection and over-acceptance in every version).
+Increment 10 (#79) is done: `pg-psql-oracle` links psql's own lexer of each
+pinned release, and `pg-psql/tests/psql_oracle.rs` pins the outcome of every
+document per target version (`docs/psql-oracle.md`). The version work also
+found parity defects that are older than it: #80 (the oracle makes a hard
+error from a soft error) and #81 to #87 (over-rejection and over-acceptance in
+every version).
 
 ## Increments
 
@@ -123,3 +126,8 @@ the merge.
    and the new `CREATE SCHEMA` elements, so the increment does not add them.
 10. **Follow-up: psqlscan oracle** (#79). An FFI oracle for the psql lexer, built
     from the tree for each version. This does not block increments 5 to 9.
+    Done: the `pg-psql-oracle` crate, the `psql-oracle` feature of pg-psql,
+    the frozen psql corpus and one baseline for each target version. It found
+    two defects: `\gdesc` was not a send command, which is fixed, and an
+    unterminated `E'...'` is re-read rather than refused, which is listed
+    (`docs/psql-oracle.md`).

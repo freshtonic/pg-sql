@@ -112,9 +112,9 @@ recursa::ast_node! {
         /// text, which pg-sql then frames on its own semicolons.
         #[tok(SEMI)]
         Semi,
-        /// `\g`, `\gx`, `\gset`, `\gexec`, `\crosstabview` — client syntax the
-        /// server never sees, so rendering replaces one with `;`. From 18 also
-        /// `\parse` and `\sendpipeline`.
+        /// `\g`, `\gx`, `\gset`, `\gdesc`, `\gexec`, `\crosstabview` — client
+        /// syntax the server never sees, so rendering replaces one with `;`.
+        /// From 18 also `\parse` and `\sendpipeline`.
         Send(SendCommand),
         /// Added in 18: a command that ends the query buffer but does not
         /// send its text (docs/research/psql-14-19-syntax-changes.md, class
@@ -152,6 +152,11 @@ recursa::ast_node! {
         /// A1; `REL_18_6:command.c` 440, 2844).
         #[cfg(feature = "since-pg18")]
         Sendpipeline(#[lex(pattern = r"\\sendpipeline", priority = 2)] SendSendpipeline),
+        /// `\gdesc` sends the buffer text with a Describe, so it is a
+        /// statement boundary like the rest
+        /// (docs/research/psql-14-19-syntax-changes.md, PostgreSQL 14, "Send
+        /// commands"; `REL_17_11:command.c` 1570 returns `PSQL_CMD_SEND`).
+        Gdesc(#[lex(pattern = r"\\gdesc", priority = 2)] SendGdesc),
         /// `\gexec`
         Gexec(#[lex(pattern = r"\\gexec", priority = 2)] SendGexec),
         /// `\gset`
@@ -172,6 +177,7 @@ impl<'input> SendCommand<'input> {
             Self::Parse(token) => token.text(),
             #[cfg(feature = "since-pg18")]
             Self::Sendpipeline(token) => token.text(),
+            Self::Gdesc(token) => token.text(),
             Self::Gexec(token) => token.text(),
             Self::Gset(token) => token.text(),
             Self::Gx(token) => token.text(),

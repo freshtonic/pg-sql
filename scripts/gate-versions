@@ -12,7 +12,8 @@
 # no-spans and `arbitrary` combinations.
 #
 # Each version is a different build of the generated grammar, and the first
-# oracle build of each version builds PostgreSQL. A full run is slow and needs
+# build of each oracle of each version builds PostgreSQL: pg-oracle under its
+# OUT_DIR, pg-psql-oracle under target/pg-trees. A full run is slow and needs
 # several GB of disk for each version.
 set -euo pipefail
 
@@ -47,6 +48,10 @@ for version in "${versions[@]}"; do
     --test differential --test accepted_legacy_gaps
   run cargo test --locked -p pg-psql --no-default-features --features "$version"
   run cargo test --locked -p pg-oracle --no-default-features --features "$version"
+  # The psql oracle (#79): psql's own lexer of the same pinned release.
+  run cargo test --locked -p pg-psql-oracle --no-default-features --features "$version"
+  run cargo test --locked -p pg-psql --no-default-features \
+    --features "$version,psql-oracle"
 
   if [ "$version" = pg17 ]; then
     # The no-spans and arbitrary combinations run on pg17 only.

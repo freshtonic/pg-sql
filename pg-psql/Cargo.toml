@@ -13,11 +13,18 @@ build = "build.rs"
 # uses `default-features = false` on pg-sql and forwards these features.
 # Enable exactly one version feature.
 default = ["pg17"]
-pg14 = ["pg-sql/pg14"]
-pg15 = ["pg-sql/pg15", "since-pg15"]
-pg16 = ["pg-sql/pg16", "since-pg15", "since-pg16"]
-pg17 = ["pg-sql/pg17", "since-pg15", "since-pg16", "since-pg17"]
-pg18 = ["pg-sql/pg18", "since-pg15", "since-pg16", "since-pg17", "since-pg18"]
+pg14 = ["pg-sql/pg14", "pg-psql-oracle?/pg14"]
+pg15 = ["pg-sql/pg15", "since-pg15", "pg-psql-oracle?/pg15"]
+pg16 = ["pg-sql/pg16", "since-pg15", "since-pg16", "pg-psql-oracle?/pg16"]
+pg17 = ["pg-sql/pg17", "since-pg15", "since-pg16", "since-pg17", "pg-psql-oracle?/pg17"]
+pg18 = [
+    "pg-sql/pg18",
+    "since-pg15",
+    "since-pg16",
+    "since-pg17",
+    "since-pg18",
+    "pg-psql-oracle?/pg18",
+]
 pg19-beta = [
     "pg-sql/pg19-beta",
     "since-pg15",
@@ -25,17 +32,31 @@ pg19-beta = [
     "since-pg17",
     "since-pg18",
     "since-pg19",
+    "pg-psql-oracle?/pg19-beta",
 ]
 since-pg15 = ["pg-sql/since-pg15"]
 since-pg16 = ["pg-sql/since-pg16"]
 since-pg17 = ["pg-sql/since-pg17"]
 since-pg18 = ["pg-sql/since-pg18"]
 since-pg19 = ["pg-sql/since-pg19"]
+# The psql oracle of the same target version (issue #79). It builds the
+# pinned PostgreSQL release, so it is opt-in, as `postgres-oracle` is for
+# pg-sql.
+psql-oracle = ["dep:pg-psql-oracle"]
 
 [dependencies]
 recursa = { path = "../../recursa/recursa", features = ["diagrams", "explorer", "spans"] }
 pg-sql = { path = "..", default-features = false, features = ["spans"] }
 derive_more = { version = "2.1.1", features = ["deref"] }
+pg-psql-oracle = { path = "../pg-psql-oracle", optional = true, default-features = false }
 
 [build-dependencies]
 recursa-codegen = { path = "../../recursa/recursa-codegen", features = ["diagrams", "explorer", "spans"] }
+
+[dev-dependencies]
+serde_json = "1"
+
+[[test]]
+name = "psql_oracle"
+path = "tests/psql_oracle.rs"
+required-features = ["psql-oracle"]

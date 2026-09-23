@@ -43,6 +43,21 @@ pg-sql and forward the version features, as `pg-psql` does.
 
 `scripts/gate-versions` builds and tests every target version.
 
+## Oracles
+
+Two oracles check the parsers against PostgreSQL itself, both built from the
+pinned release of the build's target version (`pg-oracle/pins.tsv`):
+
+| Crate | Links | Checked by |
+|---|---|---|
+| `pg-oracle` | PostgreSQL's raw parser | `cargo test -p pg-sql --features postgres-oracle --test differential` |
+| `pg-psql-oracle` | psql's `psqlscan.l` and `psqlscanslash.l` | `cargo test -p pg-psql --features psql-oracle` |
+
+Each first build extracts the pinned commit from the `vendor/postgres` object
+store and builds PostgreSQL. Fetch the pins first with
+`scripts/fetch-postgres-pins`. See `docs/differential-baseline.md` and
+`docs/psql-oracle.md`.
+
 ## Toolchain
 
 `rust-toolchain.toml` pins a dated nightly. The dev loop compiles the
