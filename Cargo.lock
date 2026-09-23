@@ -407,6 +407,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "pg-psql-oracle"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "pg-sql"
 version = "0.1.0"
 dependencies = [
