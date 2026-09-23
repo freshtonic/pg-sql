@@ -353,20 +353,19 @@ fn index_shaped_elements_take_a_restricted_target() {
 /// clause below must therefore carry its fixed syntax on a node of its own.
 #[test]
 fn declared_lists_and_optionals_span_their_delimiters() {
-    for source in [
+    #[cfg_attr(
+        not(feature = "since-pg15"),
+        allow(unused_mut, reason = "the 15 forms extend the list")
+    )]
+    let mut sources = vec![
         // PARTITION BY key lists (#34).
         "CREATE TABLE t (a int, b int) PARTITION BY RANGE (a, b)",
         "CREATE TABLE t (a int, b int) PARTITION BY HASH (a part_test_int4_ops, b part_test_text_ops)",
         // ON CONFLICT arbiters and DO UPDATE assignment lists (#35).
         "INSERT INTO t VALUES (0) ON CONFLICT (key, fruit) DO NOTHING",
         "INSERT INTO t VALUES (0) ON CONFLICT (name) DO UPDATE SET population = 1, altitude = 2",
-        // MERGE insert column lists and UPDATE SET assignment lists (#36).
-        "MERGE INTO target t USING source s ON t.tid = s.sid WHEN NOT MATCHED THEN INSERT (tid, balance) VALUES (s.sid, s.delta)",
-        "MERGE INTO target t USING source s ON t.tid = s.sid WHEN MATCHED THEN UPDATE SET balance = 1, tid = 2",
-        // REFERENCES column lists and ON DELETE SET column lists (#38).
+        // REFERENCES column lists (#38).
         "CREATE TABLE t (a int, b int, FOREIGN KEY (a, b) REFERENCES p (x, y))",
-        "CREATE TABLE t (a int REFERENCES p (x) ON DELETE SET NULL (a))",
-        "CREATE TABLE t (a int REFERENCES p (x) ON DELETE SET DEFAULT (a))",
         // EXECUTE parameter lists (#43).
         "EXECUTE q3('AAAAxx', 5, 10.5)",
         // SELECT ... INTO [TABLE] target (#46).
@@ -377,7 +376,20 @@ fn declared_lists_and_optionals_span_their_delimiters() {
         "CREATE VIEW v AS SELECT 1 WITH CHECK OPTION",
         "CREATE VIEW v AS SELECT 1 WITH LOCAL CHECK OPTION",
         "CREATE VIEW v AS SELECT 1 WITH CASCADED CHECK OPTION",
-    ] {
+    ];
+    // MERGE and the column list of ON DELETE SET are added in 15:
+    // docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 15,
+    // "New statements" and "Changes to existing statements".
+    #[cfg(feature = "since-pg15")]
+    sources.extend([
+        // MERGE insert column lists and UPDATE SET assignment lists (#36).
+        "MERGE INTO target t USING source s ON t.tid = s.sid WHEN NOT MATCHED THEN INSERT (tid, balance) VALUES (s.sid, s.delta)",
+        "MERGE INTO target t USING source s ON t.tid = s.sid WHEN MATCHED THEN UPDATE SET balance = 1, tid = 2",
+        // ON DELETE SET column lists (#38).
+        "CREATE TABLE t (a int REFERENCES p (x) ON DELETE SET NULL (a))",
+        "CREATE TABLE t (a int REFERENCES p (x) ON DELETE SET DEFAULT (a))",
+    ]);
+    for source in sources {
         let lexed = lex(source);
         assert!(
             lexed.errors().next().is_none(),

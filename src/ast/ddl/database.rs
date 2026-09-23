@@ -120,6 +120,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `AlterDatabaseRefreshCollStmt`).
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `REFRESH COLLATION VERSION` — Postgres'
     /// `AlterDatabaseRefreshCollStmt`. Three fixed keywords with no operands.
@@ -150,6 +153,8 @@ recursa::ast_node! {
         Rename(RenameTo),
         Owner(OwnerTo),
         SetTablespace(SetTablespaceClause),
+        /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
+        #[cfg(feature = "since-pg15")]
         RefreshCollVersion(RefreshCollVersion),
         /// gram.y `AlterDatabaseSetStmt: ALTER DATABASE name SetResetClause`,
         /// its `VariableResetStmt` half (`RESET TABLESPACE` is `RESET var_name`).

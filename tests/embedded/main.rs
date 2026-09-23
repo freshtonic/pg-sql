@@ -277,6 +277,8 @@ pub mod ast {
                 "/embedded-tests/src/ast/dml/insert.tests.rs"
             ));
         }
+        // Added in 15: research, PostgreSQL 15, "New statements".
+        #[cfg(feature = "since-pg15")]
         pub mod merge {
             pub use pg_sql::ast::dml::merge::*;
             include!(concat!(

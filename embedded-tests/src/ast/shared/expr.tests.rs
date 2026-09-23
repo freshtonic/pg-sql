@@ -4556,9 +4556,9 @@ mod tests {
     }
 
     // The keywords that 16 added are identifiers before 16: research,
-    // PostgreSQL 16, "Keywords" (REL_15_19 kwlist.h). `format`, `json`, `keys`
-    // and `scalar` stay unreserved keywords in a 15 build (see `crate::tokens`),
-    // which is invisible here. `system_user` is an identifier in every build.
+    // PostgreSQL 16, "Keywords" (REL_15_19 kwlist.h). So each is a name where
+    // gram.y takes only `IDENT`: `old_aggr_elem` and `createdb_opt_name`.
+    // `system_user` is an identifier in every build.
     #[cfg(not(feature = "since-pg16"))]
     #[test]
     fn words_that_16_adds_are_identifiers_before_16() {
@@ -4568,12 +4568,80 @@ mod tests {
             "CREATE TABLE absent (indent int, format int, json int, keys int, scalar int)",
             "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, absent = 1)",
             "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, indent = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, format = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, json = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, keys = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, scalar = 1)",
             "CREATE DATABASE d absent = 1",
             "CREATE DATABASE d indent = 1",
+            "CREATE DATABASE d format = 1",
+            "CREATE DATABASE d json = 1",
+            "CREATE DATABASE d keys = 1",
+            "CREATE DATABASE d scalar = 1",
             "SELECT format json FROM t",
             "SELECT system_user FROM t",
             "CREATE TABLE system_user (a int)",
             "SELECT system_user()",
         ]);
     }
+
+    // From 16, the 16 keywords are no `IDENT`, so they are not names in the
+    // positions of `words_that_16_adds_are_identifiers_before_16` (REL_16_15
+    // gram.y `old_aggr_elem`, `createdb_opt_name`).
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn words_that_16_adds_are_no_ident_from_16() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, format = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, json = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, keys = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, scalar = 1)",
+            "CREATE DATABASE d format = 1",
+            "CREATE DATABASE d json = 1",
+            "CREATE DATABASE d keys = 1",
+            "CREATE DATABASE d scalar = 1",
+        ]);
+    }
+
+    // The keywords that 15 added are identifiers before 15: research,
+    // PostgreSQL 15, "Keywords" (REL_14_24 kwlist.h has no `merge`, `matched`
+    // or `parameter`). So each is a name where gram.y takes only `IDENT`.
+    #[cfg(not(feature = "since-pg15"))]
+    #[test]
+    fn words_that_15_adds_are_identifiers_before_15() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT merge, matched, parameter FROM t",
+            "SELECT 1 merge, 2 matched, 3 parameter",
+            "CREATE TABLE merge (matched int, parameter int)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, merge = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, matched = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, parameter = 1)",
+            "CREATE DATABASE d merge = 1",
+            "CREATE DATABASE d matched = 1",
+            "CREATE DATABASE d parameter = 1",
+            "SELECT EXTRACT(merge FROM x)",
+        ]);
+    }
+
+    // From 15, the 15 keywords are unreserved keywords: still column names
+    // and labels, but no `IDENT` (REL_15_19 gram.y `old_aggr_elem`,
+    // `createdb_opt_name`).
+    #[cfg(feature = "since-pg15")]
+    #[test]
+    fn words_that_15_adds_are_no_ident_from_15() {
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT merge, matched, parameter FROM t",
+            "SELECT 1 merge, 2 matched, 3 parameter",
+            "CREATE TABLE merge (matched int, parameter int)",
+        ]);
+        crate::ast::test_support::assert_statements_rejected(&[
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, merge = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, matched = 1)",
+            "CREATE AGGREGATE agg (basetype = int, sfunc = f, stype = int, parameter = 1)",
+            "CREATE DATABASE d merge = 1",
+            "CREATE DATABASE d matched = 1",
+            "CREATE DATABASE d parameter = 1",
+        ]);
+    }
 }
+

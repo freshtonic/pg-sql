@@ -223,16 +223,23 @@ fn interpolation_is_not_recognised_inside_a_quoted_identifier() {
 #[test]
 fn interpolation_is_not_recognised_inside_a_comment() {
     // psqlscan.l:163-165 folds `--` comments into `{whitespace}`; :423-458
-    // `xc` handles block comments, and they nest.
-    for source in [
-        "SELECT 1 -- :v\n",
-        "SELECT 1 -- :'v'",
-        "SELECT /* :v */ 1",
-        "SELECT /* a /* :v */ b */ 1",
+    // `xc` handles block comments, and they nest. Before 15, psql does not
+    // send a `--` comment (docs/research/psql-14-19-syntax-changes.md, class
+    // (A) item A3), so the second column is the 14 rendering.
+    for (source, rendered_before_15) in [
+        ("SELECT 1 -- :v\n", "SELECT 1 \n"),
+        ("SELECT 1 -- :'v'", "SELECT 1 "),
+        ("SELECT /* :v */ 1", "SELECT /* :v */ 1"),
+        ("SELECT /* a /* :v */ b */ 1", "SELECT /* a /* :v */ b */ 1"),
     ] {
+        let expected = if cfg!(feature = "since-pg15") {
+            source
+        } else {
+            rendered_before_15
+        };
         assert_eq!(
             render_unbound(source),
-            source,
+            expected,
             "{source:?} holds no interpolation"
         );
         assert_eq!(
@@ -770,13 +777,20 @@ fn the_documents_pg_sql_used_to_reject_now_render_and_parse() {
 
 #[test]
 fn an_empty_document_is_valid_and_source_preserving() {
-    for source in ["", "   ", "-- just a comment\n", "/* only this */"] {
+    for source in ["", "   ", "/* only this */"] {
         assert_eq!(
             render_unbound(source),
             source,
             "{source:?} renders unchanged"
         );
     }
+    // Before 15, psql removes a `--` comment (class (A) item A3).
+    let expected = if cfg!(feature = "since-pg15") {
+        "-- just a comment\n"
+    } else {
+        "\n"
+    };
+    assert_eq!(render_unbound("-- just a comment\n"), expected);
     assert!(pg_psql::parse("").unwrap().items.is_empty());
 }
 
@@ -793,8 +807,79 @@ fn plain_sql_is_one_maximal_text_run() {
 fn rendering_preserves_every_byte_outside_a_rewrite() {
     // The strongest statement of the rendering contract: with nothing bound
     // and no send command, the output is the input.
+    // Before 15 psql also removes a `--` comment (class (A) item A3).
     let source = "-- header\nSELECT $$a$$, 'b', \"c\", 1.5, a::int, x[1:2] /* t */;\n";
-    assert_eq!(render_unbound(source), source);
+    let expected = if cfg!(feature = "since-pg15") {
+        source
+    } else {
+        "\nSELECT $$a$$, 'b', \"c\", 1.5, a::int, x[1:2] /* t */;\n"
+    };
+    assert_eq!(render_unbound(source), expected);
+}
+
+// --- Version differences of psqlscan.l ---------------------------------------
+
+// From 15, psqlscan.l copies the trailing-junk rules of scan.l, so a number
+// that an identifier follows directly is one token
+// (docs/research/psql-14-19-syntax-changes.md, class (A) item A2). The `e` of
+// `1e'\'` then does not start an escape string, and the `-` of `1e-` is part
+// of the number, so a `-` after it does not start a comment.
+#[cfg(feature = "since-pg15")]
+#[test]
+fn a_number_and_an_identifier_are_one_token_from_15() {
+    for source in [
+        "SELECT 1e'\\' AS a, :'v' AS b -- '\n;",
+        "SELECT 1.5e'\\' AS a, :'v' AS b -- '\n;",
+        "SELECT $1e'\\' AS a, :'v' AS b -- '\n;",
+        "SELECT 1e--:v\n;",
+    ] {
+        assert_eq!(interpolation_count(source), 1, "{source:?}");
+        assert_eq!(terminator_count(source), 1, "{source:?}");
+    }
+    let rendered = pg_psql::render(
+        "SELECT 1e'\\' AS a, :'v' AS b -- '\n;",
+        &variables(&[("v", "x")]),
+    )
+    .unwrap();
+    assert_eq!(rendered.sql(), "SELECT 1e'\\' AS a, 'x' AS b -- '\n;");
+}
+
+// Before 15, `realfail1` and `realfail2` give back the `e` and the sign
+// (class (A) item A2; `REL_14_24:psqlscan.l`). So `e'\'` starts an escape
+// string, where `\'` does not end the string, and `--` after `1e-` starts a
+// comment. psql 14 then sees no interpolation in these sources.
+#[cfg(not(feature = "since-pg15"))]
+#[test]
+fn a_number_and_an_identifier_are_two_tokens_before_15() {
+    for source in [
+        "SELECT 1e'\\' AS a, :'v' AS b -- '\n;",
+        "SELECT 1.5e'\\' AS a, :'v' AS b -- '\n;",
+        "SELECT $1e'\\' AS a, :'v' AS b -- '\n;",
+    ] {
+        assert_eq!(interpolation_count(source), 0, "{source:?}");
+        assert_eq!(terminator_count(source), 1, "{source:?}");
+        assert_eq!(render_unbound(source), source, "{source:?}");
+    }
+    assert_eq!(interpolation_count("SELECT 1e--:v\n;"), 0);
+}
+
+// Before 15, psql removes every `--` comment from the text that it sends, and
+// keeps the line ending (class (A) item A3; `REL_14_24:psqlscan.l` 388). From
+// 15 it sends the comment.
+#[test]
+fn a_line_comment_is_sent_from_15() {
+    let source = "SELECT 1 -- note\n, 2 --x\r\n;--end";
+    let rendered = pg_psql::render(source, &Variables::new()).unwrap();
+    if cfg!(feature = "since-pg15") {
+        assert_eq!(rendered.sql(), source);
+        assert_eq!(rendered.map().regions().count(), 0);
+    } else {
+        assert_eq!(rendered.sql(), "SELECT 1 \n, 2 \r\n;");
+        // The map carries an offset after a removed comment back to the
+        // source: `,` is at 10 in the rendering and at 17 in the source.
+        assert_eq!(rendered.map().origin(10), Origin::Verbatim(17));
+    }
+    assert!(rendered.parse_sql().is_ok());
 }
 
 // --- The real corpus ---------------------------------------------------------
@@ -840,8 +925,12 @@ fn every_regression_script_is_a_psql_document() {
         // or `:"name"` must survive untouched.
         for (_, origin) in rendered.map().regions() {
             let text = &source[origin.clone()];
+            // Before 15, psql also removes each `--` comment (class (A) item
+            // A3).
             assert!(
-                text.starts_with('\\') || text.starts_with(":{?"),
+                text.starts_with('\\')
+                    || text.starts_with(":{?")
+                    || (!cfg!(feature = "since-pg15") && text.starts_with("--")),
                 "{name}: rewrote {text:?} at {origin:?} with nothing bound",
             );
         }

@@ -2,6 +2,9 @@
 mod tests {
     use crate::ast::ddl::index::{CreateIndexStmt, DropIndexStmt};
 
+    // Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+    // (REL_15_19 gram.y `opt_unique_null_treatment`).
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn parse_create_unique_index_nulls_distinct() {
         let lexed = crate::lex("CREATE UNIQUE INDEX i ON t (i) NULLS NOT DISTINCT");

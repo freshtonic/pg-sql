@@ -1,3 +1,6 @@
+// MERGE is added in 15: research, PostgreSQL 15, "New statements"
+// (REL_15_19 gram.y `MergeStmt`).
+#[cfg(feature = "since-pg15")]
 #[cfg(test)]
 mod tests {
     use super::*;

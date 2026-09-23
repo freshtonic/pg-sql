@@ -69,6 +69,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `alter_table_cmd: SET ACCESS METHOD name`).
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `SET ACCESS METHOD { name | DEFAULT }` — Postgres' alter_table_cmd
     /// branch for changing a relation's table access method. Used by ALTER
@@ -87,6 +90,9 @@ recursa::ast_node! {
     }
 }
 
+// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+// (REL_15_19 gram.y `alter_table_cmd: SET ACCESS METHOD name`).
+#[cfg(feature = "since-pg15")]
 recursa::ast_node! {
     /// `SET ACCESS METHOD { name | DEFAULT }` — Postgres' alter_table_cmd
     /// branch.
@@ -136,6 +142,9 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum AlterMatViewCmd {
         SetTablespace(SetTablespaceClause),
+        /// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
+        /// (REL_15_19 gram.y `alter_table_cmd: SET ACCESS METHOD name`).
+        #[cfg(feature = "since-pg15")]
         SetAccessMethod(SetAccessMethodClause),
         SetSchema(SetSchemaClause),
         SetReloptions(SetReloptions),

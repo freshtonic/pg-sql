@@ -585,6 +585,10 @@ mod tests {
     // PostgreSQL lex error ("trailing junk after numeric literal"). The
     // trailing-dot form must NOT match across the dot for `0.a` / `1_000._5` —
     // the classifier must not return a `NumericLit` spanning the dot.
+    // The trailing-junk check is added in 15: research, PostgreSQL 15,
+    // "Lexical and literal syntax" (commit 2549f0661). See
+    // `trailing_junk_ends_a_number_before_15` for 14.
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn numeric_literal_trailing_dot_junk_rejected() {
         for src in ["0.a", "1_000._5"] {
@@ -656,6 +660,10 @@ mod tests {
     // NumericLit case as "no token that consumes the entire input" — which is
     // the property that defeats the permissive split. See
     // regress_numerology's trailing-junk fixtures.
+    // The trailing-junk check is added in 15: research, PostgreSQL 15,
+    // "Lexical and literal syntax" (commit 2549f0661). See
+    // `trailing_junk_ends_a_number_before_15` for 14.
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn integer_lit_does_not_match_when_followed_by_ident_char() {
         for src in ["123abc", "0xFFG", "0b101z", "0o7ab", "100_", "0xff_"] {
@@ -671,6 +679,10 @@ mod tests {
         }
     }
 
+    // The trailing-junk check is added in 15: research, PostgreSQL 15,
+    // "Lexical and literal syntax" (commit 2549f0661). See
+    // `trailing_junk_ends_a_number_before_15` for 14.
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn numeric_lit_does_not_match_when_followed_by_ident_char() {
         // The `\b` anchor eliminates these forms — none of them classify as
@@ -689,6 +701,10 @@ mod tests {
         }
     }
 
+    // The trailing-junk check is added in 15: research, PostgreSQL 15,
+    // "Lexical and literal syntax" (commit 2549f0661). See
+    // `trailing_junk_ends_a_number_before_15` for 14.
+    #[cfg(feature = "since-pg15")]
     #[test]
     fn numeric_lit_with_trailing_ident_does_not_consume_full_input() {
         // Forms where the digit-end alt fails `\b` but the regex engine
@@ -1291,8 +1307,9 @@ mod tests {
 
     // Added in 16, so rejected before 16: research, PostgreSQL 16, "Lexical and
     // literal syntax". In REL_15_19 scan.l each form matches `integer_junk`,
-    // `decimal_junk` or `real_junk`, which are errors.
-    #[cfg(not(feature = "since-pg16"))]
+    // `decimal_junk` or `real_junk`, which are errors. 14 has no junk rules
+    // (`trailing_junk_ends_a_number_before_15`).
+    #[cfg(all(feature = "since-pg15", not(feature = "since-pg16")))]
     #[test]
     fn non_decimal_and_underscore_literals_are_rejected_before_16() {
         crate::ast::test_support::assert_statements_rejected(&[
@@ -1328,6 +1345,79 @@ mod tests {
             "SELECT x'1F'",
             "SELECT b'101'",
             "SELECT $1",
+        ]);
+    }
+
+    // From 15, a number or a parameter that an identifier character follows
+    // directly is a lexical error, and so is an incomplete exponent: research,
+    // PostgreSQL 15, "Lexical and literal syntax" (REL_15_19 scan.l
+    // `integer_junk`, `decimal_junk`, `real_junk`, `realfail`, `param_junk`).
+    #[cfg(feature = "since-pg15")]
+    #[test]
+    fn trailing_junk_is_rejected_from_15() {
+        crate::ast::test_support::assert_statements_rejected(&[
+            "SELECT 123abc",
+            "SELECT 1e",
+            "SELECT 1e+",
+            "SELECT 1.5e",
+            "SELECT 1.5x",
+            "SELECT 1e5x",
+            "SELECT $1abc",
+            "SELECT a FROM t LIMIT 1offset 2",
+            "SELECT 1union SELECT 2",
+        ]);
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT 123 abc",
+            "SELECT 1e+5",
+            "SELECT 1.e5",
+            "SELECT $1",
+            "SELECT a FROM t LIMIT 1 OFFSET 2",
+        ]);
+    }
+
+    // Removed in 15: before 15 the scanner has no trailing-junk rules, and
+    // `realfail1` and `realfail2` give back the `[Ee]` and `[Ee][-+]`
+    // (research, PostgreSQL 15, "Removed or changed syntax"; REL_14_24 scan.l
+    // 392-399). So a number ends where its pattern ends: `123abc` is `123 AS
+    // abc`, `0x1F` is `0 AS x1F` and `$1abc` is `$1 AS abc`.
+    #[cfg(not(feature = "since-pg15"))]
+    #[test]
+    fn trailing_junk_ends_a_number_before_15() {
+        for (src, kind, len) in [
+            ("123abc", crate::TokenKind::IntegerLit, 3),
+            ("0x1F", crate::TokenKind::IntegerLit, 1),
+            ("1_000", crate::TokenKind::IntegerLit, 1),
+            ("1e", crate::TokenKind::IntegerLit, 1),
+            ("1e+", crate::TokenKind::IntegerLit, 1),
+            ("1.5x", crate::TokenKind::NumericLit, 3),
+            ("1e5x", crate::TokenKind::NumericLit, 3),
+            ("0.a", crate::TokenKind::NumericLit, 2),
+            ("$1abc", crate::TokenKind::DollarNum, 2),
+        ] {
+            assert!(first_token_is(src, kind, len), "{src:?}");
+            assert_eq!(crate::lex(src).errors().count(), 0, "{src:?}");
+        }
+        crate::ast::test_support::assert_statements_parse(&[
+            "SELECT 123abc",
+            "SELECT 0x1F",
+            "SELECT 0x",
+            "SELECT 1_000",
+            "SELECT 1.5_0",
+            "SELECT 1e1_0",
+            "SELECT 1e",
+            "SELECT 1.5e",
+            "SELECT 1e5x",
+            "SELECT $1abc",
+            "SELECT $1_0",
+            "SELECT 1 FROM t WHERE a=1AND b=2",
+            "SELECT a FROM t LIMIT 1offset 2",
+            "SELECT 1union SELECT 2",
+        ]);
+        crate::ast::test_support::assert_statements_rejected(&[
+            "SELECT 1e+",
+            "SELECT 1e'x'",
+            "SELECT 0x'1F'",
+            "SELECT 1as",
         ]);
     }
 }
