@@ -20,6 +20,10 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 # A RUSTUP_TOOLCHAIN from the shell overrides rust-toolchain.toml.
 unset RUSTUP_TOOLCHAIN
+# Each version is its own build, so the incremental cache of one version is
+# never read again, and a full run leaves about 110 GB of it behind. The gate
+# does not need it: set CARGO_INCREMENTAL=1 to get it back.
+export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
 
 versions=("$@")
 if [ "${#versions[@]}" -eq 0 ]; then
