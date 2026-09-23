@@ -40,16 +40,20 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// PRIMARY KEY column constraint.
+    /// PRIMARY KEY column constraint — gram.y `ColConstraintElem: PRIMARY KEY
+    /// opt_definition OptConsTableSpace`.
     #[derive(Debug)]
     #[tok(PRIMARY, KEY, this)]
     pub struct PrimaryKeyConstraint {
+        /// `WITH (storage_param = value, ...)` — gram.y `opt_definition`.
+        pub with_storage: Option<crate::ast::ddl::index::WithStorage>,
         pub index_tablespace: Option<UsingIndexTablespace>,
     }
 }
 
 recursa::ast_node! {
-    /// UNIQUE column constraint.
+    /// UNIQUE column constraint — gram.y `ColConstraintElem: UNIQUE
+    /// opt_unique_null_treatment opt_definition OptConsTableSpace`.
     #[derive(Debug)]
     #[tok(UNIQUE, this)]
     pub struct UniqueConstraint {
@@ -57,6 +61,8 @@ recursa::ast_node! {
         /// (REL_15_19 gram.y `opt_unique_null_treatment`).
         #[cfg(feature = "since-pg15")]
         pub nulls: Option<NullsDistinctQualifier>,
+        /// `WITH (storage_param = value, ...)` — gram.y `opt_definition`.
+        pub with_storage: Option<crate::ast::ddl::index::WithStorage>,
         pub index_tablespace: Option<UsingIndexTablespace>,
     }
 }

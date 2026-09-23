@@ -1,7 +1,10 @@
 //! DOMAIN DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use crate::ast::ddl::trigger::ConstraintAttributeElem;
+use crate::ast::ddl::table::{
+    CheckConstraint, ColumnConstraintAttr, GeneratedConstraint, PrimaryKeyConstraint,
+    ReferencesConstraint, UniqueConstraint,
+};
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
@@ -18,29 +21,12 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `[CONSTRAINT name]` prefix on a domain constraint.
+    /// `[CONSTRAINT name]` prefix on a domain constraint — gram.y
+    /// `ColConstraint: CONSTRAINT name ColConstraintElem`.
     #[derive(Debug)]
     pub struct DomainConstraintName {
         #[tok(CONSTRAINT, this)]
         pub name: crate::tokens::ColId,
-    }
-}
-
-recursa::ast_node! {
-    /// `NOT NULL` domain constraint body.
-    #[derive(Debug)]
-    pub enum DomainNotNull {
-        #[tok(NOT, NULL)]
-        Value,
-    }
-}
-
-recursa::ast_node! {
-    /// `CHECK (expr)` domain constraint body.
-    #[derive(Debug)]
-    pub struct DomainCheckBody {
-        #[tok(CHECK, LPAREN, this, RPAREN)]
-        pub expr: boxed!(Expr),
     }
 }
 
@@ -56,24 +42,38 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Body of a domain constraint — Postgres' `DomainConstraintElem` plus the
-    /// `DEFAULT expr` form (which is split out from `ColConstraintElem` by
-    /// `SplitColQualList` in gram.y).
+    /// Body of a domain constraint — gram.y `ColConstraintElem`, which
+    /// `CreateDomainStmt` reaches through `ColQualList`. The same element set
+    /// serves a column of a table, so the arms reuse the nodes of
+    /// [`crate::ast::ddl::table`]. Execution, not the raw parser, rejects the
+    /// kinds that a domain cannot hold.
     ///
-    /// Variant ordering: `NotNull` (`NOT NULL`, 2 tokens) before `Null`; `Check`
-    /// and `Default` are keyword-led and unambiguous.
+    /// Variant ordering: `NotNullNoInherit` (4 tokens) before `NotNull`; every
+    /// other arm has its own leading keyword.
     #[derive(Debug)]
     pub enum DomainConstraintBody {
-        NotNull(DomainNotNull),
+        Generated(GeneratedConstraint),
+        PrimaryKey(PrimaryKeyConstraint),
+        /// Added in 18: gram.y `ColConstraintElem: NOT NULL_P opt_no_inherit`
+        /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+        /// item 7; REL_18_6 gram.y `ColConstraintElem`).
+        #[cfg(feature = "since-pg18")]
+        #[tok(NOT, NULL, NO, INHERIT)]
+        NotNullNoInherit,
+        #[tok(NOT, NULL)]
+        NotNull,
         #[tok(NULL)]
         Null,
-        Check(DomainCheckBody),
+        Unique(UniqueConstraint),
+        References(ReferencesConstraint),
         Default(DomainDefault),
+        Check(CheckConstraint),
     }
 }
 
 recursa::ast_node! {
-    /// A single domain constraint — `[CONSTRAINT name] body`.
+    /// A named or unnamed domain constraint — gram.y `ColConstraint`'s two
+    /// `ColConstraintElem` arms.
     #[derive(Debug)]
     pub struct DomainConstraint {
         pub name: Option<DomainConstraintName>,
@@ -82,7 +82,22 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `CREATE DOMAIN name [AS] Typename [COLLATE name] [constraint_list]`.
+    /// One entry of gram.y `ColQualList` — `ColConstraint`. A `ConstraintAttr`
+    /// (`[NOT] DEFERRABLE`, `INITIALLY …`, and from 18 `[NOT] ENFORCED`) is an
+    /// entry of its own, so it takes no `CONSTRAINT name` prefix.
+    ///
+    /// Variant ordering: `Attr` and `Constraint` share the `NOT` keyword and
+    /// part at the token after it (`DEFERRABLE` or `ENFORCED` against `NULL`).
+    #[derive(Debug)]
+    pub enum DomainQual {
+        Constraint(DomainConstraint),
+        Attr(ColumnConstraintAttr),
+    }
+}
+
+recursa::ast_node! {
+    /// `CREATE DOMAIN name [AS] Typename [COLLATE name] ColQualList` — gram.y
+    /// `CreateDomainStmt`.
     #[derive(Debug)]
     pub struct CreateDomainStmt {
         #[tok(CREATE, DOMAIN, this)]
@@ -90,7 +105,7 @@ recursa::ast_node! {
         #[tok(optional(AS), this)]
         pub type_name: CastType,
         pub collate: Option<DomainCollate>,
-        pub constraints: zero_or_many!(DomainConstraint),
+        pub quals: zero_or_many!(DomainQual),
     }
 }
 
@@ -109,15 +124,62 @@ recursa::ast_node! {
 // statements"; REL_17_11 gram.y 4254-4307, 11552).
 #[cfg(feature = "since-pg17")]
 recursa::ast_node! {
+    /// The `ConstraintAttributeSpec` entries that gram.y's `DomainConstraintElem`
+    /// accepts after `CHECK (expr)`. `processCASbits` gets no `deferrable` and
+    /// no `initdeferred` pointer, so `DEFERRABLE` and `INITIALLY DEFERRED` are
+    /// raw-parser errors; from 18 it gets no `is_enforced` pointer either
+    /// (REL_17_11 gram.y 4286-4288; REL_18_6 gram.y 4384-4386).
+    ///
+    /// Variant ordering: multi-keyword forms first.
+    #[derive(Debug)]
+    pub enum DomainCheckAttr {
+        #[tok(NOT, DEFERRABLE)]
+        NotDeferrable,
+        #[tok(NOT, VALID)]
+        NotValid,
+        #[tok(NO, INHERIT)]
+        NoInherit,
+        #[tok(INITIALLY, IMMEDIATE)]
+        InitiallyImmediate,
+    }
+}
+
+// Added in 17: see `DomainCheckAttr`.
+#[cfg(feature = "since-pg17")]
+recursa::ast_node! {
+    /// The `ConstraintAttributeSpec` entries that gram.y's `DomainConstraintElem`
+    /// accepts after `NOT NULL`. `processCASbits` gets only a `no_inherit`
+    /// pointer (REL_17_11 gram.y 4300-4302), and from 18 no pointer at all, so
+    /// `NO INHERIT` is a raw-parser error there (REL_18_6 gram.y 4399-4401).
+    ///
+    /// Variant ordering: multi-keyword forms first.
+    #[derive(Debug)]
+    pub enum DomainNotNullAttr {
+        #[tok(NOT, DEFERRABLE)]
+        NotDeferrable,
+        /// Removed in 18: REL_18_6 gram.y `DomainConstraintElem` passes no
+        /// `no_inherit` pointer for `NOT NULL` (commit 14e87ffa5).
+        #[cfg(not(feature = "since-pg18"))]
+        #[tok(NO, INHERIT)]
+        NoInherit,
+        #[tok(INITIALLY, IMMEDIATE)]
+        InitiallyImmediate,
+    }
+}
+
+// Added in 17: `DomainConstraint` (research, PostgreSQL 17, "Changes to existing
+// statements"; REL_17_11 gram.y 4254-4307, 11552).
+#[cfg(feature = "since-pg17")]
+recursa::ast_node! {
     /// `CHECK (expr) ConstraintAttributeSpec` — Postgres' CHECK arm of
     /// `DomainConstraintElem` (the ALTER DOMAIN-specific form). Differs from
-    /// CREATE DOMAIN's `DomainCheckBody` by carrying the optional trailing
-    /// `ConstraintAttributeSpec` (e.g. `NOT VALID`).
+    /// CREATE DOMAIN's `ColConstraintElem` CHECK by carrying the full
+    /// `ConstraintAttributeSpec` (e.g. `NOT VALID`) instead of `opt_no_inherit`.
     #[derive(Debug)]
     pub struct AlterDomainCheckConstraint {
         #[tok(CHECK, LPAREN, this, RPAREN)]
         pub expr: boxed!(Expr),
-        pub attrs: zero_or_many!(ConstraintAttributeElem),
+        pub attrs: zero_or_many!(DomainCheckAttr),
     }
 }
 
@@ -137,7 +199,7 @@ recursa::ast_node! {
     #[derive(Debug)]
     #[tok(NOT, NULL, this)]
     pub struct AlterDomainNotNullConstraint {
-        pub attrs: zero_or_many!(ConstraintAttributeElem),
+        pub attrs: zero_or_many!(DomainNotNullAttr),
     }
 }
 

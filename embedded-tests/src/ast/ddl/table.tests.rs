@@ -1390,4 +1390,19 @@ mod tests {
             ],
         );
     }
+
+    // gram.y `ColConstraintElem` gives the column-level `UNIQUE` and `PRIMARY
+    // KEY` an `opt_definition` before `OptConsTableSpace` (REL_17_11 gram.y
+    // 3901-3960).
+    #[test]
+    fn column_unique_and_primary_key_take_storage_parameters() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int UNIQUE WITH (fillfactor = 10))",
+                "CREATE TABLE t (a int UNIQUE WITH (fillfactor = 10) USING INDEX TABLESPACE ts)",
+                "CREATE TABLE t (a int PRIMARY KEY WITH (fillfactor = 10))",
+            ],
+            &["CREATE TABLE t (a int UNIQUE USING INDEX TABLESPACE ts WITH (fillfactor = 10))"],
+        );
+    }
 }

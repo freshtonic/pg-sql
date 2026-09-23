@@ -55,6 +55,14 @@ embedded-tests/src/ast/ddl/domain.tests.rs	parse_create_domain_named_constraint	
 embedded-tests/src/ast/ddl/domain.tests.rs	parse_create_domain_simple	false	14-
 embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_add_table_constraint_before_17	false	14-16
 embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_add_not_null_is_rejected_before_17	false	14-16
+embedded-tests/src/ast/ddl/domain.tests.rs	create_domain_takes_the_column_qualification_list	false	14-
+embedded-tests/src/ast/ddl/domain.tests.rs	create_domain_unique_nulls_distinct_from_15	false	15-
+embedded-tests/src/ast/ddl/domain.tests.rs	create_domain_qual_list_18_forms	false	18-
+embedded-tests/src/ast/ddl/domain.tests.rs	create_domain_qual_list_18_forms_are_rejected_before_18	false	14-17
+embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_check_takes_only_its_own_attributes	false	17-
+embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_not_null_takes_only_its_own_attributes	false	17-
+embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_not_null_takes_no_inherit_in_17	false	17-17
+embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_not_null_rejects_no_inherit_from_18	false	18-
 embedded-tests/src/ast/ddl/extension.tests.rs	parse_alter_extension_add_table	false	14-
 embedded-tests/src/ast/ddl/extension.tests.rs	parse_alter_extension_set_schema	false	14-
 embedded-tests/src/ast/ddl/extension.tests.rs	parse_alter_extension_update	false	14-
@@ -387,6 +395,7 @@ embedded-tests/src/ast/ddl/table.tests.rs	alter_constraint_rejects_no_inherit_be
 embedded-tests/src/ast/ddl/table.tests.rs	enforced_reaches_only_the_kinds_that_take_it_from_18	false	18-
 embedded-tests/src/ast/ddl/table.tests.rs	table_not_null_takes_only_its_own_attributes	false	18-
 embedded-tests/src/ast/ddl/table.tests.rs	generated_expression_takes_only_always	false	14-
+embedded-tests/src/ast/ddl/table.tests.rs	column_unique_and_primary_key_take_storage_parameters	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_owner	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_rename	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_reset	false	14-
