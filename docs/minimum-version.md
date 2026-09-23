@@ -143,14 +143,22 @@ that refuses it.
 
 ## The span
 
-`VersionRequirement::span` carries the extent of the construct. A lexical
-requirement always has one. An item or shape requirement has none today: this
-grammar builds an arena-backed AST, and Recursa runs the requirement scan from
-a root occurrence cursor only for `Parsed<T>`, not for `ArenaParsed<F>`. The
-scan over a detached value reports no span, which is the contract of
-`Requires` itself.
+`VersionRequirement::span` carries the extent of the construct. The scan runs
+from the parse's own root occurrence cursor, so every answer keeps its span:
+an item gate points at the construct, a shape rule points at the element that
+holds no value (the parenthesised subquery that needs the alias), and a
+lexical gate points at the token. `recursa#136` added the `ArenaParsed` pair
+of methods that this needs, beside the `Parsed` pair.
 
-The fix belongs to Recursa: an `ArenaParsed` pair of methods beside the
-`Parsed` pair that `recursa-core/src/parsed.rs` already has. It needs no
-change in pg-sql, because `span()` already returns `Option<Span>`. Until then
-a consumer uses the statement's own `source_bounds()`.
+The answer therefore takes the parse, not the detached AST:
+
+```rust,ignore
+use pg_sql::{MinimumVersion, TargetVersion};
+
+let found = parsed.minimum_version_above(TargetVersion::Pg15).unwrap();
+assert_eq!(&source[found.span().unwrap().range()], "(SELECT 1)");
+```
+
+A build without the `spans` Cargo feature retains no provenance, so the span
+is `None` and only the version and the message data remain. pg-analyze enables
+`spans` in every build.

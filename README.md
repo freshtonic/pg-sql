@@ -54,9 +54,10 @@ version, the answer carries its SQLSTATE, message and hint.
 ```rust,ignore
 use pg_sql::{MinimumVersion, TargetVersion};
 
-if let Some(found) = parsed.ast().minimum_version_above(TargetVersion::Pg15) {
-    // "subquery in FROM must have an alias", 42601, needs PostgreSQL 16.
-    eprintln!("{:?}: {:?}", found.version(), found.message());
+if let Some(found) = parsed.minimum_version_above(TargetVersion::Pg15) {
+    // "subquery in FROM must have an alias", 42601, needs PostgreSQL 16,
+    // with the span of the subquery that lacks it.
+    eprintln!("{:?} {:?}: {:?}", found.version(), found.span(), found.message());
 }
 ```
 

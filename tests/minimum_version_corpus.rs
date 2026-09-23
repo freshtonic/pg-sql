@@ -134,7 +134,7 @@ fn reported_minimum(source: &str) -> Option<Reported> {
     if !input.is_eof() {
         return None;
     }
-    let item = minimum_version(parsed.ast());
+    let item = minimum_version(&parsed);
     // The two scans answer about the same statement, so the minimum of the
     // whole statement is the higher of the two.
     Some(match (item, lexical) {

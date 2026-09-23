@@ -15,10 +15,7 @@ fn parse_and_report(source: &str) -> Option<TargetVersion> {
     let mut input = lexed.input();
     let parsed = Statement::parse(&mut input).expect("statement parses");
     assert!(input.is_eof(), "{source} is one complete statement");
-    Some(
-        minimum_version(parsed.ast())
-            .map_or(TargetVersion::Pg14, |requirement| requirement.version()),
-    )
+    Some(minimum_version(&parsed).map_or(TargetVersion::Pg14, |requirement| requirement.version()))
 }
 
 #[test]
@@ -41,6 +38,14 @@ fn a_statement_with_no_gated_construct_needs_only_the_oldest_version() {
         parse_and_report("CREATE TABLE t (a int PRIMARY KEY)"),
         Some(TargetVersion::Pg14)
     );
+}
+
+/// The span of one requirement, as `start..end`, or `None`.
+fn span_of(source: &str) -> Option<std::ops::Range<usize>> {
+    let lexed = lex(source);
+    let mut input = lexed.input();
+    let parsed = Statement::parse(&mut input).expect("statement parses");
+    minimum_version(&parsed).and_then(|found| found.span().map(|span| span.range()))
 }
 
 /// Class 1: a gate on a node, field or variant.
@@ -69,6 +74,15 @@ fn an_item_gate_reports_the_version_that_added_the_item() {
         parse_and_report("CREATE TABLE t (a int, b int GENERATED ALWAYS AS (a * 2) VIRTUAL)"),
         Some(TargetVersion::Pg18)
     );
+
+    // The answer keeps the span of the construct that sets the version
+    // (recursa#136). `JSON_ARRAY(1, 2)` starts after `SELECT `.
+    #[cfg(feature = "since-pg16")]
+    {
+        let source = "SELECT JSON_ARRAY(1, 2)";
+        let span = span_of(source).expect("a span");
+        assert_eq!(&source[span], "JSON_ARRAY(1, 2)");
+    }
 }
 
 /// Class 3: a shape rule, where a newer grammar makes optional what an older
@@ -85,7 +99,7 @@ fn a_shape_rule_reports_the_version_that_made_the_value_optional() {
         let lexed = lex(source);
         let mut input = lexed.input();
         let parsed = Statement::parse(&mut input).expect("statement parses");
-        let found = minimum_version(parsed.ast()).expect("a requirement above 14");
+        let found = minimum_version(&parsed).expect("a requirement above 14");
         assert_eq!(found.version(), TargetVersion::Pg16, "{source}");
         assert!(found.is_absence(), "{source}");
         assert_eq!(found.sqlstate(), Some("42601"), "{source}");
@@ -100,9 +114,17 @@ fn a_shape_rule_reports_the_version_that_made_the_value_optional() {
             "{source}"
         );
         assert!(found.citation().is_some(), "{source}");
+        // The span of a shape rule covers the element that holds no value:
+        // the parenthesised subquery that needs the alias (recursa#136).
+        let span = found.span().expect("a span");
+        assert_eq!(
+            &source[span.start() as usize..span.end() as usize],
+            "(SELECT 1)",
+            "{source}"
+        );
         // A PostgreSQL 15 server rejects it; a PostgreSQL 16 server does not.
-        assert!(minimum_version_above(parsed.ast(), TargetVersion::Pg15).is_some());
-        assert!(minimum_version_above(parsed.ast(), TargetVersion::Pg16).is_none());
+        assert!(minimum_version_above(&parsed, TargetVersion::Pg15).is_some());
+        assert!(minimum_version_above(&parsed, TargetVersion::Pg16).is_none());
     }
 
     // The same rule with the alias present needs nothing above the baseline.
@@ -117,13 +139,19 @@ fn a_shape_rule_reports_the_version_that_made_the_value_optional() {
         let lexed = lex(source);
         let mut input = lexed.input();
         let parsed = Statement::parse(&mut input).expect("statement parses");
-        let found = minimum_version(parsed.ast()).expect("a requirement above 14");
+        let found = minimum_version(&parsed).expect("a requirement above 14");
         assert_eq!(found.version(), TargetVersion::Pg16, "{source}");
         assert!(found.is_absence(), "{source}");
         // The older grammar has no alternative without the name, so it gives
         // a plain syntax error and the gate carries no message.
         assert_eq!(found.sqlstate(), None, "{source}");
         assert!(found.citation().is_some(), "{source}");
+        // The absent name still has a span inside the statement.
+        let span = found.span().expect("a span");
+        assert!(
+            span.end() as usize <= source.len() && span.start() <= span.end(),
+            "{source}: {span:?}"
+        );
     }
     assert_eq!(
         parse_and_report("CREATE STATISTICS s ON a, b FROM t"),
@@ -149,21 +177,20 @@ fn the_minimum_and_the_first_construct_above_a_floor_can_differ() {
     let mut input = lexed.input();
     let parsed = Statement::parse(&mut input).expect("statement parses");
 
-    let minimum = minimum_version(parsed.ast()).expect("a requirement");
+    let minimum = minimum_version(&parsed).expect("a requirement");
     assert_eq!(minimum.version(), TargetVersion::Pg17);
 
-    let above_14 = minimum_version_above(parsed.ast(), TargetVersion::Pg14).expect("above 14");
+    let above_14 = minimum_version_above(&parsed, TargetVersion::Pg14).expect("above 14");
     assert_eq!(above_14.version(), TargetVersion::Pg16);
     assert_eq!(above_14.construct(), "ParenQueryRef.alias");
 
     // The trait gives the same answers as methods.
     let above_16 = parsed
-        .ast()
         .minimum_version_above(TargetVersion::Pg16)
         .expect("above 16");
     assert_eq!(above_16.version(), TargetVersion::Pg17);
 
-    assert!(minimum_version_above(parsed.ast(), TargetVersion::Pg17).is_none());
+    assert!(minimum_version_above(&parsed, TargetVersion::Pg17).is_none());
 }
 
 /// A gate that carries message text cites the `gram.y` line the text comes
@@ -178,7 +205,7 @@ fn every_gate_that_carries_a_message_cites_its_source() {
         let lexed = lex(source);
         let mut input = lexed.input();
         let parsed = Statement::parse(&mut input).expect("statement parses");
-        let found = minimum_version(parsed.ast()).expect("a requirement");
+        let found = minimum_version(&parsed).expect("a requirement");
         assert!(found.message().is_some());
         let citation = found.citation().expect("a citation");
         assert!(citation.contains("gram.y"), "{citation}");

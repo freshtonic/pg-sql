@@ -23,7 +23,7 @@
 //! it names the construct the older server rejects first.
 //!
 //! The [`MinimumVersion`] trait gives the same two answers as methods, so a
-//! caller writes `parsed.ast().minimum_version_above(target)`.
+//! caller writes `parsed.minimum_version_above(target)`.
 //!
 //! The two answers differ, and both are right. A value can need 17 because of
 //! a construct late in the statement while an earlier construct needs 16.
@@ -40,14 +40,14 @@
 //! let parsed = Statement::parse(&mut input).expect("statement");
 //!
 //! // A subquery in FROM needs no alias only from PostgreSQL 16.
-//! let minimum = minimum_version(parsed.ast()).expect("a requirement above 14");
+//! let minimum = minimum_version(&parsed).expect("a requirement above 14");
 //! assert_eq!(minimum.version(), TargetVersion::Pg16);
 //! assert_eq!(minimum.message(), Some("subquery in FROM must have an alias"));
 //! assert_eq!(minimum.sqlstate(), Some("42601"));
 //!
 //! // A PostgreSQL 15 server rejects it; a PostgreSQL 16 server does not.
-//! assert!(minimum_version_above(parsed.ast(), TargetVersion::Pg15).is_some());
-//! assert!(minimum_version_above(parsed.ast(), TargetVersion::Pg16).is_none());
+//! assert!(minimum_version_above(&parsed, TargetVersion::Pg15).is_some());
+//! assert!(minimum_version_above(&parsed, TargetVersion::Pg16).is_none());
 //! ```
 //!
 //! # The lexical gates
@@ -65,15 +65,17 @@
 //!
 //! # Provenance
 //!
-//! [`VersionRequirement::span`] carries the extent of the construct when the
-//! parse retained it. This grammar builds an arena-backed AST, and Recursa
-//! does not yet run the requirement scan from an
-//! [`ArenaParsed`](recursa::ArenaParsed) root cursor, so the span is `None`
-//! today. Use the statement's own
-//! [`source_bounds`](recursa::ArenaParsed::source_bounds) until Recursa adds
-//! it.
+//! [`VersionRequirement::span`] carries the extent of the construct. The scan
+//! starts from the parse's own root occurrence cursor, so every answer keeps
+//! its span, including one that belongs to a missing value or to an element
+//! of a repetition. The answer therefore takes the parse, not the detached
+//! AST: an [`ArenaParsed`] of any node of this grammar.
+//!
+//! Without the `spans` Cargo feature an ordinary parse retains no provenance,
+//! so the span is `None` and only the version and the message data remain.
+//! pg-analyze enables `spans` in every build.
 
-use recursa::{Requirement, Requires, Span};
+use recursa::{ArenaAstFamily, ArenaParsed, Requirement, Requires, Span};
 
 use crate::TargetVersion;
 
@@ -88,7 +90,7 @@ use crate::TargetVersion;
 pub struct VersionRequirement {
     /// The lowest target version whose grammar accepts the construct.
     version: TargetVersion,
-    /// The extent of the construct, when it is known.
+    /// The extent of the construct, when the parse retained it.
     span: Option<Span>,
     /// The authored path of the construct.
     construct: &'static str,
@@ -127,11 +129,13 @@ impl VersionRequirement {
         self.version
     }
 
-    /// The extent of the construct, when it is known.
+    /// The extent of the construct, when the parse retained provenance.
     ///
-    /// A lexical requirement always carries the span of its token. An item or
-    /// shape requirement carries the span only when the parse retained
-    /// provenance; see the module note on provenance.
+    /// A lexical requirement always carries the span of its token, because
+    /// the token carries it. An item or shape requirement carries the span of
+    /// the construct the scan found, which for a shape rule is the element
+    /// that holds no value. It is `None` only in a build without the `spans`
+    /// Cargo feature.
     pub const fn span(&self) -> Option<Span> {
         self.span
     }
@@ -186,7 +190,7 @@ impl VersionRequirement {
 /// version. `None` means PostgreSQL 14, the oldest supported version, accepts
 /// the whole value.
 ///
-/// Pass the AST of a parse: `parsed.ast()`.
+/// Pass the parse itself, so the answer keeps its span.
 ///
 /// ```
 /// use pg_sql::ast::Statement;
@@ -197,24 +201,28 @@ impl VersionRequirement {
 /// let mut input = lexed.input();
 /// let parsed = Statement::parse(&mut input).expect("statement");
 /// // Every supported version parses this statement.
-/// assert!(minimum_version(parsed.ast()).is_none());
+/// assert!(minimum_version(&parsed).is_none());
 ///
 /// let lexed = pg_sql::lex("MERGE INTO t USING s ON t.a = s.a WHEN MATCHED THEN DELETE");
 /// let mut input = lexed.input();
 /// let parsed = Statement::parse(&mut input).expect("statement");
 /// // MERGE arrived in PostgreSQL 15.
 /// assert_eq!(
-///     minimum_version(parsed.ast()).map(|found| found.version()),
+///     minimum_version(&parsed).map(|found| found.version()),
 ///     Some(TargetVersion::Pg15)
 /// );
 /// ```
-pub fn minimum_version<T: Requires + ?Sized>(value: &T) -> Option<VersionRequirement> {
-    value
+pub fn minimum_version<F>(parsed: &ArenaParsed<'_, F>) -> Option<VersionRequirement>
+where
+    F: ArenaAstFamily,
+    for<'arena> F::Ast<'arena>: Requires,
+{
+    parsed
         .minimum_requirement()
         .map(VersionRequirement::from_scan)
 }
 
-/// The two answers as methods on any parsed value of this grammar.
+/// The two answers as methods on any parse of this grammar.
 ///
 /// It is the same pair as [`minimum_version`] and [`minimum_version_above`].
 /// A consumer that reports one diagnostic per statement usually wants
@@ -229,11 +237,12 @@ pub fn minimum_version<T: Requires + ?Sized>(value: &T) -> Option<VersionRequire
 /// let parsed = Statement::parse(&mut input).expect("statement");
 ///
 /// let rejected = parsed
-///     .ast()
 ///     .minimum_version_above(TargetVersion::Pg15)
 ///     .expect("PostgreSQL 15 rejects the missing alias");
 /// assert_eq!(rejected.version(), TargetVersion::Pg16);
 /// assert_eq!(rejected.sqlstate(), Some("42601"));
+/// // The span covers the subquery that lacks the alias.
+/// assert_eq!(rejected.span().map(|span| span.range()), Some(14..24));
 /// ```
 pub trait MinimumVersion {
     /// See [`minimum_version`].
@@ -243,7 +252,11 @@ pub trait MinimumVersion {
     fn minimum_version_above(&self, target: TargetVersion) -> Option<VersionRequirement>;
 }
 
-impl<T: Requires + ?Sized> MinimumVersion for T {
+impl<F> MinimumVersion for ArenaParsed<'_, F>
+where
+    F: ArenaAstFamily,
+    for<'arena> F::Ast<'arena>: Requires,
+{
     fn minimum_version(&self) -> Option<VersionRequirement> {
         minimum_version(self)
     }
@@ -260,7 +273,7 @@ impl<T: Requires + ?Sized> MinimumVersion for T {
 /// gives where `gram.y` has one. `None` means `target` accepts the whole
 /// value.
 ///
-/// Pass the AST of a parse: `parsed.ast()`.
+/// Pass the parse itself, so the answer keeps its span.
 ///
 /// ```
 /// use pg_sql::ast::Statement;
@@ -272,16 +285,20 @@ impl<T: Requires + ?Sized> MinimumVersion for T {
 /// let parsed = Statement::parse(&mut input).expect("statement");
 ///
 /// // The name of a statistics object is optional only from PostgreSQL 16.
-/// let found = minimum_version_above(parsed.ast(), TargetVersion::Pg15).expect("rejected by 15");
+/// let found = minimum_version_above(&parsed, TargetVersion::Pg15).expect("rejected by 15");
 /// assert_eq!(found.version(), TargetVersion::Pg16);
 /// assert!(found.is_absence());
-/// assert!(minimum_version_above(parsed.ast(), TargetVersion::Pg16).is_none());
+/// assert!(minimum_version_above(&parsed, TargetVersion::Pg16).is_none());
 /// ```
-pub fn minimum_version_above<T: Requires + ?Sized>(
-    value: &T,
+pub fn minimum_version_above<F>(
+    parsed: &ArenaParsed<'_, F>,
     target: TargetVersion,
-) -> Option<VersionRequirement> {
-    value
+) -> Option<VersionRequirement>
+where
+    F: ArenaAstFamily,
+    for<'arena> F::Ast<'arena>: Requires,
+{
+    parsed
         .requirement_above(configuration(target).id())
         .map(VersionRequirement::from_scan)
 }
