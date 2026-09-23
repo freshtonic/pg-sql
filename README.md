@@ -43,6 +43,29 @@ pg-sql and forward the version features, as `pg-psql` does.
 
 `scripts/gate-versions` builds and tests every target version.
 
+### The minimum version of a statement
+
+A build fixes the grammar, but the server that runs the SQL can be older.
+`pg_sql::minimum_version` answers, for one parsed statement, the lowest target
+version whose grammar accepts it, and the first construct that a given older
+version rejects. Where `gram.y` raises a specific `ereport` in that older
+version, the answer carries its SQLSTATE, message and hint.
+
+```rust,ignore
+use pg_sql::{MinimumVersion, TargetVersion};
+
+if let Some(found) = parsed.minimum_version_above(TargetVersion::Pg15) {
+    // "subquery in FROM must have an alias", 42601, needs PostgreSQL 16,
+    // with the span of the subquery that lacks it.
+    eprintln!("{:?} {:?}: {:?}", found.version(), found.span(), found.message());
+}
+```
+
+The answer comes from the version gates, which are declarations that Recursa
+records, so no list can drift from them. `docs/minimum-version.md` describes
+the classes of gate, the lexical scan that goes with the parsed value, and
+what the answer does not cover. See ADR 0010.
+
 ## Oracles
 
 Two oracles check the parsers against PostgreSQL itself, both built from the

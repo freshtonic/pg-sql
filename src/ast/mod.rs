@@ -237,7 +237,7 @@ recursa::ast_node! {
         Insert(boxed!(InsertStmt)),
         Update(boxed!(UpdateStmt)),
         /// Added in 15: research, PostgreSQL 15, "New statements".
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         Merge(boxed!(crate::ast::dml::merge::MergeStmt)),
         Delete(boxed!(DeleteStmt)),
         // Transaction control
@@ -267,11 +267,11 @@ recursa::ast_node! {
         Checkpoint(CheckpointStmt),
         /// Added in 19: gram.y `RepackStmt` (b73d13c:12080; research
         /// PostgreSQL 19, "New statements").
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         Repack(boxed!(crate::ast::utility::repack::RepackStmt)),
         /// Added in 19: gram.y `WaitStmt` (b73d13c:16635; research
         /// PostgreSQL 19, "New statements").
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         Wait(crate::ast::utility::wait::WaitStmt),
         Vacuum(boxed!(VacuumStmt)),
         Lock(LockStmt),

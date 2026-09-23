@@ -54,6 +54,10 @@ recursa::ast_node! {
 recursa::ast_node! {
     #[derive(Debug)]
     pub struct VacuumRelation {
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 18 adds belongs
+        // to those shapes.
         #[cfg(not(feature = "since-pg18"))]
         pub name: QualifiedName,
         /// From 18 gram.y `vacuum_relation` names a `relation_expr`, so

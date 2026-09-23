@@ -7,7 +7,7 @@ recursa::ast_node! {
     pub enum CheckpointStmt {
         /// Added in 19: `CHECKPOINT opt_utility_option_list` (research
         /// PostgreSQL 19, "Changes to existing statements").
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         Options(CheckpointWithOptions),
         #[tok(CHECKPOINT)]
         Value,

@@ -59,7 +59,7 @@ recursa::ast_node! {
     pub struct UniqueConstraint {
         /// Optional `NULLS [NOT] DISTINCT` qualifier. Added in 15: research, PostgreSQL 15, "Changes to existing statements"
         /// (REL_15_19 gram.y `opt_unique_null_treatment`).
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         pub nulls: Option<NullsDistinctQualifier>,
         /// `WITH (storage_param = value, ...)` — gram.y `opt_definition`.
         pub with_storage: Option<crate::ast::ddl::index::WithStorage>,
@@ -116,10 +116,10 @@ recursa::ast_node! {
     /// `SET NULL [(columns)]`. The column list is added in 15: research, PostgreSQL 15, "Changes to existing statements"
     /// (REL_15_19 gram.y `key_action: SET NULL_P opt_column_list`).
     #[derive(Debug)]
-    #[cfg_attr(feature = "since-pg15", tok(SET, NULL, this))]
-    #[cfg_attr(not(feature = "since-pg15"), tok(SET, NULL))]
+    #[config_attr(since = pg15, tok(SET, NULL, this))]
+    #[config_attr(before = pg15, tok(SET, NULL))]
     pub struct SetNullKw {
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         pub cols: Option<ReferentialActionColumnList>,
     }
 }
@@ -128,10 +128,10 @@ recursa::ast_node! {
     /// `SET DEFAULT [(columns)]`. The column list is added in 15: research, PostgreSQL 15, "Changes to existing statements"
     /// (REL_15_19 gram.y `key_action: SET DEFAULT opt_column_list`).
     #[derive(Debug)]
-    #[cfg_attr(feature = "since-pg15", tok(SET, DEFAULT, this))]
-    #[cfg_attr(not(feature = "since-pg15"), tok(SET, DEFAULT))]
+    #[config_attr(since = pg15, tok(SET, DEFAULT, this))]
+    #[config_attr(before = pg15, tok(SET, DEFAULT))]
     pub struct SetDefaultKw {
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         pub cols: Option<ReferentialActionColumnList>,
     }
 }
@@ -192,11 +192,11 @@ recursa::ast_node! {
         /// Added in 18: gram.y `ConstraintAttr: ENFORCED | NOT ENFORCED`
         /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
         /// item 4; REL_18_6 gram.y `ConstraintAttr`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(ENFORCED)]
         Enforced,
         /// Added in 18: see [`Self::Enforced`].
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(NOT, ENFORCED)]
         NotEnforced,
     }
@@ -247,11 +247,11 @@ recursa::ast_node! {
         /// ENFORCED`, which `ConstraintElem`'s CHECK arm passes an
         /// `is_enforced` pointer for (docs/research/postgres-14-19-sql-syntax-changes.md,
         /// PostgreSQL 18, item 4; REL_18_6 gram.y 4211-4213).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(NOT, ENFORCED)]
         NotEnforced,
         /// Added in 18: see [`Self::NotEnforced`].
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(ENFORCED)]
         Enforced,
     }
@@ -278,11 +278,11 @@ recursa::ast_node! {
         #[tok(DEFERRABLE)]
         Deferrable,
         /// Added in 18: see [`TableCheckAttr::NotEnforced`].
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(NOT, ENFORCED)]
         NotEnforced,
         /// Added in 18: see [`TableCheckAttr::NotEnforced`].
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(ENFORCED)]
         Enforced,
     }
@@ -309,15 +309,15 @@ recursa::ast_node! {
         /// Added in 18: `ALTER CONSTRAINT name NO INHERIT`
         /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
         /// item 5; REL_18_6 gram.y `alter_table_cmd` 2682-2683).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(NO, INHERIT)]
         NoInherit,
         /// Added in 18: see [`TableCheckAttr::NotEnforced`] and research item 5.
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(NOT, ENFORCED)]
         NotEnforced,
         /// Added in 18: see [`Self::NotEnforced`].
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(ENFORCED)]
         Enforced,
     }
@@ -346,7 +346,6 @@ recursa::ast_node! {
         InitiallyImmediate,
     }
 }
-
 
 recursa::ast_node! {
     /// `ON DELETE ...` or `ON UPDATE ...` trailing action on a REFERENCES
@@ -479,14 +478,14 @@ recursa::ast_node! {
         /// The research lists it under PostgreSQL 17, "Changes to existing
         /// statements" (commit f7567f9e53d, back-patched to 15 and 16).
         /// REL_14_24 gram.y `SeqOptElem` has no `LOGGED` or `UNLOGGED`.
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         #[tok(LOGGED)]
         Logged,
         /// Added in 15: REL_15_19 gram.y `SeqOptElem: ... | UNLOGGED` (4781).
         /// Same commit and research entry as [`IdentitySeqOption::Logged`].
         /// `SET UNLOGGED` on a column is `SET SeqOptElem`, which is separate
         /// from the table-level `alter_table_cmd: SET UNLOGGED`.
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         #[tok(UNLOGGED)]
         Unlogged,
     }
@@ -589,7 +588,7 @@ recursa::ast_node! {
         /// Added in 18: `(expr) [VIRTUAL]`, gram.y `opt_virtual_or_stored`
         /// with `VIRTUAL` or empty (docs/research/postgres-14-19-sql-syntax-changes.md,
         /// PostgreSQL 18, item 1; REL_18_6 gram.y `ColConstraintElem`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         Virtual(GeneratedVirtualTail),
     }
 }
@@ -668,7 +667,7 @@ recursa::ast_node! {
         /// Added in 18: gram.y `ColConstraintElem: NOT NULL_P opt_no_inherit`
         /// with `NO INHERIT` (docs/research/postgres-14-19-sql-syntax-changes.md,
         /// PostgreSQL 18, item 7; REL_18_6 gram.y `ColConstraintElem`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(NOT, NULL, NO, INHERIT)]
         NotNullNoInherit,
         #[tok(NULL)]
@@ -687,7 +686,7 @@ recursa::ast_node! {
         Check(CheckConstraint),
         Compression(CompressionConstraint),
         // Added in 16: see `StorageConstraint`.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         Storage(StorageConstraint),
     }
 }
@@ -707,6 +706,12 @@ recursa::ast_node! {
     /// keyword that `ColId` never admits.
     #[derive(Debug)]
     pub enum ColumnStorageMode {
+        /// Added in 16: the shape that the widening of `ALTER TABLE ... SET
+        /// STORAGE` adds. Before 16 the argument is a `ColId`, which never
+        /// admits the reserved word `DEFAULT` (REL_15_19 gram.y
+        /// `alter_table_cmd: ... SET STORAGE ColId`; REL_16_15 2472,
+        /// commit b9424d014).
+        #[config(since = pg16)]
         #[tok(DEFAULT)]
         Default,
         Name(crate::tokens::ColId),
@@ -840,6 +845,9 @@ recursa::ast_node! {
     #[derive(Debug, derive_more :: Deref)]
     #[tok(LPAREN, this, RPAREN)]
     pub struct IndexedConstraintColumnList(
+        // A narrowing, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // 18 accepts fewer lists than 14, so a list that 18 accepts needs no
+        // version above the baseline. Both arms only remove; neither records.
         #[cfg(not(feature = "since-pg18"))]
         #[sep(COMMA)]
         #[deref]
@@ -854,7 +862,7 @@ recursa::ast_node! {
         /// Added in 18: gram.y `opt_without_overlaps` after the last key
         /// column, a temporal key (docs/research/postgres-14-19-sql-syntax-changes.md,
         /// PostgreSQL 18, item 2; REL_18_6 gram.y `ConstraintElem`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[presence(WITHOUT, OVERLAPS)]
         pub bool,
     );
@@ -916,7 +924,7 @@ recursa::ast_node! {
         /// simplicity. If present alongside `USING INDEX`, PG rejects at
         /// semantic time; the diff oracle handles that case. Added in 15:
         /// research, PostgreSQL 15, "Changes to existing statements".
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         pub nulls: Option<NullsDistinctQualifier>,
         pub body: IndexedConstraintBody,
         /// gram.y `ConstraintAttributeSpec`.
@@ -929,6 +937,9 @@ recursa::ast_node! {
     #[derive(Debug, derive_more :: Deref)]
     #[tok(LPAREN, this, RPAREN)]
     pub struct ForeignKeyColumnList(
+        // A narrowing, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // 18 accepts fewer lists than 14, so a list that 18 accepts needs no
+        // version above the baseline. Both arms only remove; neither records.
         #[cfg(not(feature = "since-pg18"))]
         #[sep(COMMA)]
         #[deref]
@@ -943,7 +954,7 @@ recursa::ast_node! {
         /// Added in 18: gram.y `optionalPeriodName`, the `PERIOD` column of a
         /// temporal foreign key (docs/research/postgres-14-19-sql-syntax-changes.md,
         /// PostgreSQL 18, item 3; REL_18_6 gram.y `ConstraintElem`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         pub Option<PeriodColumn>,
     );
 }
@@ -1004,6 +1015,10 @@ recursa::ast_node! {
     #[tok(FOREIGN, KEY, this)]
     pub struct TableForeignKey {
         pub columns: ForeignKeyColumnList,
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 18 adds belongs
+        // to those shapes.
         #[cfg(not(feature = "since-pg18"))]
         pub references: ReferencesConstraint,
         /// From 18 the referenced column list can end with `PERIOD col`,
@@ -1126,7 +1141,7 @@ recursa::ast_node! {
         /// Added in 18: gram.y `ConstraintElem: NOT NULL_P ColId
         /// ConstraintAttributeSpec` (docs/research/postgres-14-19-sql-syntax-changes.md,
         /// PostgreSQL 18, item 6; REL_18_6 gram.y `ConstraintElem`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         NotNull(TableNotNull),
     }
 }
@@ -2055,7 +2070,7 @@ recursa::ast_node! {
         /// Added in 18: gram.y `alter_table_cmd: ALTER CONSTRAINT name
         /// INHERIT` (docs/research/postgres-14-19-sql-syntax-changes.md,
         /// PostgreSQL 18, item 5; REL_18_6 gram.y `alter_table_cmd`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         AlterConstraintInherit(AlterConstraintInheritCmd),
         // ALTER [COLUMN] colname ...
         AlterColumn(AlterColumnCmd),
@@ -2087,7 +2102,7 @@ recursa::ast_node! {
         SetUnlogged(SetUnloggedCmd),
         /// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
         /// (REL_15_19 gram.y `alter_table_cmd: SET ACCESS METHOD name`).
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         SetAccessMethod(SetAccessMethodClause),
         SetTablespace(SetTablespaceClause),
         SetReloptions(SetReloptions),
@@ -2238,7 +2253,7 @@ recursa::ast_node! {
     pub enum AlterColumnAction {
         // SET ... — longest prefixes first.
         // Added in 17: see `AlterColSetExpression`.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         SetExpressionAs(AlterColSetExpression),
         SetDataType(AlterColSetDataType),
         SetStatistics(AlterColSetStatistics),
@@ -2393,6 +2408,10 @@ recursa::ast_node! {
         // 16 accepts `DEFAULT` (`column_storage`): research, PostgreSQL 16,
         // "Changes to existing statements" (commit b9424d014). REL_15_19 gram.y
         // has `ALTER opt_column ColId SET STORAGE ColId`.
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 16 adds belongs
+        // to those shapes.
         #[cfg(feature = "since-pg16")]
         #[tok(SET, STORAGE, this)]
         pub mode: crate::ast::ddl::table::ColumnStorageMode,

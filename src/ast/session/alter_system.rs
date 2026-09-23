@@ -32,7 +32,7 @@ recursa::ast_node! {
         /// Added in 19: `generic_set: var_name TO NULL_P | var_name '=' NULL_P`
         /// (gram.y b73d13c:1727, 1737; research PostgreSQL 19, "Changes to
         /// existing statements", commit ff4597acd).
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         SetNull(crate::ast::session::set_reset::SetNullStmt),
         Reset(AlterSystemReset),
     }

@@ -16,7 +16,20 @@ recursa::grammar! {
     module = crate,
     arena_ast,
     flat,
-    derives(Arbitrary, Pretty, Visit, VisitMut),
+    // One name for each target version, in release order, mapped to the
+    // cumulative `since-*` helper that already removes the element (ADR 0009,
+    // ADR 0010). `pg14` is the baseline, which every build admits, so it takes
+    // no feature. `pg19` stands for the `pg19-beta` target version; the name
+    // loses the suffix so the gates need no edit when PostgreSQL 19.0 ships.
+    configurations(
+        pg14,
+        pg15 = feature("since-pg15"),
+        pg16 = feature("since-pg16"),
+        pg17 = feature("since-pg17"),
+        pg18 = feature("since-pg18"),
+        pg19 = feature("since-pg19"),
+    ),
+    derives(Arbitrary, Pretty, Requires, Visit, VisitMut),
     keyword_matching = ascii_insensitive,
     diagrams,
     framing(island = ast::file::SqlDocumentItem, boundary = SEMI),
@@ -27,7 +40,20 @@ recursa::grammar! {
     module = crate,
     arena_ast,
     flat,
-    derives(Pretty, Visit, VisitMut),
+    // One name for each target version, in release order, mapped to the
+    // cumulative `since-*` helper that already removes the element (ADR 0009,
+    // ADR 0010). `pg14` is the baseline, which every build admits, so it takes
+    // no feature. `pg19` stands for the `pg19-beta` target version; the name
+    // loses the suffix so the gates need no edit when PostgreSQL 19.0 ships.
+    configurations(
+        pg14,
+        pg15 = feature("since-pg15"),
+        pg16 = feature("since-pg16"),
+        pg17 = feature("since-pg17"),
+        pg18 = feature("since-pg18"),
+        pg19 = feature("since-pg19"),
+    ),
+    derives(Pretty, Requires, Visit, VisitMut),
     keyword_matching = ascii_insensitive,
     diagrams,
     framing(island = ast::file::SqlDocumentItem, boundary = SEMI),
@@ -39,11 +65,13 @@ pub mod bench_data;
 pub mod document;
 pub mod formatter;
 pub mod ident;
+pub mod minimum_version;
 mod target_version;
 pub mod tokens;
 
 #[cfg(feature = "spans")]
 pub use document::{SqlDocument, SqlParseError, SqlRejection};
+pub use minimum_version::{MinimumVersion, VersionRequirement};
 pub use target_version::TargetVersion;
 
 // The constants are defined here and not in `target_version`, because the

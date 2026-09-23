@@ -103,7 +103,7 @@ recursa::ast_node! {
         /// Removed in 18: gram.y `opclass_item` has no `opt_recheck`
         /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
         /// "Removed or changed syntax"; commit 7da1bdc2c2f).
-        #[cfg(not(feature = "since-pg18"))]
+        #[config(before = pg18)]
         #[presence(RECHECK)]
         pub recheck: bool,
     }
@@ -378,6 +378,10 @@ recursa::ast_node! {
     /// CREATE OPERATOR / CREATE AGGREGATE / etc. and is captured by [`DefList`].
     #[derive(Debug)]
     pub struct AlterOperatorSetOptions {
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 17 adds belongs
+        // to those shapes.
         #[cfg(feature = "since-pg17")]
         #[tok(SET, this)]
         pub options: DefList,

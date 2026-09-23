@@ -51,7 +51,7 @@ recursa::ast_node! {
         Connection(SubscriptionConnectionClause),
         /// Added in 19: `CREATE SUBSCRIPTION name SERVER name PUBLICATION
         /// name_list opt_definition` (gram.y b73d13c:11045).
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         Server(SubscriptionServerClause),
     }
 }
@@ -168,18 +168,18 @@ recursa::ast_node! {
         /// Added in 19: `ALTER SUBSCRIPTION name SERVER name` (gram.y
         /// b73d13c:11084; research PostgreSQL 19, "Changes to existing
         /// statements").
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         Server(SubscriptionServerClause),
         Refresh(AlterSubscriptionRefresh),
         /// Added in 19: `ALTER SUBSCRIPTION name REFRESH SEQUENCES` (gram.y
         /// b73d13c:11104, commit f0b3573c3).
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         #[tok(REFRESH, SEQUENCES)]
         RefreshSequences,
         AddPublication(AlterSubscriptionAddPublication),
         DropPublication(AlterSubscriptionDropPublication),
         /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         Skip(AlterSubscriptionSkip),
         #[tok(ENABLE)]
         Enable,

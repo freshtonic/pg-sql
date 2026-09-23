@@ -81,7 +81,7 @@ recursa::ast_node! {
         /// Added in 18: gram.y `returning_with_clause`
         /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
         /// item 12; REL_18_6 gram.y `returning_clause`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         pub with: Option<ReturningWithClause>,
         /// The list is gram.y `target_list`, which is not empty: a bare
         /// `RETURNING` is a raw-parser error in every target version, and from

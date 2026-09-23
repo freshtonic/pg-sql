@@ -31,6 +31,14 @@ lexer of one target version. The version features `pg14`, `pg15`, `pg16`,
    is `feature = "since-pgN"`. "Removed in N" is `not(feature = "since-pgN")`.
    There is no `since-pg14`. Every gate cites the research entry, or the
    `gram.y`/`scan.l`/`psqlscan.l` change.
+
+   Changed by #92: inside an `ast_node!` or `tokens!` body the gate is now
+   `#[config(since = pgN)]` or `#[config(before = pgN)]`, which the root
+   `grammar!` `configurations(...)` list maps onto the same features. A
+   `since` gate also records the requirement. A widening, where the newer
+   type accepts everything the older one does, keeps a plain `#[cfg]` on the
+   field and gates the shapes the newer type adds; see ADR 0010 and
+   `docs/minimum-version.md`.
 3. **Keywords.** A keyword that changes category or label status gets two
    `tokens!` entries with opposite `cfg`. Codegen reports an error when two
    active entries have the same name. The `categories`, `flags` and
@@ -73,6 +81,19 @@ lexer of one target version. The version features `pg14`, `pg15`, `pg16`,
 - Diagnostics that know about versions. A `pg17` build rejects 18 syntax as
   PostgreSQL 17 does.
 - Version gates on psql meta-commands that pg-psql does not parse.
+
+## Status, 2026-09-24
+
+Issue #92 is done: `pg_sql::minimum_version` reports the lowest target
+version that one parsed statement needs, from the gates themselves. Every
+version gate inside an `ast_node!` or `tokens!` body is now the
+`#[config(since = pgN)]` declaration that recursa#135 added (ADR 0010,
+`docs/minimum-version.md`), and `.recursa-revision` moves to b17b788
+(generation protocol 36). `scripts/gate-versions` gained the cross-version
+check: each version compares its own reports with the oracle outcome of all
+six versions, which the version baselines already record. The work found one
+class the plan did not name, the widening, where a newer version gives a
+field a wider type; decision 2 below now covers it.
 
 ## Status, 2026-09-23
 

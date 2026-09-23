@@ -230,7 +230,7 @@ recursa::ast_node! {
     pub enum CopyGenericOptionArg {
         // Added in 17: research, PostgreSQL 17, "Changes to existing statements"
         // (REL_17_11 gram.y 3539 `copy_generic_opt_arg`).
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(DEFAULT)]
         Default,
         #[tok(STAR)]
@@ -285,7 +285,7 @@ recursa::ast_node! {
         Csv,
         /// Added in 19: `copy_opt_item: JSON` (gram.y b73d13c:3567; research
         /// PostgreSQL 19, "Changes to existing statements", commit 7dadd38cd).
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         #[tok(JSON)]
         Json,
         #[tok(HEADER)]
@@ -354,6 +354,10 @@ recursa::ast_node! {
         // `*` is added in 17: research, PostgreSQL 17, "Changes to existing
         // statements" (REL_17_11 gram.y 3475, 3483). REL_16_15 gram.y 3419
         // takes only a `columnList`.
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 17 adds belongs
+        // to those shapes.
         #[cfg(feature = "since-pg17")]
         #[tok(FORCE, NOT, NULL, this)]
         pub target: CopyForceTarget,

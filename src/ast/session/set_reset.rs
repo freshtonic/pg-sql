@@ -355,7 +355,7 @@ recursa::ast_node! {
         // fallback after their literal-leading branches.
         Generic(GenericSetRest),
         /// Added in 19: `generic_set: var_name TO NULL_P` (b73d13c:1727).
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         GenericNull(GenericSetNull),
     }
 }

@@ -49,9 +49,19 @@ recursa::ast_node! {
         // The name is optional from 16: research, PostgreSQL 16, "Changes to
         // existing statements" (commits 2cbc3c17a, 0a5f06b84). REL_15_19 gram.y
         // has `REINDEX reindex_target_multitable opt_concurrently name`.
-        #[cfg(feature = "since-pg16")]
+        //
+        // A shape rule, so the requirement belongs to the absence of the name
+        // (ADR 0010). REL_15_19 raises no ereport for it: the rule has no
+        // alternative without the name, so the parser gives a plain syntax
+        // error and the gate carries no message.
+        #[config(
+            since = pg16,
+            on = absent,
+            cite = "gram.y REL_15_19:8988 `ReindexStmt: REINDEX reindex_target_multitable \
+                    opt_concurrently name`; optional from 16, commits 2cbc3c17a, 0a5f06b84"
+        )]
         pub name: Option<crate::tokens::ColId>,
-        #[cfg(not(feature = "since-pg16"))]
+        #[config(before = pg16)]
         pub name: crate::tokens::ColId,
     }
 }

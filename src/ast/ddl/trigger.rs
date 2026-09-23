@@ -298,7 +298,7 @@ recursa::ast_node! {
         /// and has no effect (docs/research/postgres-14-19-sql-syntax-changes.md,
         /// PostgreSQL 19, "Changes to existing statements"; commit
         /// 87251e11496; b73d13c gram.y 6126 and 6164-6166).
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         #[tok(ENFORCED)]
         Enforced,
     }

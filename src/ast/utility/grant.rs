@@ -105,7 +105,7 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum Privilege {
         /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         AlterSystem(AlterSystemPriv),
         Select(SelectPriv),
         References(ReferencesPriv),
@@ -434,7 +434,7 @@ recursa::ast_node! {
         Tablespace(TablespaceTarget),
         Type(TypeTarget),
         /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         Parameter(ParameterTarget),
         Bare(BareTablesTarget),
     }
@@ -500,10 +500,16 @@ recursa::ast_node! {
     /// `{OPTION|TRUE|FALSE}` — the value of a role-grant `WITH` option.
     #[derive(Debug)]
     pub enum WithRoleOptValue {
+        // `OPTION` alone is the 14 shape `WITH ADMIN OPTION`, so it records
+        // nothing. `TRUE` and `FALSE` are the shapes that 16 adds (REL_15_19
+        // gram.y `opt_grant_admin_option: WITH ADMIN OPTION`; REL_16_15
+        // `grant_role_opt_value`, commit e3ce2de09).
         #[tok(OPTION)]
         Option,
+        #[config(since = pg16)]
         #[tok(TRUE)]
         True,
+        #[config(since = pg16)]
         #[tok(FALSE)]
         False,
     }
@@ -571,6 +577,10 @@ recursa::ast_node! {
         #[tok(TO, this)]
         pub roles: RoleList,
         // Added in 16: see `WithRoleOpts`.
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 16 adds belongs
+        // to those shapes.
         #[cfg(feature = "since-pg16")]
         pub with: Option<WithRoleOpts>,
         // Removed in 16: see `WithAdminOption`.
@@ -762,7 +772,7 @@ recursa::ast_node! {
         /// Added in 18: gram.y `defacl_privilege_target: LARGE_P OBJECTS_P`
         /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
         /// item 8; REL_18_6 gram.y `defacl_privilege_target`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(LARGE, OBJECTS)]
         LargeObjects,
     }

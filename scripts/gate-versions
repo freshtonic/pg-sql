@@ -43,7 +43,8 @@ for version in "${versions[@]}"; do
   run cargo build --locked -p pg-sql "${spans[@]}"
   run cargo test --locked -p pg-sql "${spans[@]}" \
     --test embedded --test embedded_inventory --test differential_baseline \
-    --test target_version --test strict_statement --test fmt --test flat_parity
+    --test target_version --test strict_statement --test fmt --test flat_parity \
+    --test minimum_version --test minimum_version_corpus
   run cargo test --locked -p pg-sql "${oracle[@]}" \
     --test differential --test accepted_legacy_gaps
   run cargo test --locked -p pg-psql --no-default-features --features "$version"
