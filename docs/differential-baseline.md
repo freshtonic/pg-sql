@@ -44,6 +44,42 @@ files gives 345 statements that are not in the frozen corpus. They are not in
 the baseline. A one-time probe of these statements with the differential check
 and the 17.11 oracle found no failure.
 
+### Soft errors in the oracle (#80)
+
+`pg-oracle` made `errsave_start` an `errstart(ERROR, ...)` and ignored its
+context, so every soft error became a hard error. From PostgreSQL 16 the raw
+parser uses the soft-error API: `process_integer_literal` in `scan.l` calls
+`pg_strtoint32_safe` with an `ErrorSaveContext`, and a literal that does not
+fit in `int32` becomes an `FCONST`. The oracle thus rejected statements that
+PostgreSQL accepts, such as `SELECT 2147483648`. The stub now follows
+`elog.c`: with an `ErrorSaveContext` it records the error and returns false,
+and with no context the error stays hard.
+
+The `pg16`, `pg17`, `pg18` and `pg19-beta` baselines each record an accept
+for the same 131 statements that they recorded as a reject. All 131 hold an
+integer literal above `INT32_MAX`, in decimal (`int8.sql`, `numeric.sql`,
+`random.sql`), in a non-decimal form (`numerology.sql`) or with `_`
+separators (`partition_prune.sql`). Each is a legacy statement item, so the
+`pass` and `skip` totals do not move, and pg-sql agrees with the oracle on
+every one, so no version gap is added.
+
+`pg14` and `pg15` do not change. Their `process_integer_literal` reaches the
+same `FCONST` fallback through `strtoint` and `errno`, with no soft-error
+context, so the defect never touched them.
+
+Only the token changes, not the grammar rules that take it. The token is an
+`FCONST`, so a rule that takes only an `Iconst` still rejects it: at 14
+`createdb_opt_item` takes a `SignedIconst` and rejects
+`CREATE DATABASE d OID = 3000000000`, while 15 and later take a `NumericOnly`
+and accept it. `pg-oracle/tests/soft_errors.rs` holds these cases.
+
+pg-sql lexes every integer literal to one `IntegerLit` token, whatever its
+value, so it accepts an out-of-`int32` literal where `gram.y` takes only an
+`Iconst` — for example `CREATE ROLE r SYSID 3000000000`. No frozen corpus
+statement has that shape, so the differential check cannot see it and the
+version baselines record no gap for it. Making pg-sql agree needs a second
+integer token kind chosen by value, which is a grammar change, not a fix.
+
 ## One baseline for each target version
 
 Each target version (ADR 0009) has its own version baseline in

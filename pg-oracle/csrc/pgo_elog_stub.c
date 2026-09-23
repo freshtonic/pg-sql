@@ -23,6 +23,10 @@
 
 #include "miscadmin.h"
 #include "utils/elog.h"
+#if PG_VERSION_NUM >= 160000
+/* ErrorSaveContext — the soft-error API arrived in PostgreSQL 16. */
+#include "nodes/miscnodes.h"
+#endif
 #include "parser/parser.h"
 #include "nodes/pg_list.h"
 #include "nodes/value.h"
@@ -69,6 +73,16 @@ const char *pgo_last_error_message(void) {
 static int  pgo_stack_depth = -1;          /* -1 == empty */
 static int  pgo_cur_level[PGO_MAXSTACK];
 
+#if PG_VERSION_NUM >= 160000
+/* The soft-error context of each open frame, or NULL when the frame is a
+ * normal (hard) error. Only a frame that errsave_start opened with a
+ * details_wanted context has a non-NULL entry. */
+static ErrorSaveContext *pgo_cur_escontext[PGO_MAXSTACK];
+/* The message of such a frame, kept apart from pgo_error_buf so that a soft
+ * error never becomes the reported parse error. */
+static char pgo_soft_buf[PGO_MAXSTACK][1024];
+#endif
+
 bool
 errstart(int elevel, const char *domain)
 {
@@ -80,6 +94,9 @@ errstart(int elevel, const char *domain)
     }
     pgo_stack_depth++;
     pgo_cur_level[pgo_stack_depth] = elevel;
+#if PG_VERSION_NUM >= 160000
+    pgo_cur_escontext[pgo_stack_depth] = NULL;
+#endif
 
     if (elevel >= ERROR) {
         /* fresh message for this error */
@@ -131,11 +148,21 @@ errfinish(const char *filename, int lineno, const char *funcname)
 static void
 pgo_capture(const char *fmt, va_list args)
 {
+    if (pgo_stack_depth < 0)
+        return;
     /* Only capture if we are inside an ERROR (errstart set pgo_have_error
      * and cleared the buffer). Don't clobber on sub-ERROR messages. */
-    if (pgo_stack_depth >= 0 && pgo_cur_level[pgo_stack_depth] >= ERROR) {
+    if (pgo_cur_level[pgo_stack_depth] >= ERROR) {
         vsnprintf(pgo_error_buf, sizeof(pgo_error_buf), fmt, args);
+        return;
     }
+#if PG_VERSION_NUM >= 160000
+    /* A soft-error frame that wants details keeps its own message. */
+    if (pgo_cur_escontext[pgo_stack_depth] != NULL) {
+        vsnprintf(pgo_soft_buf[pgo_stack_depth],
+                  sizeof(pgo_soft_buf[pgo_stack_depth]), fmt, args);
+    }
+#endif
 }
 
 int
@@ -252,21 +279,84 @@ errbacktrace(void)
     return 0;
 }
 
-/* errsave_start / errsave_finish — the "soft error" API. With no soft-error
- * context we treat every soft error as a hard ERROR. */
+/* errsave_start / errsave_finish — the "soft error" API, added in
+ * PostgreSQL 16 and modelled here on elog.c.
+ *
+ * The caller gives an ErrorSaveContext when it can continue after the error.
+ * errsave_start then records the error in that context and returns false, so
+ * the ereport() body never runs and the caller continues. The raw parser
+ * needs this: process_integer_literal() in scan.l calls pg_strtoint32_safe()
+ * with a context, and a literal that does not fit in int32 becomes an FCONST
+ * instead of an error. With no context the soft error stays a hard ERROR. */
 bool
 errsave_start(struct Node *context, const char *domain)
 {
+#if PG_VERSION_NUM >= 160000
+    ErrorSaveContext *escontext;
+
+    /* No context for soft error reporting: punt to errstart(). */
+    if (context == NULL || !IsA(context, ErrorSaveContext))
+        return errstart(ERROR, domain);
+
+    /* Report that a soft error was detected. */
+    escontext = (ErrorSaveContext *) context;
+    escontext->error_occurred = true;
+
+    /* Nothing else to do if the caller wants no further details. */
+    if (!escontext->details_wanted)
+        return false;
+
+    /* Open a frame to collect the message in. Its level is below ERROR, so
+     * errsave_finish pops it without unwinding, and pgo_error_buf — the
+     * message that the oracle reports — keeps its value. */
+    if (pgo_stack_depth + 1 >= PGO_MAXSTACK) {
+        write_stderr("pgo_elog_stub: error stack overflow\n");
+        abort();
+    }
+    pgo_stack_depth++;
+    pgo_cur_level[pgo_stack_depth] = LOG;
+    pgo_cur_escontext[pgo_stack_depth] = escontext;
+    pgo_soft_buf[pgo_stack_depth][0] = '\0';
+    return true;
+#else
     (void) context;
     return errstart(ERROR, domain);
+#endif
 }
 
 void
 errsave_finish(struct Node *context, const char *filename, int lineno,
                const char *funcname)
 {
+#if PG_VERSION_NUM >= 160000
+    ErrorSaveContext *escontext;
+    ErrorData  *edata;
+
+    (void) context;
+
+    /* If errsave_start punted to errstart, punt likewise to errfinish. */
+    if (pgo_stack_depth < 0 || pgo_cur_escontext[pgo_stack_depth] == NULL) {
+        errfinish(filename, lineno, funcname);
+        abort();                /* errfinish does not return for an ERROR */
+    }
+
+    /* Give the details to the caller, in the caller's memory context. */
+    escontext = pgo_cur_escontext[pgo_stack_depth];
+    edata = (ErrorData *) palloc0(sizeof(ErrorData));
+    edata->elevel = ERROR;
+    edata->sqlerrcode = ERRCODE_INTERNAL_ERROR;
+    edata->filename = filename;
+    edata->lineno = lineno;
+    edata->funcname = funcname;
+    edata->message = pstrdup(pgo_soft_buf[pgo_stack_depth]);
+    escontext->error_data = edata;
+
+    pgo_cur_escontext[pgo_stack_depth] = NULL;
+    pgo_stack_depth--;
+#else
     (void) context;
     errfinish(filename, lineno, funcname);
+#endif
 }
 
 /* pg_re_throw — re-raise the current error (used by PG_RE_THROW). */
