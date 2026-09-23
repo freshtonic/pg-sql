@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::ast::session::set_reset::{ResetStmt, ShowStmt, VariableSetRest, VariableSetStmt};
+    use crate::ast::session::set_reset::{
+        GenericSetValue, ResetStmt, ShowStmt, VariableSetRest, VariableSetStmt,
+    };
 
     #[test]
     fn parse_set_to() {
@@ -49,7 +51,10 @@ mod tests {
         let VariableSetRest::Generic(rest) = &body.rest else {
             panic!("generic SET expected");
         };
-        assert_eq!(rest.values.len(), 1);
+        let GenericSetValue::List(values) = &rest.value else {
+            panic!("var_list expected");
+        };
+        assert_eq!(values.len(), 1);
         assert!(input.is_eof());
     }
 
@@ -66,7 +71,10 @@ mod tests {
         let VariableSetRest::Generic(rest) = &body.rest else {
             panic!("generic SET expected");
         };
-        assert_eq!(rest.values.len(), 1);
+        let GenericSetValue::List(values) = &rest.value else {
+            panic!("var_list expected");
+        };
+        assert_eq!(values.len(), 1);
         assert!(input.is_eof());
     }
 
@@ -83,7 +91,10 @@ mod tests {
         let VariableSetRest::Generic(rest) = &body.rest else {
             panic!("generic SET expected");
         };
-        assert_eq!(rest.values.len(), 2);
+        let GenericSetValue::List(values) = &rest.value else {
+            panic!("var_list expected");
+        };
+        assert_eq!(values.len(), 2);
         assert!(input.is_eof());
     }
 
@@ -165,6 +176,63 @@ mod tests {
         let _stmt_parsed = ResetStmt::parse(&mut input).unwrap();
         let _stmt = _stmt_parsed.ast();
         assert!(input.is_eof());
+    }
+
+    /// The three `set_rest_more` arms that `VariableSetRest` did not have:
+    /// `SCHEMA Sconst`, `NAMES opt_encoding` and `var_name FROM CURRENT_P`
+    /// (REL_17_11:1729, 1739, 1702). `CATALOG_P Sconst` stays rejected: its
+    /// action is an unconditional `ereport(ERROR)` (REL_17_11:1723). Each arm
+    /// reaches every `set_rest` position, so `ALTER DATABASE` and `ALTER ROLE`
+    /// take it too.
+    #[test]
+    fn set_schema_names_and_from_current() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SET SCHEMA 'public'",
+                "SET LOCAL SCHEMA 'public'",
+                "SET NAMES",
+                "SET NAMES 'utf8'",
+                "SET NAMES DEFAULT",
+                "SET search_path FROM CURRENT",
+                "SET a.b FROM CURRENT",
+                "SET SCHEMA = public",
+                "SET NAMES = 'utf8'",
+                "ALTER DATABASE d SET SCHEMA 'public'",
+                "ALTER DATABASE d SET NAMES 'utf8'",
+                "ALTER DATABASE d SET NAMES",
+                "ALTER DATABASE d SET search_path FROM CURRENT",
+                "ALTER ROLE r SET SCHEMA 'public'",
+            ],
+            &[
+                "SET SCHEMA public",
+                "SET SCHEMA",
+                "SET NAMES utf8",
+                "SET search_path FROM",
+                "SET CATALOG 'x'",
+                "ALTER DATABASE d SET CATALOG 'x'",
+            ],
+        );
+    }
+
+    /// gram.y gives `generic_set` two dedicated `DEFAULT` arms
+    /// (REL_17_11:1682, 1690), because `DEFAULT` is reserved and no
+    /// `var_value` takes it. So it is the whole right side or none of it.
+    #[test]
+    fn default_is_not_a_var_list_element() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SET search_path = DEFAULT",
+                "SET search_path TO DEFAULT",
+                "SET search_path TO a, b",
+            ],
+            &[
+                "SET search_path = DEFAULT, a",
+                "SET search_path TO a, DEFAULT",
+                "ALTER SYSTEM SET search_path = DEFAULT, a",
+                "ALTER DATABASE d SET search_path = a, DEFAULT",
+                "ALTER ROLE r SET search_path = DEFAULT, a",
+            ],
+        );
     }
 
     #[test]
