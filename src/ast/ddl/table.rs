@@ -303,7 +303,8 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// One option inside an `IDENTITY ( ... )` sequence option list.
+    /// One option inside an `IDENTITY ( ... )` sequence option list, and the
+    /// option of `alter_identity_column_option: SET SeqOptElem`.
     ///
     /// Variant ordering: longer multi-word forms first so longest-match-wins
     /// picks them.
@@ -322,6 +323,20 @@ recursa::ast_node! {
         Cycle,
         #[tok(NO, CYCLE)]
         NoCycle,
+        /// Added in 15: REL_15_19 gram.y `SeqOptElem: ... | LOGGED` (4741).
+        /// The research lists it under PostgreSQL 17, "Changes to existing
+        /// statements" (commit f7567f9e53d, back-patched to 15 and 16).
+        /// REL_14_24 gram.y `SeqOptElem` has no `LOGGED` or `UNLOGGED`.
+        #[cfg(feature = "since-pg15")]
+        #[tok(LOGGED)]
+        Logged,
+        /// Added in 15: REL_15_19 gram.y `SeqOptElem: ... | UNLOGGED` (4781).
+        /// Same commit and research entry as [`IdentitySeqOption::Logged`].
+        /// `SET UNLOGGED` on a column is `SET SeqOptElem`, which is separate
+        /// from the table-level `alter_table_cmd: SET UNLOGGED`.
+        #[cfg(feature = "since-pg15")]
+        #[tok(UNLOGGED)]
+        Unlogged,
     }
 }
 

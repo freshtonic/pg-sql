@@ -129,16 +129,18 @@ recursa::ast_node! {
         SequenceName(SeqSequenceNameOption),
         #[tok(CYCLE)]
         Cycle,
-        /// Added in 15: REL_15_19 gram.y `SeqOptElem: ... | UNLOGGED`. The
-        /// research lists it under PostgreSQL 17, "Changes to existing
+        /// Added in 15: REL_15_19 gram.y `SeqOptElem: ... | LOGGED` (4741).
+        /// The research lists it under PostgreSQL 17, "Changes to existing
         /// statements" (commit f7567f9e53d, back-patched to 15 and 16).
         /// REL_14_24 gram.y `SeqOptElem` has no `LOGGED` or `UNLOGGED`.
         #[cfg(feature = "since-pg15")]
+        #[tok(LOGGED)]
+        Logged,
+        /// Added in 15: REL_15_19 gram.y `SeqOptElem: ... | UNLOGGED` (4781).
+        /// Same commit and research entry as [`SeqOption::Logged`].
+        #[cfg(feature = "since-pg15")]
         #[tok(UNLOGGED)]
         Unlogged,
-        // `LOGGED` is in Postgres' SeqOptElem but no corpus statement uses it
-        // (it is the default); a `LOGGED` keyword token does not yet exist in
-        // pg-sql. Add when first needed.
     }
 }
 
@@ -230,9 +232,10 @@ recursa::ast_node! {
     ///   `SeqOptElem` first token.
     /// - `Rename` (`RENAME TO`) is keyword-disjoint from the others.
     /// - `Opts` (`SeqOptList`) is listed last because it starts with any of
-    ///   `AS`, `CACHE`, `CYCLE`, `INCREMENT`, `MAXVALUE`, `MINVALUE`,
-    ///   `NO …`, `OWNED`, `RESTART`, `SEQUENCE`, `START`, `UNLOGGED` — none
-    ///   of which conflict with the keyword-led variants above.
+    ///   `AS`, `CACHE`, `CYCLE`, `INCREMENT`, `LOGGED`, `MAXVALUE`,
+    ///   `MINVALUE`, `NO …`, `OWNED`, `RESTART`, `SEQUENCE`, `START`,
+    ///   `UNLOGGED` — none of which conflict with the keyword-led variants
+    ///   above.
     #[derive(Debug)]
     pub enum AlterSequenceAction {
         SetLogged(SetLoggedClause),
