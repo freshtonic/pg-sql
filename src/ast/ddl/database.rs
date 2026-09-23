@@ -135,13 +135,16 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// One action on `ALTER DATABASE name action` — covers Postgres'
-    /// `AlterDatabaseStmt`, `AlterDatabaseRefreshCollStmt`, `RenameStmt` and
-    /// `AlterOwnerStmt` branches for databases, plus the corpus-exercised
-    /// `RESET TABLESPACE` form of `AlterDatabaseSetStmt`.
+    /// `AlterDatabaseStmt`, `AlterDatabaseRefreshCollStmt`,
+    /// `AlterDatabaseSetStmt`, `RenameStmt` and `AlterOwnerStmt` branches for
+    /// databases.
     ///
-    /// Variant ordering: the dedicated variants begin with distinct leading
-    /// keywords (`RENAME`, `OWNER`, `SET`, `REFRESH`), so order is for clarity
-    /// only. The `[WITH] createdb_opt_list` branch isn't exercised by the
+    /// Variant ordering: `SetTablespace` is the dedicated
+    /// `AlterDatabaseStmt: ALTER DATABASE name SET TABLESPACE name` branch and
+    /// comes before the general `SetReset`, whose `generic_set` would take
+    /// `TABLESPACE` as a `var_name`. The other variants begin with distinct
+    /// leading keywords (`RENAME`, `OWNER`, `REFRESH`), so their order is for
+    /// clarity only. The `[WITH] createdb_opt_list` branch isn't exercised by the
     /// pg-sql differential corpus (which only uses a single bare option name
     /// for ALTER DATABASE, e.g. `CONNECTION_LIMIT 123`), so we model the
     /// single-option form as `WithOpt` — taking one `CreateDbOption` directly,
@@ -156,9 +159,9 @@ recursa::ast_node! {
         /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
         #[cfg(feature = "since-pg15")]
         RefreshCollVersion(RefreshCollVersion),
-        /// gram.y `AlterDatabaseSetStmt: ALTER DATABASE name SetResetClause`,
-        /// its `VariableResetStmt` half (`RESET TABLESPACE` is `RESET var_name`).
-        Reset(crate::ast::session::set_reset::ResetStmt),
+        /// gram.y `AlterDatabaseSetStmt: ALTER DATABASE name SetResetClause`.
+        /// `RESET TABLESPACE` is its `RESET var_name` form.
+        SetReset(crate::ast::ddl::role::SetResetClause),
         /// A single `createdb_opt_item` (no leading `WITH`). Listed last so
         /// the more specific `SET …`, `REFRESH …`, `OWNER TO …`, and
         /// `RENAME TO …` branches win when they apply.

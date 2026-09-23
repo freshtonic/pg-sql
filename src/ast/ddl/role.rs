@@ -491,16 +491,19 @@ recursa::ast_node! {
 recursa::ast_node! {
     /// `SET set_rest | VariableResetStmt` — Postgres' `SetResetClause`.
     ///
-    /// Reuses the top-level [`crate::ast::session::set_reset::SetStmt`] and
-    /// [`crate::ast::session::set_reset::ResetStmt`]; both start with their own
-    /// keyword (`SET` / `RESET`), so the two variants are keyword-disjoint.
+    /// The `SET` half is the whole of `set_rest`, so every special form of a
+    /// top-level unscoped `SET` is legal here: `ALTER ROLE r SET TIME ZONE
+    /// 'UTC'` and `ALTER DATABASE d SET TRANSACTION ISOLATION LEVEL
+    /// SERIALIZABLE` are accepted. `LOCAL` and `SESSION` are not, because
+    /// `SetResetClause` names the literal `SET` itself.
+    ///
+    /// Reuses [`crate::ast::session::set_reset::SetUnscoped`] (`SET set_rest`)
+    /// and [`crate::ast::session::set_reset::ResetStmt`]
+    /// (`VariableResetStmt`); both start with their own keyword, so the two
+    /// variants are keyword-disjoint.
     #[derive(Debug)]
     pub enum SetResetClause {
-        Set(crate::ast::session::set_reset::SetStmt),
-        /// Added in 19: `SET var TO NULL` (gram.y b73d13c:1727; research
-        /// PostgreSQL 19, "Changes to existing statements").
-        #[cfg(feature = "since-pg19")]
-        SetNull(crate::ast::session::set_reset::SetNullStmt),
+        Set(crate::ast::session::set_reset::SetUnscoped),
         Reset(crate::ast::session::set_reset::ResetStmt),
     }
 }

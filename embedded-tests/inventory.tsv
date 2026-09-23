@@ -1250,3 +1250,8 @@ embedded-tests/src/tokens.tests.rs	numeric_literal_trailing_dot_after_underscore
 embedded-tests/src/tokens.tests.rs	non_decimal_and_underscore_literals_are_rejected_before_16	false	15-15
 embedded-tests/src/tokens.tests.rs	trailing_junk_is_rejected_from_15	false	15-
 embedded-tests/src/tokens.tests.rs	trailing_junk_ends_a_number_before_15	false	14-14
+embedded-tests/src/ast/session/alter_system.tests.rs	alter_system_set_generic_set	false	14-
+embedded-tests/src/ast/session/alter_system.tests.rs	alter_system_reset_generic_reset	false	14-
+embedded-tests/src/ast/session/alter_system.tests.rs	alter_system_action_shapes	false	14-
+embedded-tests/src/ast/ddl/database.tests.rs	alter_database_set_reset_clause	false	14-
+embedded-tests/src/ast/session/set_reset.tests.rs	parse_reset_transaction_isolation_level	false	14-

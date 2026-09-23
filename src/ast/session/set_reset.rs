@@ -307,23 +307,43 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Target of a RESET statement.
+    /// PostgreSQL's `generic_reset`: `var_name | ALL`.
     ///
-    /// Variant ordering: multi-token variants before single-token variants.
+    /// This is the whole `RESET` target of `ALTER SYSTEM`. A top-level
+    /// `RESET` takes the wider [`ResetTarget`] (`reset_rest`), which adds the
+    /// three special names.
+    ///
+    /// Variant ordering: `ALL` is a reserved keyword and `var_name` starts
+    /// with a `ColId`, so the two are disjoint; `ALL` is first for clarity.
+    #[derive(Debug)]
+    pub enum GenericReset {
+        #[tok(ALL)]
+        All,
+        Name(crate::ast::shared::names::QualifiedName),
+    }
+}
+
+recursa::ast_node! {
+    /// PostgreSQL's `reset_rest`: `generic_reset`, plus the three special
+    /// names that spell out a GUC (`TIME ZONE` is `timezone`, and so on).
+    ///
+    /// Variant ordering: the multi-keyword names before `Generic`, whose
+    /// `var_name` is a `ColId` and would otherwise take `SESSION`, `TIME` and
+    /// `TRANSACTION` as a bare name.
     #[derive(Debug)]
     pub enum ResetTarget {
         #[tok(SESSION, AUTHORIZATION)]
         SessionAuth,
         #[tok(TIME, ZONE)]
         TimeZone,
-        #[tok(ALL)]
-        All,
-        Ident(crate::ast::shared::names::QualifiedName),
+        #[tok(TRANSACTION, ISOLATION, LEVEL)]
+        TransactionIsolationLevel,
+        Generic(GenericReset),
     }
 }
 
 recursa::ast_node! {
-    /// RESET statement: `RESET { param | ALL | ROLE | SESSION AUTHORIZATION | TIME ZONE }`.
+    /// PostgreSQL's `VariableResetStmt`: `RESET reset_rest`.
     #[derive(Debug)]
     pub struct ResetStmt {
         #[tok(RESET, this)]

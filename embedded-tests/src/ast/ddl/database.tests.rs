@@ -43,6 +43,51 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    /// gram.y `AlterDatabaseSetStmt: ALTER DATABASE name SetResetClause`
+    /// (REL_17_11:11441). `SetResetClause` is `SET set_rest` and
+    /// `VariableResetStmt`, so every special form of an unscoped top-level
+    /// `SET` belongs here, but neither `LOCAL` nor `SESSION` does. The
+    /// dedicated `AlterDatabaseStmt: ... SET TABLESPACE name` branch still
+    /// wins over `generic_set`, whose `var_name` would take `TABLESPACE`.
+    #[test]
+    fn alter_database_set_reset_clause() {
+        check_statement_forms(
+            &[
+                "ALTER DATABASE d SET search_path = a, b",
+                "ALTER DATABASE d SET search_path TO DEFAULT",
+                "ALTER DATABASE d SET a.b = 1",
+                "ALTER DATABASE d SET TIME ZONE 'UTC'",
+                "ALTER DATABASE d SET TIME ZONE LOCAL",
+                "ALTER DATABASE d SET TIME ZONE -7",
+                "ALTER DATABASE d SET SESSION AUTHORIZATION bob",
+                "ALTER DATABASE d SET SESSION AUTHORIZATION DEFAULT",
+                "ALTER DATABASE d SET ROLE bob",
+                "ALTER DATABASE d SET XML OPTION DOCUMENT",
+                "ALTER DATABASE d SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+                "ALTER DATABASE d SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY",
+                "ALTER DATABASE d SET TRANSACTION SNAPSHOT '000'",
+                "ALTER DATABASE d SET TABLESPACE ts",
+                "ALTER DATABASE d RESET work_mem",
+                "ALTER DATABASE d RESET a.b",
+                "ALTER DATABASE d RESET ALL",
+                "ALTER DATABASE d RESET TIME ZONE",
+                "ALTER DATABASE d RESET SESSION AUTHORIZATION",
+                "ALTER DATABASE d RESET TRANSACTION ISOLATION LEVEL",
+                "ALTER DATABASE d RESET TABLESPACE",
+            ],
+            &[
+                "ALTER DATABASE d SET x",
+                "ALTER DATABASE d SET LOCAL x = 1",
+                "ALTER DATABASE d SET SESSION x = 1",
+                // `set_rest_more: CATALOG_P Sconst` exists, but its action is
+                // an unconditional `ereport(ERROR)` (REL_17_11:1723), so the
+                // raw parser rejects it.
+                "ALTER DATABASE d SET CATALOG 'x'",
+                "ALTER DATABASE d RESET",
+            ],
+        );
+    }
+
     #[test]
     fn parse_drop_database_force() {
         let lexed = crate::lex("DROP DATABASE IF EXISTS db1 WITH (FORCE)");

@@ -142,6 +142,21 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    /// gram.y `reset_rest: TRANSACTION ISOLATION LEVEL` (REL_17_11:1903), the
+    /// arm that `ResetTarget` did not have. `RESET TRANSACTION` alone stays
+    /// legal as the `generic_reset` `var_name` form.
+    #[test]
+    fn parse_reset_transaction_isolation_level() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "RESET TRANSACTION ISOLATION LEVEL",
+                "RESET TRANSACTION",
+                "RESET ALL",
+            ],
+            &["RESET TRANSACTION ISOLATION", "RESET"],
+        );
+    }
+
     #[test]
     fn parse_reset_time_zone() {
         let lexed = crate::lex("RESET TIME ZONE");
@@ -340,6 +355,9 @@ mod tests {
                 "SET LOCAL search_path TO NULL",
                 "SET SESSION s.x = NULL",
                 "ALTER ROLE r IN DATABASE d SET search_path = NULL",
+                "ALTER DATABASE d SET search_path = NULL",
+                "ALTER SYSTEM SET search_path = NULL",
+                "ALTER SYSTEM SET search_path TO NULL",
                 "ALTER FUNCTION f() SET search_path TO NULL",
                 "CREATE FUNCTION f() RETURNS int LANGUAGE sql SET search_path TO NULL RETURN 1",
             ],
@@ -363,6 +381,8 @@ mod tests {
                 "SET search_path TO NULL",
                 "SET search_path = NULL",
                 "ALTER ROLE r SET search_path TO NULL",
+                "ALTER DATABASE d SET search_path = NULL",
+                "ALTER SYSTEM SET search_path = NULL",
                 "ALTER FUNCTION f() SET search_path TO NULL",
             ],
         );

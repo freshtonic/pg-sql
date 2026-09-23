@@ -310,6 +310,13 @@ pub mod ast {
     }
     pub mod session {
         pub use pg_sql::ast::session::*;
+        pub mod alter_system {
+            pub use pg_sql::ast::session::alter_system::*;
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/embedded-tests/src/ast/session/alter_system.tests.rs"
+            ));
+        }
         pub mod discard {
             pub use pg_sql::ast::session::discard::*;
             include!(concat!(
