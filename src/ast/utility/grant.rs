@@ -497,22 +497,6 @@ recursa::ast_node! {
 // (REL_16_15 gram.y `grant_role_opt_list`, commits e3ce2de09, 3d14e171e).
 #[cfg(feature = "since-pg16")]
 recursa::ast_node! {
-    /// `{ADMIN|INHERIT|SET}` — the keyword on a role-grant `WITH` option.
-    #[derive(Debug)]
-    pub enum WithRoleOptKind {
-        #[tok(ADMIN)]
-        Admin,
-        #[tok(INHERIT)]
-        Inherit,
-        #[tok(SET)]
-        Set,
-    }
-}
-
-// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
-// (REL_16_15 gram.y `grant_role_opt_list`, commits e3ce2de09, 3d14e171e).
-#[cfg(feature = "since-pg16")]
-recursa::ast_node! {
     /// `{OPTION|TRUE|FALSE}` — the value of a role-grant `WITH` option.
     #[derive(Debug)]
     pub enum WithRoleOptValue {
@@ -529,10 +513,14 @@ recursa::ast_node! {
 // (REL_16_15 gram.y `grant_role_opt_list`, commits e3ce2de09, 3d14e171e).
 #[cfg(feature = "since-pg16")]
 recursa::ast_node! {
-    /// `kind value` pair — Postgres' `grant_role_opt`.
+    /// `name value` pair — gram.y `grant_role_opt: ColLabel
+    /// grant_role_opt_value` (REL_17_11 7970). The grammar takes any
+    /// `ColLabel`; only `user.c` rejects a name other than `ADMIN`, `INHERIT`
+    /// or `SET`, and parse analysis is not part of version parity
+    /// (principle 9).
     #[derive(Debug)]
     pub struct WithRoleOpt {
-        pub kind: WithRoleOptKind,
+        pub name: crate::tokens::ColLabel,
         pub value: WithRoleOptValue,
     }
 }
