@@ -8,7 +8,9 @@
 //!
 //! The `ErrorSaveContext` path exists from PostgreSQL 16. Before 16 the same
 //! function reaches the `FCONST` fallback through `strtoint` and `errno`, so
-//! every case below is accepted by every target version.
+//! the token is an `FCONST` at every target version. Only the grammar rules
+//! that take the token differ between versions, and a test that depends on
+//! such a rule carries the version gate of that rule.
 
 use pg_oracle::parse_ok;
 
