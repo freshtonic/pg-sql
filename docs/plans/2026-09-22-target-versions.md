@@ -74,6 +74,14 @@ lexer of one target version. The version features `pg14`, `pg15`, `pg16`,
   PostgreSQL 17 does.
 - Version gates on psql meta-commands that pg-psql does not parse.
 
+## Status, 2026-09-23
+
+Increments 1 to 9 are merged. A build of each of the six target versions passes
+`scripts/gate-versions`, and each version baseline has no expected version gap.
+Increment 10 (#79) is open. The version work also found parity defects that are
+older than it: #80 (the oracle makes a hard error from a soft error) and #81 to
+#87 (over-rejection and over-acceptance in every version).
+
 ## Increments
 
 Each increment is one branch and one GitHub issue. The gate must be green before
