@@ -307,8 +307,10 @@ fn pg_psql_facts(source: &str, variables: &Variables) -> Option<Facts> {
         sql: rendered.sql().to_owned(),
         interpolations,
         submissions,
-        // pg-psql refuses an unterminated region rather than reading past it
-        // (ADR 0007), so a document it parses is always complete.
+        // pg-psql has no notion of an incomplete query buffer: it has no
+        // open lexical region, so a document it parses at all is complete.
+        // Where psql is still inside a string, a comment or a dollar-quoted
+        // body, that is the `open-lexical-region` gap.
         complete: true,
     })
 }

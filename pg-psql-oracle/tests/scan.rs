@@ -203,3 +203,55 @@ fn a_literal_value_is_quoted_as_pqescapeliteral_does() {
         "SELECT \"a\"\"b\""
     );
 }
+
+#[test]
+fn the_send_commands_of_this_release_are_classified() {
+    use pg_psql_oracle::{Command, classify};
+    // `exec_command_*` returns `PSQL_CMD_SEND` for each of these in every
+    // target version (`REL_17_11:command.c` 761, 1474, 1570, 1624, 1651).
+    for name in ["g", "gx", "gset", "gdesc", "gexec", "crosstabview"] {
+        assert_eq!(classify(name), Command::Send, "\\{name}");
+    }
+    // A name psqlscanslash.l reads whole is not a send command with a
+    // suffix.
+    for name in ["gsetfoo", "gexecx", "getenv", "set", "d", "", "."] {
+        assert_eq!(classify(name), Command::Other, "\\{name}");
+    }
+    // `\watch` and `\r` end the query buffer without `PSQL_CMD_SEND`, so the
+    // table does not cover them (docs/psql-oracle.md).
+    assert_eq!(classify("watch"), Command::Other);
+    assert_eq!(classify("r"), Command::Other);
+}
+
+// Added in 18: nine commands end the query buffer, and two of them send its
+// text (docs/research/psql-14-19-syntax-changes.md, class (A) item A1).
+#[cfg(feature = "since-pg18")]
+#[test]
+fn the_18_pipeline_commands_are_classified() {
+    use pg_psql_oracle::{Command, classify};
+    for name in ["parse", "sendpipeline"] {
+        assert_eq!(classify(name), Command::Send, "\\{name}");
+    }
+    for name in [
+        "close_prepared",
+        "endpipeline",
+        "flush",
+        "flushrequest",
+        "getresults",
+        "startpipeline",
+        "syncpipeline",
+    ] {
+        assert_eq!(classify(name), Command::Discard, "\\{name}");
+    }
+}
+
+// Before 18 the pipeline commands do not exist, so psql reads each one as an
+// unknown command.
+#[cfg(not(feature = "since-pg18"))]
+#[test]
+fn the_18_pipeline_commands_are_unknown_before_18() {
+    use pg_psql_oracle::{Command, classify};
+    for name in ["parse", "sendpipeline", "startpipeline", "close_prepared"] {
+        assert_eq!(classify(name), Command::Other, "\\{name}");
+    }
+}
