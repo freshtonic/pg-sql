@@ -2896,11 +2896,31 @@ recursa::ast_node! {
     /// prefix. They therefore share this node, and the presence of the key/value
     /// separator is what tells the two forms apart.
     ///
-    /// PostgreSQL's `func_arg_list` also admits the `name => value` spelling.
-    /// That form is not modelled here: no `json_object` call uses it, and a
-    /// named argument is not a legal SQL/JSON entry key.
+    /// Variant ordering: `Named` first. Its `type_function_name` and arrow
+    /// are the `func_arg_expr` named spelling, which `Value`'s key would
+    /// otherwise start to read as a column reference.
     #[derive(Debug)]
-    pub struct JsonObjectEntry {
+    pub enum JsonObjectEntry {
+        /// `name => value` or `name := value` — gram.y `func_arg_expr`'s two
+        /// named-argument arms, reachable only through the legacy
+        /// `JSON_OBJECT '(' func_arg_list ')'` production (REL_17_11 gram.y
+        /// 15941, `func_arg_expr` 16549). A named argument carries no
+        /// key/value separator, so it is its own variant.
+        Named(NamedFuncArg),
+        Value(JsonObjectEntryKeyValue),
+    }
+}
+
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
+recursa::ast_node! {
+    /// A `JSON_OBJECT` item that leads with an expression: a SQL/JSON
+    /// `‹key› {: | VALUE} ‹value›` entry, or one positional argument of the
+    /// legacy `json_object(...)` function form.
+    #[derive(Debug)]
+    pub struct JsonObjectEntryKeyValue {
         pub key: boxed!(Expr),
         pub value: Option<JsonObjectEntryValue>,
     }

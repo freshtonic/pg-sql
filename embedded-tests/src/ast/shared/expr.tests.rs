@@ -8,7 +8,7 @@ mod tests {
     };
     // Added in 16: research, PostgreSQL 16, "Queries and expressions".
     #[cfg(feature = "since-pg16")]
-    use crate::ast::shared::expr::JsonObject;
+    use crate::ast::shared::expr::{JsonObject, JsonObjectEntry};
     use crate::ast::dml::values::{SelectClause, Subquery};
 
     /// Parse `src` as an `Expr` through the logos lex pass.
@@ -3641,7 +3641,10 @@ mod tests {
         let JsonObject::Entries(args) = object.as_ref() else {
             panic!("expected the entry form");
         };
-        assert!(args.entries.first().value.is_some(), "expected a key/value entry");
+        let JsonObjectEntry::Value(entry) = args.entries.first() else {
+            panic!("expected an expression-led entry");
+        };
+        assert!(entry.value.is_some(), "expected a key/value entry");
         // The typed literal keeps its keyword-named spelling, which is
         // gram.y's `ConstTypename Sconst` and takes a string, never a colon.
         assert!(matches!(
@@ -4498,6 +4501,39 @@ mod tests {
             "SELECT XMLSERIALIZE(DOCUMENT x AS text)",
             "SELECT xmlserialize(content x AS text) indent",
         ]);
+    }
+
+    // From 16, `json_object(...)` has the legacy arm
+    // `JSON_OBJECT '(' func_arg_list ')'` (REL_16_15 gram.y 15569, REL_17_11
+    // 15941), and `func_arg_expr` admits `name => value` and `name := value`
+    // (REL_17_11 16549). `VARIADIC` belongs to `func_application`, not to
+    // `func_arg_list`, so it stays rejected.
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn json_object_takes_a_named_legacy_argument() {
+        let parsed = parse_expr_classified("json_object(a => 1)");
+        let Expr::JsonObject(object) = parsed.ast() else {
+            panic!("expected the SQL/JSON constructor node");
+        };
+        let JsonObject::Entries(args) = object.as_ref() else {
+            panic!("expected the entry form");
+        };
+        assert!(
+            matches!(args.entries.first(), JsonObjectEntry::Named(_)),
+            "expected a named argument",
+        );
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT json_object(a => 1)",
+                "SELECT json_object(a := 1)",
+                "SELECT json_object('{a,b}', b => '{1,2}')",
+                "SELECT json_object(a => 1, b => 2)",
+            ],
+            &[
+                "SELECT json_object(VARIADIC a)",
+                "SELECT json_object(a => 1: 2)",
+            ],
+        );
     }
 
     // Before 16, `json_object`, `json_array`, `json_objectagg` and
