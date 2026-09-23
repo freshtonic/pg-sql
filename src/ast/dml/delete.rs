@@ -18,23 +18,34 @@ recursa::ast_node! {
     /// with `BareColLabel`: a reserved keyword such as `USING` or `NULL` can
     /// never open the alias, which is what keeps `USING ...` a using-clause.
     ///
+    /// `SET` is a `ColId`, yet the bare form never takes it: gram.y gives the
+    /// first `relation_expr_opt_alias` rule the `UMINUS` precedence, which is
+    /// above `SET`'s, so the parser reduces the empty alias instead of
+    /// shifting the keyword ("Given `UPDATE foo set set ...`, we have to
+    /// decide without looking any further ahead", REL_17_11 gram.y 13801-13810
+    /// and `%nonassoc IDENT … SET …` 886-887). The state is the one the three
+    /// statements share, so `DELETE FROM t set` is a syntax error as much as
+    /// `UPDATE t set SET a = 1` is. `AS set` keeps working.
+    ///
     /// Variant ordering: WithAs (`AS ident`) has a longer first_pattern than
     /// Bare (`ident`), so longest-match-wins picks it when AS is present.
     #[derive(Debug)]
     pub enum DeleteTableAlias {
         WithAs(DeleteAsAlias),
-        Bare(crate::tokens::ColId),
+        Bare(crate::tokens::literal::RelationAliasName),
     }
 }
 
 impl<'input> DeleteTableAlias<'input> {
     /// Returns the alias name regardless of variant.
     pub fn name(&self) -> &str {
-        let (DeleteTableAlias::WithAs(DeleteAsAlias {
-            name: crate::tokens::ColId::Text(text),
-        })
-        | DeleteTableAlias::Bare(crate::tokens::ColId::Text(text))) = self;
-        text.text()
+        match self {
+            DeleteTableAlias::WithAs(alias) => {
+                let crate::tokens::ColId::Text(text) = &alias.name;
+                text.text()
+            }
+            DeleteTableAlias::Bare(name) => name.text(),
+        }
     }
 }
 

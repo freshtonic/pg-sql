@@ -268,44 +268,6 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A single `ConstraintAttributeElem` — one of `NOT DEFERRABLE |
-    /// DEFERRABLE | INITIALLY IMMEDIATE | INITIALLY DEFERRED | NOT VALID |
-    /// NO INHERIT`, and from 18 `NOT ENFORCED | ENFORCED`.
-    ///
-    /// A CONSTRAINT TRIGGER uses [`ConstraintTriggerAttr`] instead, because
-    /// the raw parser rejects some of these attributes there.
-    ///
-    /// Variant ordering: longer/multi-keyword forms first
-    /// (`NOT DEFERRABLE`/`NOT VALID`/`INITIALLY …`/`NO INHERIT`).
-    #[derive(Debug)]
-    pub enum ConstraintAttributeElem {
-        #[tok(NOT, DEFERRABLE)]
-        NotDeferrable,
-        #[tok(NOT, VALID)]
-        NotValid,
-        #[tok(NO, INHERIT)]
-        NoInherit,
-        #[tok(INITIALLY, IMMEDIATE)]
-        InitiallyImmediate,
-        #[tok(INITIALLY, DEFERRED)]
-        InitiallyDeferred,
-        #[tok(DEFERRABLE)]
-        Deferrable,
-        /// Added in 18: gram.y `ConstraintAttributeElem: NOT ENFORCED |
-        /// ENFORCED` (docs/research/postgres-14-19-sql-syntax-changes.md,
-        /// PostgreSQL 18, items 4 and 5; REL_18_6 gram.y
-        /// `ConstraintAttributeElem`).
-        #[cfg(feature = "since-pg18")]
-        #[tok(NOT, ENFORCED)]
-        NotEnforced,
-        /// Added in 18: see [`Self::NotEnforced`].
-        #[cfg(feature = "since-pg18")]
-        #[tok(ENFORCED)]
-        Enforced,
-    }
-}
-
-recursa::ast_node! {
     /// One attribute of a CONSTRAINT TRIGGER: the part of gram.y
     /// `ConstraintAttributeSpec` that the raw parser accepts in the
     /// constraint arm of `CreateTrigStmt`.
@@ -343,19 +305,19 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `CREATE [OR REPLACE] CONSTRAINT TRIGGER name AFTER events ON table
+    /// `CREATE CONSTRAINT TRIGGER name AFTER events ON table
     /// [FROM ref_table] ConstraintAttributeSpec FOR EACH ROW [WHEN (expr)]
     /// EXECUTE {FUNCTION|PROCEDURE} func_name(args)` — Postgres'
     /// `CreateTrigStmt` (constraint form).
     ///
-    /// PG rejects `OR REPLACE` semantically here, but gram.y accepts it; we
-    /// mirror the grammar.
+    /// The rule reads `CREATE opt_or_replace CONSTRAINT TRIGGER`, but its
+    /// action stops on `OR REPLACE` ("CREATE OR REPLACE CONSTRAINT TRIGGER is
+    /// not supported"), so the raw parser rejects the form in every target
+    /// version (REL_14_24 gram.y `CreateTrigStmt`; b73d13c gram.y 6096). Only
+    /// the plain-trigger arm, [`CreateTriggerStmt`], keeps `OR REPLACE`.
     #[derive(Debug)]
     pub struct CreateConstraintTriggerStmt {
-        #[tok(CREATE, this, CONSTRAINT, TRIGGER)]
-        #[presence(OR, REPLACE)]
-        pub or_replace: bool,
-        #[tok(this, AFTER)]
+        #[tok(CREATE, CONSTRAINT, TRIGGER, this, AFTER)]
         pub name: crate::tokens::ColId,
         pub events: TriggerEventList,
         #[tok(ON, this)]

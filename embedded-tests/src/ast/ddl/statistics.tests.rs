@@ -36,8 +36,8 @@ mod tests {
         // The name is a required field before 16.
         #[cfg(feature = "since-pg16")]
         assert!(stmt.name.is_some());
-        assert!(stmt.on.is_some());
-        assert!(stmt.from.is_some());
+        assert_eq!(stmt.on.params.len(), 2);
+        assert_eq!(stmt.from.tables.len(), 1);
         assert!(input.is_eof());
     }
 
@@ -60,7 +60,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = CreateStatisticsStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert!(stmt.on.is_some());
+        assert_eq!(stmt.on.params.len(), 2);
         assert!(input.is_eof());
     }
 
@@ -111,5 +111,23 @@ mod tests {
             "CREATE STATISTICS s ON a, b FROM t",
             "CREATE STATISTICS IF NOT EXISTS s (ndistinct) ON a, b FROM t",
         ]);
+    }
+
+    // Every arm of gram.y `CreateStatsStmt` ends with `ON stats_params FROM
+    // from_list`, so a statement that stops earlier is a raw-parser error in
+    // every target version (REL_14_24 gram.y `CreateStatsStmt`; b73d13c gram.y
+    // `CreateStatsStmt`).
+    #[test]
+    fn create_statistics_needs_on_and_from() {
+        crate::ast::test_support::check_statement_forms(
+            &["CREATE STATISTICS s ON a FROM t"],
+            &[
+                "CREATE STATISTICS s",
+                "CREATE STATISTICS s ON a",
+                "CREATE STATISTICS s FROM t",
+                "CREATE STATISTICS s (ndistinct) FROM t",
+                "CREATE STATISTICS IF NOT EXISTS s",
+            ],
+        );
     }
 }

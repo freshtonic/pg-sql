@@ -319,16 +319,6 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// gram.y `relation_expr_opt_alias`, the target of `MERGE INTO`: a
-    /// `relation_expr` with an optional alias.
-    #[derive(Debug)]
-    pub struct PlainTable {
-        pub relation: crate::ast::shared::names::RelationExpr,
-        pub alias: Option<PlainTableAlias>,
-    }
-}
-
-recursa::ast_node! {
     /// Alias of a plain table reference in FROM: `[AS] name [(col, col, ...)]`.
     ///
     /// Unlike `TableAlias` (which is used for subqueries, function tables, etc.,

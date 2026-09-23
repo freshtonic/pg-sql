@@ -1050,7 +1050,10 @@ mod tests {
             let ColumnConstraintKind::Generated(generated) = &column.constraints[0].kind else {
                 panic!("{src:?} holds a generated column");
             };
-            let GeneratedBody::Virtual(tail) = &generated.body else {
+            let GeneratedConstraint::Always(always) = generated else {
+                panic!("{src:?} is a GENERATED ALWAYS column");
+            };
+            let GeneratedBody::Virtual(tail) = &always.body else {
                 panic!("{src:?} is a virtual generated column");
             };
             assert_eq!(tail.virtual_keyword, spelled, "{src:?}");
@@ -1263,5 +1266,143 @@ mod tests {
             "ALTER TABLE t ALTER a SET STORAGE \"default\"",
             "CREATE TABLE t (LIKE u INCLUDING STORAGE)",
         ]);
+    }
+
+    // `processCASbits` rejects each `ConstraintAttributeSpec` entry whose
+    // output pointer the constraint's action does not pass. `CHECK` gets
+    // `not_valid` and `no_inherit` but no deferrability; `UNIQUE`, `PRIMARY
+    // KEY` and `EXCLUDE` get deferrability only; `FOREIGN KEY` also gets
+    // `not_valid`. `NOT DEFERRABLE` and `INITIALLY IMMEDIATE` set no bit that
+    // is ever checked, so they are accepted everywhere (REL_17_11 gram.y
+    // 4129-4250 and `processCASbits` 19216-19278).
+    #[test]
+    fn constraint_attributes_match_the_constraint_kind() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int, CHECK (a > 0) NOT DEFERRABLE)",
+                "CREATE TABLE t (a int, CHECK (a > 0) INITIALLY IMMEDIATE)",
+                "CREATE TABLE t (a int, CHECK (a > 0) NOT VALID)",
+                "CREATE TABLE t (a int, CHECK (a > 0) NO INHERIT)",
+                "CREATE TABLE t (a int, UNIQUE (a) DEFERRABLE INITIALLY DEFERRED)",
+                "CREATE TABLE t (a int, PRIMARY KEY (a) DEFERRABLE)",
+                "CREATE TABLE t (a int, EXCLUDE (a WITH =) INITIALLY DEFERRED)",
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u NOT VALID)",
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u DEFERRABLE)",
+                "ALTER TABLE t ALTER CONSTRAINT c DEFERRABLE INITIALLY DEFERRED",
+            ],
+            &[
+                "CREATE TABLE t (a int, CHECK (a > 0) DEFERRABLE)",
+                "CREATE TABLE t (a int, CHECK (a > 0) INITIALLY DEFERRED)",
+                "CREATE TABLE t (a int, UNIQUE (a) NOT VALID)",
+                "CREATE TABLE t (a int, UNIQUE (a) NO INHERIT)",
+                "CREATE TABLE t (a int, PRIMARY KEY (a) NOT VALID)",
+                "CREATE TABLE t (a int, PRIMARY KEY (a) NO INHERIT)",
+                "CREATE TABLE t (a int, EXCLUDE (a WITH =) NOT VALID)",
+                "CREATE TABLE t (a int, EXCLUDE (a WITH =) NO INHERIT)",
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u NO INHERIT)",
+                "ALTER TABLE t ADD UNIQUE USING INDEX i NOT VALID",
+                "ALTER TABLE t ADD PRIMARY KEY USING INDEX i NO INHERIT",
+                "ALTER TABLE t ALTER CONSTRAINT c NOT VALID",
+            ],
+        );
+    }
+
+    // Added in 18: `ALTER CONSTRAINT name` passes a `no_inherit` pointer
+    // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+    // item 5; REL_18_6 gram.y `alter_table_cmd` 2682-2683). Before 18 it
+    // passes none, so `processCASbits` rejects `NO INHERIT`.
+    #[cfg(not(feature = "since-pg18"))]
+    #[test]
+    fn alter_constraint_rejects_no_inherit_before_18() {
+        crate::ast::test_support::check_statement_forms(
+            &[],
+            &["ALTER TABLE t ALTER CONSTRAINT c NO INHERIT"],
+        );
+    }
+
+    // Added in 18: only the `CHECK` and `FOREIGN KEY` arms, and `ALTER
+    // CONSTRAINT`, pass an `is_enforced` pointer, so `processCASbits` rejects
+    // `[NOT] ENFORCED` on every other kind
+    // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+    // item 4; REL_18_6 gram.y 4211, 4244, 4278, 4314, 4343, 2677).
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn enforced_reaches_only_the_kinds_that_take_it_from_18() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int, CHECK (a > 0) NOT ENFORCED)",
+                "CREATE TABLE t (a int, CHECK (a > 0) ENFORCED)",
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u NOT ENFORCED)",
+                "ALTER TABLE t ALTER CONSTRAINT c NOT ENFORCED",
+                "ALTER TABLE t ALTER CONSTRAINT c NO INHERIT",
+            ],
+            &[
+                "CREATE TABLE t (a int, UNIQUE (a) ENFORCED)",
+                "CREATE TABLE t (a int, PRIMARY KEY (a) NOT ENFORCED)",
+                "CREATE TABLE t (a int, EXCLUDE (a WITH =) ENFORCED)",
+                "CREATE TABLE t (a int, NOT NULL a ENFORCED)",
+                "ALTER TABLE t ADD UNIQUE USING INDEX i NOT ENFORCED",
+            ],
+        );
+    }
+
+    // Added in 18: the table-level `NOT NULL` arm passes `not_valid` and
+    // `no_inherit` only (docs/research/postgres-14-19-sql-syntax-changes.md,
+    // PostgreSQL 18, item 6; REL_18_6 gram.y 4224-4226).
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn table_not_null_takes_only_its_own_attributes() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int, NOT NULL a NOT VALID)",
+                "CREATE TABLE t (a int, NOT NULL a NO INHERIT)",
+                "CREATE TABLE t (a int, NOT NULL a NOT DEFERRABLE)",
+                "CREATE TABLE t (a int, NOT NULL a INITIALLY IMMEDIATE)",
+            ],
+            &[
+                "CREATE TABLE t (a int, NOT NULL a DEFERRABLE)",
+                "CREATE TABLE t (a int, NOT NULL a INITIALLY DEFERRED)",
+                "CREATE TABLE t (a int, NOT NULL a NOT ENFORCED)",
+            ],
+        );
+    }
+
+    // The generated-column arm of `ColConstraintElem` stops on any
+    // `generated_when` other than `ALWAYS` ("for a generated column,
+    // GENERATED ALWAYS must be specified"), so only the identity arm takes
+    // `BY DEFAULT` (REL_14_24 gram.y `ColConstraintElem`; b73d13c gram.y
+    // `ColConstraintElem`).
+    #[test]
+    fn generated_expression_takes_only_always() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int GENERATED ALWAYS AS (1) STORED)",
+                "CREATE TABLE t (a int GENERATED ALWAYS AS IDENTITY)",
+                "CREATE TABLE t (a int GENERATED BY DEFAULT AS IDENTITY)",
+                "CREATE TABLE t (a int GENERATED BY DEFAULT AS IDENTITY (START WITH 4))",
+                "ALTER TABLE t ALTER COLUMN a ADD GENERATED BY DEFAULT AS IDENTITY",
+            ],
+            &[
+                "CREATE TABLE t (a int GENERATED BY DEFAULT AS (1) STORED)",
+                "CREATE TABLE t (a int GENERATED BY DEFAULT AS (1) VIRTUAL)",
+                "CREATE TABLE t (a int GENERATED BY DEFAULT AS (1))",
+                "ALTER TABLE t ADD COLUMN a int GENERATED BY DEFAULT AS (1) STORED",
+            ],
+        );
+    }
+
+    // gram.y `ColConstraintElem` gives the column-level `UNIQUE` and `PRIMARY
+    // KEY` an `opt_definition` before `OptConsTableSpace` (REL_17_11 gram.y
+    // 3901-3960).
+    #[test]
+    fn column_unique_and_primary_key_take_storage_parameters() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int UNIQUE WITH (fillfactor = 10))",
+                "CREATE TABLE t (a int UNIQUE WITH (fillfactor = 10) USING INDEX TABLESPACE ts)",
+                "CREATE TABLE t (a int PRIMARY KEY WITH (fillfactor = 10))",
+            ],
+            &["CREATE TABLE t (a int UNIQUE USING INDEX TABLESPACE ts WITH (fillfactor = 10))"],
+        );
     }
 }

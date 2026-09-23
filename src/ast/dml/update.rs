@@ -83,13 +83,11 @@ recursa::ast_node! {
         /// item 12; REL_18_6 gram.y `returning_clause`).
         #[cfg(feature = "since-pg18")]
         pub with: Option<ReturningWithClause>,
-        #[cfg(not(feature = "since-pg18"))]
-        #[sep(COMMA)]
-        pub items: zero_or_many!(crate::ast::dml::select::SelectItem),
-        /// From 18 the list is gram.y `target_list`, which is not empty: an
-        /// empty list would let `RETURNING WITH (OLD AS o)` parse, which
-        /// REL_18_6 gram.y `returning_clause` rejects.
-        #[cfg(feature = "since-pg18")]
+        /// The list is gram.y `target_list`, which is not empty: a bare
+        /// `RETURNING` is a raw-parser error in every target version, and from
+        /// 18 an empty list would also let `RETURNING WITH (OLD AS o)` parse
+        /// (REL_14_24 gram.y `returning_clause`; REL_18_6 gram.y
+        /// `returning_clause`).
         #[sep(COMMA)]
         pub items: one_or_many!(crate::ast::dml::select::SelectItem),
     }
@@ -162,11 +160,13 @@ recursa::ast_node! {
     ///
     /// PostgreSQL admits `SET` as a `ColId`, but gives it precedence as the UPDATE
     /// clause keyword in this position. The bare-alias admission excludes exactly
-    /// that keyword; the explicit `AS` form continues to accept it.
+    /// that keyword; the explicit `AS` form continues to accept it. DELETE and
+    /// MERGE share the same `relation_expr_opt_alias` state, so they share the
+    /// admission set.
     #[derive(Debug)]
     pub enum UpdateTableAlias {
         WithAs(UpdateTableAliasWithAs),
-        Bare(literal::UpdateAliasName),
+        Bare(literal::RelationAliasName),
     }
 }
 

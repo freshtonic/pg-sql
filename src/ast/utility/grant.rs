@@ -660,67 +660,90 @@ recursa::ast_node! {
     }
 }
 
+// Changed in 16: research, PostgreSQL 16, "Changes to existing statements"
+// (REL_16_15 gram.y `RevokeRoleStmt: REVOKE ColId OPTION FOR …`, commit
+// e3ce2de09). REL_15_19 gram.y has only `REVOKE ADMIN OPTION FOR`.
+#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
-    /// `ADMIN OPTION FOR` — the role-revoke counterpart that strips just the
-    /// ADMIN option from an existing role grant.
+    /// `ColId OPTION FOR` — the role-revoke prefix that strips one option of
+    /// an existing role grant. gram.y takes any `ColId` here and the catalog
+    /// rejects a name other than `ADMIN`, `INHERIT` or `SET`.
     #[derive(Debug)]
-    pub enum RevokeAdminOptionFor {
+    pub struct RevokeRoleOptionFor {
+        #[tok(this, OPTION, FOR)]
+        pub name: crate::tokens::ColId,
+    }
+}
+
+// Removed in 16: see `RevokeRoleOptionFor`.
+#[cfg(not(feature = "since-pg16"))]
+recursa::ast_node! {
+    /// `ADMIN OPTION FOR` — the only role-revoke option prefix before 16.
+    #[derive(Debug)]
+    pub enum RevokeRoleOptionFor {
         #[tok(ADMIN, OPTION, FOR)]
         Value,
     }
 }
 
-// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
-// (REL_16_15 gram.y `REVOKE ColId OPTION FOR`, commit e3ce2de09). REL_15_19
-// gram.y has only `REVOKE ADMIN OPTION FOR`.
-#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
-    /// `INHERIT OPTION FOR` — strips just INHERIT.
+    /// `REVOKE GRANT OPTION FOR privileges ON target FROM …` — gram.y
+    /// `RevokeStmt`'s second arm. `GRANT` is a reserved keyword, so the role
+    /// arm's `ColId` never spells it, and the prefix reaches only the
+    /// privilege body.
     #[derive(Debug)]
-    pub enum RevokeInheritOptionFor {
-        #[tok(INHERIT, OPTION, FOR)]
-        Value,
-    }
-}
-
-// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
-// (REL_16_15 gram.y `REVOKE ColId OPTION FOR`, commit e3ce2de09). REL_15_19
-// gram.y has only `REVOKE ADMIN OPTION FOR`.
-#[cfg(feature = "since-pg16")]
-recursa::ast_node! {
-    /// `SET OPTION FOR` — strips just SET.
-    #[derive(Debug)]
-    pub enum RevokeSetOptionFor {
-        #[tok(SET, OPTION, FOR)]
-        Value,
+    pub struct RevokeGrantOptionForm {
+        #[tok(GRANT, OPTION, FOR, this)]
+        pub privileges: Privileges,
+        pub body: RevokePrivilegeBody,
     }
 }
 
 recursa::ast_node! {
-    /// Optional `… OPTION FOR` prefix on `REVOKE`. PG distinguishes `GRANT OPTION
-    /// FOR` (privilege form) from `{ADMIN|INHERIT|SET} OPTION FOR` (role form);
-    /// the body following the privileges decides which it actually is.
+    /// `REVOKE ColId OPTION FOR roles FROM …` — gram.y `RevokeRoleStmt`'s
+    /// second arm. It has no `ON target`, so the prefix reaches only the role
+    /// body.
     #[derive(Debug)]
-    pub enum RevokeOptionFor {
-        GrantOption(RevokeGrantOptionFor),
-        AdminOption(RevokeAdminOptionFor),
-        // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
-        InheritOption(RevokeInheritOptionFor),
-        // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
-        SetOption(RevokeSetOptionFor),
+    pub struct RevokeRoleOptionForm {
+        pub option_for: RevokeRoleOptionFor,
+        pub privileges: Privileges,
+        pub body: RevokeRoleBody,
     }
 }
 
 recursa::ast_node! {
-    /// `REVOKE [… OPTION FOR] privileges (ON target FROM …) | (FROM roles …)`.
+    /// `REVOKE privileges (ON target FROM …) | (FROM roles …)` — the first arm
+    /// of gram.y `RevokeStmt` and of `RevokeRoleStmt`.
+    #[derive(Debug)]
+    pub struct RevokePlainForm {
+        pub privileges: Privileges,
+        pub body: RevokeBody,
+    }
+}
+
+recursa::ast_node! {
+    /// The three `REVOKE` forms. gram.y pairs each `OPTION FOR` prefix with
+    /// one body: `GRANT OPTION FOR` belongs to `RevokeStmt`, which needs `ON
+    /// target`, and `ColId OPTION FOR` belongs to `RevokeRoleStmt`, which has
+    /// no `ON` (REL_17_11 gram.y `RevokeStmt` 7556, `RevokeRoleStmt` 7935).
+    ///
+    /// Variant ordering: the two prefixed forms first; `Plain` is the
+    /// catch-all, and its privileges can begin with the same `ColId`.
+    #[derive(Debug)]
+    pub enum RevokeForm {
+        GrantOption(RevokeGrantOptionForm),
+        RoleOption(RevokeRoleOptionForm),
+        Plain(RevokePlainForm),
+    }
+}
+
+recursa::ast_node! {
+    /// `REVOKE …` — Postgres' `RevokeStmt` and `RevokeRoleStmt` unified on the
+    /// `REVOKE` keyword they share.
     #[derive(Debug)]
     #[tok(REVOKE, this)]
     pub struct RevokeStmt {
-        pub option_for: Option<RevokeOptionFor>,
-        pub privileges: Privileges,
-        pub body: RevokeBody,
+        pub form: RevokeForm,
     }
 }
 

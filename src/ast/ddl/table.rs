@@ -40,16 +40,20 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// PRIMARY KEY column constraint.
+    /// PRIMARY KEY column constraint — gram.y `ColConstraintElem: PRIMARY KEY
+    /// opt_definition OptConsTableSpace`.
     #[derive(Debug)]
     #[tok(PRIMARY, KEY, this)]
     pub struct PrimaryKeyConstraint {
+        /// `WITH (storage_param = value, ...)` — gram.y `opt_definition`.
+        pub with_storage: Option<crate::ast::ddl::index::WithStorage>,
         pub index_tablespace: Option<UsingIndexTablespace>,
     }
 }
 
 recursa::ast_node! {
-    /// UNIQUE column constraint.
+    /// UNIQUE column constraint — gram.y `ColConstraintElem: UNIQUE
+    /// opt_unique_null_treatment opt_definition OptConsTableSpace`.
     #[derive(Debug)]
     #[tok(UNIQUE, this)]
     pub struct UniqueConstraint {
@@ -57,6 +61,8 @@ recursa::ast_node! {
         /// (REL_15_19 gram.y `opt_unique_null_treatment`).
         #[cfg(feature = "since-pg15")]
         pub nulls: Option<NullsDistinctQualifier>,
+        /// `WITH (storage_param = value, ...)` — gram.y `opt_definition`.
+        pub with_storage: Option<crate::ast::ddl::index::WithStorage>,
         pub index_tablespace: Option<UsingIndexTablespace>,
     }
 }
@@ -197,6 +203,152 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// The `ConstraintAttributeSpec` entries that gram.y accepts on a
+    /// `UNIQUE`, `PRIMARY KEY` or `EXCLUDE` table constraint. `processCASbits`
+    /// gets `deferrable` and `initdeferred` pointers and nothing else, so
+    /// `NOT VALID`, `NO INHERIT` and (from 18) `[NOT] ENFORCED` are
+    /// raw-parser errors (REL_17_11 gram.y 4157, 4173, 4190, 4206, 4226;
+    /// REL_18_6 gram.y 4244, 4260, 4278, 4294, 4314).
+    ///
+    /// Variant ordering: multi-keyword forms first.
+    #[derive(Debug)]
+    pub enum IndexConstraintAttr {
+        #[tok(NOT, DEFERRABLE)]
+        NotDeferrable,
+        #[tok(INITIALLY, IMMEDIATE)]
+        InitiallyImmediate,
+        #[tok(INITIALLY, DEFERRED)]
+        InitiallyDeferred,
+        #[tok(DEFERRABLE)]
+        Deferrable,
+    }
+}
+
+recursa::ast_node! {
+    /// The `ConstraintAttributeSpec` entries that gram.y accepts on a
+    /// table-level `CHECK`. `processCASbits` gets no `deferrable` and no
+    /// `initdeferred` pointer, so `DEFERRABLE` and `INITIALLY DEFERRED` are
+    /// raw-parser errors; `NOT VALID` and `NO INHERIT` are passed, and from 18
+    /// `is_enforced` as well (REL_17_11 gram.y 4138-4140; REL_18_6 gram.y
+    /// 4211-4213).
+    ///
+    /// Variant ordering: multi-keyword forms first.
+    #[derive(Debug)]
+    pub enum TableCheckAttr {
+        #[tok(NOT, DEFERRABLE)]
+        NotDeferrable,
+        #[tok(NOT, VALID)]
+        NotValid,
+        #[tok(NO, INHERIT)]
+        NoInherit,
+        #[tok(INITIALLY, IMMEDIATE)]
+        InitiallyImmediate,
+        /// Added in 18: gram.y `ConstraintAttributeElem: NOT ENFORCED |
+        /// ENFORCED`, which `ConstraintElem`'s CHECK arm passes an
+        /// `is_enforced` pointer for (docs/research/postgres-14-19-sql-syntax-changes.md,
+        /// PostgreSQL 18, item 4; REL_18_6 gram.y 4211-4213).
+        #[cfg(feature = "since-pg18")]
+        #[tok(NOT, ENFORCED)]
+        NotEnforced,
+        /// Added in 18: see [`Self::NotEnforced`].
+        #[cfg(feature = "since-pg18")]
+        #[tok(ENFORCED)]
+        Enforced,
+    }
+}
+
+recursa::ast_node! {
+    /// The `ConstraintAttributeSpec` entries that gram.y accepts on a
+    /// `FOREIGN KEY` table constraint: the deferrability entries, `NOT VALID`,
+    /// and from 18 `[NOT] ENFORCED`. `no_inherit` is the one pointer that
+    /// `processCASbits` does not get (REL_17_11 gram.y 4245-4248; REL_18_6
+    /// gram.y 4343-4346).
+    ///
+    /// Variant ordering: multi-keyword forms first.
+    #[derive(Debug)]
+    pub enum ForeignKeyConstraintAttr {
+        #[tok(NOT, DEFERRABLE)]
+        NotDeferrable,
+        #[tok(NOT, VALID)]
+        NotValid,
+        #[tok(INITIALLY, IMMEDIATE)]
+        InitiallyImmediate,
+        #[tok(INITIALLY, DEFERRED)]
+        InitiallyDeferred,
+        #[tok(DEFERRABLE)]
+        Deferrable,
+        /// Added in 18: see [`TableCheckAttr::NotEnforced`].
+        #[cfg(feature = "since-pg18")]
+        #[tok(NOT, ENFORCED)]
+        NotEnforced,
+        /// Added in 18: see [`TableCheckAttr::NotEnforced`].
+        #[cfg(feature = "since-pg18")]
+        #[tok(ENFORCED)]
+        Enforced,
+    }
+}
+
+recursa::ast_node! {
+    /// The `ConstraintAttributeSpec` entries that gram.y accepts on
+    /// `ALTER TABLE ... ALTER CONSTRAINT name`: the deferrability entries in
+    /// every version, and from 18 also `NO INHERIT` and `[NOT] ENFORCED`. The
+    /// 18 action rejects `NOT VALID` itself, before `processCASbits`
+    /// (REL_17_11 gram.y 2652-2654; REL_18_6 gram.y 2671-2685).
+    ///
+    /// Variant ordering: multi-keyword forms first.
+    #[derive(Debug)]
+    pub enum AlterConstraintAttr {
+        #[tok(NOT, DEFERRABLE)]
+        NotDeferrable,
+        #[tok(INITIALLY, IMMEDIATE)]
+        InitiallyImmediate,
+        #[tok(INITIALLY, DEFERRED)]
+        InitiallyDeferred,
+        #[tok(DEFERRABLE)]
+        Deferrable,
+        /// Added in 18: `ALTER CONSTRAINT name NO INHERIT`
+        /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
+        /// item 5; REL_18_6 gram.y `alter_table_cmd` 2682-2683).
+        #[cfg(feature = "since-pg18")]
+        #[tok(NO, INHERIT)]
+        NoInherit,
+        /// Added in 18: see [`TableCheckAttr::NotEnforced`] and research item 5.
+        #[cfg(feature = "since-pg18")]
+        #[tok(NOT, ENFORCED)]
+        NotEnforced,
+        /// Added in 18: see [`Self::NotEnforced`].
+        #[cfg(feature = "since-pg18")]
+        #[tok(ENFORCED)]
+        Enforced,
+    }
+}
+
+// Added in 18: a table-level `NOT NULL` constraint
+// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18, item 6).
+#[cfg(feature = "since-pg18")]
+recursa::ast_node! {
+    /// The `ConstraintAttributeSpec` entries that gram.y accepts on a
+    /// table-level `NOT NULL`. `processCASbits` gets `not_valid` and
+    /// `no_inherit` only, so the deferrable entries other than `NOT
+    /// DEFERRABLE` and `INITIALLY IMMEDIATE`, and `[NOT] ENFORCED`, are
+    /// raw-parser errors (REL_18_6 gram.y 4224-4226).
+    ///
+    /// Variant ordering: multi-keyword forms first.
+    #[derive(Debug)]
+    pub enum TableNotNullAttr {
+        #[tok(NOT, DEFERRABLE)]
+        NotDeferrable,
+        #[tok(NOT, VALID)]
+        NotValid,
+        #[tok(NO, INHERIT)]
+        NoInherit,
+        #[tok(INITIALLY, IMMEDIATE)]
+        InitiallyImmediate,
+    }
+}
+
+
+recursa::ast_node! {
     /// `ON DELETE ...` or `ON UPDATE ...` trailing action on a REFERENCES
     /// constraint. Modeled as an enum so both orders of the two clauses
     /// are accepted via a [`Vec`]`<`[`OnAction`]`>`.
@@ -252,7 +404,7 @@ recursa::ast_node! {
     pub struct TableCheck {
         #[tok(CHECK, LPAREN, this, RPAREN)]
         pub expr: crate::ast::shared::expr::Expr,
-        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+        pub attrs: zero_or_many!(TableCheckAttr),
     }
 }
 
@@ -381,22 +533,51 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `GENERATED {ALWAYS | BY DEFAULT} AS {IDENTITY [(seq options)] | (expr)
-    /// STORED}` — gram.y `ColConstraintElem`'s two `GENERATED generated_when AS`
-    /// forms with their shared prefix factored, so the parser shifts `AS` before
-    /// choosing.
+    /// `GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY [(seq options)]` or
+    /// `GENERATED ALWAYS AS (expr) [STORED | VIRTUAL]` — gram.y
+    /// `ColConstraintElem`'s two `GENERATED generated_when AS` forms.
+    ///
+    /// The expression form takes `ALWAYS` only: its action stops on any other
+    /// `generated_when` ("for a generated column, GENERATED ALWAYS must be
+    /// specified"), so `GENERATED BY DEFAULT AS (1) STORED` is a raw-parser
+    /// error in every target version (REL_14_24 gram.y `ColConstraintElem`;
+    /// b73d13c gram.y `ColConstraintElem`). `ALWAYS` is therefore a token of
+    /// the rule, not a reduced `generated_when`: the parser shifts `GENERATED
+    /// ALWAYS AS` and parts at `IDENTITY` or `(`.
+    ///
+    /// Variant ordering: `BY` and `ALWAYS` part the two after `GENERATED`.
     #[derive(Debug)]
-    pub struct GeneratedConstraint {
-        #[tok(GENERATED, this)]
-        pub mode: GeneratedIdentityMode,
+    pub enum GeneratedConstraint {
+        Always(GeneratedAlwaysConstraint),
+        ByDefault(GeneratedByDefaultConstraint),
+    }
+}
+
+recursa::ast_node! {
+    /// `GENERATED ALWAYS AS {IDENTITY [(seq options)] | (expr) [STORED |
+    /// VIRTUAL]}`.
+    #[derive(Debug)]
+    pub struct GeneratedAlwaysConstraint {
+        #[tok(GENERATED, ALWAYS, AS, this)]
         pub body: GeneratedBody,
     }
 }
 
 recursa::ast_node! {
-    /// What follows `GENERATED generated_when`.
+    /// `GENERATED BY DEFAULT AS IDENTITY [(seq options)]`. gram.y takes the
+    /// expression form only with `ALWAYS`.
+    #[derive(Debug)]
+    #[tok(GENERATED, BY, DEFAULT, AS, this)]
+    pub struct GeneratedByDefaultConstraint {
+        pub identity: GeneratedIdentityTail,
+    }
+}
+
+recursa::ast_node! {
+    /// What follows `GENERATED ALWAYS AS`.
     ///
-    /// Variant ordering: both start with `AS`; `IDENTITY` or `(` decides.
+    /// Variant ordering: `IDENTITY` or `(` decides; `Stored` (which ends in
+    /// `STORED`) before `Virtual`, whose keyword is optional.
     #[derive(Debug)]
     #[allow(
         clippy::large_enum_variant,
@@ -405,7 +586,7 @@ recursa::ast_node! {
     pub enum GeneratedBody {
         Identity(GeneratedIdentityTail),
         Stored(GeneratedStoredTail),
-        /// Added in 18: `AS (expr) [VIRTUAL]`, gram.y `opt_virtual_or_stored`
+        /// Added in 18: `(expr) [VIRTUAL]`, gram.y `opt_virtual_or_stored`
         /// with `VIRTUAL` or empty (docs/research/postgres-14-19-sql-syntax-changes.md,
         /// PostgreSQL 18, item 1; REL_18_6 gram.y `ColConstraintElem`).
         #[cfg(feature = "since-pg18")]
@@ -416,12 +597,12 @@ recursa::ast_node! {
 // Added in 18: see `GeneratedBody::Virtual`.
 #[cfg(feature = "since-pg18")]
 recursa::ast_node! {
-    /// `AS (expr) [VIRTUAL]` — a virtual generated column. From 18 a
+    /// `(expr) [VIRTUAL]` — a virtual generated column. From 18 a
     /// generated column without `STORED` is virtual, so the keyword is
     /// optional.
     #[derive(Debug)]
     pub struct GeneratedVirtualTail {
-        #[tok(AS, LPAREN, this, RPAREN)]
+        #[tok(LPAREN, this, RPAREN)]
         pub expr: crate::ast::shared::expr::Expr,
         /// Whether the source spells `VIRTUAL`.
         #[presence(VIRTUAL)]
@@ -430,19 +611,19 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `AS IDENTITY [(seq options)]`.
+    /// `IDENTITY [(seq options)]`.
     #[derive(Debug)]
+    #[tok(IDENTITY, this)]
     pub struct GeneratedIdentityTail {
-        pub identity: AsIdentity,
         pub seq_options: Option<IdentitySeqOptionList>,
     }
 }
 
 recursa::ast_node! {
-    /// `AS (expr) STORED`.
+    /// `(expr) STORED`.
     #[derive(Debug)]
     pub struct GeneratedStoredTail {
-        #[tok(AS, LPAREN, this, RPAREN, STORED)]
+        #[tok(LPAREN, this, RPAREN, STORED)]
         pub expr: crate::ast::shared::expr::Expr,
     }
 }
@@ -705,7 +886,7 @@ recursa::ast_node! {
         #[tok(PRIMARY, KEY, this)]
         pub body: IndexedConstraintBody,
         /// gram.y `ConstraintAttributeSpec`.
-        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+        pub attrs: zero_or_many!(IndexConstraintAttr),
     }
 }
 
@@ -739,7 +920,7 @@ recursa::ast_node! {
         pub nulls: Option<NullsDistinctQualifier>,
         pub body: IndexedConstraintBody,
         /// gram.y `ConstraintAttributeSpec`.
-        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+        pub attrs: zero_or_many!(IndexConstraintAttr),
     }
 }
 
@@ -831,7 +1012,7 @@ recursa::ast_node! {
         #[cfg(feature = "since-pg18")]
         pub references: ForeignKeyReferences,
         /// gram.y `ConstraintAttributeSpec` after `key_actions`.
-        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+        pub attrs: zero_or_many!(ForeignKeyConstraintAttr),
     }
 }
 
@@ -925,7 +1106,7 @@ recursa::ast_node! {
         /// `WHERE (expr)` partial-constraint predicate (parens mandatory).
         pub where_clause: Option<ExclusionWhereClause>,
         /// gram.y `ConstraintAttributeSpec`.
-        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+        pub attrs: zero_or_many!(IndexConstraintAttr),
     }
 }
 
@@ -961,7 +1142,7 @@ recursa::ast_node! {
         #[tok(NOT, NULL, this)]
         pub column: crate::tokens::ColId,
         /// gram.y `ConstraintAttributeSpec`.
-        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+        pub attrs: zero_or_many!(TableNotNullAttr),
     }
 }
 
@@ -1999,7 +2180,7 @@ recursa::ast_node! {
         #[tok(ALTER, CONSTRAINT, this)]
         pub name: literal::Ident,
         /// gram.y `ConstraintAttributeSpec`.
-        pub attrs: zero_or_many!(crate::ast::ddl::trigger::ConstraintAttributeElem),
+        pub attrs: zero_or_many!(AlterConstraintAttr),
     }
 }
 

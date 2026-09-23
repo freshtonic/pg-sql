@@ -137,8 +137,10 @@ mod tests {
     fn revoke_simple_privilege() {
         let stmt = parse_stmt::<RevokeStmt>("REVOKE SELECT ON tbl1 FROM u1");
         let stmt = stmt.ast();
-        assert!(stmt.option_for.is_none());
-        assert!(matches!(stmt.body, RevokeBody::Privilege(_)));
+        let RevokeForm::Plain(form) = &stmt.form else {
+            panic!("expected a plain REVOKE, got {:?}", stmt.form);
+        };
+        assert!(matches!(form.body, RevokeBody::Privilege(_)));
         reparse_stable::<RevokeStmt>("REVOKE SELECT ON tbl1 FROM u1");
     }
 
@@ -146,10 +148,7 @@ mod tests {
     fn revoke_grant_option_for_cascade() {
         let stmt = parse_stmt::<RevokeStmt>("REVOKE GRANT OPTION FOR SELECT ON tbl1 FROM u1 CASCADE");
         let stmt = stmt.ast();
-        assert!(matches!(
-            stmt.option_for,
-            Some(RevokeOptionFor::GrantOption(_))
-        ));
+        assert!(matches!(stmt.form, RevokeForm::GrantOption(_)));
         reparse_stable::<RevokeStmt>("REVOKE GRANT OPTION FOR SELECT ON tbl1 FROM u1 CASCADE");
     }
 
@@ -157,7 +156,10 @@ mod tests {
     fn revoke_role_membership_cascade() {
         let stmt = parse_stmt::<RevokeStmt>("REVOKE role1 FROM u1 CASCADE");
         let stmt = stmt.ast();
-        assert!(matches!(stmt.body, RevokeBody::Role(_)));
+        let RevokeForm::Plain(form) = &stmt.form else {
+            panic!("expected a plain REVOKE, got {:?}", stmt.form);
+        };
+        assert!(matches!(form.body, RevokeBody::Role(_)));
         reparse_stable::<RevokeStmt>("REVOKE role1 FROM u1 CASCADE");
     }
 
@@ -165,10 +167,7 @@ mod tests {
     fn revoke_admin_option_for_role() {
         let stmt = parse_stmt::<RevokeStmt>("REVOKE ADMIN OPTION FOR role1 FROM u1");
         let stmt = stmt.ast();
-        assert!(matches!(
-            stmt.option_for,
-            Some(RevokeOptionFor::AdminOption(_))
-        ));
+        assert!(matches!(stmt.form, RevokeForm::RoleOption(_)));
         reparse_stable::<RevokeStmt>("REVOKE ADMIN OPTION FOR role1 FROM u1");
     }
 
@@ -260,6 +259,7 @@ mod tests {
             "GRANT r TO u WITH ADMIN OPTION, INHERIT TRUE",
             "REVOKE INHERIT OPTION FOR r FROM u",
             "REVOKE SET OPTION FOR r FROM u",
+            "REVOKE banana OPTION FOR r FROM u",
         ]);
         crate::ast::test_support::assert_statements_parse(&[
             "GRANT r TO u WITH ADMIN OPTION",
@@ -267,5 +267,42 @@ mod tests {
             "GRANT r TO u GRANTED BY CURRENT_USER",
             "REVOKE ADMIN OPTION FOR r FROM u CASCADE",
         ]);
+    }
+
+    // gram.y pairs each `OPTION FOR` prefix with one body. `GRANT OPTION FOR`
+    // belongs to `RevokeStmt`, whose arm needs `ON target`; `ColId OPTION FOR`
+    // belongs to `RevokeRoleStmt`, whose arm has no `ON`. `GRANT` is reserved,
+    // so it is no `ColId` (REL_17_11 gram.y `RevokeStmt` 7556,
+    // `RevokeRoleStmt` 7935).
+    #[test]
+    fn revoke_option_for_pairs_with_its_body() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "REVOKE GRANT OPTION FOR SELECT ON t FROM u",
+                "REVOKE ADMIN OPTION FOR r FROM u",
+                "REVOKE SELECT ON t FROM u",
+                "REVOKE r FROM u",
+            ],
+            &[
+                "REVOKE GRANT OPTION FOR r FROM u",
+                "REVOKE ADMIN OPTION FOR SELECT ON t FROM u",
+            ],
+        );
+    }
+
+    // Changed in 16: `RevokeRoleStmt` takes any `ColId` before `OPTION FOR`,
+    // and the catalog rejects a name other than ADMIN, INHERIT or SET
+    // (research, PostgreSQL 16, "Changes to existing statements"; REL_16_15
+    // gram.y `RevokeRoleStmt`, commit e3ce2de09).
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn revoke_role_option_for_takes_any_col_id_from_16() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "REVOKE banana OPTION FOR r FROM u",
+                "REVOKE INHERIT OPTION FOR r FROM u",
+            ],
+            &["REVOKE banana OPTION FOR SELECT ON t FROM u"],
+        );
     }
 }

@@ -250,4 +250,21 @@ mod tests {
             "CREATE EVENT TRIGGER t ON ddl_command_end EXECUTE FUNCTION f()",
         );
     }
+
+    // The `CreateTrigStmt` action stops on `OR REPLACE` in the constraint arm
+    // ("CREATE OR REPLACE CONSTRAINT TRIGGER is not supported"), so the raw
+    // parser rejects it in every target version (REL_14_24 gram.y
+    // `CreateTrigStmt`; b73d13c gram.y 6096). The plain-trigger arm keeps it.
+    #[test]
+    fn constraint_trigger_rejects_or_replace() {
+        check_statement_forms(
+            &[
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON tbl FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE OR REPLACE TRIGGER t AFTER INSERT ON tbl FOR EACH ROW EXECUTE FUNCTION f()",
+            ],
+            &[
+                "CREATE OR REPLACE CONSTRAINT TRIGGER t AFTER INSERT ON tbl FOR EACH ROW EXECUTE FUNCTION f()",
+            ],
+        );
+    }
 }

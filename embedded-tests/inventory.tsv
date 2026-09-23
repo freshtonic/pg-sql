@@ -55,6 +55,14 @@ embedded-tests/src/ast/ddl/domain.tests.rs	parse_create_domain_named_constraint	
 embedded-tests/src/ast/ddl/domain.tests.rs	parse_create_domain_simple	false	14-
 embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_add_table_constraint_before_17	false	14-16
 embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_add_not_null_is_rejected_before_17	false	14-16
+embedded-tests/src/ast/ddl/domain.tests.rs	create_domain_takes_the_column_qualification_list	false	14-
+embedded-tests/src/ast/ddl/domain.tests.rs	create_domain_unique_nulls_distinct_from_15	false	15-
+embedded-tests/src/ast/ddl/domain.tests.rs	create_domain_qual_list_18_forms	false	18-
+embedded-tests/src/ast/ddl/domain.tests.rs	create_domain_qual_list_18_forms_are_rejected_before_18	false	14-17
+embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_check_takes_only_its_own_attributes	false	17-
+embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_not_null_takes_only_its_own_attributes	false	17-
+embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_not_null_takes_no_inherit_in_17	false	17-17
+embedded-tests/src/ast/ddl/domain.tests.rs	alter_domain_not_null_rejects_no_inherit_from_18	false	18-
 embedded-tests/src/ast/ddl/extension.tests.rs	parse_alter_extension_add_table	false	14-
 embedded-tests/src/ast/ddl/extension.tests.rs	parse_alter_extension_set_schema	false	14-
 embedded-tests/src/ast/ddl/extension.tests.rs	parse_alter_extension_update	false	14-
@@ -288,6 +296,7 @@ embedded-tests/src/ast/ddl/statistics.tests.rs	alter_statistics_set_statistics_d
 embedded-tests/src/ast/ddl/statistics.tests.rs	alter_statistics_set_statistics_default_is_rejected_before_17	false	14-16
 embedded-tests/src/ast/ddl/statistics.tests.rs	create_statistics_without_a_name	false	16-
 embedded-tests/src/ast/ddl/statistics.tests.rs	create_statistics_needs_a_name_before_16	false	14-15
+embedded-tests/src/ast/ddl/statistics.tests.rs	create_statistics_needs_on_and_from	false	14-
 embedded-tests/src/ast/ddl/subscription.tests.rs	create_subscription_connection_publication_roundtrips	false	14-
 embedded-tests/src/ast/ddl/subscription.tests.rs	create_subscription_multi_publication_roundtrips	false	14-
 embedded-tests/src/ast/ddl/subscription.tests.rs	parse_alter_subscription_set_origin_any	false	14-
@@ -381,6 +390,12 @@ embedded-tests/src/ast/ddl/table.tests.rs	the_keywords_of_18_are_names	false	14-
 embedded-tests/src/ast/ddl/table.tests.rs	the_table_forms_of_18_are_rejected_before_18	false	14-17
 embedded-tests/src/ast/ddl/table.tests.rs	column_storage_forms	false	16-
 embedded-tests/src/ast/ddl/table.tests.rs	column_storage_is_rejected_before_16	false	14-15
+embedded-tests/src/ast/ddl/table.tests.rs	constraint_attributes_match_the_constraint_kind	false	14-
+embedded-tests/src/ast/ddl/table.tests.rs	alter_constraint_rejects_no_inherit_before_18	false	14-17
+embedded-tests/src/ast/ddl/table.tests.rs	enforced_reaches_only_the_kinds_that_take_it_from_18	false	18-
+embedded-tests/src/ast/ddl/table.tests.rs	table_not_null_takes_only_its_own_attributes	false	18-
+embedded-tests/src/ast/ddl/table.tests.rs	generated_expression_takes_only_always	false	14-
+embedded-tests/src/ast/ddl/table.tests.rs	column_unique_and_primary_key_take_storage_parameters	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_owner	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_rename	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_reset	false	14-
@@ -424,6 +439,7 @@ embedded-tests/src/ast/ddl/trigger.tests.rs	parse_drop_trigger_on_table	false	14
 embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_rejects_not_valid_and_no_inherit	false	14-
 embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_enforced_from_19	false	19-
 embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_enforced_is_rejected_before_19	false	14-18
+embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_rejects_or_replace	false	14-
 embedded-tests/src/ast/ddl/type.tests.rs	parse_alter_type_add_attribute	false	14-
 embedded-tests/src/ast/ddl/type.tests.rs	parse_alter_type_add_value	false	14-
 embedded-tests/src/ast/ddl/type.tests.rs	parse_alter_type_add_value_if_not_exists_after	false	14-
@@ -453,6 +469,8 @@ embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_qualified_table	false	14
 embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_simple	false	14-
 embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_with_as_alias	false	14-
 embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_with_bare_alias	false	14-
+embedded-tests/src/ast/dml/delete.tests.rs	delete_bare_alias_never_takes_set	false	14-
+embedded-tests/src/ast/dml/delete.tests.rs	returning_takes_a_non_empty_target_list	false	14-
 embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_column_indirection	false	14-
 embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_default_values_returning	false	14-
 embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_multiple_columns	false	14-
@@ -472,6 +490,7 @@ embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_clauses_with_gram_y_a
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_matched_and	false	15-
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_clauses_before_17	false	15-16
 embedded-tests/src/ast/dml/merge.tests.rs	merge_17_clauses_are_rejected_before_17	false	15-16
+embedded-tests/src/ast/dml/merge.tests.rs	merge_bare_target_alias_never_takes_set	false	15-
 embedded-tests/src/ast/dml/select.tests.rs	parse_coalesce_family_as_function_tables	false	14-
 embedded-tests/src/ast/dml/select.tests.rs	parse_fetch_first_row_with_ties	false	14-
 embedded-tests/src/ast/dml/select.tests.rs	parse_fetch_first_rows_no_count	false	14-
@@ -1060,6 +1079,8 @@ embedded-tests/src/ast/utility/grant.tests.rs	alter_default_privileges_on_large_
 embedded-tests/src/ast/utility/grant.tests.rs	alter_default_privileges_on_large_objects_is_rejected_before_18	false	14-17
 embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_from_16	false	16-
 embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_before_16	false	14-15
+embedded-tests/src/ast/utility/grant.tests.rs	revoke_option_for_pairs_with_its_body	false	14-
+embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_option_for_takes_any_col_id_from_16	false	16-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_inheritance_star_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_multiple_relations_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_only_roundtrips	false	14-
