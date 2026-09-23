@@ -254,9 +254,12 @@ fn the_reported_minimum_is_the_oldest_version_whose_oracle_accepts_the_statement
         checked > 30_000,
         "the check must cover the corpus, not a few statements: {checked}"
     );
-    assert!(
+    // A pg14 build holds no gated element at all, so nothing can report above
+    // the baseline. Every later build must exercise at least one gate.
+    assert_eq!(
         reported_above_the_baseline > 0,
-        "the corpus must exercise at least one gate on {build:?}"
+        build > TargetVersion::Pg14,
+        "{build:?} reported {reported_above_the_baseline} statements above the baseline"
     );
     // Every frozen widening must still be one: a gate that later records the
     // requirement takes its statement off the list, and the list must shrink.

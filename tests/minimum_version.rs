@@ -46,6 +46,7 @@ fn a_statement_with_no_gated_construct_needs_only_the_oldest_version() {
 /// Class 1: a gate on a node, field or variant.
 #[test]
 fn an_item_gate_reports_the_version_that_added_the_item() {
+    #[cfg(feature = "since-pg15")]
     assert_eq!(
         parse_and_report("MERGE INTO t USING s ON t.a = s.a WHEN MATCHED THEN DELETE"),
         Some(TargetVersion::Pg15)
