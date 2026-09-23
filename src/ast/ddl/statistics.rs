@@ -109,7 +109,18 @@ recursa::ast_node! {
         // The name is optional from 16: research, PostgreSQL 16, "Changes to
         // existing statements" (commit 624aa2a13). REL_15_19 gram.y has
         // `CREATE STATISTICS any_name`.
-        #[config(since = pg16)]
+        //
+        // A shape rule, so the requirement belongs to the absence of the name
+        // (ADR 0010). REL_15_19 raises no ereport for it: the rule has no
+        // alternative without the name, so the parser gives a plain syntax
+        // error and the gate carries no message.
+        #[config(
+            since = pg16,
+            on = absent,
+            cite = "gram.y REL_15_19:4423-4425 `CreateStatsStmt: CREATE STATISTICS any_name \
+                    opt_name_list ON stats_params FROM from_list`; optional from 16, \
+                    commit 624aa2a13"
+        )]
         pub name: Option<QualifiedName>,
         #[config(before = pg16)]
         pub name: QualifiedName,

@@ -196,7 +196,21 @@ recursa::ast_node! {
         // expressions" (commit bcedd8f5f). The REL_15_19 gram.y action of
         // `table_ref: select_with_parens opt_alias_clause` raises "subquery in
         // FROM must have an alias", so the raw parser rejects the form.
-        #[config(since = pg16)]
+        //
+        // A shape rule, so the requirement belongs to the absence of the
+        // alias (ADR 0010). The same action raises "VALUES in FROM must have
+        // an alias" when the body is a VALUES list (REL_15_19 gram.y
+        // 13257-13261); one declaration carries one message, so it carries
+        // the general one.
+        #[config(
+            since = pg16,
+            on = absent,
+            code = "42601",
+            message = "subquery in FROM must have an alias",
+            hint = "For example, FROM (SELECT ...) [AS] foo.",
+            cite = "gram.y REL_15_19:13235 `table_ref: select_with_parens opt_alias_clause`, \
+                    ereport 13263-13267; optional from 16, commit bcedd8f5f"
+        )]
         pub alias: Option<PlainTableAlias>,
         #[config(before = pg16)]
         pub alias: PlainTableAlias,
@@ -284,7 +298,15 @@ recursa::ast_node! {
         pub query: boxed!(Subquery),
         // The alias is optional from 16, as in `ParenQueryRef` (REL_15_19
         // gram.y `table_ref: LATERAL_P select_with_parens opt_alias_clause`).
-        #[config(since = pg16)]
+        #[config(
+            since = pg16,
+            on = absent,
+            code = "42601",
+            message = "subquery in FROM must have an alias",
+            hint = "For example, FROM (SELECT ...) [AS] foo.",
+            cite = "gram.y REL_15_19:13271 `table_ref: LATERAL_P select_with_parens \
+                    opt_alias_clause`, ereport 13289-13293; optional from 16, commit bcedd8f5f"
+        )]
         pub alias: Option<PlainTableAlias>,
         #[config(before = pg16)]
         pub alias: PlainTableAlias,

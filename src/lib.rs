@@ -65,11 +65,13 @@ pub mod bench_data;
 pub mod document;
 pub mod formatter;
 pub mod ident;
+pub mod minimum_version;
 mod target_version;
 pub mod tokens;
 
 #[cfg(feature = "spans")]
 pub use document::{SqlDocument, SqlParseError, SqlRejection};
+pub use minimum_version::{MinimumVersion, VersionRequirement};
 pub use target_version::TargetVersion;
 
 // The constants are defined here and not in `target_version`, because the
