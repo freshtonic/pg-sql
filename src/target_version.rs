@@ -10,7 +10,11 @@
 ///
 /// Each target version is pinned to one exact release: the latest minor
 /// release of that major, or a named commit for a pre-release major.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// The order is the version order: `Pg14 < Pg15 < ... < Pg19Beta`. A
+/// consumer that analyses SQL for an older server than the build's grammar
+/// compares its own version with this one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TargetVersion {
     /// PostgreSQL 14 (feature `pg14`).
     Pg14,
