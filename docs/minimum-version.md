@@ -99,16 +99,16 @@ not miss one gives these clauses its own check. The complete list:
 | `ANALYZE ONLY t`, `ANALYZE t *`, and the same for `VACUUM` | 18 | The extra shapes sit in the shared `RelationExpr`, where `ONLY t` is legal in 14 elsewhere. |
 | `FOREIGN KEY (a, PERIOD b) REFERENCES t (c, PERIOD d)` | 18 | The `PERIOD` element sits in a list shape that the wider type adds; it has no gate yet. |
 
-One widening is not split yet, and it reports a version that is too **high**.
-The 15 publication object list (`pub_obj_list`) also covers the 14 `FOR TABLE
-relation_expr_list`, so `CREATE PUBLICATION p FOR TABLE t` reports 15,
-although 14 parses it. The same holds for `ALTER PUBLICATION ...
-{ADD|SET|DROP}`. To split it, gate `TABLES IN SCHEMA`, the column list and the
-`WHERE` clause, which are the three shapes that 15 adds.
-
 Each of these needs its own node, or a shape rule on the wider node, before a
 gate can carry it. The frozen corpus exercises only the first three, and
 `tests/minimum_version_corpus.rs` pins those seven statements.
+
+One widening is not split yet, and it goes the other way: it reports a version
+that is too **high**. The 15 publication object list (`pub_obj_list`) also
+covers the 14 `FOR TABLE relation_expr_list`, so `CREATE PUBLICATION p FOR
+TABLE t` reports 15 although 14 parses it. The same holds for `ALTER
+PUBLICATION ... {ADD|SET|DROP}`. To split it, gate `TABLES IN SCHEMA`, the
+column list and the `WHERE` clause, which are the three shapes that 15 adds.
 
 ## The verification
 
@@ -129,11 +129,12 @@ it. Before 16, `SELECT 0x42F` is the integer `0` with the column label `x42F`,
 and the 14 oracle accepts it. The report of 17 or 16 looks too high, and it is
 right: the statement that this build parsed needs the newer version. The test
 frozen list `REINTERPRETED_BY_AN_OLDER_GRAMMAR` names each construct that may
-do this, so a new one cannot arrive unnoticed.
+do this, so a new one cannot arrive unnoticed. The unsplit publication
+widening is in the same list, because its effect on the check is the same.
 
-**A widening that depends on a word.** The two residues above report a version
-that is too low. The test frozen list `UNRECORDED_WIDENINGS` names the seven
-corpus statements that do this.
+**A widening that depends on a word.** The residues in class 4 report a
+version that is too low. The test frozen list `UNRECORDED_WIDENINGS` names the
+seven corpus statements that do this.
 
 Every other statement must satisfy the equality. In particular a report that
 is too low fails the test wherever no frozen entry excuses it, because that is
