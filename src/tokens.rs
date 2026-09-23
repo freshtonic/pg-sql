@@ -137,7 +137,7 @@ recursa::tokens! {
         // "Keywords" (REL_16_15 kwlist.h `system_user`, commit 0823d061b).
         // REL_15_19 kwlist.h has no `system_user`, so 15 lexes the word as an
         // identifier.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         SYSTEM_USER       => r"SYSTEM_USER" in RESERVED + bare_label,
         CAST         => r"CAST" in RESERVED + bare_label,
         COLLATION    => r"COLLATION" in TYPE_FUNC_NAME + bare_label,
@@ -173,93 +173,93 @@ recursa::tokens! {
     // kwlist.h).
         // `json` changes category in 17 from UNRESERVED to COL_NAME: research,
         // PostgreSQL 17, "Keywords"; REL_16_15 kwlist.h line 233.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JSON            => r"JSON" in COL_NAME + bare_label + json_type,
         // Added in 16 as an unreserved keyword: research, PostgreSQL 16,
         // "Keywords". REL_15_19 kwlist.h has no `json`. The `FORMAT_LA`
         // lookahead entry names it under the same predicate.
-        #[cfg(all(feature = "since-pg16", not(feature = "since-pg17")))]
+        #[config(since = pg16, before = pg17)]
         JSON            => r"JSON" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JSON_VALUE      => r"JSON_VALUE" in COL_NAME + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JSON_QUERY      => r"JSON_QUERY" in COL_NAME + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JSON_EXISTS     => r"JSON_EXISTS" in COL_NAME + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords".
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JSON_OBJECT     => r"JSON_OBJECT" in COL_NAME + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords".
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JSON_ARRAY      => r"JSON_ARRAY" in COL_NAME + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords".
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JSON_OBJECTAGG  => r"JSON_OBJECTAGG" in COL_NAME + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords".
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JSON_ARRAYAGG   => r"JSON_ARRAYAGG" in COL_NAME + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JSON_SERIALIZE  => r"JSON_SERIALIZE" in COL_NAME + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JSON_SCALAR     => r"JSON_SCALAR" in COL_NAME + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JSON_TABLE      => r"JSON_TABLE" in COL_NAME + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords". The `FORMAT_LA`
         // lookahead entry names it under the same predicate.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         FORMAT          => r"FORMAT" in UNRESERVED + bare_label,
         ENCODING        => r"ENCODING" in UNRESERVED + bare_label,
         PASSING         => r"PASSING" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords". The `precedence`
         // block names it under the same predicate.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         PATH            => r"PATH" in UNRESERVED + bare_label,
         COLUMNS         => r"COLUMNS" in UNRESERVED + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords". The `precedence`
         // block names it under the same predicate.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         KEYS            => r"KEYS" in UNRESERVED + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords". The `precedence`
         // block names it under the same predicate.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         SCALAR          => r"SCALAR" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         QUOTES          => r"QUOTES" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords". The `precedence`
         // block names it under the same predicate.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         NESTED          => r"NESTED" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         OMIT            => r"OMIT" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         KEEP            => r"KEEP" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         CONDITIONAL     => r"CONDITIONAL" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         UNCONDITIONAL   => r"UNCONDITIONAL" in UNRESERVED + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords".
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         ABSENT          => r"ABSENT" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         ERROR           => r"ERROR" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         EMPTY           => r"EMPTY" in UNRESERVED + bare_label,
         OBJECT          => r"OBJECT" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         STRING          => r"STRING" in UNRESERVED + bare_label,
         UNKNOWN         => r"UNKNOWN" in UNRESERVED + bare_label,
         INSERT          => r"INSERT" in UNRESERVED + bare_label,
@@ -293,14 +293,14 @@ recursa::tokens! {
         MATERIALIZED    => r"MATERIALIZED" in UNRESERVED + bare_label,
         // Added in 15: research, PostgreSQL 15, "Keywords". REL_14_24
         // kwlist.h has no `merge`, `matched` or `parameter`.
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         MERGE           => r"MERGE" in UNRESERVED + bare_label,
         // Added in 15: research, PostgreSQL 15, "Keywords".
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         MATCHED         => r"MATCHED" in UNRESERVED + bare_label,
         // Added in 15: research, PostgreSQL 15, "Keywords" (gram.y
         // `privilege_target: PARAMETER parameter_name_list`).
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         PARAMETER       => r"PARAMETER" in UNRESERVED + bare_label,
         CONFLICT        => r"CONFLICT" in UNRESERVED + bare_label,
         NOTHING         => r"NOTHING" in UNRESERVED + bare_label,
@@ -445,10 +445,10 @@ recursa::tokens! {
         OTHERS          => r"OTHERS" in UNRESERVED + bare_label,
         TIES            => r"TIES" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         SOURCE          => r"SOURCE" in UNRESERVED + bare_label,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         TARGET          => r"TARGET" in UNRESERVED + bare_label,
         STRICT          => r"STRICT" in UNRESERVED + bare_label,
         STABLE          => r"STABLE" in UNRESERVED + bare_label,
@@ -602,7 +602,7 @@ recursa::tokens! {
         VERSION         => r"VERSION" in UNRESERVED + bare_label,
         STANDALONE      => r"STANDALONE" in UNRESERVED + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords".
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         INDENT          => r"INDENT" in UNRESERVED + bare_label,
         REF             => r"REF" in UNRESERVED + bare_label,
         YES             => r"YES" in UNRESERVED + bare_label,
@@ -770,21 +770,21 @@ recursa::tokens! {
         // Removed in 18: `opt_recheck` and the `recheck` keyword are gone
         // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
         // "Keywords" and "Removed or changed syntax"; commit 7da1bdc2c2f).
-        #[cfg(not(feature = "since-pg18"))]
+        #[config(before = pg18)]
         RECHECK         => r"RECHECK" in UNRESERVED + bare_label,
         // Added in 19: `kwlist.h` at `b73d13c` (docs/research/
         // postgres-14-19-sql-syntax-changes.md, PostgreSQL 19, "Keywords").
         // Before 19 each word is no keyword at all, so it lexes as an
         // identifier. `IGNORE` and `RESPECT` are AS_LABEL: no `bare_label`.
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         IGNORE          => r"IGNORE" in UNRESERVED,
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         RESPECT         => r"RESPECT" in UNRESERVED,
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         LSN             => r"LSN" in UNRESERVED + bare_label,
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         REPACK          => r"REPACK" in UNRESERVED + bare_label,
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         WAIT            => r"WAIT" in UNRESERVED + bare_label,
         // Added in 18: four new unreserved, bare-label keywords
         // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
@@ -792,13 +792,13 @@ recursa::tokens! {
         // attribute, `OBJECTS` ends `ON LARGE OBJECTS` in default privileges,
         // `PERIOD` marks a temporal foreign-key column, and `VIRTUAL` is the
         // generated-column kind.
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         ENFORCED        => r"ENFORCED" in UNRESERVED + bare_label,
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         OBJECTS         => r"OBJECTS" in UNRESERVED + bare_label,
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         PERIOD          => r"PERIOD" in UNRESERVED + bare_label,
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         VIRTUAL         => r"VIRTUAL" in UNRESERVED + bare_label,
     },
     punctuation {
@@ -964,9 +964,9 @@ recursa::tokens! {
         // REL_16_15 scan.l 395-437: `decinteger {decdigit}(_?{decdigit})*`,
         // the `0x`/`0o`/`0b` integers, and `_` separators in `numeric` and
         // `real`.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         NumericLit => next_exclusion(pattern = r"(?:(?:[0-9](?:_?[0-9])*\.[0-9](?:_?[0-9])*|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\.)", excluded = r"[A-Za-z0-9_]"),
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         IntegerLit => next_exclusion(pattern = r"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)", excluded = r"[A-Za-z0-9_]"),
         // Before 16 there are no non-decimal integers and no `_` separators:
         // research, PostgreSQL 16, "Lexical and literal syntax" (commits
@@ -975,9 +975,9 @@ recursa::tokens! {
         // `real ({integer}|{decimal})[Ee][-+]?{digit}+`. So `0x1F` and `1_000`
         // are `integer_junk`, `1.5_0` is `decimal_junk` and `1e1_0` is
         // `real_junk`, and each is an error.
-        #[cfg(all(feature = "since-pg15", not(feature = "since-pg16")))]
+        #[config(since = pg15, before = pg16)]
         NumericLit => next_exclusion(pattern = r"(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)[eE][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*", excluded = r"[A-Za-z0-9_]"),
-        #[cfg(all(feature = "since-pg15", not(feature = "since-pg16")))]
+        #[config(since = pg15, before = pg16)]
         IntegerLit => next_exclusion(pattern = r"[0-9]+", excluded = r"[A-Za-z0-9_]"),
         // Before 15 there is no trailing-junk check: research, PostgreSQL 15,
         // "Lexical and literal syntax" (commit 2549f0661). REL_14_24 scan.l
@@ -985,13 +985,13 @@ recursa::tokens! {
         // and `realfail2` give back the `[Ee]` and `[Ee][-+]`. So a number
         // ends where its pattern ends, whatever follows: `123abc` is `123`
         // then `abc`, `0x1F` is `0` then `x1F`, and `1e+` is `1`, `e`, `+`.
-        #[cfg(not(feature = "since-pg15"))]
+        #[config(before = pg15)]
         NumericLit => next_exclusion(pattern = r"(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)[eE][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*"),
-        #[cfg(not(feature = "since-pg15"))]
+        #[config(before = pg15)]
         IntegerLit => next_exclusion(pattern = r"[0-9]+"),
         // A parameter that an identifier character follows directly is a
         // lexical error from 15 (scan.l `param_junk`).
-        #[cfg(all(feature = "since-pg15", not(feature = "since-pg18")))]
+        #[config(since = pg15, before = pg18)]
         DollarNum => next_exclusion(pattern = r"\$[0-9]+", excluded = r"[A-Za-z0-9_]"),
         // Added in 18: a parameter number that does not fit in `int32` is a
         // lexer error, "parameter number too large"
@@ -1000,12 +1000,12 @@ recursa::tokens! {
         // pattern accepts only the values 0 to 2147483647, with any leading
         // zeros. A longer number matches only an in-range prefix, and the
         // next digit is excluded, so the lexer reports an error.
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         DollarNum => next_exclusion(pattern = r"\$0*(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])", excluded = r"[A-Za-z0-9_]"),
         // Before 15 there is no `param_junk`: `$1abc` is `$1` then `abc`
         // (REL_14_24 scan.l 399 `param \${integer}`; research, PostgreSQL
         // 15, "Lexical and literal syntax").
-        #[cfg(not(feature = "since-pg15"))]
+        #[config(before = pg15)]
         DollarNum => next_exclusion(pattern = r"\$[0-9]+"),
         CustomOp => operator_run(
             characters = "-+*/<>=~!@#%^&|?",
@@ -1083,7 +1083,7 @@ recursa::tokens! {
         // two keywords: research, PostgreSQL 16, "Lexical and literal syntax"
         // (REL_16_15 parser.c, case `FORMAT`). REL_15_19 parser.c has no such
         // case.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         FORMAT_LA = FORMAT before { JSON },
         // `parser.c`: `case NOT:` -> `NOT_LA` before BETWEEN, IN_P, LIKE,
         // ILIKE, SIMILAR (gram.y `a_expr NOT_LA BETWEEN ...`, and the
@@ -1182,7 +1182,7 @@ recursa::tokens! {
         // "Keywords". REL_15_19 gram.y has the IDENT level without them.
         nonassoc(bp = 100) {
             UNBOUNDED,
-            #[cfg(feature = "since-pg17")]
+            #[config(since = pg17)]
             NESTED
         },
         // gram.y:887-888 `%nonassoc IDENT PARTITION RANGE ROWS GROUPS
@@ -1204,15 +1204,15 @@ recursa::tokens! {
             CUBE,
             ROLLUP,
             SET,
-            #[cfg(feature = "since-pg16")]
+            #[config(since = pg16)]
             KEYS,
             OBJECT,
-            #[cfg(feature = "since-pg16")]
+            #[config(since = pg16)]
             SCALAR,
             VALUE,
             WITH,
             WITHOUT,
-            #[cfg(feature = "since-pg17")]
+            #[config(since = pg17)]
             PATH
         },
         // gram.y:889 `%left Op OPERATOR` ("multi-character ops and
@@ -1576,14 +1576,12 @@ pub mod literal {
             // PostgreSQL 17, "Lexical and literal syntax" (commit ae6d06f0968).
             // REL_16_15 scan.l 222-240 has `space [ \t\n\r\f]` and
             // `horiz_space [ \t\f]`.
-            #[cfg_attr(
-                feature = "since-pg17",
+            #[config_attr(since = pg17,
                 lex(
                     pattern = r"'[^']*(?:''[^']*)*'(?:(?:[ \t\f\v]|--[^\r\n]*)*(?:\r\n|\r|\n)(?:[ \t\r\n\f\v]+|--[^\r\n]*(?:\r\n|\r|\n))*'[^']*(?:''[^']*)*')+"
                 )
             )]
-            #[cfg_attr(
-                not(feature = "since-pg17"),
+            #[config_attr(before = pg17,
                 lex(
                     pattern = r"'[^']*(?:''[^']*)*'(?:(?:[ \t\f]|--[^\r\n]*)*(?:\r\n|\r|\n)(?:[ \t\r\n\f]+|--[^\r\n]*(?:\r\n|\r|\n))*'[^']*(?:''[^']*)*')+"
                 )

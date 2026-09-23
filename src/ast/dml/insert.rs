@@ -150,7 +150,7 @@ recursa::ast_node! {
         /// Added in 19: `ON CONFLICT opt_conf_expr DO SELECT
         /// opt_for_locking_strength where_clause` (gram.y b73d13c:12580;
         /// research PostgreSQL 19, "Changes to existing statements").
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         DoSelect(DoSelectAction),
     }
 }

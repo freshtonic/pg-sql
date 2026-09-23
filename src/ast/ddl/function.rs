@@ -173,7 +173,7 @@ recursa::ast_node! {
         // Added in 17: `JsonType` (research, PostgreSQL 17, "Queries and
         // expressions"). In 16, `json` is unreserved and is an identifier-spelled
         // type name.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(JSON)]
         Json,
         #[tok(INTEGER)]
@@ -503,7 +503,7 @@ recursa::ast_node! {
         Parallel(ParallelOption),
         Set(SetFuncOption),
         /// Added in 19: `SET var TO NULL` (gram.y b73d13c:1727).
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         SetNull(SetFuncNullOption),
         Language(LanguageOption),
         /// `SECURITY DEFINER` / `SECURITY INVOKER`.
@@ -907,7 +907,7 @@ recursa::ast_node! {
         Set(crate::ast::session::set_reset::SetStmt),
         /// Added in 19: `SET var TO NULL` (gram.y b73d13c:1727; research
         /// PostgreSQL 19, "Changes to existing statements").
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         SetNull(crate::ast::session::set_reset::SetNullStmt),
         Reset(crate::ast::session::set_reset::ResetStmt),
         // Single-keyword forms.

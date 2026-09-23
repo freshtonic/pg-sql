@@ -109,9 +109,9 @@ recursa::ast_node! {
         // The name is optional from 16: research, PostgreSQL 16, "Changes to
         // existing statements" (commit 624aa2a13). REL_15_19 gram.y has
         // `CREATE STATISTICS any_name`.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         pub name: Option<QualifiedName>,
-        #[cfg(not(feature = "since-pg16"))]
+        #[config(before = pg16)]
         pub name: QualifiedName,
         pub stat_types: Option<StatisticsTypeList>,
         pub on: StatisticsOnClause,
@@ -141,7 +141,7 @@ recursa::ast_node! {
         // Added in 17: research, PostgreSQL 17, "Changes to existing statements"
         // (REL_17_11 gram.y 3093 `set_statistics_value`). REL_16_15 gram.y 2426
         // takes only `SignedIconst`.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(DEFAULT)]
         Default,
         Value(SignedIconst),

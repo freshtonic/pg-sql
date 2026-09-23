@@ -171,19 +171,19 @@ recursa::ast_node! {
         /// Removed in 19: gram.y replaces `FOR ALL TABLES` by `FOR
         /// pub_all_obj_type_list` (b73d13c:10781), which
         /// [`PublicationForClause::AllObjects`] models.
-        #[cfg(not(feature = "since-pg19"))]
+        #[config(before = pg19)]
         AllTables(PublicationForAllTables),
         /// Added in 19: `FOR pub_all_obj_type_list` (gram.y b73d13c:10781;
         /// research PostgreSQL 19, "Changes to existing statements").
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         AllObjects(PublicationForAllObjects),
         /// Added in 15: `FOR pub_obj_list` (research, PostgreSQL 15,
         /// "Changes to existing statements").
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         Objects(PublicationForObjects),
         /// Removed in 15: `FOR TABLE relation_expr_list` (REL_14_24 gram.y
         /// `publication_for_tables`), which `FOR pub_obj_list` replaces.
-        #[cfg(not(feature = "since-pg15"))]
+        #[config(before = pg15)]
         Tables(PublicationForTables),
     }
 }
@@ -395,23 +395,23 @@ recursa::ast_node! {
         Owner(OwnerTo),
         /// Added in 15: `ADD pub_obj_list` (research, PostgreSQL 15,
         /// "Changes to existing statements").
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         AddObjs(AlterPublicationAddObjects),
         /// Added in 15: `DROP pub_obj_list`.
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         DropObjs(AlterPublicationDropObjects),
         SetDef(SetDefinitionClause),
         /// Added in 15: `SET pub_obj_list`.
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         SetObjs(AlterPublicationSetObjects),
         /// Removed in 15: `{ ADD | SET | DROP } TABLE relation_expr_list`
         /// (REL_14_24 gram.y `AlterPublicationStmt`).
-        #[cfg(not(feature = "since-pg15"))]
+        #[config(before = pg15)]
         Tables(AlterPublicationTables),
         /// Added in 19: `ALTER PUBLICATION name SET pub_all_obj_type_list`
         /// (gram.y b73d13c:11003; research PostgreSQL 19, "Changes to
         /// existing statements").
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         SetAllObjs(AlterPublicationSetAllObjects),
     }
 }

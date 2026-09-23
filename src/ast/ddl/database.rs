@@ -157,7 +157,7 @@ recursa::ast_node! {
         Owner(OwnerTo),
         SetTablespace(SetTablespaceClause),
         /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         RefreshCollVersion(RefreshCollVersion),
         /// gram.y `AlterDatabaseSetStmt: ALTER DATABASE name SetResetClause`.
         /// `RESET TABLESPACE` is its `RESET var_name` form.

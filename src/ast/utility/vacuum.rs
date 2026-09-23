@@ -54,13 +54,13 @@ recursa::ast_node! {
 recursa::ast_node! {
     #[derive(Debug)]
     pub struct VacuumRelation {
-        #[cfg(not(feature = "since-pg18"))]
+        #[config(before = pg18)]
         pub name: QualifiedName,
         /// From 18 gram.y `vacuum_relation` names a `relation_expr`, so
         /// `ONLY name` and `name *` are accepted
         /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
         /// item 9; REL_18_6 gram.y `vacuum_relation`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         pub name: crate::ast::shared::names::RelationExpr,
         pub columns: Option<VacuumColumnList>,
     }

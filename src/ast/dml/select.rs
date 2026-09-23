@@ -196,9 +196,9 @@ recursa::ast_node! {
         // expressions" (commit bcedd8f5f). The REL_15_19 gram.y action of
         // `table_ref: select_with_parens opt_alias_clause` raises "subquery in
         // FROM must have an alias", so the raw parser rejects the form.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         pub alias: Option<PlainTableAlias>,
-        #[cfg(not(feature = "since-pg16"))]
+        #[config(before = pg16)]
         pub alias: PlainTableAlias,
     }
 }
@@ -284,9 +284,9 @@ recursa::ast_node! {
         pub query: boxed!(Subquery),
         // The alias is optional from 16, as in `ParenQueryRef` (REL_15_19
         // gram.y `table_ref: LATERAL_P select_with_parens opt_alias_clause`).
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         pub alias: Option<PlainTableAlias>,
-        #[cfg(not(feature = "since-pg16"))]
+        #[config(before = pg16)]
         pub alias: PlainTableAlias,
     }
 }
@@ -301,7 +301,7 @@ recursa::ast_node! {
     pub enum LateralBody {
         Subquery(LateralSubquery),
         // Added in 17: see `JsonTableRef`.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonTable(boxed!(JsonTableRef)),
         XmlTable(boxed!(XmlTableRef)),
         Func(boxed!(FuncTableRef)),
@@ -757,11 +757,11 @@ recursa::ast_node! {
         /// `xmltable_column_el` (13805-13858) then rejects every name other
         /// than `path`; pg-sql accepts any `IDENT` here. Research, PostgreSQL
         /// 17, "Keywords" and "Queries and expressions" (`XMLTABLE`).
-        #[cfg(not(feature = "since-pg17"))]
+        #[config(before = pg17)]
         pub option: crate::tokens::literal::IdentOnly,
         /// gram.y `xmltable_column_option_el: PATH b_expr` (exclusions as in
         /// `PositionInner`), so the path ends before a following `NOT NULL`.
-        #[cfg_attr(feature = "since-pg17", tok(PATH, this))]
+        #[config_attr(since = pg17, tok(PATH, this))]
         pub xpath: boxed!(crate::ast::shared::expr::BExpr),
     }
 }
@@ -1034,47 +1034,47 @@ recursa::ast_node! {
         Values,
         // `json` is `COL_NAME` from 17 (research, PostgreSQL 17, "Keywords"). In 16
         // it is unreserved, so `TableFunctionName` admits it.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(JSON)]
         Json,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(JSON_VALUE)]
         JsonValue,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(JSON_QUERY)]
         JsonQuery,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(JSON_EXISTS)]
         JsonExists,
         // Added in 16: research, PostgreSQL 16, "Keywords".
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         #[tok(JSON_OBJECT)]
         JsonObject,
         // Added in 16: research, PostgreSQL 16, "Keywords".
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         #[tok(JSON_ARRAY)]
         JsonArray,
         // Added in 16: research, PostgreSQL 16, "Keywords".
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         #[tok(JSON_OBJECTAGG)]
         JsonObjectAgg,
         // Added in 16: research, PostgreSQL 16, "Keywords".
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         #[tok(JSON_ARRAYAGG)]
         JsonArrayAgg,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(JSON_SERIALIZE)]
         JsonSerialize,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(JSON_SCALAR)]
         JsonScalar,
         // Added in 17: research, PostgreSQL 17, "Keywords".
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(JSON_TABLE)]
         JsonTable,
         #[tok(BOOLEAN)]
@@ -1189,7 +1189,7 @@ recursa::ast_node! {
     pub enum SimpleTableRef {
         Lateral(LateralRef),
         // Added in 17: see `JsonTableRef`.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonTable(boxed!(JsonTableRef)),
         XmlTable(boxed!(XmlTableRef)),
         RowsFrom(boxed!(RowsFromRef)),

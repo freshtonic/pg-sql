@@ -83,7 +83,7 @@ recursa::ast_node! {
         // Added in 17: research, PostgreSQL 17, "Changes to existing statements"
         // (REL_17_11 gram.y 3098 `set_access_method_name`). REL_16_15 gram.y
         // 2838 takes only `name`.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(DEFAULT)]
         Default,
         Name(crate::tokens::ColId),
@@ -144,7 +144,7 @@ recursa::ast_node! {
         SetTablespace(SetTablespaceClause),
         /// Added in 15: research, PostgreSQL 15, "Changes to existing statements"
         /// (REL_15_19 gram.y `alter_table_cmd: SET ACCESS METHOD name`).
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         SetAccessMethod(SetAccessMethodClause),
         SetSchema(SetSchemaClause),
         SetReloptions(SetReloptions),

@@ -105,7 +105,7 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum Privilege {
         /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         AlterSystem(AlterSystemPriv),
         Select(SelectPriv),
         References(ReferencesPriv),
@@ -434,7 +434,7 @@ recursa::ast_node! {
         Tablespace(TablespaceTarget),
         Type(TypeTarget),
         /// Added in 15: research, PostgreSQL 15, "Changes to existing statements".
-        #[cfg(feature = "since-pg15")]
+        #[config(since = pg15)]
         Parameter(ParameterTarget),
         Bare(BareTablesTarget),
     }
@@ -571,10 +571,10 @@ recursa::ast_node! {
         #[tok(TO, this)]
         pub roles: RoleList,
         // Added in 16: see `WithRoleOpts`.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         pub with: Option<WithRoleOpts>,
         // Removed in 16: see `WithAdminOption`.
-        #[cfg(not(feature = "since-pg16"))]
+        #[config(before = pg16)]
         pub with: Option<WithAdminOption>,
         pub granted_by: Option<GrantedBy>,
     }
@@ -762,7 +762,7 @@ recursa::ast_node! {
         /// Added in 18: gram.y `defacl_privilege_target: LARGE_P OBJECTS_P`
         /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
         /// item 8; REL_18_6 gram.y `defacl_privilege_target`).
-        #[cfg(feature = "since-pg18")]
+        #[config(since = pg18)]
         #[tok(LARGE, OBJECTS)]
         LargeObjects,
     }

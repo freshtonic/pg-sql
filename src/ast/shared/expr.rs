@@ -767,7 +767,7 @@ recursa::ast_node! {
         /// Added in 19: gram.y `func_expr ... filter_clause null_treatment
         /// over_clause` (b73d13c:16017, `null_treatment` 16668; research
         /// PostgreSQL 19, "Queries and expressions", commit 25a30bbd4).
-        #[cfg(feature = "since-pg19")]
+        #[config(since = pg19)]
         pub null_treatment: Option<NullTreatment>,
         pub window: Option<WindowSpec>,
     }
@@ -1873,7 +1873,7 @@ recursa::ast_node! {
     pub enum TypeCastFunc {
         Fixed(FixedTypeCastFunc),
         // Added in 17: see `JsonTypeCastFunc`.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         Json(JsonTypeCastFunc),
         Named(NamedTypeCastFunc),
     }
@@ -2144,7 +2144,7 @@ recursa::ast_node! {
         #[tok(AS, this)]
         pub ty: CastType,
         // Added in 16: see `XmlIndentOption`.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         pub indent: Option<XmlIndentOption>,
     }
 }
@@ -3683,7 +3683,7 @@ recursa::ast_node! {
         /// `BoolTestKind`, so order is not load-bearing, only tidy.
         // Added in 16: research, PostgreSQL 16, "Queries and expressions"
         // (REL_16_15 gram.y `a_expr IS json_predicate_type_constraint`).
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         IsJson(boxed!(Self), #[tok(IS, this)] IsJsonTail),
         /// `expr IS [NOT] [NFC|NFD|NFKC|NFKD] NORMALIZED` — the Unicode
         /// normalisation predicate (gram.y rules 15198/15205/15212/15220).
@@ -3704,7 +3704,7 @@ recursa::ast_node! {
         #[parse(prec = AT)]
         // Added in 17: research, PostgreSQL 17, "Queries and expressions"
         // (REL_17_11 gram.y 14798).
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         AtLocal(#[tok(this, AT, LOCAL)] boxed!(Self)),
         /// `expr AT TIME ZONE zone_expr` — convert to specified timezone.
         /// gram.y:14792 `a_expr AT TIME ZONE a_expr %prec AT`.
@@ -4111,43 +4111,43 @@ recursa::ast_node! {
         Extract(ExtractCall),
         /// `JSON(...)` SQL/JSON value constructor. Before `Func`.
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonCtor(boxed!(JsonConstructor)),
         /// `JSON_SCALAR(...)`. Before `Func`.
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonScalar(boxed!(JsonScalar)),
         /// `JSON_SERIALIZE(...)`. Before `Func`.
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonSerialize(boxed!(JsonSerialize)),
         /// `JSON_OBJECT(...)` SQL/JSON object constructor. Before `Func`.
         // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JsonObject(boxed!(JsonObject)),
         /// `JSON_ARRAY(...)` SQL/JSON array constructor. Before `Func`.
         // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JsonArray(boxed!(JsonArray)),
         /// `JSON_EXISTS(...)` SQL/JSON path predicate. Before `Func`.
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonExists(boxed!(JsonExists)),
         /// `JSON_VALUE(...)` SQL/JSON scalar extraction. Before `Func`.
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonValue(boxed!(JsonValue)),
         /// `JSON_QUERY(...)` SQL/JSON value extraction. Before `Func`.
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonQuery(boxed!(JsonQuery)),
         /// `JSON_OBJECTAGG(...)` SQL/JSON object aggregate. Before `Func`.
         // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JsonObjectAgg(boxed!(JsonObjectAgg)),
         /// `JSON_ARRAYAGG(...)` SQL/JSON array aggregate. Before `Func`.
         // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JsonArrayAgg(boxed!(JsonArrayAgg)),
         /// Function call: `func(args)` -- must come before ColumnRef
         Func(boxed!(FuncCall)),
@@ -4384,34 +4384,34 @@ recursa::ast_node! {
         Overlay,
         Extract,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonCtor,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonScalar,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonSerialize,
         // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JsonObject,
         // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JsonArray,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonExists,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonValue,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonQuery,
         // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JsonObjectAgg,
         // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JsonArrayAgg,
         Func,
         User,
@@ -4493,7 +4493,7 @@ recursa::ast_node! {
         #[tok(SESSION_USER)]
         SessionUser,
         // Added in 16: see the `SYSTEM_USER` keyword entry.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         #[tok(SYSTEM_USER)]
         SystemUser,
         Precision(PrecisionSqlValueFunc),
@@ -4538,28 +4538,28 @@ recursa::ast_node! {
         Overlay,
         Extract,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonCtor,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonScalar,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonSerialize,
         // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JsonObject,
         // Added in 16: see its node.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         JsonArray,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonExists,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonValue,
         // Added in 17: see its node.
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         JsonQuery,
         Coalesce,
         Greatest,

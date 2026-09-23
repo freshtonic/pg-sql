@@ -49,9 +49,9 @@ recursa::ast_node! {
         // The name is optional from 16: research, PostgreSQL 16, "Changes to
         // existing statements" (commits 2cbc3c17a, 0a5f06b84). REL_15_19 gram.y
         // has `REINDEX reindex_target_multitable opt_concurrently name`.
-        #[cfg(feature = "since-pg16")]
+        #[config(since = pg16)]
         pub name: Option<crate::tokens::ColId>,
-        #[cfg(not(feature = "since-pg16"))]
+        #[config(before = pg16)]
         pub name: crate::tokens::ColId,
     }
 }

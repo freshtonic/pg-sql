@@ -103,7 +103,7 @@ recursa::ast_node! {
         /// Removed in 18: gram.y `opclass_item` has no `opt_recheck`
         /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
         /// "Removed or changed syntax"; commit 7da1bdc2c2f).
-        #[cfg(not(feature = "since-pg18"))]
+        #[config(before = pg18)]
         #[presence(RECHECK)]
         pub recheck: bool,
     }
@@ -378,13 +378,13 @@ recursa::ast_node! {
     /// CREATE OPERATOR / CREATE AGGREGATE / etc. and is captured by [`DefList`].
     #[derive(Debug)]
     pub struct AlterOperatorSetOptions {
-        #[cfg(feature = "since-pg17")]
+        #[config(since = pg17)]
         #[tok(SET, this)]
         pub options: DefList,
         // Before 17, every option has a value: research, PostgreSQL 17,
         // "Changes to existing statements" (REL_17_11 gram.y 10252 adds
         // `operator_def_elem: ColLabel`; REL_16_15 gram.y 10103).
-        #[cfg(not(feature = "since-pg17"))]
+        #[config(before = pg17)]
         #[tok(SET, this)]
         pub options: OperatorDefList,
     }
