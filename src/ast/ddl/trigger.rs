@@ -343,19 +343,19 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `CREATE [OR REPLACE] CONSTRAINT TRIGGER name AFTER events ON table
+    /// `CREATE CONSTRAINT TRIGGER name AFTER events ON table
     /// [FROM ref_table] ConstraintAttributeSpec FOR EACH ROW [WHEN (expr)]
     /// EXECUTE {FUNCTION|PROCEDURE} func_name(args)` — Postgres'
     /// `CreateTrigStmt` (constraint form).
     ///
-    /// PG rejects `OR REPLACE` semantically here, but gram.y accepts it; we
-    /// mirror the grammar.
+    /// The rule reads `CREATE opt_or_replace CONSTRAINT TRIGGER`, but its
+    /// action stops on `OR REPLACE` ("CREATE OR REPLACE CONSTRAINT TRIGGER is
+    /// not supported"), so the raw parser rejects the form in every target
+    /// version (REL_14_24 gram.y `CreateTrigStmt`; b73d13c gram.y 6096). Only
+    /// the plain-trigger arm, [`CreateTriggerStmt`], keeps `OR REPLACE`.
     #[derive(Debug)]
     pub struct CreateConstraintTriggerStmt {
-        #[tok(CREATE, this, CONSTRAINT, TRIGGER)]
-        #[presence(OR, REPLACE)]
-        pub or_replace: bool,
-        #[tok(this, AFTER)]
+        #[tok(CREATE, CONSTRAINT, TRIGGER, this, AFTER)]
         pub name: crate::tokens::ColId,
         pub events: TriggerEventList,
         #[tok(ON, this)]

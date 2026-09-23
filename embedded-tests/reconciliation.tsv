@@ -486,3 +486,4 @@ tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	words_that_15_adds_are_identifiers_before_15	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	words_that_15_adds_are_no_ident_from_15	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/ddl/publication.tests.rs	publication_table_lists_before_15	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_rejects_or_replace	issue-9-generated-statement

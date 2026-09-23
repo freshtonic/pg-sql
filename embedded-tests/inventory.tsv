@@ -424,6 +424,7 @@ embedded-tests/src/ast/ddl/trigger.tests.rs	parse_drop_trigger_on_table	false	14
 embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_rejects_not_valid_and_no_inherit	false	14-
 embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_enforced_from_19	false	19-
 embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_enforced_is_rejected_before_19	false	14-18
+embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_rejects_or_replace	false	14-
 embedded-tests/src/ast/ddl/type.tests.rs	parse_alter_type_add_attribute	false	14-
 embedded-tests/src/ast/ddl/type.tests.rs	parse_alter_type_add_value	false	14-
 embedded-tests/src/ast/ddl/type.tests.rs	parse_alter_type_add_value_if_not_exists_after	false	14-
