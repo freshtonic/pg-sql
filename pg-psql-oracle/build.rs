@@ -145,19 +145,26 @@ fn main() {
         .include(tree.join("src/interfaces/libpq"))
         .include(tree.join("src/bin/psql"))
         .include("csrc")
-        // psql reaches `pg_valid_server_encoding_id` through the libpq
-        // shared library. This oracle links the static libraries, where the
-        // symbol has the `_private` spelling that `src/include/mb/pg_wchar.h`
-        // gives it under `USE_PRIVATE_ENCODING_FUNCS`; psqlscan.c takes its
-        // declaration from `libpq-fe.h` and never sees that header, so the
-        // rename is made here instead.
-        .define(
-            "pg_valid_server_encoding_id",
-            Some("pg_valid_server_encoding_id_private"),
-        )
         .flag_if_supported("-w") // PG sources warn a lot
         .flag_if_supported("-fno-strict-aliasing")
         .flag_if_supported("-fwrapv");
+
+    // psql reaches `pg_valid_server_encoding_id` through the libpq shared
+    // library. This oracle links the static libraries, and from PostgreSQL 17
+    // `src/include/mb/pg_wchar.h` gives the symbol a `_private` spelling in
+    // `libpgcommon.a` under `USE_PRIVATE_ENCODING_FUNCS` (commit b6c7cfac88c).
+    // psqlscan.c takes its declaration from `libpq-fe.h` and never sees that
+    // header, so the rename is made here instead. The header itself says which
+    // releases need it, so the trees of 14 to 16 are left alone.
+    let renames_encoding_functions = std::fs::read_to_string(tree.join("src/include/mb/pg_wchar.h"))
+        .expect("read pg_wchar.h")
+        .contains("USE_PRIVATE_ENCODING_FUNCS");
+    if renames_encoding_functions {
+        build.define(
+            "pg_valid_server_encoding_id",
+            Some("pg_valid_server_encoding_id_private"),
+        );
+    }
 
     build.file("csrc/psql_oracle.c");
     // psqlscan.l is the psql SQL lexer itself.

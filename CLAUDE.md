@@ -10,7 +10,7 @@
 
 4. **Use method syntax, not UFCS.** Write `T::parse(input)` not `<T as Parse>::parse(input)`.
 
-5. **Test against the target version's raw-parser oracle.** `pg-oracle` links the raw parser of the pinned release of the build's target version (`pg-oracle/pins.tsv`), and the differential suite compares pg-sql with it (`--features postgres-oracle`). There are no testcontainers and no running server. A statement that the oracle of the target version accepts must parse; one that it rejects must not.
+5. **Test against the target version's oracles.** `pg-oracle` links the raw parser of the pinned release of the build's target version (`pg-oracle/pins.tsv`), and the differential suite compares pg-sql with it (`--features postgres-oracle`). `pg-psql-oracle` links `psqlscan.l` and `psqlscanslash.l` of the same release, and `pg-psql/tests/psql_oracle.rs` compares pg-psql with it (`--features psql-oracle`, `docs/psql-oracle.md`). Both read the one pin table. There are no testcontainers and no running server. A statement that the raw-parser oracle of the target version accepts must parse; one that it rejects must not. A psql document that disagrees with the psql oracle is an expected psql gap with a recorded class, never an unexplained one.
 
 6. **Grow the grammar incrementally.** Each new test file drives new token/AST additions. Don't build grammar that isn't tested.
 

@@ -140,6 +140,14 @@ The first oracle build of each version extracts the pinned commit from the
 `vendor/postgres` object store and builds PostgreSQL under Cargo's `OUT_DIR`.
 Fetch the pins first with `scripts/fetch-postgres-pins`.
 
+## The psql oracle
+
+`docs/psql-oracle.md` describes the second differential: `pg-psql-oracle`
+links `psqlscan.l` and `psqlscanslash.l` of the same pinned release, and
+`pg-psql/tests/psql_oracle.rs` compares pg-psql's lexing with psql's own. It
+reads the same frozen corpus, by Git blob ID, and pins its outcomes per
+target version in `baselines/psql-oracle/<feature>.json`.
+
 ## Frozen corpus rules
 
 The inclusion rule is the exact `corpus_tests!` declaration at legacy commit

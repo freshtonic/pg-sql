@@ -215,25 +215,22 @@ fn shaped_documents() -> Vec<(&'static str, String)> {
     // Added in 17: a vertical tab ends a command name
     // (docs/research/psql-14-19-syntax-changes.md, item A4).
     documents.push(("name/vertical-tab", "SELECT 1 \\g\x0bx".into()));
-    // Added in 18: the pipeline and prepared-statement commands.
+    // Added in 18: the pipeline and prepared-statement commands, two of
+    // which send the buffer text and seven of which do not
+    // (docs/research/psql-14-19-syntax-changes.md, class (A) item A1).
     #[cfg(feature = "since-pg18")]
-    {
-        for command in [
-            "parse",
-            "sendpipeline",
-            "startpipeline",
-            "syncpipeline",
-            "endpipeline",
-            "flush",
-            "flushrequest",
-            "getresults",
-            "close_prepared",
-        ] {
-            documents.push((
-                Box::leak(format!("pipeline/{command}").into_boxed_str()),
-                format!("SELECT 1; SELECT 2 \\{command}\nSELECT 3;"),
-            ));
-        }
+    for (name, command) in [
+        ("pipeline/parse", "parse"),
+        ("pipeline/sendpipeline", "sendpipeline"),
+        ("pipeline/startpipeline", "startpipeline"),
+        ("pipeline/syncpipeline", "syncpipeline"),
+        ("pipeline/endpipeline", "endpipeline"),
+        ("pipeline/flush", "flush"),
+        ("pipeline/flushrequest", "flushrequest"),
+        ("pipeline/getresults", "getresults"),
+        ("pipeline/close-prepared", "close_prepared"),
+    ] {
+        documents.push((name, format!("SELECT 1; SELECT 2 \\{command}\nSELECT 3;")));
     }
     documents
 }
@@ -523,7 +520,8 @@ fn first_difference(psql_side: &str, oracle_side: &str) -> String {
 ///
 /// Every class is a deliberate limit of what pg-psql models, and a
 /// disagreement that fits none of them is `unclassified`, so a new one cannot
-/// be recorded without a reason.
+/// be recorded without a reason. The order of the rules is the order of
+/// causes: a later rule only speaks for a document no earlier one explains.
 fn classify(
     scanned: &pg_psql_oracle::Scan,
     psql: Option<&Facts>,
@@ -533,17 +531,16 @@ fn classify(
     if outcome.agrees() {
         return "";
     }
-    let Some(psql) = psql else {
-        // pg-psql refuses a document that reaches end of input inside a
-        // string, a dollar-quoted body, a quoted identifier or a comment;
-        // psql asks for another line instead (ADR 0007,
-        // freshtonic/recursa#131).
-        return if !scanned.is_complete() && scanned.final_prompt().is_open_lexical_region() {
-            "open-lexical-region"
-        } else {
-            "refused"
-        };
-    };
+    // The document reaches end of input inside a string, a quoted identifier,
+    // a dollar-quoted body or a comment. psql asks for another line; pg-psql
+    // has no open region, so it either refuses the document or reads the
+    // region's text as other tokens (ADR 0007, freshtonic/recursa#131).
+    if !scanned.is_complete() && scanned.final_prompt().is_open_lexical_region() {
+        return "open-lexical-region";
+    }
+    if psql.is_none() {
+        return "refused";
+    }
     // psql stops SQL lexing at every backslash command and reads the rest of
     // its line as arguments. pg-psql keeps a command it does not model as
     // ordinary text (freshtonic/pg-sql#11, #12, #13), so the forwarded text
@@ -568,9 +565,12 @@ fn classify(
     // psql suppresses the `;` boundary inside parentheses and inside a
     // tracked `BEGIN ... END` block of a `CREATE FUNCTION`. pg-psql tracks
     // neither, because it renders one string for the whole document rather
-    // than splitting it into submissions, so it only ever has more
-    // boundaries than psql.
-    if is_subsequence(&oracle.submissions, &psql.submissions) {
+    // than splitting it into submissions, so it only ever has fewer psql
+    // boundaries than its own.
+    let psql = psql.expect("the refusal case returned above");
+    if oracle.submissions.len() < psql.submissions.len()
+        && is_subsequence(&oracle.submissions, &psql.submissions)
+    {
         return "boundary-suppressed-by-nesting";
     }
     "unclassified"
