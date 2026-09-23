@@ -53,11 +53,16 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// A count or `ALL` marker following `FORWARD`/`BACKWARD`.
+    ///
+    /// The count is a `SignedIconst`, per gram.y's
+    /// `fetch_args: FORWARD SignedIconst opt_from_in cursor_name` (REL_17_11
+    /// 7477) and `BACKWARD SignedIconst opt_from_in cursor_name` (7504), so
+    /// `FORWARD -1` and `BACKWARD +2` are accepted.
     #[derive(Debug)]
     pub enum FetchCountOrAll {
         #[tok(ALL)]
         All,
-        Count(literal::IntegerLit),
+        Count(crate::ast::shared::numbers::SignedIconst),
     }
 }
 
@@ -66,7 +71,10 @@ recursa::ast_node! {
     ///
     /// Variant ordering: multi-token forms (`ABSOLUTE n`, `RELATIVE n`,
     /// `FORWARD [...]`, `BACKWARD [...]`) before single-keyword directions.
-    /// `Count` (bare integer) listed last since it has no keyword prefix.
+    /// `Count` listed last since it has no keyword prefix. It is a
+    /// `SignedIconst`, per gram.y's
+    /// `fetch_args: SignedIconst opt_from_in cursor_name` (REL_17_11 7450),
+    /// so `FETCH -5 c` and `MOVE +5 c` are accepted.
     #[derive(Debug)]
     pub enum FetchDirection {
         Absolute(FetchAbsolute),
@@ -83,7 +91,7 @@ recursa::ast_node! {
         Last,
         #[tok(ALL)]
         All,
-        Count(literal::IntegerLit),
+        Count(crate::ast::shared::numbers::SignedIconst),
     }
 }
 
