@@ -381,6 +381,7 @@ embedded-tests/src/ast/ddl/table.tests.rs	the_keywords_of_18_are_names	false	14-
 embedded-tests/src/ast/ddl/table.tests.rs	the_table_forms_of_18_are_rejected_before_18	false	14-17
 embedded-tests/src/ast/ddl/table.tests.rs	column_storage_forms	false	16-
 embedded-tests/src/ast/ddl/table.tests.rs	column_storage_is_rejected_before_16	false	14-15
+embedded-tests/src/ast/ddl/table.tests.rs	column_storage_takes_any_col_id	false	16-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_owner	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_rename	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_reset	false	14-

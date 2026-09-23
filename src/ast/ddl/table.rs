@@ -516,19 +516,19 @@ recursa::ast_node! {
 // 15, only `ALTER ... SET STORAGE ColId` takes a storage mode.
 #[cfg(feature = "since-pg16")]
 recursa::ast_node! {
-    /// Column STORAGE mode: `STORAGE { PLAIN | EXTERNAL | EXTENDED | MAIN | DEFAULT }`.
+    /// Column STORAGE mode — gram.y `column_storage: STORAGE ColId | STORAGE
+    /// DEFAULT`. The grammar takes any `ColId`, and only `ALTER TABLE`'s parse
+    /// analysis (`tablecmds.c`) rejects a word other than `plain`, `external`,
+    /// `extended` or `main`, so the admission set is `ColId`, not that word
+    /// list (principle 9).
+    ///
+    /// Variant ordering: `Default` first, although `DEFAULT` is a reserved
+    /// keyword that `ColId` never admits.
     #[derive(Debug)]
     pub enum ColumnStorageMode {
-        #[tok(PLAIN)]
-        Plain,
-        #[tok(EXTERNAL)]
-        External,
-        #[tok(EXTENDED)]
-        Extended,
-        #[tok(MAIN)]
-        Main,
         #[tok(DEFAULT)]
         Default,
+        Name(crate::tokens::ColId),
     }
 }
 
