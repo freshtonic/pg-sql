@@ -214,4 +214,22 @@ mod tests {
             "WITH m AS (MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE RETURNING *) SELECT 1",
         ]);
     }
+
+    // The MERGE target is gram.y `relation_expr_opt_alias`, whose alias-free
+    // rule has the `UMINUS` precedence, above `SET`'s, so `set` never opens
+    // the bare alias (REL_17_11 gram.y 13801-13810). The target also takes no
+    // column list, which `alias_clause` in a FROM item does.
+    #[test]
+    fn merge_bare_target_alias_never_takes_set() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "MERGE INTO t AS set USING u ON true WHEN MATCHED THEN DO NOTHING",
+                "MERGE INTO t x USING u ON true WHEN MATCHED THEN DO NOTHING",
+            ],
+            &[
+                "MERGE INTO t set USING u ON true WHEN MATCHED THEN DO NOTHING",
+                "MERGE INTO t x (a) USING u ON true WHEN MATCHED THEN DO NOTHING",
+            ],
+        );
+    }
 }

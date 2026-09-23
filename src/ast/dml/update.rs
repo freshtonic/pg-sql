@@ -162,11 +162,13 @@ recursa::ast_node! {
     ///
     /// PostgreSQL admits `SET` as a `ColId`, but gives it precedence as the UPDATE
     /// clause keyword in this position. The bare-alias admission excludes exactly
-    /// that keyword; the explicit `AS` form continues to accept it.
+    /// that keyword; the explicit `AS` form continues to accept it. DELETE and
+    /// MERGE share the same `relation_expr_opt_alias` state, so they share the
+    /// admission set.
     #[derive(Debug)]
     pub enum UpdateTableAlias {
         WithAs(UpdateTableAliasWithAs),
-        Bare(literal::UpdateAliasName),
+        Bare(literal::RelationAliasName),
     }
 }
 

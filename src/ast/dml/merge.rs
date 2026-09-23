@@ -8,7 +8,7 @@
 ///     | INSERT [INTO target] [(cols)] { VALUES (...) [, (...)] | DEFAULT VALUES } }
 /// [RETURNING ...]
 /// ```
-use crate::ast::dml::select::{PlainTable, TableRef};
+use crate::ast::dml::select::TableRef;
 #[cfg(feature = "since-pg17")]
 use crate::ast::dml::update::ReturningClause;
 use crate::ast::dml::update::SetAssignment;
@@ -187,11 +187,48 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// `AS alias` on a MERGE target — gram.y `relation_expr_opt_alias:
+    /// relation_expr AS ColId`.
+    #[derive(Debug)]
+    pub struct MergeAsAlias {
+        #[tok(AS, this)]
+        pub name: crate::tokens::ColId,
+    }
+}
+
+recursa::ast_node! {
+    /// Alias of a MERGE target — gram.y `relation_expr_opt_alias`, which has
+    /// no column list.
+    ///
+    /// `SET` is a `ColId`, yet the bare form never takes it: gram.y gives the
+    /// first `relation_expr_opt_alias` rule the `UMINUS` precedence, which is
+    /// above `SET`'s, so the parser reduces the empty alias instead of
+    /// shifting the keyword (REL_17_11 gram.y 13801-13810). MERGE, DELETE and
+    /// UPDATE share that state, so `MERGE INTO t set` is a syntax error.
+    ///
+    /// Variant ordering: `WithAs` (`AS ident`) before `Bare` (`ident`).
+    #[derive(Debug)]
+    pub enum MergeTableAlias {
+        WithAs(MergeAsAlias),
+        Bare(literal::RelationAliasName),
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `relation_expr_opt_alias`, the target of `MERGE INTO`.
+    #[derive(Debug)]
+    pub struct MergeTarget {
+        pub relation: crate::ast::shared::names::RelationExpr,
+        pub alias: Option<MergeTableAlias>,
+    }
+}
+
+recursa::ast_node! {
     /// MERGE statement.
     #[derive(Debug)]
     pub struct MergeStmt {
         #[tok(MERGE, INTO, this)]
-        pub target: boxed!(PlainTable),
+        pub target: boxed!(MergeTarget),
         #[tok(USING, this)]
         pub source: boxed!(TableRef),
         #[tok(ON, this)]

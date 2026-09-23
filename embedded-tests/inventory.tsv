@@ -455,6 +455,7 @@ embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_qualified_table	false	14
 embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_simple	false	14-
 embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_with_as_alias	false	14-
 embedded-tests/src/ast/dml/delete.tests.rs	parse_delete_with_bare_alias	false	14-
+embedded-tests/src/ast/dml/delete.tests.rs	delete_bare_alias_never_takes_set	false	14-
 embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_column_indirection	false	14-
 embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_default_values_returning	false	14-
 embedded-tests/src/ast/dml/insert.tests.rs	parse_insert_multiple_columns	false	14-
@@ -474,6 +475,7 @@ embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_clauses_with_gram_y_a
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_matched_and	false	15-
 embedded-tests/src/ast/dml/merge.tests.rs	parse_merge_when_clauses_before_17	false	15-16
 embedded-tests/src/ast/dml/merge.tests.rs	merge_17_clauses_are_rejected_before_17	false	15-16
+embedded-tests/src/ast/dml/merge.tests.rs	merge_bare_target_alias_never_takes_set	false	15-
 embedded-tests/src/ast/dml/select.tests.rs	parse_coalesce_family_as_function_tables	false	14-
 embedded-tests/src/ast/dml/select.tests.rs	parse_fetch_first_row_with_ties	false	14-
 embedded-tests/src/ast/dml/select.tests.rs	parse_fetch_first_rows_no_count	false	14-

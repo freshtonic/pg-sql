@@ -1001,7 +1001,7 @@ recursa::tokens! {
         BareColLabel = bare_label,
         WindowRefName = ColId - { PARTITION, ORDER, ROWS, RANGE, GROUPS },
         TableFunctionName = type_function_name - { COLLATION },
-        UpdateAliasName = ColId - { SET },
+        RelationAliasName = ColId - { SET },
         // gram.y resolves `a LIKE b escape`, `x IS JSON WITH UNIQUE keys`
         // and `x IS JSON value` by precedence (`%nonassoc ESCAPE`, and the
         // `%nonassoc IDENT ... KEYS OBJECT_P SCALAR VALUE_P ...` group), yet
@@ -1742,22 +1742,22 @@ pub mod literal {
         /// keyword precedence over interpreting it as a bare alias. Quoted
         /// identifiers and every other `ColId` spelling remain available.
         #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-        pub enum UpdateAliasName {
+        pub enum RelationAliasName {
             Text(
                 #[lex(
                     pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
-                    admits(UpdateAliasName)
+                    admits(RelationAliasName)
                 )]
-                UpdateAliasNameText,
+                RelationAliasNameText,
             ),
         }
     }
 
-    impl<'input> UpdateAliasName<'input> {
+    impl<'input> RelationAliasName<'input> {
         /// Raw alias text, including quotes when present.
         pub fn text(&self) -> &str {
             match self {
-                UpdateAliasName::Text(text) => text.text(),
+                RelationAliasName::Text(text) => text.text(),
             }
         }
     }

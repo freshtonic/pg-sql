@@ -87,4 +87,42 @@ mod tests {
         assert_eq!(stmt.relation.name().object(), "c");
         assert!(input.is_eof());
     }
+
+    // gram.y gives the alias-free `relation_expr_opt_alias` rule the `UMINUS`
+    // precedence, which is above `SET`'s, so the parser reduces the empty
+    // alias rather than shift the keyword (REL_17_11 gram.y 13801-13810 and
+    // `%nonassoc IDENT … SET …` 886-887). DELETE, UPDATE and MERGE share that
+    // state. The `AS` form keeps `set`, and every other `ColId` keeps the bare
+    // form.
+    #[test]
+    fn delete_bare_alias_never_takes_set() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "DELETE FROM t AS set",
+                "DELETE FROM t value",
+                "DELETE FROM t between",
+            ],
+            &[
+                "DELETE FROM t set",
+                "DELETE FROM ONLY t set",
+                "DELETE FROM t set USING u WHERE true",
+            ],
+        );
+    }
+
+    // `returning_clause: RETURNING target_list` has no empty list, so a bare
+    // `RETURNING` is neither an alias (the keyword is reserved) nor a clause
+    // (REL_14_24 gram.y `returning_clause`; REL_18_6 gram.y
+    // `returning_clause`).
+    #[test]
+    fn returning_takes_a_non_empty_target_list() {
+        crate::ast::test_support::check_statement_forms(
+            &["DELETE FROM t RETURNING *", "UPDATE t SET a = 1 RETURNING a"],
+            &[
+                "DELETE FROM t returning",
+                "UPDATE t SET a = 1 RETURNING",
+                "INSERT INTO t VALUES (1) RETURNING",
+            ],
+        );
+    }
 }
