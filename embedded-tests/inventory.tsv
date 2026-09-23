@@ -396,6 +396,7 @@ embedded-tests/src/ast/ddl/table.tests.rs	enforced_reaches_only_the_kinds_that_t
 embedded-tests/src/ast/ddl/table.tests.rs	table_not_null_takes_only_its_own_attributes	false	18-
 embedded-tests/src/ast/ddl/table.tests.rs	generated_expression_takes_only_always	false	14-
 embedded-tests/src/ast/ddl/table.tests.rs	column_unique_and_primary_key_take_storage_parameters	false	14-
+embedded-tests/src/ast/ddl/table.tests.rs	column_storage_takes_any_col_id	false	16-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_owner	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_rename	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_reset	false	14-
@@ -1081,6 +1082,7 @@ embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_from_16	false	1
 embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_before_16	false	14-15
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_option_for_pairs_with_its_body	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_option_for_takes_any_col_id_from_16	false	16-
+embedded-tests/src/ast/utility/grant.tests.rs	role_grant_option_takes_any_col_label	false	16-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_inheritance_star_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_multiple_relations_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_only_roundtrips	false	14-
@@ -1248,6 +1250,10 @@ embedded-tests/src/ast/shared/expr.tests.rs	parse_null_treatment_between_filter_
 embedded-tests/src/ast/shared/expr.tests.rs	reject_null_treatment_before_19	false	14-18
 embedded-tests/src/ast/shared/expr.tests.rs	words_that_15_adds_are_identifiers_before_15	false	14-14
 embedded-tests/src/ast/shared/expr.tests.rs	words_that_15_adds_are_no_ident_from_15	false	15-
+embedded-tests/src/ast/shared/expr.tests.rs	json_object_takes_a_named_legacy_argument	false	16-
+embedded-tests/src/ast/shared/expr.tests.rs	sql_value_function_words_are_reserved	false	14-
+embedded-tests/src/ast/shared/expr.tests.rs	system_user_is_reserved_from_16	false	16-
+embedded-tests/src/ast/shared/expr.tests.rs	system_user_is_a_name_before_16	false	14-15
 embedded-tests/src/ast/mod.tests.rs	checkpoint_takes_utility_options_from_19	false	19-
 embedded-tests/src/ast/mod.tests.rs	repack_statement_forms_from_19	false	19-
 embedded-tests/src/ast/mod.tests.rs	wait_for_lsn_forms_from_19	false	19-

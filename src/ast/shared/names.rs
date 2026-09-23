@@ -25,16 +25,23 @@ impl<'input> NameList<'input> {
 }
 
 recursa::ast_node! {
-    /// A single role reference — Postgres' `RoleSpec`.
+    /// A single role reference — gram.y `RoleSpec: NonReservedWord |
+    /// CURRENT_ROLE | CURRENT_USER | SESSION_USER` (REL_17_11 17346).
     ///
-    /// Only the `NonReservedWord` form is modelled: every role reference in the
-    /// differential corpus is a plain (possibly quoted) identifier. The reserved
-    /// pseudo-roles `CURRENT_ROLE` / `CURRENT_USER` / `SESSION_USER` are not yet
-    /// modelled — when a corpus statement needs one, add reserved-keyword tokens
-    /// and extend this enum to a tuple variant per form.
+    /// `public` is no keyword; gram.y's action recognises it by string, so it
+    /// arrives through `Name`.
+    ///
+    /// Variant ordering: the three pseudo-roles lead with their own reserved
+    /// keywords, which `NonReservedWord` does not admit.
     #[derive(Debug, PartialEq, Eq, Hash)]
-    pub struct RoleSpec {
-        pub name: crate::tokens::NonReservedWord,
+    pub enum RoleSpec {
+        #[tok(CURRENT_ROLE)]
+        CurrentRole,
+        #[tok(CURRENT_USER)]
+        CurrentUser,
+        #[tok(SESSION_USER)]
+        SessionUser,
+        Name(crate::tokens::NonReservedWord),
     }
 }
 

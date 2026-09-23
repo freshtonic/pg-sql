@@ -110,6 +110,35 @@ recursa::tokens! {
         GRANT        => r"GRANT" in RESERVED,
         FETCH        => r"FETCH" in RESERVED,
         USER         => r"USER" in RESERVED + bare_label,
+        // The reserved half of the `SQLValueFunction` keyword family of
+        // gram.y `func_expr_common_subexpr` (REL_17_11 15654-15720). Every
+        // word is `RESERVED_KEYWORD, BARE_LABEL` in kwlist.h at every pin
+        // from REL_14_24 to `b73d13c`, and every word but `system_user` is
+        // already there at REL_14_24.
+        //
+        // `current_schema` is absent on purpose: kwlist.h makes it a
+        // `TYPE_FUNC_NAME_KEYWORD`, which `table_function_name` admits, and
+        // `ast::dml::select::NamedTableRef` reads a relation name and a
+        // function-table name through that one admission. A bare
+        // `CURRENT_SCHEMA` in `table_ref` would then reduce either to that
+        // name or to `SqlValueFunction`, which is an RCA0401 reduce/reduce
+        // conflict. Modelling it needs `NamedTableRef` split into gram.y's
+        // `qualified_name` (`ColId`) and `func_application` routes.
+        CURRENT_CATALOG   => r"CURRENT_CATALOG" in RESERVED + bare_label,
+        CURRENT_DATE      => r"CURRENT_DATE" in RESERVED + bare_label,
+        CURRENT_ROLE      => r"CURRENT_ROLE" in RESERVED + bare_label,
+        CURRENT_TIME      => r"CURRENT_TIME" in RESERVED + bare_label,
+        CURRENT_TIMESTAMP => r"CURRENT_TIMESTAMP" in RESERVED + bare_label,
+        CURRENT_USER      => r"CURRENT_USER" in RESERVED + bare_label,
+        LOCALTIME         => r"LOCALTIME" in RESERVED + bare_label,
+        LOCALTIMESTAMP    => r"LOCALTIMESTAMP" in RESERVED + bare_label,
+        SESSION_USER      => r"SESSION_USER" in RESERVED + bare_label,
+        // Added in 16 as a reserved keyword: research, PostgreSQL 16,
+        // "Keywords" (REL_16_15 kwlist.h `system_user`, commit 0823d061b).
+        // REL_15_19 kwlist.h has no `system_user`, so 15 lexes the word as an
+        // identifier.
+        #[cfg(feature = "since-pg16")]
+        SYSTEM_USER       => r"SYSTEM_USER" in RESERVED + bare_label,
         CAST         => r"CAST" in RESERVED + bare_label,
         COLLATION    => r"COLLATION" in TYPE_FUNC_NAME + bare_label,
         FOREIGN      => r"FOREIGN" in RESERVED + bare_label,

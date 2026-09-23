@@ -468,12 +468,14 @@ tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	words_that_16_adds_are_identifiers_before_16	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	column_storage_forms	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	column_storage_is_rejected_before_16	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/table.tests.rs	column_storage_takes_any_col_id	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/statistics.tests.rs	create_statistics_without_a_name	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/statistics.tests.rs	create_statistics_needs_a_name_before_16	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/utility/reindex.tests.rs	reindex_database_without_a_name	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/utility/reindex.tests.rs	reindex_database_needs_a_name_before_16	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_from_16	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_before_16	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/utility/grant.tests.rs	role_grant_option_takes_any_col_label	issue-9-generated-statement
 -	introduced	embedded-tests/src/tokens.tests.rs	numeric_literal_trailing_dot_after_underscores	issue-9-generated-statement
 -	introduced	embedded-tests/src/tokens.tests.rs	non_decimal_and_underscore_literals_are_rejected_before_16	issue-9-generated-statement
 -	introduced	embedded-tests/src/tokens.tests.rs	dollar_num_above_int32_is_a_lexical_error_from_18	issue-9-generated-statement
@@ -485,6 +487,10 @@ tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src
 -	introduced	embedded-tests/src/ast/mod.tests.rs	statement_forms_added_in_15_are_rejected_before_15	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	words_that_15_adds_are_identifiers_before_15	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/shared/expr.tests.rs	words_that_15_adds_are_no_ident_from_15	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	json_object_takes_a_named_legacy_argument	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	sql_value_function_words_are_reserved	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	system_user_is_reserved_from_16	issue-9-generated-expression
+-	introduced	embedded-tests/src/ast/shared/expr.tests.rs	system_user_is_a_name_before_16	issue-9-generated-expression
 -	introduced	embedded-tests/src/ast/ddl/publication.tests.rs	publication_table_lists_before_15	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/cursor/fetch.tests.rs	fetch_signed_count_is_modelled	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/cursor/fetch.tests.rs	fetch_and_move_signed_count_forms	issue-9-generated-statement

@@ -2896,11 +2896,31 @@ recursa::ast_node! {
     /// prefix. They therefore share this node, and the presence of the key/value
     /// separator is what tells the two forms apart.
     ///
-    /// PostgreSQL's `func_arg_list` also admits the `name => value` spelling.
-    /// That form is not modelled here: no `json_object` call uses it, and a
-    /// named argument is not a legal SQL/JSON entry key.
+    /// Variant ordering: `Named` first. Its `type_function_name` and arrow
+    /// are the `func_arg_expr` named spelling, which `Value`'s key would
+    /// otherwise start to read as a column reference.
     #[derive(Debug)]
-    pub struct JsonObjectEntry {
+    pub enum JsonObjectEntry {
+        /// `name => value` or `name := value` — gram.y `func_arg_expr`'s two
+        /// named-argument arms, reachable only through the legacy
+        /// `JSON_OBJECT '(' func_arg_list ')'` production (REL_17_11 gram.y
+        /// 15941, `func_arg_expr` 16549). A named argument carries no
+        /// key/value separator, so it is its own variant.
+        Named(NamedFuncArg),
+        Value(JsonObjectEntryKeyValue),
+    }
+}
+
+// Added in 16: research, PostgreSQL 16, "Queries and expressions"
+// (REL_16_15 gram.y `json_value_expr`, `json_output_clause_opt` and the
+// `JSON_OBJECT`/`JSON_ARRAY` constructors; REL_15_19 gram.y has no SQL/JSON).
+#[cfg(feature = "since-pg16")]
+recursa::ast_node! {
+    /// A `JSON_OBJECT` item that leads with an expression: a SQL/JSON
+    /// `‹key› {: | VALUE} ‹value›` entry, or one positional argument of the
+    /// legacy `json_object(...)` function form.
+    #[derive(Debug)]
+    pub struct JsonObjectEntryKeyValue {
         pub key: boxed!(Expr),
         pub value: Option<JsonObjectEntryValue>,
     }
@@ -4141,6 +4161,10 @@ recursa::ast_node! {
         /// atom. Declared before `ColumnRef` for clarity (ColumnRef cannot
         /// match a reserved keyword anyway).
         User,
+        /// The rest of gram.y's `SQLValueFunction` family: `CURRENT_DATE`,
+        /// `CURRENT_USER` and the others. Each leads with its own keyword,
+        /// which no other atom admits.
+        SqlValue(SqlValueFunction),
         /// Qualified reference: `table.column`, `schema.table.column`, or
         /// `schema.table.*` -- must come before ColumnRef.
         QualRef(QualifiedRef),
@@ -4391,6 +4415,7 @@ recursa::ast_node! {
         JsonArrayAgg,
         Func,
         User,
+        SqlValue,
         QualRef,
         Parenthesized,
         NumericLit,
@@ -4404,6 +4429,74 @@ recursa::ast_node! {
         Null,
         PositionalParam,
         ColumnRef,
+    }
+}
+
+recursa::ast_node! {
+    /// `( ‹precision› )` — the `'(' Iconst ')'` argument of the four
+    /// `SQLValueFunction` keywords that take one (REL_17_11 gram.y 15662,
+    /// 15670, 15678, 15686).
+    #[derive(Debug)]
+    pub struct SqlValueFuncPrecision {
+        #[tok(LPAREN, this, RPAREN)]
+        pub value: literal::IntegerLit,
+    }
+}
+
+recursa::ast_node! {
+    /// The four `SQLValueFunction` keywords that gram.y writes twice, once
+    /// bare and once with `'(' Iconst ')'`.
+    #[derive(Debug)]
+    pub enum PrecisionSqlValueFuncName {
+        #[tok(CURRENT_TIME)]
+        CurrentTime,
+        #[tok(CURRENT_TIMESTAMP)]
+        CurrentTimestamp,
+        #[tok(LOCALTIME)]
+        LocalTime,
+        #[tok(LOCALTIMESTAMP)]
+        LocalTimestamp,
+    }
+}
+
+recursa::ast_node! {
+    /// One of the four time-valued `SQLValueFunction` keywords with its
+    /// optional precision.
+    #[derive(Debug)]
+    pub struct PrecisionSqlValueFunc {
+        pub name: PrecisionSqlValueFuncName,
+        pub precision: Option<SqlValueFuncPrecision>,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `func_expr_common_subexpr`'s `SQLValueFunction` arms
+    /// (REL_17_11 15654-15720), less the `USER` synonym, which keeps its own
+    /// [`Expr::User`] atom.
+    ///
+    /// Every spelling is a reserved keyword in every target version, so none
+    /// of them is an identifier: `CREATE TABLE current_user` is a syntax
+    /// error, as PostgreSQL reports. `CURRENT_SCHEMA` is not here: see the
+    /// keyword table in `crate::tokens`.
+    ///
+    /// Variant ordering: each variant leads with its own keyword.
+    #[derive(Debug)]
+    pub enum SqlValueFunction {
+        #[tok(CURRENT_CATALOG)]
+        CurrentCatalog,
+        #[tok(CURRENT_DATE)]
+        CurrentDate,
+        #[tok(CURRENT_ROLE)]
+        CurrentRole,
+        #[tok(CURRENT_USER)]
+        CurrentUser,
+        #[tok(SESSION_USER)]
+        SessionUser,
+        // Added in 16: see the `SYSTEM_USER` keyword entry.
+        #[cfg(feature = "since-pg16")]
+        #[tok(SYSTEM_USER)]
+        SystemUser,
+        Precision(PrecisionSqlValueFunc),
     }
 }
 
@@ -4426,8 +4519,7 @@ recursa::ast_node! {
     /// `FILTER` and `OVER` that a windowless position does not have, and where
     /// either word could start an alias or an operator class (RCA0400). An
     /// aggregate in these positions fails PostgreSQL's parse analysis anyway;
-    /// `Grouping`, which gram.y has in `c_expr`, not here; and the
-    /// `CURRENT_DATE` family, which pg-sql lexes as identifiers.
+    /// `Grouping`, which gram.y has in `c_expr`, not here.
     #[restricts(Expr)]
     pub enum FuncExprCommonSubexpr {
         XmlElement,
@@ -4476,5 +4568,6 @@ recursa::ast_node! {
         XmlConcat,
         Normalize,
         User,
+        SqlValue,
     }
 }

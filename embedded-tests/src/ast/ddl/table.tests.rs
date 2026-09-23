@@ -1246,6 +1246,27 @@ mod tests {
         ]);
     }
 
+    // gram.y `column_storage: STORAGE ColId | STORAGE DEFAULT` (REL_16_15
+    // 3781, REL_17_11 3845) takes a name, not the four TOAST words. Only
+    // `tablecmds.c` knows the word list, so the raw parser accepts any
+    // `ColId` and rejects the reserved words that `ColId` excludes.
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn column_storage_takes_any_col_id() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int STORAGE banana)",
+                "CREATE TABLE t (a int STORAGE \"Banana\")",
+                "CREATE TABLE t (a int STORAGE between)",
+                "ALTER TABLE t ALTER COLUMN a SET STORAGE banana",
+            ],
+            &[
+                "CREATE TABLE t (a int STORAGE select)",
+                "ALTER TABLE t ALTER COLUMN a SET STORAGE select",
+            ],
+        );
+    }
+
     // Added in 16, so rejected before 16. REL_15_19 gram.y has no
     // `column_storage`, and `ALTER opt_column ColId SET STORAGE ColId` takes a
     // name, which excludes the reserved word `DEFAULT`.

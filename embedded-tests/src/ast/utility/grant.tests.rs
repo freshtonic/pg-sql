@@ -247,6 +247,28 @@ mod tests {
         ]);
     }
 
+    // gram.y `grant_role_opt: ColLabel grant_role_opt_value` (REL_16_15 7817,
+    // REL_17_11 7970) takes a name, not the three option words. `user.c`
+    // rejects the rest, and parse analysis is not part of version parity.
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn role_grant_option_takes_any_col_label() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "GRANT r TO u WITH banana OPTION",
+                "GRANT r TO u WITH banana TRUE",
+                "GRANT r TO u WITH banana FALSE",
+                "GRANT r TO u WITH select OPTION",
+                "GRANT r TO u WITH banana OPTION, other TRUE",
+                "GRANT r TO u WITH banana TRUE GRANTED BY v",
+            ],
+            &[
+                "GRANT r TO u WITH banana",
+                "GRANT r TO u WITH 'banana' OPTION",
+            ],
+        );
+    }
+
     // Added in 16, so rejected before 16: REL_15_19 gram.y has only
     // `opt_grant_admin_option: WITH ADMIN OPTION` and `REVOKE ADMIN OPTION FOR`.
     #[cfg(not(feature = "since-pg16"))]
