@@ -493,3 +493,4 @@ tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src
 -	introduced	embedded-tests/src/ast/dml/delete.tests.rs	delete_bare_alias_never_takes_set	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/delete.tests.rs	returning_takes_a_non_empty_target_list	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/merge.tests.rs	merge_bare_target_alias_never_takes_set	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/table.tests.rs	generated_expression_takes_only_always	issue-9-generated-statement
