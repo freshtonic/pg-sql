@@ -1062,6 +1062,8 @@ embedded-tests/src/ast/utility/grant.tests.rs	alter_default_privileges_on_large_
 embedded-tests/src/ast/utility/grant.tests.rs	alter_default_privileges_on_large_objects_is_rejected_before_18	false	14-17
 embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_from_16	false	16-
 embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_before_16	false	14-15
+embedded-tests/src/ast/utility/grant.tests.rs	revoke_option_for_pairs_with_its_body	false	14-
+embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_option_for_takes_any_col_id_from_16	false	16-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_inheritance_star_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_multiple_relations_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_only_roundtrips	false	14-
