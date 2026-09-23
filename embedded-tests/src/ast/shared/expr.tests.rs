@@ -1080,6 +1080,83 @@ mod tests {
         }
     }
 
+    /// gram.y `func_expr_common_subexpr` gives every `SQLValueFunction` word
+    /// its own arm (REL_17_11 15654-15720), and kwlist.h makes each one a
+    /// `RESERVED_KEYWORD, BARE_LABEL` at every pin. So none of them is a
+    /// `ColId`, and `CREATE TABLE current_user` is a syntax error.
+    /// `current_schema` is the one member pg-sql still lexes as an
+    /// identifier: see the keyword table in `crate::tokens`.
+    #[test]
+    fn sql_value_function_words_are_reserved() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT current_catalog",
+                "SELECT current_date",
+                "SELECT current_role",
+                "SELECT current_time",
+                "SELECT current_time(3)",
+                "SELECT current_timestamp",
+                "SELECT current_timestamp(3)",
+                "SELECT current_user",
+                "SELECT localtime",
+                "SELECT localtime(3)",
+                "SELECT localtimestamp",
+                "SELECT localtimestamp(3)",
+                "SELECT session_user",
+                "SELECT current_date + 1",
+                "SELECT 1 AS current_user",
+                "SELECT 1 current_user",
+                "SELECT * FROM current_date",
+                "CREATE TABLE t (a timestamptz DEFAULT current_timestamp)",
+                "GRANT r TO CURRENT_USER",
+                "GRANT r TO u GRANTED BY CURRENT_ROLE",
+                "ALTER TABLE t OWNER TO SESSION_USER",
+            ],
+            &[
+                "CREATE TABLE current_catalog (a int)",
+                "CREATE TABLE current_date (a int)",
+                "CREATE TABLE current_role (a int)",
+                "CREATE TABLE current_time (a int)",
+                "CREATE TABLE current_timestamp (a int)",
+                "CREATE TABLE current_user (a int)",
+                "CREATE TABLE localtime (a int)",
+                "CREATE TABLE localtimestamp (a int)",
+                "CREATE TABLE session_user (a int)",
+                "CREATE TABLE t (current_user int)",
+                "SELECT * FROM t AS current_user",
+            ],
+        );
+    }
+
+    // Added in 16 as a reserved keyword: research, PostgreSQL 16, "Keywords"
+    // (REL_16_15 kwlist.h `system_user`, commit 0823d061b).
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn system_user_is_reserved_from_16() {
+        crate::ast::test_support::check_statement_forms(
+            &["SELECT system_user", "SELECT 1 AS system_user"],
+            &[
+                "CREATE TABLE system_user (a int)",
+                "SELECT * FROM t AS system_user",
+            ],
+        );
+    }
+
+    // Added in 16, so a plain name before 16: REL_15_19 kwlist.h has no
+    // `system_user`, and 15 lexes the word as an identifier.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn system_user_is_a_name_before_16() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT system_user",
+                "CREATE TABLE system_user (a int)",
+                "SELECT * FROM t AS system_user",
+            ],
+            &[],
+        );
+    }
+
     #[test]
     fn parse_substring_from() {
         let lexed = crate::lex("SUBSTRING('1234567890' FROM 3)");

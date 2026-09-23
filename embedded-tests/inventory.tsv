@@ -1230,6 +1230,9 @@ embedded-tests/src/ast/shared/expr.tests.rs	reject_null_treatment_before_19	fals
 embedded-tests/src/ast/shared/expr.tests.rs	words_that_15_adds_are_identifiers_before_15	false	14-14
 embedded-tests/src/ast/shared/expr.tests.rs	words_that_15_adds_are_no_ident_from_15	false	15-
 embedded-tests/src/ast/shared/expr.tests.rs	json_object_takes_a_named_legacy_argument	false	16-
+embedded-tests/src/ast/shared/expr.tests.rs	sql_value_function_words_are_reserved	false	14-
+embedded-tests/src/ast/shared/expr.tests.rs	system_user_is_reserved_from_16	false	16-
+embedded-tests/src/ast/shared/expr.tests.rs	system_user_is_a_name_before_16	false	14-15
 embedded-tests/src/ast/mod.tests.rs	checkpoint_takes_utility_options_from_19	false	19-
 embedded-tests/src/ast/mod.tests.rs	repack_statement_forms_from_19	false	19-
 embedded-tests/src/ast/mod.tests.rs	wait_for_lsn_forms_from_19	false	19-

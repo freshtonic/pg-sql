@@ -55,8 +55,9 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// `TO role_list` clause on CREATE/ALTER POLICY — Postgres'
-    /// `RowSecurityDefaultToRole`. `PUBLIC`/`CURRENT_USER`/etc. are not
-    /// keywords in pg-sql; they pass through as `RoleSpec` identifiers.
+    /// `RowSecurityDefaultToRole`. `PUBLIC` is no keyword and arrives as a
+    /// `RoleSpec` name; `CURRENT_USER` and its two siblings are reserved
+    /// words with their own `RoleSpec` variants.
     #[derive(Debug)]
     pub struct PolicyToClause {
         #[tok(TO, this)]
