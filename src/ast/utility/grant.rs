@@ -500,10 +500,16 @@ recursa::ast_node! {
     /// `{OPTION|TRUE|FALSE}` — the value of a role-grant `WITH` option.
     #[derive(Debug)]
     pub enum WithRoleOptValue {
+        // `OPTION` alone is the 14 shape `WITH ADMIN OPTION`, so it records
+        // nothing. `TRUE` and `FALSE` are the shapes that 16 adds (REL_15_19
+        // gram.y `opt_grant_admin_option: WITH ADMIN OPTION`; REL_16_15
+        // `grant_role_opt_value`, commit e3ce2de09).
         #[tok(OPTION)]
         Option,
+        #[config(since = pg16)]
         #[tok(TRUE)]
         True,
+        #[config(since = pg16)]
         #[tok(FALSE)]
         False,
     }
@@ -571,10 +577,14 @@ recursa::ast_node! {
         #[tok(TO, this)]
         pub roles: RoleList,
         // Added in 16: see `WithRoleOpts`.
-        #[config(since = pg16)]
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 16 adds belongs
+        // to those shapes.
+        #[cfg(feature = "since-pg16")]
         pub with: Option<WithRoleOpts>,
         // Removed in 16: see `WithAdminOption`.
-        #[config(before = pg16)]
+        #[cfg(not(feature = "since-pg16"))]
         pub with: Option<WithAdminOption>,
         pub granted_by: Option<GrantedBy>,
     }

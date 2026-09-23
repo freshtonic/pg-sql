@@ -28,6 +28,8 @@ features.
   `since-pg15` … `since-pg19`: "added in N" is `feature = "since-pgN"`, and
   "removed in N" is `not(feature = "since-pgN")`. recursa-codegen reads Cargo's
   `cfg` values, so the generated grammar matches the selected version.
+  (ADR 0010 replaces the `cfg` by a `#[config]` declaration over the same
+  features, for every gate that recursa sees. The features do not change.)
 - The AST type differs between builds. Changes are additive where possible, so
   consumer code for an older version usually compiles with a newer target
   version.

@@ -215,6 +215,11 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub enum AlterDomainConstraintElem {
         Check(AlterDomainCheckConstraint),
+        /// Added in 17: the shape that the widening of `ALTER DOMAIN ... ADD`
+        /// adds. Before 17 the body is a `TableConstraint`, whose
+        /// `ConstraintElem` has no bare `NOT NULL` (REL_16_15 gram.y 11392;
+        /// REL_17_11 gram.y 4254-4307, 11552).
+        #[config(since = pg17)]
         NotNull(AlterDomainNotNullConstraint),
     }
 }
@@ -241,10 +246,14 @@ recursa::ast_node! {
         // statements". REL_17_11 gram.y 11552 takes `DomainConstraint`;
         // REL_16_15 gram.y 11392 takes `TableConstraint`, and execution
         // rejects the kinds other than `CHECK`.
-        #[config(since = pg17)]
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 17 adds belongs
+        // to those shapes.
+        #[cfg(feature = "since-pg17")]
         #[tok(ADD, this)]
         pub constraint: AlterDomainConstraint,
-        #[config(before = pg17)]
+        #[cfg(not(feature = "since-pg17"))]
         #[tok(ADD, this)]
         pub constraint: crate::ast::ddl::table::TableConstraint,
     }

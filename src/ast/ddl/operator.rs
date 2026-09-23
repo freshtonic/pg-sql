@@ -378,13 +378,17 @@ recursa::ast_node! {
     /// CREATE OPERATOR / CREATE AGGREGATE / etc. and is captured by [`DefList`].
     #[derive(Debug)]
     pub struct AlterOperatorSetOptions {
-        #[config(since = pg17)]
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 17 adds belongs
+        // to those shapes.
+        #[cfg(feature = "since-pg17")]
         #[tok(SET, this)]
         pub options: DefList,
         // Before 17, every option has a value: research, PostgreSQL 17,
         // "Changes to existing statements" (REL_17_11 gram.y 10252 adds
         // `operator_def_elem: ColLabel`; REL_16_15 gram.y 10103).
-        #[config(before = pg17)]
+        #[cfg(not(feature = "since-pg17"))]
         #[tok(SET, this)]
         pub options: OperatorDefList,
     }

@@ -354,10 +354,14 @@ recursa::ast_node! {
         // `*` is added in 17: research, PostgreSQL 17, "Changes to existing
         // statements" (REL_17_11 gram.y 3475, 3483). REL_16_15 gram.y 3419
         // takes only a `columnList`.
-        #[config(since = pg17)]
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 17 adds belongs
+        // to those shapes.
+        #[cfg(feature = "since-pg17")]
         #[tok(FORCE, NOT, NULL, this)]
         pub target: CopyForceTarget,
-        #[config(before = pg17)]
+        #[cfg(not(feature = "since-pg17"))]
         #[tok(FORCE, NOT, NULL, this)]
         pub target: CopyForceColumns,
     }
@@ -370,10 +374,10 @@ recursa::ast_node! {
         // `*` is added in 17: research, PostgreSQL 17, "Changes to existing
         // statements" (REL_17_11 gram.y 3475, 3483). REL_16_15 gram.y 3419
         // takes only a `columnList`.
-        #[config(since = pg17)]
+        #[cfg(feature = "since-pg17")]
         #[tok(FORCE, NULL, this)]
         pub target: CopyForceTarget,
-        #[config(before = pg17)]
+        #[cfg(not(feature = "since-pg17"))]
         #[tok(FORCE, NULL, this)]
         pub target: CopyForceColumns,
     }

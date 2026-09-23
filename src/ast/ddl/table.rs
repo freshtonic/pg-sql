@@ -706,6 +706,12 @@ recursa::ast_node! {
     /// keyword that `ColId` never admits.
     #[derive(Debug)]
     pub enum ColumnStorageMode {
+        /// Added in 16: the shape that the widening of `ALTER TABLE ... SET
+        /// STORAGE` adds. Before 16 the argument is a `ColId`, which never
+        /// admits the reserved word `DEFAULT` (REL_15_19 gram.y
+        /// `alter_table_cmd: ... SET STORAGE ColId`; REL_16_15 2472,
+        /// commit b9424d014).
+        #[config(since = pg16)]
         #[tok(DEFAULT)]
         Default,
         Name(crate::tokens::ColId),
@@ -1003,12 +1009,16 @@ recursa::ast_node! {
     #[tok(FOREIGN, KEY, this)]
     pub struct TableForeignKey {
         pub columns: ForeignKeyColumnList,
-        #[config(before = pg18)]
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 18 adds belongs
+        // to those shapes.
+        #[cfg(not(feature = "since-pg18"))]
         pub references: ReferencesConstraint,
         /// From 18 the referenced column list can end with `PERIOD col`,
         /// which a column-level `REFERENCES` cannot (REL_18_6 gram.y
         /// `opt_column_and_period_list`).
-        #[config(since = pg18)]
+        #[cfg(feature = "since-pg18")]
         pub references: ForeignKeyReferences,
         /// gram.y `ConstraintAttributeSpec` after `key_actions`.
         pub attrs: zero_or_many!(ForeignKeyConstraintAttr),
@@ -2392,10 +2402,14 @@ recursa::ast_node! {
         // 16 accepts `DEFAULT` (`column_storage`): research, PostgreSQL 16,
         // "Changes to existing statements" (commit b9424d014). REL_15_19 gram.y
         // has `ALTER opt_column ColId SET STORAGE ColId`.
-        #[config(since = pg16)]
+        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
+        // the newer type accepts everything the older one does, so both arms
+        // only remove and neither records. The gate for what 16 adds belongs
+        // to those shapes.
+        #[cfg(feature = "since-pg16")]
         #[tok(SET, STORAGE, this)]
         pub mode: crate::ast::ddl::table::ColumnStorageMode,
-        #[config(before = pg16)]
+        #[cfg(not(feature = "since-pg16"))]
         #[tok(SET, STORAGE, this)]
         pub mode: crate::tokens::ColId,
     }

@@ -25,11 +25,23 @@ API.
   pg-psql build, version parity covers only the psql language that pg-psql
   models: `psqlscan.l` lexing and the send commands. Meta-commands that
   pg-psql keeps as unparsed text have no version gate.
-- **Version gate**: a statement that one grammar element (a statement,
+- **Version gate**: a declaration that one grammar element (a statement,
   clause, field, lexer rule, keyword or keyword category) exists only from a
-  target version ("added in N"), or only before one ("removed in N"). Every
-  version gate cites the research entry or the `gram.y`/`scan.l` change that
-  justifies it.
+  target version ("added in N"), or only before one ("removed in N"). It is
+  `#[config(since = pgN)]` or `#[config(before = pgN)]` inside an
+  `ast_node!` or `tokens!` body, and a `#[cfg]` where recursa never sees it.
+  Every version gate cites the research entry or the `gram.y`/`scan.l` change
+  that justifies it. A `since` gate both removes the element and records the
+  requirement (ADR 0010).
+- **Version requirement**: the lowest target version whose grammar accepts
+  one construct, which a `since` gate records. `pg_sql::minimum_version`
+  reports the requirement of a parsed statement, with the construct, and,
+  where `gram.y` raises a specific `ereport`, its SQLSTATE, message and hint
+  (`docs/minimum-version.md`).
+- **Widening**: a change where a newer target version gives a field a type
+  that accepts everything the older type does. The requirement belongs to the
+  shapes the newer type adds, never to the field, so a widening keeps a
+  `#[cfg]` and gates those shapes instead.
 - **PostgreSQL statement**: one semantically typed statement accepted by the
   supported PostgreSQL grammar.
 - **SQL file item**: one statement, raw or COPY payload region, or the first
