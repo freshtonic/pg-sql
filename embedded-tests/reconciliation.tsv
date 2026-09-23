@@ -493,4 +493,8 @@ tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src
 -	introduced	embedded-tests/src/ast/dml/delete.tests.rs	delete_bare_alias_never_takes_set	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/delete.tests.rs	returning_takes_a_non_empty_target_list	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/dml/merge.tests.rs	merge_bare_target_alias_never_takes_set	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/table.tests.rs	constraint_attributes_match_the_constraint_kind	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/table.tests.rs	alter_constraint_rejects_no_inherit_before_18	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/table.tests.rs	enforced_reaches_only_the_kinds_that_take_it_from_18	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/table.tests.rs	table_not_null_takes_only_its_own_attributes	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	generated_expression_takes_only_always	issue-9-generated-statement

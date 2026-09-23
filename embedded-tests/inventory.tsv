@@ -382,6 +382,10 @@ embedded-tests/src/ast/ddl/table.tests.rs	the_keywords_of_18_are_names	false	14-
 embedded-tests/src/ast/ddl/table.tests.rs	the_table_forms_of_18_are_rejected_before_18	false	14-17
 embedded-tests/src/ast/ddl/table.tests.rs	column_storage_forms	false	16-
 embedded-tests/src/ast/ddl/table.tests.rs	column_storage_is_rejected_before_16	false	14-15
+embedded-tests/src/ast/ddl/table.tests.rs	constraint_attributes_match_the_constraint_kind	false	14-
+embedded-tests/src/ast/ddl/table.tests.rs	alter_constraint_rejects_no_inherit_before_18	false	14-17
+embedded-tests/src/ast/ddl/table.tests.rs	enforced_reaches_only_the_kinds_that_take_it_from_18	false	18-
+embedded-tests/src/ast/ddl/table.tests.rs	table_not_null_takes_only_its_own_attributes	false	18-
 embedded-tests/src/ast/ddl/table.tests.rs	generated_expression_takes_only_always	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_owner	false	14-
 embedded-tests/src/ast/ddl/tablespace.tests.rs	parse_alter_tablespace_rename	false	14-
