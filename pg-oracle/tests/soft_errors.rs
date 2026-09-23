@@ -26,10 +26,19 @@ fn a_very_large_integer_literal_is_a_float() {
 }
 
 /// The literal is a float, so it reaches a grammar rule that takes a
-/// `NumericOnly`, not only an `ICONST`.
+/// `NumericOnly`, not only an `ICONST`. `createdb_opt_item` takes a
+/// `NumericOnly` from 15; at 14 it takes a `SignedIconst`, so 14 rejects it.
+#[cfg(feature = "since-pg15")]
 #[test]
 fn a_create_database_oid_above_int32_is_accepted() {
     assert!(parse_ok("CREATE DATABASE d OID = 3000000000"));
+}
+
+#[cfg(not(feature = "since-pg15"))]
+#[test]
+fn a_create_database_oid_above_int32_is_rejected_before_15() {
+    assert!(parse_ok("CREATE DATABASE d OID = 2147483647"));
+    assert!(!parse_ok("CREATE DATABASE d OID = 3000000000"));
 }
 
 /// The same fallback under a unary minus.
