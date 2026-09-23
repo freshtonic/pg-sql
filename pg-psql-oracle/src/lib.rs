@@ -137,6 +137,68 @@ impl Prompt {
     }
 }
 
+/// What psql does with the query buffer when a backslash command ends.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Command {
+    /// The command returns `PSQL_CMD_SEND` and its send mode puts the buffer
+    /// text on the wire. `MainLoop()` then resets the buffer.
+    Send,
+    /// The command returns `PSQL_CMD_SEND`, so the buffer ends, but its send
+    /// mode does not put the buffer text on the wire. All of these arrived in
+    /// PostgreSQL 18.
+    Discard,
+    /// Every other command. It does not end the query buffer, so the text
+    /// before and after it belongs to one statement.
+    Other,
+}
+
+/// What psql does with the query buffer after the backslash command `name`.
+///
+/// The table is the set of commands whose `exec_command_*` returns
+/// `PSQL_CMD_SEND` in `src/bin/psql/command.c` at the pinned release, split by
+/// whether the send mode transmits the buffer text
+/// (`docs/research/psql-14-19-syntax-changes.md`, class (A) item A1).
+///
+/// Two boundaries are outside the table, because they are not `PSQL_CMD_SEND`:
+/// `\watch` runs the buffer and resets it, and `\r` discards it. Both answer
+/// [`Command::Other`] here. `docs/psql-oracle.md` records this.
+pub fn classify(name: &str) -> Command {
+    // `exec_command_g` serves both `\g` and `\gx`; `\gdesc` sends the buffer
+    // with a Describe, so it transmits the text like the others.
+    // `REL_17_11:command.c` 761, 1474, 1570, 1624, 1651.
+    const SEND: &[&str] = &["crosstabview", "g", "gx", "gdesc", "gexec", "gset"];
+    // Added in 18: `REL_18_6:command.c` 2529 (`\parse`) and 2855
+    // (`\sendpipeline`) send the buffer text.
+    #[cfg(feature = "since-pg18")]
+    const SEND_18: &[&str] = &["parse", "sendpipeline"];
+    // Added in 18: these end the buffer but send none of its text
+    // (`REL_18_6:command.c` 775, 1702, 1721, 1939, 3072, 3091, 3110).
+    #[cfg(feature = "since-pg18")]
+    const DISCARD_18: &[&str] = &[
+        "close_prepared",
+        "endpipeline",
+        "flush",
+        "flushrequest",
+        "getresults",
+        "startpipeline",
+        "syncpipeline",
+    ];
+
+    if SEND.contains(&name) {
+        return Command::Send;
+    }
+    #[cfg(feature = "since-pg18")]
+    {
+        if SEND_18.contains(&name) {
+            return Command::Send;
+        }
+        if DISCARD_18.contains(&name) {
+            return Command::Discard;
+        }
+    }
+    Command::Other
+}
+
 /// One fact psql's lexer reported about a document.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {

@@ -362,6 +362,7 @@ fn send_commands_render_as_a_statement_boundary() {
     // never sees.
     for (source, expected) in [
         (r"SELECT 1 \gset", "SELECT 1 ;"),
+        (r"SELECT 1 \gdesc", "SELECT 1 ;"),
         (r"SELECT 1 \gexec", "SELECT 1 ;"),
         (r"SELECT 1 \gx", "SELECT 1 ;"),
         (r"SELECT 1 \g", "SELECT 1 ;"),
@@ -444,7 +445,7 @@ fn a_send_command_name_is_read_whole() {
         r"SELECT 1 \gsetfoo",
         r"SELECT 1 \gexecx",
         r"\getenv abs_srcdir",
-        r"\gdesc",
+        r"\gdescribe",
     ] {
         assert_eq!(
             render_unbound(source),
