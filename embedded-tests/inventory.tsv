@@ -1250,3 +1250,7 @@ embedded-tests/src/tokens.tests.rs	numeric_literal_trailing_dot_after_underscore
 embedded-tests/src/tokens.tests.rs	non_decimal_and_underscore_literals_are_rejected_before_16	false	15-15
 embedded-tests/src/tokens.tests.rs	trailing_junk_is_rejected_from_15	false	15-
 embedded-tests/src/tokens.tests.rs	trailing_junk_ends_a_number_before_15	false	14-14
+embedded-tests/src/ast/cursor/fetch.tests.rs	fetch_signed_count_is_modelled	false	14-
+embedded-tests/src/ast/cursor/fetch.tests.rs	fetch_and_move_signed_count_forms	false	14-
+embedded-tests/src/ast/ddl/sequence.tests.rs	sequence_logged_options_are_modelled	false	15-
+embedded-tests/src/ast/ddl/sequence.tests.rs	sequence_logged_options_are_rejected_before_15	false	14-14
