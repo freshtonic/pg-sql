@@ -1086,6 +1086,7 @@ embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_before_16	false
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_option_for_pairs_with_its_body	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_option_for_takes_any_col_id_from_16	false	16-
 embedded-tests/src/ast/utility/grant.tests.rs	role_grant_option_takes_any_col_label	false	16-
+embedded-tests/src/ast/utility/grant.tests.rs	role_grant_opts_keep_the_admin_option_shape	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_inheritance_star_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_multiple_relations_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_only_roundtrips	false	14-

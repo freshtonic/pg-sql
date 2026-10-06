@@ -176,6 +176,22 @@ mod tests {
         assert!(matches!(form.option_for.name, RevokeRoleOptionName::Admin));
     }
 
+    // `WITH ADMIN OPTION` is the one role-grant option REL_15_19 gram.y 7752
+    // accepts: one option, named `ADMIN`, with the value `OPTION`. A second
+    // option and any other name are the two shapes 16 adds (issue #93).
+    #[test]
+    fn role_grant_opts_keep_the_admin_option_shape() {
+        let stmt = parse_stmt::<GrantStmt>("GRANT role1 TO role2 WITH ADMIN OPTION");
+        let stmt = stmt.ast();
+        let GrantBody::Role(body) = &stmt.body else {
+            panic!("expected the role body, got {:?}", stmt.body);
+        };
+        let with = body.with.as_ref().expect("the WITH block");
+        assert!(matches!(with.first.name, GrantRoleOptionName::Admin));
+        assert!(matches!(with.first.value, WithRoleOptValue::Option));
+        assert_eq!(with.more.iter().count(), 0);
+    }
+
     #[test]
     fn revoke_admin_option_for_role() {
         let stmt = parse_stmt::<RevokeStmt>("REVOKE ADMIN OPTION FOR role1 FROM u1");

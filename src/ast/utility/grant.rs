@@ -493,9 +493,10 @@ recursa::ast_node! {
     }
 }
 
-// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
+// Changed in 16: research, PostgreSQL 16, "Changes to existing statements"
 // (REL_16_15 gram.y `grant_role_opt_list`, commits e3ce2de09, 3d14e171e).
-#[cfg(feature = "since-pg16")]
+// REL_15_19 gram.y 7752 has only `opt_grant_admin_option: WITH ADMIN OPTION`,
+// which is this node with the `Admin` name and the `OPTION` value.
 recursa::ast_node! {
     /// `{OPTION|TRUE|FALSE}` — the value of a role-grant `WITH` option.
     #[derive(Debug)]
@@ -515,45 +516,67 @@ recursa::ast_node! {
     }
 }
 
-// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
-// (REL_16_15 gram.y `grant_role_opt_list`, commits e3ce2de09, 3d14e171e).
-#[cfg(feature = "since-pg16")]
 recursa::ast_node! {
-    /// `name value` pair — gram.y `grant_role_opt: ColLabel
-    /// grant_role_opt_value` (REL_17_11 7970). The grammar takes any
+    /// The name of one role-grant `WITH` option — gram.y `grant_role_opt`'s
+    /// `ColLabel` (REL_16_15 7827, REL_17_11 7970). The grammar takes any
     /// `ColLabel`; only `user.c` rejects a name other than `ADMIN`, `INHERIT`
     /// or `SET`, and parse analysis is not part of version parity
     /// (principle 9).
+    ///
+    /// REL_15_19 gram.y 7752 spells only `WITH ADMIN OPTION`, so `ADMIN` is the
+    /// 14 shape and every other spelling is what 16 adds. The two variants
+    /// together are gram.y's `ColLabel`, which is why neither widens an
+    /// admission set.
+    ///
+    /// Variant ordering: `Admin` is one fixed keyword and `Other` admits
+    /// `ColLabel` without it, so the two never overlap.
+    #[derive(Debug)]
+    pub enum GrantRoleOptionName {
+        #[tok(ADMIN)]
+        Admin,
+        /// Added in 16: research, PostgreSQL 16, "Changes to existing
+        /// statements" (REL_16_15 gram.y 7827 `grant_role_opt: ColLabel
+        /// grant_role_opt_value`, commits e3ce2de09, 3d14e171e).
+        #[config(since = pg16)]
+        Other(crate::tokens::RoleGrantOptionWord),
+    }
+}
+
+recursa::ast_node! {
+    /// `name value` pair — gram.y `grant_role_opt: ColLabel
+    /// grant_role_opt_value` (REL_17_11 7970).
     #[derive(Debug)]
     pub struct WithRoleOpt {
-        pub name: crate::tokens::ColLabel,
+        pub name: GrantRoleOptionName,
         pub value: WithRoleOptValue,
     }
 }
 
-// Added in 16: research, PostgreSQL 16, "Changes to existing statements"
-// (REL_16_15 gram.y `grant_role_opt_list`, commits e3ce2de09, 3d14e171e).
-#[cfg(feature = "since-pg16")]
+recursa::ast_node! {
+    /// `, opt` — one more option of a role-grant `WITH` list.
+    #[derive(Debug)]
+    #[tok(COMMA, this)]
+    pub struct WithRoleOptMore {
+        pub opt: WithRoleOpt,
+    }
+}
+
+// Changed in 16: 16 replaces REL_15_19 gram.y 7752
+// `opt_grant_admin_option: WITH ADMIN OPTION` with `WITH grant_role_opt_list`
+// (research, PostgreSQL 16, "Changes to existing statements"; REL_16_15 gram.y
+// 7778, 7821). The newer form accepts the older one, so the gates sit on the
+// two shapes it adds: a name other than `ADMIN`, and a second option.
 recursa::ast_node! {
     /// `WITH opt [, …]` — role-grant trailing options block.
     #[derive(Debug)]
     #[tok(WITH, this)]
     pub struct WithRoleOpts {
-        #[sep(COMMA)]
-        pub opts: one_or_many!(WithRoleOpt),
-    }
-}
-
-// Removed in 16: REL_15_19 gram.y `opt_grant_admin_option: WITH ADMIN OPTION`.
-// 16 replaces it with `WITH grant_role_opt_list` (research, PostgreSQL 16,
-// "Changes to existing statements").
-#[cfg(not(feature = "since-pg16"))]
-recursa::ast_node! {
-    /// `WITH ADMIN OPTION` — the only role-grant option before 16.
-    #[derive(Debug)]
-    pub enum WithAdminOption {
-        #[tok(WITH, ADMIN, OPTION)]
-        Value,
+        pub first: WithRoleOpt,
+        /// Added in 16: REL_15_19 gram.y 7752 takes one option and no comma,
+        /// so a second option is what needs 16 (REL_16_15 gram.y 7821
+        /// `grant_role_opt_list`).
+        #[config(since = pg16)]
+        pub more: zero_or_many!(WithRoleOptMore),
     }
 }
 
@@ -576,16 +599,10 @@ recursa::ast_node! {
     pub struct GrantRoleBody {
         #[tok(TO, this)]
         pub roles: RoleList,
-        // Added in 16: see `WithRoleOpts`.
         // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
-        // the newer type accepts everything the older one does, so both arms
-        // only remove and neither records. The gate for what 16 adds belongs
-        // to those shapes.
-        #[cfg(feature = "since-pg16")]
+        // `WITH ADMIN OPTION` parses in 14, so the field records nothing and
+        // the gates sit inside `WithRoleOpts` on the shapes 16 adds.
         pub with: Option<WithRoleOpts>,
-        // Removed in 16: see `WithAdminOption`.
-        #[cfg(not(feature = "since-pg16"))]
-        pub with: Option<WithAdminOption>,
         pub granted_by: Option<GrantedBy>,
     }
 }

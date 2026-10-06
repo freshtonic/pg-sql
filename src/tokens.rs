@@ -1042,6 +1042,11 @@ recursa::tokens! {
         // principle 9 asks for; the split only lets the gate name the spelling
         // that 16 adds.
         RoleRevokeOptionWord = ColId - { ADMIN },
+        // gram.y `grant_role_opt: ColLabel grant_role_opt_value` (REL_16_15
+        // 7827), split the same way against REL_15_19 gram.y 7752
+        // `opt_grant_admin_option: WITH ADMIN OPTION`. The two together are
+        // gram.y's `ColLabel`.
+        RoleGrantOptionWord = ColLabel - { ADMIN },
         // gram.y resolves `a LIKE b escape`, `x IS JSON WITH UNIQUE keys`
         // and `x IS JSON value` by precedence (`%nonassoc ESCAPE`, and the
         // `%nonassoc IDENT ... KEYS OBJECT_P SCALAR VALUE_P ...` group), yet
@@ -1572,6 +1577,35 @@ recursa::ast_node! {
 
 #[cfg(feature = "since-pg16")]
 impl RoleRevokeOptionWord<'_> {
+    pub fn text(&self) -> &str {
+        match self {
+            Self::Text(text) => text.text(),
+        }
+    }
+}
+
+// Added in 16: the name of one role-grant `WITH` option (REL_16_15 gram.y 7827
+// `grant_role_opt: ColLabel grant_role_opt_value`). REL_15_19 gram.y 7752
+// spells only `WITH ADMIN OPTION`.
+#[cfg(feature = "since-pg16")]
+recursa::ast_node! {
+    /// Every `ColLabel` spelling of a role-grant option name except the bare
+    /// `ADMIN` keyword, which `crate::ast::utility::grant::GrantRoleOptionName`
+    /// keeps as its own variant.
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum RoleGrantOptionWord {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(RoleGrantOptionWord)
+            )]
+            RoleGrantOptionWordText,
+        ),
+    }
+}
+
+#[cfg(feature = "since-pg16")]
+impl RoleGrantOptionWord<'_> {
     pub fn text(&self) -> &str {
         match self {
             Self::Text(text) => text.text(),
