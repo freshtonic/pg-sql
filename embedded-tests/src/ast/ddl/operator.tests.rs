@@ -289,6 +289,37 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    // `ALTER OPERATOR ... SET` holds gram.y's own `operator_def_list`, not the
+    // shared `def_list`, in every target version. The value that 17 makes
+    // optional is therefore a shape of `OperatorDefElem` and carries the
+    // version gate (issue #93; REL_17_11 gram.y 10244, 10248).
+    #[test]
+    fn alter_operator_set_holds_an_operator_def_list() {
+        let stmt = parse_stmt::<AlterOperatorStmt>("ALTER OPERATOR === (int, int) SET (RESTRICT = x)");
+        let stmt = stmt.ast();
+        let AlterOperatorAction::SetOptions(action) = &stmt.action else {
+            panic!("expected SET (...), got {:?}", stmt.action);
+        };
+        let options: &OperatorDefList = &action.options;
+        assert_eq!(options.items.iter().count(), 1);
+        assert_eq!(options.items.first().name.text(), "RESTRICT");
+    }
+
+    // The 17 shape: one `operator_def_elem` with no value at all (issue #93;
+    // REL_17_11 gram.y 10252 `operator_def_elem: ColLabel`).
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn operator_def_elem_holds_no_value_from_17() {
+        let stmt = parse_stmt::<AlterOperatorStmt>("ALTER OPERATOR === (int, int) SET (MERGES)");
+        let stmt = stmt.ast();
+        let AlterOperatorAction::SetOptions(action) = &stmt.action else {
+            panic!("expected SET (...), got {:?}", stmt.action);
+        };
+        assert_eq!(action.options.items.first().name.text(), "MERGES");
+        assert!(action.options.items.first().value.is_none());
+        reparse_stable::<AlterOperatorStmt>("ALTER OPERATOR === (int, int) SET (MERGES)");
+    }
+
     // An `ALTER OPERATOR ... SET` option with no value is added in 17: research,
     // PostgreSQL 17, "Changes to existing statements" (REL_17_11 gram.y 10252).
     #[cfg(feature = "since-pg17")]

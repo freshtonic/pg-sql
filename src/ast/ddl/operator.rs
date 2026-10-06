@@ -374,42 +374,49 @@ recursa::ast_node! {
     /// `SET (operator_def_list)` action on `ALTER OPERATOR` — Postgres'
     /// `AlterOperatorStmt` proper.
     ///
-    /// The def-list inside the parens is the same `def_list` body shared with
-    /// CREATE OPERATOR / CREATE AGGREGATE / etc. and is captured by [`DefList`].
+    /// The list inside the parens is gram.y's own `operator_def_list`, not the
+    /// `def_list` that CREATE OPERATOR and CREATE AGGREGATE share, because 17
+    /// made its value optional and only this list takes that shape
+    /// ([`OperatorDefElem`]).
     #[derive(Debug)]
     pub struct AlterOperatorSetOptions {
-        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
-        // the newer type accepts everything the older one does, so both arms
-        // only remove and neither records. The gate for what 17 adds belongs
-        // to those shapes.
-        #[cfg(feature = "since-pg17")]
-        #[tok(SET, this)]
-        pub options: DefList,
-        // Before 17, every option has a value: research, PostgreSQL 17,
-        // "Changes to existing statements" (REL_17_11 gram.y 10252 adds
-        // `operator_def_elem: ColLabel`; REL_16_15 gram.y 10103).
-        #[cfg(not(feature = "since-pg17"))]
         #[tok(SET, this)]
         pub options: OperatorDefList,
     }
 }
 
-// Before 17, `operator_def_elem` has no form without a value: research,
-// PostgreSQL 17, "Changes to existing statements" (REL_16_15 gram.y 10103).
-#[cfg(not(feature = "since-pg17"))]
 recursa::ast_node! {
-    /// One `operator_def_elem` before 17: `ColLabel = {NONE | operator_def_arg}`.
+    /// One `operator_def_elem`: `ColLabel = {NONE | operator_def_arg}`, and from
+    /// 17 a bare `ColLabel` as well.
+    ///
+    /// `operator_def_list` is its own nonterminal, not the shared `def_list`, so
+    /// the missing value is a shape of this node and carries the gate. The
+    /// shared [`DefList`] cannot carry it: `def_elem: ColLabel` is legal in 14
+    /// everywhere else it appears.
     #[derive(Debug)]
     pub struct OperatorDefElem {
         pub name: literal::AliasName,
+        /// The value became optional in 17: research, PostgreSQL 17, "Changes
+        /// to existing statements" (REL_17_11 gram.y 10252 adds
+        /// `operator_def_elem: ColLabel`). REL_16_15 gram.y 10104-10107 has
+        /// only the two `ColLabel '=' …` forms, so a missing value is what
+        /// needs 17.
+        #[config(
+            since = pg17,
+            on = absent,
+            cite = "gram.y REL_17_11:10252, operator_def_elem: ColLabel; REL_16_15:10104 has \
+                    only ColLabel '=' NONE and ColLabel '=' operator_def_arg",
+        )]
+        pub value: Option<crate::ast::ddl::role::DefElemValue>,
+        // Before 17: see above.
+        #[config(before = pg17)]
         pub value: crate::ast::ddl::role::DefElemValue,
     }
 }
 
-// Before 17: see `OperatorDefElem`.
-#[cfg(not(feature = "since-pg17"))]
 recursa::ast_node! {
-    /// `( operator_def_list )` of `ALTER OPERATOR ... SET` before 17.
+    /// `( operator_def_list )` of `ALTER OPERATOR ... SET` — gram.y
+    /// `operator_def_list` (REL_17_11 gram.y 10244).
     #[derive(Debug)]
     #[tok(LPAREN, this, RPAREN)]
     pub struct OperatorDefList {

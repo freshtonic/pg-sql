@@ -196,6 +196,8 @@ embedded-tests/src/ast/ddl/materialized_view.tests.rs	create_materialized_view_w
 embedded-tests/src/ast/ddl/materialized_view.tests.rs	create_materialized_view_with_storage_tablespace_roundtrips	false	14-
 embedded-tests/src/ast/ddl/materialized_view.tests.rs	create_unlogged_materialized_view_roundtrips	false	14-
 embedded-tests/src/ast/ddl/materialized_view.tests.rs	parse_create_materialized_view_minimal	false	14-
+embedded-tests/src/ast/ddl/operator.tests.rs	alter_operator_set_holds_an_operator_def_list	false	14-
+embedded-tests/src/ast/ddl/operator.tests.rs	operator_def_elem_holds_no_value_from_17	false	17-
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_alter_operator_custom_op	false	14-
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_alter_operator_family_add	false	14-
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_alter_operator_family_add_order_by	false	14-
