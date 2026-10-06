@@ -1035,6 +1035,13 @@ recursa::tokens! {
         WindowRefName = ColId - { PARTITION, ORDER, ROWS, RANGE, GROUPS },
         TableFunctionName = type_function_name - { COLLATION },
         RelationAliasName = ColId - { SET },
+        // gram.y `RevokeRoleStmt: REVOKE ColId OPTION FOR …` (REL_16_15 7805).
+        // `ADMIN` is the one spelling REL_15_19 gram.y 7738 accepts, so it is
+        // its own variant of `RevokeRoleOptionName` and this set holds the rest
+        // of `ColId`. The two together are gram.y's `ColId`, which is what
+        // principle 9 asks for; the split only lets the gate name the spelling
+        // that 16 adds.
+        RoleRevokeOptionWord = ColId - { ADMIN },
         // gram.y resolves `a LIKE b escape`, `x IS JSON WITH UNIQUE keys`
         // and `x IS JSON value` by precedence (`%nonassoc ESCAPE`, and the
         // `%nonassoc IDENT ... KEYS OBJECT_P SCALAR VALUE_P ...` group), yet
@@ -1540,6 +1547,35 @@ impl BareColLabel<'_> {
     /// [`crate::ident::fold_identifier`].
     pub fn folded(&self) -> Result<crate::ident::Folded<'_>, crate::ident::FoldError> {
         crate::ident::fold_identifier(self.text())
+    }
+}
+
+// Added in 16: the name of the option that `REVOKE … OPTION FOR` strips
+// (REL_16_15 gram.y 7805 `REVOKE ColId OPTION FOR …`). REL_15_19 gram.y 7738
+// spells only `ADMIN`.
+#[cfg(feature = "since-pg16")]
+recursa::ast_node! {
+    /// Every `ColId` spelling of a role-revoke option name except the bare
+    /// `ADMIN` keyword, which `crate::ast::utility::grant::RevokeRoleOptionName`
+    /// keeps as its own variant so the gate can name the spellings 16 adds.
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum RoleRevokeOptionWord {
+        Text(
+            #[lex(
+                pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
+                admits(RoleRevokeOptionWord)
+            )]
+            RoleRevokeOptionWordText,
+        ),
+    }
+}
+
+#[cfg(feature = "since-pg16")]
+impl RoleRevokeOptionWord<'_> {
+    pub fn text(&self) -> &str {
+        match self {
+            Self::Text(text) => text.text(),
+        }
     }
 }
 

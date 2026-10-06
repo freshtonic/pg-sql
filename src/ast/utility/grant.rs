@@ -659,28 +659,37 @@ recursa::ast_node! {
 }
 
 // Changed in 16: research, PostgreSQL 16, "Changes to existing statements"
-// (REL_16_15 gram.y `RevokeRoleStmt: REVOKE ColId OPTION FOR …`, commit
-// e3ce2de09). REL_15_19 gram.y has only `REVOKE ADMIN OPTION FOR`.
-#[cfg(feature = "since-pg16")]
+// (REL_16_15 gram.y 7805 `RevokeRoleStmt: REVOKE ColId OPTION FOR …`, commit
+// e3ce2de09). REL_15_19 gram.y 7738 has only `REVOKE ADMIN OPTION FOR`. The
+// newer form accepts the older one, so the gate sits on the spelling it adds.
 recursa::ast_node! {
-    /// `ColId OPTION FOR` — the role-revoke prefix that strips one option of
-    /// an existing role grant. gram.y takes any `ColId` here and the catalog
+    /// The name of the option that `REVOKE … OPTION FOR` strips — gram.y's
+    /// `ColId` (REL_16_15 7805). gram.y takes any `ColId` here and the catalog
     /// rejects a name other than `ADMIN`, `INHERIT` or `SET`.
+    ///
+    /// `ADMIN` is the one spelling REL_15_19 gram.y 7738 accepts, so it is its
+    /// own variant and `Other` admits the rest of `ColId`. The two together are
+    /// gram.y's `ColId`, so neither variant widens an admission set.
+    ///
+    /// Variant ordering: `Admin` is one fixed keyword and `Other` admits
+    /// `ColId` without it, so the two never overlap.
     #[derive(Debug)]
-    pub struct RevokeRoleOptionFor {
-        #[tok(this, OPTION, FOR)]
-        pub name: crate::tokens::ColId,
+    pub enum RevokeRoleOptionName {
+        #[tok(ADMIN)]
+        Admin,
+        /// Added in 16: see the comment above this node.
+        #[config(since = pg16)]
+        Other(crate::tokens::RoleRevokeOptionWord),
     }
 }
 
-// Removed in 16: see `RevokeRoleOptionFor`.
-#[cfg(not(feature = "since-pg16"))]
 recursa::ast_node! {
-    /// `ADMIN OPTION FOR` — the only role-revoke option prefix before 16.
+    /// `ColId OPTION FOR` — the role-revoke prefix that strips one option of
+    /// an existing role grant.
     #[derive(Debug)]
-    pub enum RevokeRoleOptionFor {
-        #[tok(ADMIN, OPTION, FOR)]
-        Value,
+    pub struct RevokeRoleOptionFor {
+        #[tok(this, OPTION, FOR)]
+        pub name: RevokeRoleOptionName,
     }
 }
 

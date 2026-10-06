@@ -524,6 +524,7 @@ tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	table_not_null_takes_only_its_own_attributes	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	generated_expression_takes_only_always	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	column_unique_and_primary_key_take_storage_parameters	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_option_name_keeps_admin_as_its_own_shape	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/operator.tests.rs	alter_operator_set_holds_an_operator_def_list	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/operator.tests.rs	operator_def_elem_holds_no_value_from_17	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/utility/copy.tests.rs	force_null_options_hold_their_own_target	issue-9-generated-statement

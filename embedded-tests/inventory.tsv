@@ -1077,6 +1077,7 @@ embedded-tests/src/ast/utility/grant.tests.rs	grant_with_grant_option	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_admin_option_for_role	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_grant_option_for_cascade	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_membership_cascade	false	14-
+embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_option_name_keeps_admin_as_its_own_shape	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_simple_privilege	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	alter_default_privileges_on_large_objects	false	18-
 embedded-tests/src/ast/utility/grant.tests.rs	alter_default_privileges_on_large_objects_is_rejected_before_18	false	14-17
