@@ -1133,6 +1133,7 @@ embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_full_legacy_roundtrips	fal
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_multi_targets_roundtrips	false	14-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_options_with_target_roundtrips	false	14-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_parallel_option_with_value_roundtrips	false	14-
+embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_relation_holds_its_own_relation_name	false	14-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_verbose_analyze_roundtrips	false	14-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_relation_expr_of_18	false	18-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_relation_expr_is_rejected_before_18	false	14-17

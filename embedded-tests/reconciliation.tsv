@@ -525,3 +525,4 @@ tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	generated_expression_takes_only_always	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	column_unique_and_primary_key_take_storage_parameters	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/utility/copy.tests.rs	force_null_options_hold_their_own_target	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_relation_holds_its_own_relation_name	issue-9-generated-statement
