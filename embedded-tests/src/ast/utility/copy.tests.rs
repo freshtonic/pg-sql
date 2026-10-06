@@ -174,6 +174,42 @@ mod tests {
         reparse_stable::<CopyStmt>("COPY t FROM 'f' CSV FORCE NOT NULL a, b");
     }
 
+    // `FORCE NOT NULL` and `FORCE NULL` hold their own target node, which is
+    // not the one `FORCE QUOTE` holds. gram.y writes one `copy_opt_item` arm
+    // per spelling and shares no nonterminal, so the `*` that 17 adds to these
+    // two options carries its own version gate, while the `*` of `FORCE QUOTE`
+    // stays ungated (issue #93; REL_17_11 gram.y 3463-3484).
+    #[test]
+    fn force_null_options_hold_their_own_target() {
+        let stmt = parse_stmt::<CopyStmt>("COPY t FROM 'f' CSV FORCE NOT NULL a, b");
+        let stmt = stmt.ast();
+        let CopyBody::Table(body) = &stmt.body else {
+            panic!("expected the table form, got {:?}", stmt.body);
+        };
+        let Some(CopyOptions::Legacy(options)) = &body.options else {
+            panic!("expected the legacy option list, got {:?}", body.options);
+        };
+        let CopyLegacyOptionItem::ForceNotNull(force) = options.items.last() else {
+            panic!("expected FORCE NOT NULL, got {:?}", options.items.last());
+        };
+        let target: &CopyForceNullTarget = &force.target;
+        assert!(matches!(target, CopyForceNullTarget::Columns(_)));
+
+        let stmt = parse_stmt::<CopyStmt>("COPY t TO 'f' CSV FORCE QUOTE *");
+        let stmt = stmt.ast();
+        let CopyBody::Table(body) = &stmt.body else {
+            panic!("expected the table form, got {:?}", stmt.body);
+        };
+        let Some(CopyOptions::Legacy(options)) = &body.options else {
+            panic!("expected the legacy option list, got {:?}", body.options);
+        };
+        let CopyLegacyOptionItem::ForceQuote(force) = options.items.last() else {
+            panic!("expected FORCE QUOTE, got {:?}", options.items.last());
+        };
+        let target: &CopyForceTarget = &force.target;
+        assert!(matches!(target, CopyForceTarget::Star));
+    }
+
     #[test]
     fn copy_table_legacy_with_null_as() {
         // Corpus regression case: `WITH ... NULL AS '...'` chained options.
