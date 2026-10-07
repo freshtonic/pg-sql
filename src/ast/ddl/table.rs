@@ -986,6 +986,12 @@ recursa::ast_node! {
         #[sep(COMMA)]
         #[deref]
         pub one_or_many!(crate::tokens::ColId),
+        /// Added in 18: gram.y `optionalPeriodName`, the `PERIOD` column of the
+        /// referenced side (docs/research/postgres-14-19-sql-syntax-changes.md,
+        /// PostgreSQL 18, item 3; REL_18_6 gram.y
+        /// `opt_column_and_period_list`). The list itself is a widening of
+        /// `opt_column_list`, so only this element records.
+        #[config(since = pg18)]
         pub Option<PeriodColumn>,
     );
 }

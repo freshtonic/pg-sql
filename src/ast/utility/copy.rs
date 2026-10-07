@@ -351,19 +351,8 @@ recursa::ast_node! {
     /// `FORCE NOT NULL { * | columnList }` — legacy force-not-null option.
     #[derive(Debug)]
     pub struct CopyForceNotNullOpt {
-        // `*` is added in 17: research, PostgreSQL 17, "Changes to existing
-        // statements" (REL_17_11 gram.y 3475, 3483). REL_16_15 gram.y 3419
-        // takes only a `columnList`.
-        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
-        // the newer type accepts everything the older one does, so both arms
-        // only remove and neither records. The gate for what 17 adds belongs
-        // to those shapes.
-        #[cfg(feature = "since-pg17")]
         #[tok(FORCE, NOT, NULL, this)]
-        pub target: CopyForceTarget,
-        #[cfg(not(feature = "since-pg17"))]
-        #[tok(FORCE, NOT, NULL, this)]
-        pub target: CopyForceColumns,
+        pub target: CopyForceNullTarget,
     }
 }
 
@@ -371,22 +360,16 @@ recursa::ast_node! {
     /// `FORCE NULL { * | columnList }` — legacy force-null option.
     #[derive(Debug)]
     pub struct CopyForceNullOpt {
-        // `*` is added in 17: research, PostgreSQL 17, "Changes to existing
-        // statements" (REL_17_11 gram.y 3475, 3483). REL_16_15 gram.y 3419
-        // takes only a `columnList`.
-        #[cfg(feature = "since-pg17")]
         #[tok(FORCE, NULL, this)]
-        pub target: CopyForceTarget,
-        #[cfg(not(feature = "since-pg17"))]
-        #[tok(FORCE, NULL, this)]
-        pub target: CopyForceColumns,
+        pub target: CopyForceNullTarget,
     }
 }
 
 recursa::ast_node! {
-    /// Target of a `FORCE QUOTE` / `FORCE NULL` / `FORCE NOT NULL` legacy option:
-    /// either `*` (all columns) or a bare `columnList` (no parentheses — note
-    /// `columnList` in `gram.y` does not include outer `()`).
+    /// Target of a `FORCE QUOTE` legacy option: either `*` (all columns) or a
+    /// bare `columnList` (no parentheses — note `columnList` in `gram.y` does
+    /// not include outer `()`). Both spellings are legal in 14
+    /// (REL_16_15 gram.y 3409, 3413).
     #[derive(Debug)]
     pub enum CopyForceTarget {
         #[tok(STAR)]
@@ -395,16 +378,21 @@ recursa::ast_node! {
     }
 }
 
-// Before 17, `FORCE NOT NULL` and `FORCE NULL` take a `columnList` and no `*`
-// (research, PostgreSQL 17, "Changes to existing statements"; REL_16_15
-// gram.y 3419-3424).
-#[cfg(not(feature = "since-pg17"))]
 recursa::ast_node! {
-    /// The `columnList` target of a `FORCE NOT NULL` or `FORCE NULL` legacy
-    /// option before 17: a [`CopyForceTarget`] without `*`.
-    #[restricts(CopyForceTarget)]
-    pub enum CopyForceColumns {
-        Columns,
+    /// Target of a `FORCE NOT NULL` or `FORCE NULL` legacy option. `gram.y`
+    /// writes one `copy_opt_item` arm per spelling and shares no nonterminal
+    /// between the three `FORCE` options, so the `*` of these two options is
+    /// its own element and carries the gate that [`CopyForceTarget`] cannot.
+    #[derive(Debug)]
+    pub enum CopyForceNullTarget {
+        /// Added in 17: research, PostgreSQL 17, "Changes to existing
+        /// statements" (REL_17_11 gram.y 3475 `FORCE NOT NULL_P '*'`, 3483
+        /// `FORCE NULL_P '*'`). REL_16_15 gram.y 3417, 3421 take only a
+        /// `columnList`.
+        #[config(since = pg17)]
+        #[tok(STAR)]
+        Star,
+        Columns(#[sep(COMMA)] one_or_many!(crate::tokens::ColId)),
     }
 }
 

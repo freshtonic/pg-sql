@@ -72,29 +72,17 @@ recursa::ast_node! {
     /// `table_name [(column, ...)]` target of an ANALYZE statement.
     #[derive(Debug)]
     pub struct AnalyzeTarget {
-        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
-        // the newer type accepts everything the older one does, so both arms
-        // only remove and neither records. The gate for what 18 adds belongs
-        // to those shapes.
-        #[cfg(not(feature = "since-pg18"))]
-        pub table_name: crate::ast::shared::names::QualifiedName,
-        /// From 18 gram.y `vacuum_relation` names a `relation_expr`, so
-        /// `ONLY name` and `name *` are accepted
-        /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
-        /// item 9; REL_18_6 gram.y `vacuum_relation`).
-        #[cfg(feature = "since-pg18")]
-        pub table_name: crate::ast::shared::names::RelationExpr,
+        /// `ANALYZE` and `VACUUM` share gram.y `vacuum_relation`, so they share
+        /// the node that holds its relation, and with it the two shapes that
+        /// 18 adds (`crate::ast::utility::vacuum::VacuumRelationName`).
+        pub table_name: crate::ast::utility::vacuum::VacuumRelationName,
         pub columns: Option<AnalyzeColumnList>,
     }
 }
 
 impl<'input> AnalyzeTarget<'input> {
-    /// The name of the target relation. From 18 the target is a
-    /// `relation_expr`, and this is the name inside it.
+    /// The name of the target relation, whichever form wraps it.
     pub fn relation_name(&self) -> &crate::ast::shared::names::QualifiedName<'input> {
-        #[cfg(not(feature = "since-pg18"))]
-        return &self.table_name;
-        #[cfg(feature = "since-pg18")]
-        return self.table_name.name();
+        self.table_name.name()
     }
 }

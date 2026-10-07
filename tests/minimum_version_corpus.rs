@@ -9,19 +9,19 @@
 //! the check once for each version. The check itself needs no PostgreSQL
 //! build: it reads only the frozen corpus and the pinned baselines.
 //!
-//! The equality holds with two named exceptions, because an oracle records
-//! only "accepts" or "rejects" and cannot say what it parsed. Both are frozen
-//! lists below, and `docs/minimum-version.md` explains them.
+//! The equality holds with one named exception, because an oracle records
+//! only "accepts" or "rejects" and cannot say what it parsed. It is a frozen
+//! list below, and `docs/minimum-version.md` explains it.
 //!
 //! - **An older grammar reads the same text as something else.** Before 17,
 //!   `JSON_VALUE(j, '$.a')` is an ordinary function call, and before 16
 //!   `SELECT 0x42F` is the integer `0` with the column label `x42F`. The
 //!   older oracle accepts the text, so the report looks too high, and it is
 //!   right: the statement that this build parsed needs the newer version.
-//! - **A widening that depends on a word, not on a shape.** From 16 `REVOKE
-//!   ColId OPTION FOR` takes any name, where 15 takes only `ADMIN`. The
-//!   requirement belongs to which word appears, which no gate can declare, so
-//!   the report is too low.
+//!
+//! A report that is too low has no exception left. Issue #93 gave every
+//! widening a gated shape, so the frozen list `UNRECORDED_WIDENINGS` is empty
+//! and an under-report fails this test.
 
 #[allow(dead_code)]
 #[path = "support/baseline.rs"]
@@ -68,23 +68,16 @@ const REINTERPRETED_BY_AN_OLDER_GRAMMAR: &[&str] = &[
     LEXICAL,
 ];
 
-/// The corpus statements whose requirement no gate can declare, because the
-/// newer grammar widened an admission set and the requirement depends on
-/// which word appears, not on the shape of the value.
+/// The corpus statements whose requirement no gate declares, so that this
+/// build reports a version that is too low.
 ///
-/// - `ALTER OPERATOR ... SET (MERGES)`: from 17 `operator_def_elem` accepts a
-///   bare `ColLabel` (REL_17_11 gram.y 10252; REL_16_15 gram.y 10103).
-/// - `REVOKE ColId OPTION FOR`: from 16 the name is any `ColId`, where
-///   REL_15_19 gram.y has only `REVOKE ADMIN OPTION FOR` (commit e3ce2de09).
-const UNRECORDED_WIDENINGS: &[(&str, usize)] = &[
-    ("alter_operator.sql", 32),
-    ("alter_operator.sql", 33),
-    ("alter_operator.sql", 42),
-    ("alter_operator.sql", 43),
-    ("create_role.sql", 79),
-    ("privileges.sql", 84),
-    ("privileges.sql", 237),
-];
+/// The list is empty, and it stays. Issue #93 closed the last seven entries by
+/// giving each widening a shape to gate: `ALTER OPERATOR … SET (MERGES)` is an
+/// `OperatorDefElem` with no value, and `REVOKE INHERIT OPTION FOR …` is the
+/// `Other` name of a `RevokeRoleOptionName`. A new widening belongs in the
+/// grammar as such a shape, never in this list, because an under-report would
+/// let a consumer send a statement to a server that refuses it.
+const UNRECORDED_WIDENINGS: &[(&str, usize)] = &[];
 
 /// What one statement reports: the version, and the construct that set it.
 struct Reported {

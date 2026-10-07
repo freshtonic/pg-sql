@@ -163,6 +163,115 @@ fn a_shape_rule_reports_the_version_that_made_the_value_optional() {
     );
 }
 
+/// Class 4: a widening, where a newer grammar gives a field a wider type.
+///
+/// The requirement belongs to the shape the wider type adds, never to the
+/// field, so the older shape reports the baseline and the added shape reports
+/// the version that added it (issue #93, `docs/minimum-version.md`).
+#[test]
+fn a_widening_reports_the_version_of_the_shape_that_it_adds() {
+    // Every older shape reports the baseline, in every build.
+    for source in [
+        // 16 widened the role-revoke option name from `ADMIN` to `ColId`
+        // (REL_16_15 gram.y 7805; REL_15_19 gram.y 7738).
+        "REVOKE ADMIN OPTION FOR r FROM u",
+        // 16 widened `WITH ADMIN OPTION` to `WITH grant_role_opt_list`
+        // (REL_16_15 gram.y 7778; REL_15_19 gram.y 7752).
+        "GRANT r TO u WITH ADMIN OPTION",
+        // 17 made the value of an `operator_def_elem` optional (REL_17_11
+        // gram.y 10252; REL_16_15 gram.y 10104).
+        "ALTER OPERATOR === (int, int) SET (RESTRICT = x)",
+        // 17 added `*` to `FORCE NOT NULL` and `FORCE NULL`, which
+        // `FORCE QUOTE` has in every version (REL_17_11 gram.y 3471-3484).
+        "COPY t FROM STDIN CSV FORCE NOT NULL a, b",
+        "COPY t TO STDOUT CSV FORCE QUOTE *",
+        // 18 widened the relation of a `vacuum_relation` to a `relation_expr`
+        // (REL_18_6 gram.y 12021; REL_17_11 gram.y 11913).
+        "VACUUM t",
+        "ANALYZE t",
+        // 18 added the `PERIOD` element to both column lists of a table-level
+        // foreign key (REL_18_6 gram.y `opt_column_and_period_list`).
+        "CREATE TABLE t (a int, b int, FOREIGN KEY (a) REFERENCES u (c))",
+    ] {
+        assert_eq!(
+            parse_and_report(source),
+            Some(TargetVersion::Pg14),
+            "{source}"
+        );
+    }
+
+    #[cfg(feature = "since-pg16")]
+    {
+        // A role option named by any other word, and a second option in the
+        // list, are the two shapes 16 adds.
+        for source in [
+            "REVOKE INHERIT OPTION FOR r FROM u",
+            "REVOKE \"admin\" OPTION FOR r FROM u",
+            "GRANT r TO u WITH INHERIT OPTION",
+            "GRANT r TO u WITH ADMIN OPTION, INHERIT OPTION",
+        ] {
+            assert_eq!(
+                parse_and_report(source),
+                Some(TargetVersion::Pg16),
+                "{source}"
+            );
+        }
+        let source = "REVOKE INHERIT OPTION FOR r FROM u";
+        let span = span_of(source).expect("a span");
+        assert_eq!(&source[span], "INHERIT");
+    }
+
+    #[cfg(feature = "since-pg17")]
+    for source in [
+        "ALTER OPERATOR === (int, int) SET (MERGES)",
+        "ALTER OPERATOR === (int, int) SET (RESTRICT = x, HASHES)",
+        "COPY t FROM STDIN CSV FORCE NOT NULL *",
+        "COPY t FROM STDIN CSV FORCE NULL *",
+    ] {
+        assert_eq!(
+            parse_and_report(source),
+            Some(TargetVersion::Pg17),
+            "{source}"
+        );
+    }
+
+    #[cfg(feature = "since-pg18")]
+    for source in [
+        "VACUUM ONLY t",
+        "VACUUM t *",
+        "VACUUM FULL ONLY (t)",
+        "ANALYZE ONLY t",
+        "ANALYZE t *",
+        "CREATE TABLE t (a int, b int, FOREIGN KEY (a, PERIOD b) REFERENCES u (c))",
+        // The referenced side alone is enough: gram.y makes the two `PERIOD`
+        // elements independent.
+        "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u (c, PERIOD d))",
+    ] {
+        assert_eq!(
+            parse_and_report(source),
+            Some(TargetVersion::Pg18),
+            "{source}"
+        );
+    }
+
+    // The construct names the gated element, not the field that widened.
+    #[cfg(feature = "since-pg17")]
+    {
+        let source = "ALTER OPERATOR === (int, int) SET (MERGES)";
+        let lexed = lex(source);
+        let mut input = lexed.input();
+        let parsed = Statement::parse(&mut input).expect("statement parses");
+        let found = minimum_version(&parsed).expect("a requirement above 14");
+        assert_eq!(found.construct(), "OperatorDefElem.value");
+        assert!(found.is_absence());
+        // A shape rule has no `ereport` of its own here, so it carries no
+        // message; it still cites the `gram.y` arm that 17 added.
+        assert_eq!(found.message(), None);
+        let citation = found.citation().expect("a citation");
+        assert!(citation.contains("gram.y"), "{citation}");
+    }
+}
+
 /// The two questions differ, and both are right: the minimum is the highest
 /// requirement of the value, and the first construct above a floor is the
 /// earliest one in source order.

@@ -86,22 +86,29 @@ pub enum ColumnStorageMode {
 }
 ```
 
-Some widenings have no such shape to gate, so their requirement is not
-reported. Each one reports a version that is too low, and a consumer that must
-not miss one gives these clauses its own check. The complete list:
+Six widenings had no such shape, so each reported a version that was too low,
+which is the dangerous direction: it lets a consumer send a statement to a
+server that refuses it. Issue [#93](https://github.com/freshtonic/pg-sql/issues/93)
+gave every one of them a shape, and three devices did the whole job:
 
-| Clause | From | Why no gate |
+| Clause | From | The element that now carries the gate |
 |---|---|---|
-| `REVOKE ColId OPTION FOR` | 16 | The requirement depends on the word. REL_15_19 `gram.y` has only `REVOKE ADMIN OPTION FOR`, so `REVOKE INHERIT OPTION FOR r FROM u` needs 16 and `REVOKE ADMIN OPTION FOR r FROM u` needs 14 (commit e3ce2de09). |
-| `GRANT role TO role WITH <name> OPTION`, and a list of more than one option | 16 | The same. The `TRUE` and `FALSE` values that 16 adds do carry a gate, which covers every frozen corpus case. |
-| `ALTER OPERATOR ... SET (name)` with no value | 17 | The value sits in the shared `DefList`, where a `DefElem` with no value is legal in 14 elsewhere. REL_17_11 `gram.y` 10252 adds `operator_def_elem: ColLabel`; REL_16_15 `gram.y` 10103 has no such form. |
-| `COPY ... (FORCE NOT NULL *)`, `FORCE NULL *` | 17 | The `*` sits in `CopyForceTarget`, which `FORCE_QUOTE *` also uses, and that form is legal in 14. |
-| `ANALYZE ONLY t`, `ANALYZE t *`, and the same for `VACUUM` | 18 | The extra shapes sit in the shared `RelationExpr`, where `ONLY t` is legal in 14 elsewhere. |
-| `FOREIGN KEY (a, PERIOD b) REFERENCES t (c, PERIOD d)` | 18 | The `PERIOD` element sits in a list shape that the wider type adds; it has no gate yet. |
+| `REVOKE <name> OPTION FOR` | 16 | `RevokeRoleOptionName::Other`. REL_15_19 `gram.y` 7738 accepts only `ADMIN`, so `Admin` is the 14 shape and `Other` admits the rest of `ColId` (REL_16_15 `gram.y` 7805, commit e3ce2de09). |
+| `GRANT role TO role WITH <name> OPTION`, and a list of more than one option | 16 | `GrantRoleOptionName::Other` and `WithRoleOpts.more`, against REL_15_19 `gram.y` 7752 `opt_grant_admin_option: WITH ADMIN OPTION` (REL_16_15 `gram.y` 7778, 7821). The `TRUE` and `FALSE` values already carried a gate. |
+| `ALTER OPERATOR ... SET (name)` with no value | 17 | `OperatorDefElem.value`, with `on = absent`. The node is gram.y's own `operator_def_list`, not the shared `DefList`, in every version (REL_17_11 `gram.y` 10252; REL_16_15 `gram.y` 10104). |
+| `COPY ... FORCE NOT NULL *`, `FORCE NULL *` | 17 | `CopyForceNullTarget::Star`. `gram.y` writes one `copy_opt_item` arm per spelling and shares no nonterminal, so these two options hold a target of their own and `FORCE QUOTE *` keeps `CopyForceTarget` (REL_17_11 `gram.y` 3463-3484). |
+| `ANALYZE ONLY t`, `ANALYZE t *`, and the same for `VACUUM` | 18 | `VacuumRelationName::Only` and `VacuumInheritedRelation.star`. `VACUUM` and `ANALYZE` share one relation node of their own, so the shared `RelationExpr`, where `ONLY t` is legal in 14, needs no gate (REL_18_6 `gram.y` 12021; REL_17_11 `gram.y` 11913). |
+| `FOREIGN KEY (a, PERIOD b) REFERENCES t (c, PERIOD d)` | 18 | `ForeignKeyReferencedColumnList`'s `PERIOD` element, beside the one the referencing list already had. `gram.y` makes the two independent, so `REFERENCES t (c, PERIOD d)` alone needs 18 (REL_18_6 `gram.y` `opt_column_and_period_list`). |
 
-Each of these needs its own node, or a shape rule on the wider node, before a
-gate can carry it. The frozen corpus exercises only the first three, and
-`tests/minimum_version_corpus.rs` pins those seven statements.
+The three devices are: a gate on the variant or field that holds the added
+shape; `on = absent` where the newer grammar made a value optional; and, where
+the difference is a **word** and not a shape, one variant for the single
+keyword the older grammar accepts beside a variant that admits the rest of the
+admission set. The last one does not widen anything (principle 9): the two
+variants together are exactly `gram.y`'s `ColId` or `ColLabel`, and
+`tokens!` states the remainder as `ColId - { ADMIN }` and
+`ColLabel - { ADMIN }`. A quoted `"admin"` is no keyword, so it takes the
+`Other` variant and reports 16, which is right.
 
 One widening is not split yet, and it goes the other way: it reports a version
 that is too **high**. The 15 publication object list (`pub_obj_list`) also
@@ -109,6 +116,13 @@ covers the 14 `FOR TABLE relation_expr_list`, so `CREATE PUBLICATION p FOR
 TABLE t` reports 15 although 14 parses it. The same holds for `ALTER
 PUBLICATION ... {ADD|SET|DROP}`. To split it, gate `TABLES IN SCHEMA`, the
 column list and the `WHERE` clause, which are the three shapes that 15 adds.
+
+`ALTER TYPE t SET (name)` shares `operator_def_list` with `ALTER OPERATOR`, and
+pg-sql routes it through the shared `DefList` instead. A build before 17
+therefore accepts it, which is an over-acceptance gap rather than a version
+report, and the frozen corpus has no such statement. Giving it the same
+`OperatorDefList` is the fix, and it waits on splitting `SetDefinitionClause`,
+which `ALTER SUBSCRIPTION` and `ALTER PUBLICATION` share with it.
 
 ## The verification
 
@@ -119,8 +133,8 @@ needs no PostgreSQL build of its own, and `scripts/gate-versions` runs it once
 for each version.
 
 ADR 0010 asks for equality: the reported minimum must be the oldest target
-version whose oracle accepts the statement. The equality holds with two named
-exceptions, because an oracle records only "accepts" or "rejects" and cannot
+version whose oracle accepts the statement. The equality holds with one named
+exception, because an oracle records only "accepts" or "rejects" and cannot
 say what it parsed.
 
 **An older grammar reads the same text as something else.** Before 17,
@@ -132,14 +146,12 @@ frozen list `REINTERPRETED_BY_AN_OLDER_GRAMMAR` names each construct that may
 do this, so a new one cannot arrive unnoticed. The unsplit publication
 widening is in the same list, because its effect on the check is the same.
 
-**A widening that depends on a word.** The residues in class 4 report a
-version that is too low. The test frozen list `UNRECORDED_WIDENINGS` names the
-seven corpus statements that do this.
+A report that is too low has no exception. The test keeps the frozen list
+`UNRECORDED_WIDENINGS`, which issue #93 emptied, so an under-report now fails
+the test wherever it appears. A new widening belongs in the grammar as a gated
+shape, never in that list.
 
-Every other statement must satisfy the equality. In particular a report that
-is too low fails the test wherever no frozen entry excuses it, because that is
-the dangerous direction: it would let a consumer send a statement to a server
-that refuses it.
+Every other statement must satisfy the equality.
 
 ## The span
 

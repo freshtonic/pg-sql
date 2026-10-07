@@ -1,7 +1,6 @@
 //! VACUUM statement and the shared `VacuumOption(s)` AST nodes used by
 //! VACUUM/REINDEX/CLUSTER for their `( option [= value], ... )` lists.
 
-#[cfg(not(feature = "since-pg18"))]
 use crate::ast::shared::names::QualifiedName;
 use crate::tokens::literal;
 
@@ -52,20 +51,51 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// The relation of one gram.y `vacuum_relation`: a `qualified_name` before
+    /// 18 (REL_17_11 gram.y 11913), and a `relation_expr` from 18 (REL_18_6
+    /// gram.y 12021; docs/research/postgres-14-19-sql-syntax-changes.md,
+    /// PostgreSQL 18, item 9).
+    ///
+    /// The change is a widening, so the requirement belongs to the two shapes
+    /// 18 adds and not to the relation (ADR 0010,
+    /// `docs/minimum-version.md`). `VACUUM t` therefore records nothing, and
+    /// `VACUUM ONLY t` and `VACUUM t *` each record 18. The shared
+    /// [`RelationExpr`](crate::ast::shared::names::RelationExpr) cannot carry
+    /// those gates, because `ONLY t` and `t *` are legal in 14 everywhere else
+    /// it appears.
+    ///
+    /// Variant ordering: `Only` leads with the keyword, `Named` with a name.
+    #[derive(Debug)]
+    pub enum VacuumRelationName {
+        /// `ONLY name` or `ONLY ( name )`, added in 18 with the widening.
+        #[config(since = pg18)]
+        Only(crate::ast::shared::names::OnlyRelation),
+        /// `name` in every version, and `name *` from 18.
+        Named(VacuumInheritedRelation),
+    }
+}
+
+recursa::ast_node! {
+    /// `name [*]` inside a gram.y `vacuum_relation`: the relation with its
+    /// inheritance children, which is the default.
+    #[derive(Debug)]
+    pub struct VacuumInheritedRelation {
+        pub name: QualifiedName,
+        /// Added in 18 with the widening of gram.y `vacuum_relation` to a
+        /// `relation_expr` (REL_18_6 gram.y 12021, `extended_relation_expr:
+        /// qualified_name '*'`). REL_17_11 gram.y 11913 takes only a
+        /// `qualified_name`.
+        #[config(since = pg18)]
+        #[presence(STAR)]
+        #[pretty(break_before = soft)]
+        pub star: bool,
+    }
+}
+
+recursa::ast_node! {
     #[derive(Debug)]
     pub struct VacuumRelation {
-        // A widening, not an addition (ADR 0010, `docs/minimum-version.md`):
-        // the newer type accepts everything the older one does, so both arms
-        // only remove and neither records. The gate for what 18 adds belongs
-        // to those shapes.
-        #[cfg(not(feature = "since-pg18"))]
-        pub name: QualifiedName,
-        /// From 18 gram.y `vacuum_relation` names a `relation_expr`, so
-        /// `ONLY name` and `name *` are accepted
-        /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
-        /// item 9; REL_18_6 gram.y `vacuum_relation`).
-        #[cfg(feature = "since-pg18")]
-        pub name: crate::ast::shared::names::RelationExpr,
+        pub name: VacuumRelationName,
         pub columns: Option<VacuumColumnList>,
     }
 }
@@ -101,12 +131,30 @@ recursa::ast_node! {
 }
 
 impl<'input> VacuumRelation<'input> {
-    /// The name of the relation. From 18 the relation is a `relation_expr`,
-    /// and this is the name inside it.
-    pub fn relation_name(&self) -> &crate::ast::shared::names::QualifiedName<'input> {
-        #[cfg(not(feature = "since-pg18"))]
-        return &self.name;
-        #[cfg(feature = "since-pg18")]
-        return self.name.name();
+    /// The name of the relation, whichever form wraps it.
+    pub fn relation_name(&self) -> &QualifiedName<'input> {
+        self.name.name()
+    }
+}
+
+impl<'input> VacuumRelationName<'input> {
+    /// The relation's name, whichever form wraps it.
+    pub fn name(&self) -> &QualifiedName<'input> {
+        match self {
+            // The `ONLY` form exists only from 18, where gram.y
+            // `vacuum_relation` names a `relation_expr`.
+            #[cfg(feature = "since-pg18")]
+            Self::Only(only) => only.name(),
+            Self::Named(relation) => &relation.name,
+        }
+    }
+
+    /// Whether `ONLY` excludes the inheritance children.
+    pub fn is_only(&self) -> bool {
+        match self {
+            #[cfg(feature = "since-pg18")]
+            Self::Only(_) => true,
+            Self::Named(_) => false,
+        }
     }
 }

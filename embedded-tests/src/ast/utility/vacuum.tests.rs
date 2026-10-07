@@ -103,6 +103,24 @@ mod tests {
         reparse_stable::<VacuumStmt>("VACUUM (PARALLEL 2) pvactst");
     }
 
+    // `VACUUM` and `ANALYZE` share gram.y `vacuum_relation`, whose relation is
+    // a `qualified_name` before 18 and a `relation_expr` from 18. The relation
+    // therefore holds its own node in every target version, and that node
+    // carries the gates for the two shapes 18 adds; the shared `RelationExpr`
+    // cannot, because `ONLY t` and `t *` are legal in 14 everywhere else it
+    // appears (issue #93).
+    #[test]
+    fn vacuum_relation_holds_its_own_relation_name() {
+        let stmt = parse_stmt::<VacuumStmt>("VACUUM s.t (a, b)");
+        let stmt = stmt.ast();
+        let relations = stmt.relations.as_ref().expect("one relation");
+        assert_eq!(relations.len(), 1);
+        let name: &VacuumRelationName = &relations.first().name;
+        assert!(matches!(name, VacuumRelationName::Named(_)));
+        assert!(!name.is_only());
+        assert_eq!(relations.first().relation_name().object(), "t");
+    }
+
     /// Whether `src` parses as one complete statement.
     fn statement_parses(src: &str) -> bool {
         let lexed = crate::lex(src);

@@ -196,6 +196,8 @@ embedded-tests/src/ast/ddl/materialized_view.tests.rs	create_materialized_view_w
 embedded-tests/src/ast/ddl/materialized_view.tests.rs	create_materialized_view_with_storage_tablespace_roundtrips	false	14-
 embedded-tests/src/ast/ddl/materialized_view.tests.rs	create_unlogged_materialized_view_roundtrips	false	14-
 embedded-tests/src/ast/ddl/materialized_view.tests.rs	parse_create_materialized_view_minimal	false	14-
+embedded-tests/src/ast/ddl/operator.tests.rs	alter_operator_set_holds_an_operator_def_list	false	14-
+embedded-tests/src/ast/ddl/operator.tests.rs	operator_def_elem_holds_no_value_from_17	false	17-
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_alter_operator_custom_op	false	14-
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_alter_operator_family_add	false	14-
 embedded-tests/src/ast/ddl/operator.tests.rs	parse_alter_operator_family_add_order_by	false	14-
@@ -1075,6 +1077,7 @@ embedded-tests/src/ast/utility/grant.tests.rs	grant_with_grant_option	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_admin_option_for_role	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_grant_option_for_cascade	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_membership_cascade	false	14-
+embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_option_name_keeps_admin_as_its_own_shape	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_simple_privilege	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	alter_default_privileges_on_large_objects	false	18-
 embedded-tests/src/ast/utility/grant.tests.rs	alter_default_privileges_on_large_objects_is_rejected_before_18	false	14-17
@@ -1083,6 +1086,7 @@ embedded-tests/src/ast/utility/grant.tests.rs	role_grant_options_before_16	false
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_option_for_pairs_with_its_body	false	14-
 embedded-tests/src/ast/utility/grant.tests.rs	revoke_role_option_for_takes_any_col_id_from_16	false	16-
 embedded-tests/src/ast/utility/grant.tests.rs	role_grant_option_takes_any_col_label	false	16-
+embedded-tests/src/ast/utility/grant.tests.rs	role_grant_opts_keep_the_admin_option_shape	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_inheritance_star_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_multiple_relations_roundtrips	false	14-
 embedded-tests/src/ast/utility/lock.tests.rs	lock_only_roundtrips	false	14-
@@ -1133,6 +1137,7 @@ embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_full_legacy_roundtrips	fal
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_multi_targets_roundtrips	false	14-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_options_with_target_roundtrips	false	14-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_parallel_option_with_value_roundtrips	false	14-
+embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_relation_holds_its_own_relation_name	false	14-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_verbose_analyze_roundtrips	false	14-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_relation_expr_of_18	false	18-
 embedded-tests/src/ast/utility/vacuum.tests.rs	vacuum_relation_expr_is_rejected_before_18	false	14-17
@@ -1268,6 +1273,7 @@ embedded-tests/src/ast/ddl/foreign.tests.rs	fdw_connection_option_from_19	false	
 embedded-tests/src/ast/ddl/foreign.tests.rs	reject_fdw_connection_option_before_19	false	14-18
 embedded-tests/src/ast/ddl/subscription.tests.rs	subscription_server_and_refresh_sequences_from_19	false	19-
 embedded-tests/src/ast/ddl/subscription.tests.rs	reject_subscription_server_before_19	false	14-18
+embedded-tests/src/ast/utility/copy.tests.rs	force_null_options_hold_their_own_target	false	14-
 embedded-tests/src/ast/utility/copy.tests.rs	legacy_json_copy_option_from_19	false	19-
 embedded-tests/src/ast/utility/copy.tests.rs	reject_legacy_json_copy_option_before_19	false	14-18
 embedded-tests/src/ast/ddl/publication.tests.rs	publication_all_object_lists_from_19	false	19-
