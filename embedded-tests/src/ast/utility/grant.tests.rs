@@ -189,6 +189,10 @@ mod tests {
         let with = body.with.as_ref().expect("the WITH block");
         assert!(matches!(with.first.name, GrantRoleOptionName::Admin));
         assert!(matches!(with.first.value, WithRoleOptValue::Option));
+        // The tail of the list exists only from 16, because the gate on it
+        // removes it from an older build. That is what makes a second option
+        // report 16.
+        #[cfg(feature = "since-pg16")]
         assert_eq!(with.more.iter().count(), 0);
     }
 
