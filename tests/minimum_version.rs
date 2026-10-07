@@ -212,6 +212,94 @@ fn every_gate_that_carries_a_message_cites_its_source() {
     }
 }
 
+/// The Flat AST answers both questions exactly as the arena AST answers them.
+///
+/// pg-analyze analyses the flat form, so it must get the same answer without a
+/// second parse (issue #94; the generated walk over the pools is
+/// recursa#137). The comparison covers one requirement of each class that a
+/// parsed value records, plus a lexical gate, whose answer comes from the
+/// tokens and is therefore the same for both forms.
+#[test]
+fn the_flat_form_reports_what_the_arena_form_reports() {
+    /// One answer, rendered so that a mismatch names what differs.
+    fn describe(found: Option<pg_sql::minimum_version::VersionRequirement>) -> String {
+        found.map_or_else(
+            || "-".to_owned(),
+            |found| {
+                format!(
+                    "{:?}/{}/{}/{:?}/{:?}",
+                    found.version(),
+                    found.construct(),
+                    found.is_absence(),
+                    found.sqlstate(),
+                    found.span().map(|span| span.range()),
+                )
+            },
+        )
+    }
+
+    /// The two answers of the arena form, and the two of the flat form.
+    fn answers(source: &str) -> (String, String) {
+        let lexed = lex(source);
+        assert_eq!(lexed.errors().count(), 0, "{source} lexes");
+
+        let mut input = lexed.input();
+        let arena = Statement::parse(&mut input).expect("statement parses");
+        assert!(input.is_eof(), "{source} is one complete statement");
+
+        let mut input = lexed.input();
+        let flat = Statement::parse_flat(&mut input).expect("statement parses flat");
+        assert!(input.is_eof(), "{source} is one complete flat statement");
+
+        let render = |minimum, above| format!("{} | {}", describe(minimum), describe(above));
+        (
+            render(
+                arena.minimum_version(),
+                arena.minimum_version_above(TargetVersion::Pg14),
+            ),
+            render(
+                flat.minimum_version(),
+                flat.minimum_version_above(TargetVersion::Pg14),
+            ),
+        )
+    }
+
+    let mut sources = vec![
+        // Nothing above the baseline: both forms report nothing.
+        "SELECT 1",
+    ];
+    // Class 1, an item gate.
+    #[cfg(feature = "since-pg16")]
+    sources.push("SELECT JSON_ARRAY(1, 2)");
+    // Class 3, both subquery-alias shape rules, whose requirement belongs to
+    // the absence of the alias.
+    #[cfg(feature = "since-pg16")]
+    sources.extend(["SELECT * FROM (SELECT 1)", "SELECT * FROM LATERAL (SELECT 1)"]);
+    // An item gate late in the statement above a shape rule early in it, so
+    // the two questions have different answers in both forms.
+    #[cfg(feature = "since-pg17")]
+    sources.push("SELECT * FROM (SELECT 1) WHERE JSON_VALUE(j, '$.a') IS NOT NULL");
+
+    for source in sources {
+        let (arena, flat) = answers(source);
+        assert_eq!(arena, flat, "{source}");
+    }
+
+    // Class 2, a lexical gate. The parsed value records nothing, in either
+    // form, and the scan over the tokens gives the one answer both forms
+    // report beside their own.
+    if pg_sql::TARGET_VERSION >= TargetVersion::Pg16 {
+        use pg_sql::minimum_version::lexical_minimum_version;
+
+        let source = "SELECT 0x42F";
+        let (arena, flat) = answers(source);
+        assert_eq!(arena, flat, "{source}");
+        assert_eq!(arena, "- | -", "{source}");
+        let lexical = lexical_minimum_version(lex(source).tokens()).expect("a hexadecimal literal");
+        assert_eq!(lexical.version(), TargetVersion::Pg16);
+    }
+}
+
 /// Class 2: a gate on a `tokens!` entry, which the parsed value cannot record.
 /// The scan over the tokens reports it, with the span of the token.
 #[test]

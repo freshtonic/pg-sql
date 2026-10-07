@@ -23,7 +23,14 @@
 //! it names the construct the older server rejects first.
 //!
 //! The [`MinimumVersion`] trait gives the same two answers as methods, so a
-//! caller writes `parsed.minimum_version_above(target)`.
+//! caller writes `parsed.minimum_version_above(target)`. It covers both
+//! parse results of this grammar: the arena AST that [`Statement::parse`]
+//! returns, and the Flat AST that [`Statement::parse_flat`] returns. Both
+//! answer with the same [`VersionRequirement`], the extent included, so a
+//! consumer that holds the flat form needs no second parse (issue #94).
+//!
+//! [`Statement::parse`]: crate::ast::Statement::parse
+//! [`Statement::parse_flat`]: crate::ast::Statement::parse_flat
 //!
 //! The two answers differ, and both are right. A value can need 17 because of
 //! a construct late in the statement while an earlier construct needs 16.
@@ -69,7 +76,8 @@
 //! starts from the parse's own root occurrence cursor, so every answer keeps
 //! its span, including one that belongs to a missing value or to an element
 //! of a repetition. The answer therefore takes the parse, not the detached
-//! AST: an [`ArenaParsed`] of any node of this grammar.
+//! AST: an [`ArenaParsed`] of any node of this grammar, or a [`FlatAst`],
+//! whose every node carries the extent the parse retained for it.
 //!
 //! Without the `spans` Cargo feature an ordinary parse retains no provenance,
 //! so the span is `None` and only the version and the message data remain.
@@ -77,7 +85,7 @@
 
 use recursa::{ArenaAstFamily, ArenaParsed, Requirement, Requires, Span};
 
-use crate::TargetVersion;
+use crate::{FlatAst, FlatRequires, TargetVersion};
 
 /// One construct of a parsed value that needs a newer PostgreSQL version.
 ///
@@ -263,6 +271,55 @@ where
 
     fn minimum_version_above(&self, target: TargetVersion) -> Option<VersionRequirement> {
         minimum_version_above(self, target)
+    }
+}
+
+/// The same two answers from a Flat AST, which holds no nested value at all.
+///
+/// pg-analyze analyses the flat form, so it asks the question of a
+/// [`FlatAst`] rather than of an [`ArenaParsed`]. The answer is the same
+/// [`VersionRequirement`]: the version, the construct, the message data and
+/// the extent (issue #94, recursa#137). Recursa generates the walk over the
+/// pools, and the fold, the per-node ceiling and the answer are the ones the
+/// arena form uses, so neither form holds a second copy of them.
+///
+/// A flat result keeps one span per node and per text rather than an
+/// occurrence tree, so the extent of a gated element that carries attached
+/// fixed syntax is the value's own and not the element's. No version gate of
+/// this grammar sits on such an element: every gate is a node, a variant, a
+/// whole field, or a shape rule, and all of those report the same extent in
+/// both forms.
+///
+/// The lexical gates (class 2) take the token stream, not the value, so they
+/// are the same for both forms: run [`lexical_minimum_version`], or
+/// [`lexical_minimum_version_above`] above a floor, over the statement's
+/// tokens and keep the higher version.
+///
+/// ```
+/// use pg_sql::ast::Statement;
+/// use pg_sql::{MinimumVersion, TargetVersion};
+///
+/// let source = "SELECT * FROM (SELECT 1)";
+/// let lexed = pg_sql::lex(source);
+/// let mut input = lexed.input();
+/// let flat = Statement::parse_flat(&mut input).expect("statement");
+///
+/// // A subquery in FROM needs no alias only from PostgreSQL 16.
+/// let rejected = flat
+///     .minimum_version_above(TargetVersion::Pg15)
+///     .expect("PostgreSQL 15 rejects the missing alias");
+/// assert_eq!(rejected.version(), TargetVersion::Pg16);
+/// assert_eq!(rejected.sqlstate(), Some("42601"));
+/// assert_eq!(rejected.span().map(|span| span.range()), Some(14..24));
+/// ```
+impl<R: FlatRequires> MinimumVersion for FlatAst<'_, R> {
+    fn minimum_version(&self) -> Option<VersionRequirement> {
+        self.minimum_requirement().map(VersionRequirement::from_scan)
+    }
+
+    fn minimum_version_above(&self, target: TargetVersion) -> Option<VersionRequirement> {
+        self.requirement_above(configuration(target).id())
+            .map(VersionRequirement::from_scan)
     }
 }
 
