@@ -138,9 +138,8 @@ recursa::ast_node! {
 recursa::ast_node! {
     /// `SET generic_set`: `SET param TO|= { value [, value ...] | DEFAULT }`.
     ///
-    /// It is the `SET` half of `AlterSystemStmt`, and the `generic_set` part
-    /// of `FunctionSetResetClause`. Neither takes a `LOCAL` or `SESSION`
-    /// scope.
+    /// It is the `SET` half of `AlterSystemStmt`, which takes no `LOCAL` or
+    /// `SESSION` scope.
     #[derive(Debug)]
     #[tok(SET, this)]
     pub struct SetStmt {
@@ -198,53 +197,76 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A signed numeric literal: `[-]numeric | [-]integer`.
+    /// `INTERVAL Sconst [ HOUR | MINUTE | HOUR TO MINUTE ]`, the
+    /// `ConstInterval Sconst opt_interval` arm of PostgreSQL's `zone_value`
+    /// (REL_17_11 gram.y 1849).
     ///
-    /// Variant ordering: Numeric before Integer (longest-match-wins for `7.5`).
+    /// gram.y takes every `opt_interval` here, but its action stops with
+    /// "time zone interval must be HOUR or HOUR TO MINUTE" (REL_17_11 gram.y
+    /// 1860) when the qualifier names a field other than `HOUR` or `MINUTE`.
+    /// That action is part of the raw parser, so the qualifier admits only
+    /// those three spellings.
     #[derive(Debug)]
-    pub enum SignedNumber {
-        Numeric(SignedNumeric),
-        Integer(SignedInteger),
+    pub struct ZoneIntervalValue {
+        #[tok(INTERVAL, this)]
+        pub value: literal::StringLit,
+        pub qualifier: Option<ZoneIntervalQualifier>,
     }
 }
 
 recursa::ast_node! {
-    #[derive(Debug)]
-    pub struct SignedNumeric {
-        #[presence(MINUS)]
-        pub negative: bool,
-        pub value: literal::NumericLit,
-    }
-}
-
-recursa::ast_node! {
-    #[derive(Debug)]
-    pub struct SignedInteger {
-        #[presence(MINUS)]
-        pub negative: bool,
-        pub value: literal::IntegerLit,
-    }
-}
-
-recursa::ast_node! {
-    /// Target of `SET TIME ZONE`.
+    /// The `opt_interval` values that the `zone_value` action accepts.
     ///
-    /// Variant ordering: `LOCAL` and `DEFAULT` (keywords) before `Number` and
-    /// `String`. INTERVAL form is deliberately skipped.
+    /// Variant ordering: `HOUR TO MINUTE` before `HOUR`, so the longer match
+    /// wins.
+    #[derive(Debug)]
+    pub enum ZoneIntervalQualifier {
+        #[tok(HOUR, TO, MINUTE)]
+        HourToMinute,
+        #[tok(HOUR)]
+        Hour,
+        #[tok(MINUTE)]
+        Minute,
+    }
+}
+
+recursa::ast_node! {
+    /// `INTERVAL ( Iconst ) Sconst`, the precision arm of PostgreSQL's
+    /// `zone_value` (REL_17_11 gram.y 1866). It takes no qualifier.
+    #[derive(Debug)]
+    pub struct ZoneIntervalPrecisionValue {
+        #[tok(INTERVAL, LPAREN, this, RPAREN)]
+        pub precision: literal::IntegerLit,
+        pub value: literal::StringLit,
+    }
+}
+
+recursa::ast_node! {
+    /// PostgreSQL's `zone_value`: the target of `SET TIME ZONE`.
+    ///
+    /// The identifier arm is gram.y's `IDENT`, not `ColId`: a key word is
+    /// never a time zone name, so `SET TIME ZONE zone` is a syntax error and
+    /// `SET TIME ZONE local` is the `LOCAL` arm.
+    ///
+    /// Variant ordering: `LOCAL`, `DEFAULT` and the two `INTERVAL` arms lead
+    /// with key words. The precision arm comes before the plain one, because
+    /// only the token after `INTERVAL` tells them apart.
     #[derive(Debug)]
     pub enum SetTimeZoneTarget {
         #[tok(LOCAL)]
         Local,
         #[tok(DEFAULT)]
         Default,
-        Number(SignedNumber),
+        IntervalPrecision(ZoneIntervalPrecisionValue),
+        Interval(ZoneIntervalValue),
+        Number(crate::ast::shared::numbers::NumericOnly),
         String(literal::StringLit),
+        Ident(literal::IdentOnly),
     }
 }
 
 recursa::ast_node! {
-    /// `TIME ZONE { signed_number | string | LOCAL | DEFAULT }`, the
-    /// `set_rest_more` time-zone form.
+    /// `TIME ZONE zone_value`, the `set_rest_more` time-zone form.
     #[derive(Debug)]
     pub struct SetTimeZoneStmt {
         #[tok(TIME, ZONE, this)]
@@ -330,6 +352,59 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// `TRANSACTION SNAPSHOT Sconst`, the `set_rest_more` form that imports
+    /// a snapshot (REL_17_11 gram.y 1788).
+    ///
+    /// It is not a `transaction_mode`: `SET TRANSACTION SNAPSHOT 'x'` takes
+    /// no other mode, and `BEGIN` takes no snapshot.
+    #[derive(Debug)]
+    pub struct SetTransactionSnapshot {
+        #[tok(TRANSACTION, SNAPSHOT, this)]
+        pub id: literal::StringLit,
+    }
+}
+
+recursa::ast_node! {
+    /// PostgreSQL's `set_rest_more`: the `SET` forms of
+    /// `FunctionSetResetClause` (REL_17_11 gram.y 1948).
+    ///
+    /// [`VariableSetRest`] is `set_rest`, which adds the two transaction
+    /// forms to these arms. It inlines the arms in place of holding this
+    /// node, so the arms appear twice; keep the two lists the same.
+    ///
+    /// `set_rest_more: CATALOG_P Sconst` has no variant, for the reason
+    /// that [`VariableSetRest`] gives.
+    #[derive(Debug)]
+    pub enum SetRestMore {
+        Role(SetRoleStmt),
+        SessionAuthorization(SetSessionAuthStmt),
+        TimeZone(SetTimeZoneStmt),
+        XmlOption(SetXmlOptionStmt),
+        Schema(SetSchemaStmt),
+        Names(SetNamesStmt),
+        TransactionSnapshot(SetTransactionSnapshot),
+        // `var_name FROM CURRENT_P` shares its `var_name` head with
+        // `Generic`, and only the token after the name tells them apart.
+        FromCurrent(SetFromCurrentStmt),
+        Generic(GenericSetRest),
+        /// Added in 19: `generic_set: var_name TO NULL_P` (b73d13c:1727).
+        #[config(since = pg19)]
+        GenericNull(GenericSetNull),
+    }
+}
+
+recursa::ast_node! {
+    /// `SET set_rest_more`, the `SET` half of PostgreSQL's
+    /// `FunctionSetResetClause` (REL_17_11 gram.y 1948). It takes no
+    /// `LOCAL` or `SESSION` scope and no `TRANSACTION` mode list.
+    #[derive(Debug)]
+    #[tok(SET, this)]
+    pub struct FunctionSetStmt {
+        pub rest: SetRestMore,
+    }
+}
+
+recursa::ast_node! {
     /// PostgreSQL's `set_rest`, with its `set_rest_more` arms inlined: the
     /// statements allowed after each literal `SET`, `SET LOCAL`, or `SET
     /// SESSION` prefix.
@@ -339,6 +414,9 @@ recursa::ast_node! {
     /// version rejects `SET CATALOG 'x'`.
     #[derive(Debug)]
     pub enum VariableSetRest {
+        // `TRANSACTION SNAPSHOT` before `TRANSACTION transaction_mode_list`:
+        // only the token after `TRANSACTION` tells them apart.
+        TransactionSnapshot(SetTransactionSnapshot),
         Transaction(crate::ast::tcl::transaction::SetTransactionRest),
         SessionCharacteristics(crate::ast::tcl::transaction::SetSessionCharacteristicsRest),
         Role(SetRoleStmt),

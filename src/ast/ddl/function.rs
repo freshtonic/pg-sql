@@ -420,49 +420,6 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Separator between a SET config parameter name and its value — either
-    /// `=` or `TO`.
-    #[derive(Debug)]
-    pub enum SetAssignSep {
-        #[tok(EQ)]
-        Eq,
-        #[tok(TO)]
-        To,
-    }
-}
-
-recursa::ast_node! {
-    /// `SET config_param { = | TO } var_list` function option — per-function GUC
-    /// override applied when the function runs.
-    ///
-    /// Postgres `set_rest_more: ColId TO var_list | ColId '=' var_list` admits a
-    /// comma-separated `var_list`, so values like `SET datestyle to iso, mdy`
-    /// (rules.sql) parse cleanly.
-    #[derive(Debug)]
-    pub struct SetFuncOption {
-        #[tok(SET, this)]
-        pub name: literal::AliasName,
-        pub sep: SetAssignSep,
-        #[sep(COMMA)]
-        pub values: one_or_many!(crate::ast::session::set_reset::SetValue),
-    }
-}
-
-#[cfg(feature = "since-pg19")]
-recursa::ast_node! {
-    /// `SET config_param { = | TO } NULL` function option, added in 19: the
-    /// `generic_set: var_name TO NULL_P` arm (gram.y b73d13c:1727; research
-    /// PostgreSQL 19, "Changes to existing statements").
-    #[derive(Debug)]
-    pub struct SetFuncNullOption {
-        #[tok(SET, this)]
-        pub name: literal::AliasName,
-        #[tok(this, NULL)]
-        pub sep: SetAssignSep,
-    }
-}
-
-recursa::ast_node! {
     /// `STRICT` / `CALLED ON NULL INPUT` / `RETURNS NULL ON NULL INPUT`.
     ///
     /// Variant ordering: longer (multi-keyword) forms before `Strict`.
@@ -501,10 +458,10 @@ recursa::ast_node! {
         Strictness(StrictnessOption),
         Volatility(VolatilityOption),
         Parallel(ParallelOption),
-        Set(SetFuncOption),
-        /// Added in 19: `SET var TO NULL` (gram.y b73d13c:1727).
-        #[config(since = pg19)]
-        SetNull(SetFuncNullOption),
+        // `SET set_rest_more` and `RESET reset_rest` — the
+        // FunctionSetResetClause branch of common_func_opt_item.
+        Set(crate::ast::session::set_reset::FunctionSetStmt),
+        Reset(crate::ast::session::set_reset::ResetStmt),
         Language(LanguageOption),
         /// `SECURITY DEFINER` / `SECURITY INVOKER`.
         Security(SecurityOption),
@@ -902,13 +859,9 @@ recursa::ast_node! {
         Cost(AlterFuncCostItem),
         Rows(AlterFuncRowsItem),
         Support(AlterFuncSupportItem),
-        // `SET name = value` and `RESET name | RESET ALL` — the
+        // `SET set_rest_more` and `RESET reset_rest` — the
         // FunctionSetResetClause branch of common_func_opt_item.
-        Set(crate::ast::session::set_reset::SetStmt),
-        /// Added in 19: `SET var TO NULL` (gram.y b73d13c:1727; research
-        /// PostgreSQL 19, "Changes to existing statements").
-        #[config(since = pg19)]
-        SetNull(crate::ast::session::set_reset::SetNullStmt),
+        Set(crate::ast::session::set_reset::FunctionSetStmt),
         Reset(crate::ast::session::set_reset::ResetStmt),
         // Single-keyword forms.
         #[tok(LEAKPROOF)]
