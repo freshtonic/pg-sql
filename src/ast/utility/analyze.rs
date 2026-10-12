@@ -52,7 +52,10 @@ recursa::ast_node! {
         // inline lexer declaration here would create a second `StringLit`
         // definition and prevent lookahead filters from naming it uniquely.
         String(literal::StringLit),
-        Integer(literal::IntegerLit),
+        /// gram.y `utility_option_arg: ... | NumericOnly` (REL_17_11 gram.y
+        /// 11884): a signed integer or float, which includes an integer above
+        /// `int32` (issue #88).
+        Number(crate::ast::shared::numbers::NumericOnly),
         Name(literal::AliasName),
     }
 }

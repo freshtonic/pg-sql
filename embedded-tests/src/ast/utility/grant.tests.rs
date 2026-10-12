@@ -360,4 +360,22 @@ mod tests {
             &["REVOKE banana OPTION FOR SELECT ON t FROM u"],
         );
     }
+
+    /// `GRANT … ON LARGE OBJECT NumericOnly_list` and `COMMENT ON LARGE OBJECT
+    /// NumericOnly` take a signed integer or float (REL_17_11 gram.y 7796,
+    /// 7199), so an OID above `int32`, which the scanner makes an `FCONST`,
+    /// still parses. Issue #88.
+    #[test]
+    fn large_object_takes_numeric_only() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "GRANT SELECT ON LARGE OBJECT 3000000000 TO u",
+                "GRANT SELECT ON LARGE OBJECT -1, 1.5, +2 TO u",
+                "REVOKE SELECT ON LARGE OBJECT 4294967295 FROM u",
+                "COMMENT ON LARGE OBJECT 3000000000 IS 'x'",
+                "COMMENT ON LARGE OBJECT -5 IS 'x'",
+            ],
+            &["GRANT SELECT ON LARGE OBJECT x TO u"],
+        );
+    }
 }

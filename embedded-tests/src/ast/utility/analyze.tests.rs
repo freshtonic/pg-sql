@@ -69,4 +69,21 @@ mod tests {
             assert!(!statement_parses(src), "{src:?} must not parse before 18");
         }
     }
+
+    /// An `ANALYZE` option value is gram.y `utility_option_arg`:
+    /// `opt_boolean_or_string | NumericOnly` (REL_17_11 gram.y 11884), so a
+    /// signed number, a float and an integer above `int32` all parse.
+    /// Issue #88.
+    #[test]
+    fn analyze_option_takes_numeric_only() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "ANALYZE (BUFFER_USAGE_LIMIT 3000000000) t",
+                "ANALYZE (foo -1) t",
+                "ANALYZE (foo 1.5) t",
+                "ANALYZE (foo +2, bar 'x', baz on) t",
+            ],
+            &["ANALYZE (foo - ) t"],
+        );
+    }
 }

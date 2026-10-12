@@ -272,13 +272,14 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `LARGE OBJECT oid [, …]` — `NumericOnly_list`. Corpus uses only positive
-    /// `IntegerLit`s; signed and floating-point forms are not exercised.
+    /// `LARGE OBJECT oid [, …]` — gram.y `LARGE_P OBJECT_P NumericOnly_list`
+    /// (REL_17_11 gram.y 7796). An OID above `int32` lexes as an `FCONST`,
+    /// so the list takes `NumericOnly`, not an integer (issue #88).
     #[derive(Debug)]
     #[tok(LARGE, OBJECT, this)]
     pub struct LargeObjectTarget {
         #[sep(COMMA)]
-        pub oids: one_or_many!(literal::IntegerLit),
+        pub oids: one_or_many!(crate::ast::shared::numbers::NumericOnly),
     }
 }
 
