@@ -4433,6 +4433,98 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// PostgreSQL's `c_expr` (gram.y:15355+) as a restricted expression: the
+    /// atoms of [`Expr`], with no operator. Like [`BExpr`], it is not an AST
+    /// type: a field typed `CExpr` holds an [`Expr`].
+    ///
+    /// The admitted list is the atom part of [`BExpr`]'s list: every atom of
+    /// [`Expr`] except `Default`, which gram.y reaches only through
+    /// `a_expr: DEFAULT`. Keep the two lists the same.
+    #[restricts(Expr)]
+    pub enum CExpr {
+        Exists,
+        Array,
+        RowExpr,
+        Grouping,
+        Coalesce,
+        Greatest,
+        Least,
+        NullIf,
+        XmlConcat,
+        Normalize,
+        Case,
+        UnicodeStringLit,
+        EscapeStringLit,
+        TimestampLit,
+        TimeLit,
+        IntervalLit,
+        CastFunc,
+        XmlElement,
+        XmlForest,
+        XmlAttributes,
+        XmlPi,
+        XmlSerialize,
+        XmlParse,
+        XmlRoot,
+        XmlExists,
+        Trim,
+        CastCall,
+        Treat,
+        CollationFor,
+        Substring,
+        Position,
+        Overlay,
+        Extract,
+        // Added in 17: see its node.
+        #[config(since = pg17)]
+        JsonCtor,
+        // Added in 17: see its node.
+        #[config(since = pg17)]
+        JsonScalar,
+        // Added in 17: see its node.
+        #[config(since = pg17)]
+        JsonSerialize,
+        // Added in 16: see its node.
+        #[config(since = pg16)]
+        JsonObject,
+        // Added in 16: see its node.
+        #[config(since = pg16)]
+        JsonArray,
+        // Added in 17: see its node.
+        #[config(since = pg17)]
+        JsonExists,
+        // Added in 17: see its node.
+        #[config(since = pg17)]
+        JsonValue,
+        // Added in 17: see its node.
+        #[config(since = pg17)]
+        JsonQuery,
+        // Added in 16: see its node.
+        #[config(since = pg16)]
+        JsonObjectAgg,
+        // Added in 16: see its node.
+        #[config(since = pg16)]
+        JsonArrayAgg,
+        Func,
+        User,
+        SqlValue,
+        QualRef,
+        Parenthesized,
+        NumericLit,
+        IntegerLit,
+        DollarStringLit,
+        BitStringLit,
+        HexStringLit,
+        StringLit,
+        BoolTrue,
+        BoolFalse,
+        Null,
+        PositionalParam,
+        ColumnRef,
+    }
+}
+
+recursa::ast_node! {
     /// `( ‹precision› )` — the `'(' Iconst ')'` argument of the four
     /// `SQLValueFunction` keywords that take one (REL_17_11 gram.y 15662,
     /// 15670, 15678, 15686).
