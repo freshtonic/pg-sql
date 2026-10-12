@@ -86,6 +86,17 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// `'(' Iconst ')'`: the precision of `TIMESTAMP`, `TIME`, `INTERVAL` and
+    /// `SECOND` (REL_17_11 gram.y `ConstDatetime` 14622, `ConstInterval '('
+    /// Iconst ')'` 14350 and 17274, `interval_second` 14737). Unlike the
+    /// `expr_list` of [`TypePrecision`], it takes one unsigned integer that
+    /// fits in `int32` (issue #88).
+    #[derive(Debug, PartialEq, Eq, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct IconstPrecision(#[deref] pub literal::IntegerLit);
+}
+
+recursa::ast_node! {
     /// Leading sign of a typmod argument.
     #[derive(Debug, PartialEq, Eq)]
     pub enum TypeModifierSign {
@@ -1715,7 +1726,7 @@ recursa::ast_node! {
     #[derive(Debug, PartialEq, Eq)]
     pub struct DateTimeCastType {
         pub base: DateTimeCastTypeName,
-        pub precision: Option<TypePrecision>,
+        pub precision: Option<IconstPrecision>,
         pub tz: Option<TimeZoneQualifier>,
     }
 }
@@ -1742,7 +1753,7 @@ recursa::ast_node! {
 recursa::ast_node! {
     #[derive(Debug, PartialEq, Eq)]
     pub enum IntervalCastTypeModifier {
-        Precision(TypePrecision),
+        Precision(IconstPrecision),
         Qualifier(IntervalQualifier),
     }
 }
@@ -1938,7 +1949,7 @@ recursa::ast_node! {
     #[tok(TIMESTAMP, this)]
     pub struct TimestampLit {
         /// Optional precision, e.g., `timestamp(6)`.
-        pub precision: Option<TypePrecision>,
+        pub precision: Option<IconstPrecision>,
         pub tz: Option<TimeZoneQualifier>,
         pub value: literal::StringLit,
     }
@@ -1950,7 +1961,7 @@ recursa::ast_node! {
     #[tok(TIME, this)]
     pub struct TimeLit {
         /// Optional precision, e.g., `time(2)`.
-        pub precision: Option<TypePrecision>,
+        pub precision: Option<IconstPrecision>,
         pub tz: Option<TimeZoneQualifier>,
         pub value: literal::StringLit,
     }
@@ -1963,7 +1974,7 @@ recursa::ast_node! {
     #[derive(Debug, PartialEq, Eq)]
     #[tok(SECOND, this)]
     pub struct SecondWithPrecision {
-        pub precision: Option<TypePrecision>,
+        pub precision: Option<IconstPrecision>,
     }
 }
 
@@ -2007,7 +2018,7 @@ recursa::ast_node! {
     pub struct IntervalLit {
         pub interval: IntervalKeyword,
         /// Optional precision, e.g. `interval(2)` or `interval(0)`.
-        pub precision: Option<TypePrecision>,
+        pub precision: Option<IconstPrecision>,
         pub value: literal::StringLit,
         pub qualifier: Option<IntervalQualifier>,
     }

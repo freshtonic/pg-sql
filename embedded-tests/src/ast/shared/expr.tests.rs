@@ -4813,4 +4813,39 @@ mod tests {
             &[],
         );
     }
+
+    /// A date/time precision is gram.y `'(' Iconst ')'` (REL_17_11 gram.y
+    /// `ConstDatetime` 14622, `ConstInterval '(' Iconst ')'` 14350 and 17274,
+    /// and `interval_second` 14737), so it takes one unsigned integer that
+    /// fits in `int32`. The `opt_type_modifiers` of `Numeric`, `BIT` and a
+    /// generic type are an `expr_list`, which takes any number. Issue #88.
+    #[test]
+    fn datetime_precision_is_an_iconst() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT 1::timestamp(3)",
+                "SELECT 1::time(2) with time zone",
+                "SELECT 1::interval(3)",
+                "SELECT 1::interval second(3)",
+                "SELECT timestamp(3) '2000-01-01'",
+                "SELECT interval(2) '1'",
+                "SELECT 1::numeric(3000000000)",
+                "SELECT 1::numeric(10, -3000000000)",
+                "SELECT 1::numeric(1.5)",
+                "SELECT 1::bit(3000000000)",
+                "SELECT 1::mytype(3000000000)",
+                "SELECT numeric(3000000000) '1'",
+            ],
+            &[
+                "SELECT 1::timestamp(3000000000)",
+                "SELECT 1::timestamp(-1)",
+                "SELECT 1::timestamp(1, 2)",
+                "SELECT 1::time(3000000000)",
+                "SELECT 1::interval(3000000000)",
+                "SELECT 1::interval second(3000000000)",
+                "SELECT timestamp(3000000000) '2000-01-01'",
+                "SELECT interval(3000000000) '1'",
+            ],
+        );
+    }
 }
