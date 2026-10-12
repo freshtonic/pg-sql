@@ -1303,3 +1303,5 @@ embedded-tests/src/ast/session/set_reset.tests.rs	transaction_snapshot_is_not_a_
 embedded-tests/src/ast/dml/merge.tests.rs	merge_action_takes_no_arguments	false	17-
 embedded-tests/src/ast/shared/expr.tests.rs	json_type_takes_no_modifiers_from_17	false	17-
 embedded-tests/src/ast/shared/expr.tests.rs	json_type_takes_modifiers_before_17	false	14-16
+embedded-tests/src/ast/ddl/function.tests.rs	function_names_follow_gram_y_func_name	false	14-
+embedded-tests/src/ast/ddl/function.tests.rs	json_names_no_function_from_17	false	17-

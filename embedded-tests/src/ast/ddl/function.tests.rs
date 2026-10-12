@@ -35,7 +35,7 @@ mod tests {
         let stmt_parsed = DropFunctionStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
         assert_eq!(
-            stmt.targets.first().name.object(),
+            stmt.targets.first().object(),
             "sillysrf"
         );
         assert!(input.is_eof());
@@ -376,7 +376,7 @@ mod tests {
     fn alter_function_rename_to() {
         let stmt = parse_stmt::<AlterFunctionStmt>("ALTER FUNCTION alt_func1(int) RENAME TO alt_func2");
         let stmt = stmt.ast();
-        assert_eq!(stmt.target.name.object(), "alt_func1");
+        assert_eq!(stmt.target.object(), "alt_func1");
         assert!(matches!(stmt.action, AlterFuncAction::Rename(_)));
         reparse_stable::<AlterFunctionStmt>("ALTER FUNCTION alt_func1(int) RENAME TO alt_func2");
     }
@@ -570,6 +570,69 @@ mod tests {
                 "ALTER FUNCTION f() SET CATALOG 'x'",
                 "ALTER FUNCTION f() SET LOCAL x = 1",
                 "CREATE FUNCTION f() RETURNS int LANGUAGE sql SET TRANSACTION READ ONLY RETURN 1",
+            ],
+        );
+    }
+
+    // gram.y `func_name: type_function_name | ColId indirection` (REL_17_11
+    // 17185) and `function_with_argtypes` (8338-8368): with an argument
+    // list, an unqualified name is a `type_function_name`, so a COL_NAME
+    // keyword names a function only when qualified; without one, any
+    // `ColId` or `type_func_name_keyword` does. Aggregates, triggers, casts,
+    // transforms and comments name functions the same way.
+    #[test]
+    fn function_names_follow_gram_y_func_name() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE FUNCTION left(int) RETURNS int AS 'select 1' LANGUAGE sql",
+                "CREATE FUNCTION s.coalesce() RETURNS int AS 'select 1' LANGUAGE sql",
+                "CREATE PROCEDURE left() AS 'select 1' LANGUAGE sql",
+                "DROP FUNCTION coalesce",
+                "DROP FUNCTION left",
+                "DROP FUNCTION left()",
+                "DROP FUNCTION s.coalesce()",
+                "DROP PROCEDURE coalesce",
+                "ALTER FUNCTION coalesce STABLE",
+                "COMMENT ON FUNCTION left() IS 'x'",
+                "COMMENT ON FUNCTION coalesce IS 'x'",
+                "DROP AGGREGATE left(int)",
+                "CREATE AGGREGATE left(int) (sfunc = f, stype = int)",
+                "CREATE TRIGGER tr AFTER INSERT ON t EXECUTE FUNCTION left()",
+                "CREATE CAST (int AS text) WITH FUNCTION left(int)",
+                "CREATE CAST (int AS text) WITH FUNCTION coalesce",
+                "CREATE TRANSFORM FOR int LANGUAGE sql (FROM SQL WITH FUNCTION left(internal))",
+            ],
+            &[
+                "CREATE FUNCTION coalesce() RETURNS int AS 'select 1' LANGUAGE sql",
+                "CREATE PROCEDURE coalesce() AS 'select 1' LANGUAGE sql",
+                "DROP FUNCTION coalesce()",
+                "DROP PROCEDURE coalesce()",
+                "ALTER FUNCTION coalesce() STABLE",
+                "COMMENT ON FUNCTION coalesce() IS 'x'",
+                "DROP AGGREGATE coalesce(int)",
+                "CREATE AGGREGATE coalesce(int) (sfunc = f, stype = int)",
+                "CREATE TRIGGER tr AFTER INSERT ON t EXECUTE FUNCTION coalesce()",
+                "CREATE CAST (int AS text) WITH FUNCTION coalesce(int)",
+                "CREATE TRANSFORM FOR int LANGUAGE sql (FROM SQL WITH FUNCTION coalesce(internal))",
+            ],
+        );
+    }
+
+    // From 17, `json` is a COL_NAME keyword: research, PostgreSQL 17,
+    // "Keywords". It is a type name through `JsonType`, and a function name
+    // only when qualified or without an argument list.
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn json_names_no_function_from_17() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE FUNCTION s.json() RETURNS int AS 'select 1' LANGUAGE sql",
+                "CREATE FUNCTION f(json) RETURNS json AS 'select 1' LANGUAGE sql",
+                "DROP FUNCTION json",
+            ],
+            &[
+                "CREATE FUNCTION json(int) RETURNS int AS 'select 1' LANGUAGE sql",
+                "DROP FUNCTION json()",
             ],
         );
     }

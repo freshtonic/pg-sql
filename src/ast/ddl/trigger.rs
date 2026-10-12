@@ -188,7 +188,8 @@ recursa::ast_node! {
     pub struct TriggerExecuteClause {
         #[tok(EXECUTE, this)]
         pub kind: FunctionOrProcedure,
-        pub func_name: QualifiedName,
+        /// gram.y `func_name`.
+        pub func_name: crate::ast::shared::expr::FuncCallName,
         pub args: TriggerExecArgs,
     }
 }
@@ -399,8 +400,9 @@ recursa::ast_node! {
         pub when_filters: Option<EventTriggerWhenClause>,
         #[tok(EXECUTE, this)]
         pub kind: FunctionOrProcedure,
+        /// gram.y `func_name`.
         #[tok(this, LPAREN)]
-        pub func_name: QualifiedName,
+        pub func_name: crate::ast::shared::expr::FuncCallName,
         #[sep(COMMA)]
         /// `()` — event triggers never take arguments; the list is empty for
         /// PostgreSQL-valid inputs.

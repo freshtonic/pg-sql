@@ -22,39 +22,12 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `function_with_argtypes` in `CREATE CAST` — Postgres' `func_name func_args`
-    /// (the parenthesised form). The cast function is mandatory: bare-name
-    /// (`args_unspecified`) forms are not exercised by the corpus and are not
-    /// modelled here.
-    #[derive(Debug)]
-    pub struct CastFunctionRef {
-        pub name: QualifiedName,
-        pub args: CastFunctionArgs,
-    }
-}
-
-recursa::ast_node! {
-    /// Parenthesized argument list of a `CREATE CAST` function reference —
-    /// gram.y's `func_args`, which admits the empty `()` form.
-    ///
-    /// The parentheses belong to the whole list: a field-level attachment would
-    /// bind to each element and declare `(int), (text)`.
-    #[derive(Debug, derive_more :: Deref)]
-    #[tok(LPAREN, this, RPAREN)]
-    pub struct CastFunctionArgs(
-        #[sep(COMMA)]
-        #[deref]
-        pub zero_or_many!(crate::ast::ddl::function::FuncParam),
-    );
-}
-
-recursa::ast_node! {
     /// `WITH FUNCTION function_with_argtypes` — the function-coercion branch of
     /// `CREATE CAST`.
     #[derive(Debug)]
     pub struct CastWithFunction {
         #[tok(WITH, FUNCTION, this)]
-        pub func: CastFunctionRef,
+        pub func: crate::ast::ddl::function::DropFunctionTarget,
     }
 }
 

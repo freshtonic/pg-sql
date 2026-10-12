@@ -4778,7 +4778,6 @@ mod tests {
             "CREATE DATABASE d parameter = 1",
         ]);
     }
-}
 
     // From 17, `json` is gram.y `JsonType` (REL_17_11 14744), which takes no
     // type modifiers: research, PostgreSQL 17, "Keywords". A qualified

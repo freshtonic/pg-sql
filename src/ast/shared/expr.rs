@@ -716,6 +716,16 @@ recursa::ast_node! {
     }
 }
 
+impl<'input> FuncCallName<'input> {
+    /// The last part of the name: the function name without its schema.
+    pub fn object(&self) -> &str {
+        match self {
+            FuncCallName::Qualified(name) => name.tail.last().name.text(),
+            FuncCallName::Name(name) => name.text(),
+        }
+    }
+}
+
 recursa::ast_node! {
     /// `WITHIN GROUP (ORDER BY ...)` clause for ordered-set aggregate functions.
     #[derive(Debug)]

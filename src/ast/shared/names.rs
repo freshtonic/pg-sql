@@ -168,28 +168,6 @@ impl<'input> QualifiedName<'input> {
 }
 
 recursa::ast_node! {
-    /// Function definition name (CREATE FUNCTION / DROP FUNCTION / DROP ROUTINE).
-    ///
-    /// PG's `func_name: type_function_name | ColId indirection` admits
-    /// unreserved keywords such as `SET`. [`QualifiedName`] already uses the
-    /// generated identifier admission set containing those keywords, so one
-    /// canonical variant covers both ordinary and keyword-spelled names.
-    #[derive(Debug)]
-    pub enum FuncDefName {
-        Name(QualifiedName),
-    }
-}
-
-impl<'input> FuncDefName<'input> {
-    /// Returns the final (object) name part as text.
-    pub fn object(&self) -> &str {
-        match self {
-            FuncDefName::Name(q) => q.object(),
-        }
-    }
-}
-
-recursa::ast_node! {
     /// `RENAME TO new_name` — the rename action shared by many ALTER
     /// statements. Postgres routes most of these through `RenameStmt`, but
     /// pg-sql keeps one LR production family per leading `ALTER objtype ...`

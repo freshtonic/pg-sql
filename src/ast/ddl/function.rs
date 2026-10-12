@@ -655,7 +655,7 @@ recursa::ast_node! {
         /// so a COL_NAME keyword such as `coalesce` (or, from 17, `json`)
         /// names a function only when qualified.
         #[tok(FUNCTION, this)]
-        pub name: crate::ast::shared::names::FuncDefName,
+        pub name: crate::ast::shared::expr::FuncCallName,
         pub args: FunctionParameters,
         pub returns: Option<FuncReturnsClause>,
         pub options: zero_or_many!(FuncOption),
@@ -715,12 +715,50 @@ fn strip_dollar_quotes(s: &str) -> &str {
 }
 
 recursa::ast_node! {
-    /// A single entry in a `DROP FUNCTION` target list: optional qualified name
-    /// plus an optional parenthesized signature.
+    /// gram.y `function_with_argtypes`: a function named with or without its
+    /// argument list.
+    ///
+    /// With arguments the name is `func_name`, so an unqualified name is a
+    /// `type_function_name`. Without them gram.y writes the name out as
+    /// `type_func_name_keyword | ColId | ColId indirection`, which also takes
+    /// a COL_NAME keyword: `DROP FUNCTION coalesce` parses, `DROP FUNCTION
+    /// coalesce()` does not.
+    ///
+    /// Variant ordering: the variants share their leading name and part on
+    /// the token after it, where only `WithArgs` takes `(`.
     #[derive(Debug)]
-    pub struct DropFunctionTarget {
-        pub name: crate::ast::shared::names::FuncDefName,
-        pub args: Option<FunctionParameters>,
+    pub enum DropFunctionTarget {
+        WithArgs(FunctionWithArgs),
+        Qualified(crate::ast::shared::expr::FuncCallQualifiedName),
+        Name(crate::tokens::NonReservedWord),
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `function_with_argtypes: func_name func_args`.
+    #[derive(Debug)]
+    pub struct FunctionWithArgs {
+        pub name: crate::ast::shared::expr::FuncCallName,
+        pub args: FunctionParameters,
+    }
+}
+
+impl<'input> DropFunctionTarget<'input> {
+    /// The last part of the function name, without its schema.
+    pub fn object(&self) -> &str {
+        match self {
+            DropFunctionTarget::WithArgs(target) => target.name.object(),
+            DropFunctionTarget::Qualified(name) => name.tail.last().name.text(),
+            DropFunctionTarget::Name(name) => name.text(),
+        }
+    }
+
+    /// The argument list, when the target has one.
+    pub fn args(&self) -> Option<&FunctionParameters<'input>> {
+        match self {
+            DropFunctionTarget::WithArgs(target) => Some(&target.args),
+            DropFunctionTarget::Qualified(_) | DropFunctionTarget::Name(_) => None,
+        }
     }
 }
 

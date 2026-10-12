@@ -456,7 +456,7 @@ fn none_is_not_a_general_type_name() {
 #[test]
 fn repaired_clauses_accept_the_ordinary_multi_element_spelling() {
     for source in [
-        // CastFunctionRef.args.
+        // FunctionWithArgs.args in CREATE CAST.
         "CREATE CAST (int AS text) WITH FUNCTION f(int, text)",
         // CreateAggregateOrderByInner.args.
         "CREATE AGGREGATE ag (ORDER BY int, text) (SFUNC = f, STYPE = internal)",
