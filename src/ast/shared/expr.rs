@@ -73,14 +73,15 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A single typmod argument: an optionally-signed integer literal. Postgres'
+    /// A single typmod argument: an optionally-signed number. Postgres'
     /// gram.y allows `expr_list` here, but the corpus only exercises signed
-    /// integers (e.g. `numeric(3, -6)` in numeric.sql), so we model only that
-    /// shape. A leading `+` or `-` is permitted to mirror PG's behavior.
+    /// numbers (e.g. `numeric(3, -6)` in numeric.sql), so we model only that
+    /// shape. The number is an integer or a float, because an integer above
+    /// `int32` lexes as an `FCONST` (issue #88).
     #[derive(Debug, PartialEq, Eq)]
     pub struct TypeModifierArg {
         pub sign: Option<TypeModifierSign>,
-        pub value: literal::IntegerLit,
+        pub value: crate::ast::shared::numbers::UnsignedNumberLit,
     }
 }
 

@@ -449,10 +449,12 @@ pub static LEXICAL_GATES: &[LexicalGate] = &[
     LexicalGate {
         kind: crate::TokenKind::NumericLit,
         version: TargetVersion::Pg16,
-        needs: has_digit_separator,
+        needs: non_decimal_or_separated,
         site: "tokens!.lexer_tokens.NumericLit",
         citation: "scan.l REL_15_19:395-403 `decimal`, `real`; `_` digit separators arrive in \
-                   16, commit faff8f8e4",
+                   16, commit faff8f8e4. An integer above `int32` is an `FCONST` \
+                   (REL_17_11 scan.l 1370 `process_integer_literal`), so a hexadecimal, \
+                   octal or binary one is a `NumericLit` that needs 16 too (issue #88)",
     },
     LexicalGate {
         kind: crate::TokenKind::StringLitSequence,
@@ -464,8 +466,9 @@ pub static LEXICAL_GATES: &[LexicalGate] = &[
     },
 ];
 
-/// Reports whether an integer literal uses a 16 form: a non-decimal radix, or
-/// a `_` digit separator.
+/// Reports whether an integer or numeric literal uses a 16 form: a
+/// non-decimal radix, or a `_` digit separator. A numeric literal has a radix
+/// prefix only when it is an integer above `int32` (issue #88).
 fn non_decimal_or_separated(text: &str) -> bool {
     if has_digit_separator(text) {
         return true;
@@ -477,7 +480,7 @@ fn non_decimal_or_separated(text: &str) -> bool {
     rest.starts_with(['x', 'X', 'o', 'O', 'b', 'B'])
 }
 
-/// Reports whether a numeric literal uses the 16 `_` digit separator.
+/// Reports whether a literal uses the 16 `_` digit separator.
 fn has_digit_separator(text: &str) -> bool {
     text.contains('_')
 }

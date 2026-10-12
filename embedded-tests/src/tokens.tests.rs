@@ -366,6 +366,46 @@ mod tests {
         assert_eq!(lit.text(), "0");
     }
 
+    /// scan.l `process_integer_literal` makes an `ICONST` only when the value
+    /// fits in `int32`; a larger value is an `FCONST` (REL_17_11 scan.l 1370,
+    /// REL_14_24 scan.l 1305). Leading zeros do not count. Issue #88.
+    #[test]
+    fn integer_above_int32_is_a_numeric_literal() {
+        for src in ["2147483647", "00000000002147483647", "0"] {
+            assert!(tokenizes_as(src, crate::TokenKind::IntegerLit), "{src}");
+        }
+        for src in ["2147483648", "3000000000", "99999999999999999999", "0002147483648"] {
+            assert!(tokenizes_as(src, crate::TokenKind::NumericLit), "{src}");
+        }
+    }
+
+    /// From 16 the scanner also makes an `ICONST` from a non-decimal integer
+    /// or one with `_` separators, with the same `int32` limit (REL_16_15
+    /// scan.l `process_integer_literal`, `pg_strtoint32_safe`). Issue #88.
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn non_decimal_integer_above_int32_is_a_numeric_literal() {
+        for src in [
+            "0x7FFFFFFF",
+            "0x_0000_7fff_ffff",
+            "0o17777777777",
+            "0b1111111111111111111111111111111",
+            "2_147_483_647",
+            "0_2147483647",
+        ] {
+            assert!(tokenizes_as(src, crate::TokenKind::IntegerLit), "{src}");
+        }
+        for src in [
+            "0x80000000",
+            "0x1_0000_0000",
+            "0o20000000000",
+            "0b10000000000000000000000000000000",
+            "2_147_483_648",
+        ] {
+            assert!(tokenizes_as(src, crate::TokenKind::NumericLit), "{src}");
+        }
+    }
+
     // --- NUMERIC literal tests (decimals + exponent) ---
 
     #[test]
@@ -432,12 +472,12 @@ mod tests {
     #[cfg(feature = "since-pg16")]
     #[test]
     fn integer_literal_with_underscores() {
-        let lexed = crate::lex("100_000_000_000_000");
+        let lexed = crate::lex("1_000_000_000");
         assert_eq!(lexed.errors().count(), 0, "lex errors in input");
         let mut input = lexed.input();
         let lit_parsed = IntegerLit::parse_arena(&mut input).unwrap();
         let lit = lit_parsed.ast();
-        assert_eq!(lit.text(), "100_000_000_000_000");
+        assert_eq!(lit.text(), "1_000_000_000");
     }
 
     // Postgres 16+ accepts non-decimal integer literal forms: `0x42F`, `0b101`,

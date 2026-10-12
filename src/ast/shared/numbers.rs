@@ -14,7 +14,7 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// Either an integer or a numeric (decimal/exponent) literal.
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq, Eq)]
     pub enum UnsignedNumberLit {
         /// Decimal/exponent forms come first so longest-match-wins picks them
         /// over a bare integer when a `.` or `e` is present.

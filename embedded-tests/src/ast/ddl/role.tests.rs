@@ -305,4 +305,38 @@ mod tests {
         );
         assert!(input.is_eof());
     }
+
+    /// gram.y takes `Iconst` and `SignedIconst` only from an `ICONST` token,
+    /// and the scanner makes an `FCONST` from an integer that does not fit in
+    /// `int32` (REL_17_11 scan.l 1370). So these positions reject such a
+    /// value, and the positions that take `NumericOnly`, `AexprConst` or an
+    /// expression accept it. Issue #88.
+    #[test]
+    fn iconst_rejects_an_integer_above_int32() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE ROLE r SYSID 2147483647",
+                "CREATE ROLE r CONNECTION LIMIT -1",
+                "SELECT 3000000000",
+                "SET x = -3000000000",
+                "CREATE SEQUENCE s START 3000000000",
+                "SELECT 1 LIMIT 3000000000",
+                "SELECT 1 OFFSET 3000000000 ROWS",
+                "SELECT 1::numeric(3000000000)",
+                "SELECT 1::int[2147483647]",
+                "FETCH 2147483647 FROM c",
+            ],
+            &[
+                "CREATE ROLE r SYSID 3000000000",
+                "CREATE ROLE r CONNECTION LIMIT 3000000000",
+                "ALTER TABLE t ALTER c SET STATISTICS 3000000000",
+                "SELECT 1::int[3000000000]",
+                "SELECT current_time(3000000000)",
+                "CREATE OPERATOR CLASS c FOR TYPE int USING btree AS OPERATOR 3000000000 <",
+                "FETCH 3000000000 FROM c",
+                "MOVE -3000000000 FROM c",
+                "SET TIME ZONE INTERVAL(3000000000) '1'",
+            ],
+        );
+    }
 }
