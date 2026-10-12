@@ -35,6 +35,17 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// The `FCONST` arms of Postgres' `NumericOnly`: `FCONST`, `'+' FCONST`
+    /// and `'-' FCONST`. With [`SignedIconst`] they make all of `NumericOnly`.
+    /// An integer above `int32` is an `FCONST` too (issue #88).
+    #[derive(Debug)]
+    pub struct SignedFconst {
+        pub sign: Option<NumericSignToken>,
+        pub value: literal::NumericLit,
+    }
+}
+
+recursa::ast_node! {
     /// Postgres' `SignedIconst`: optionally signed integer literal. Used by
     /// `SYSID n` in CREATE ROLE.
     #[derive(Debug)]

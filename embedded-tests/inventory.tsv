@@ -1312,3 +1312,5 @@ embedded-tests/src/ast/ddl/role.tests.rs	iconst_rejects_an_integer_above_int32	f
 embedded-tests/src/ast/utility/grant.tests.rs	large_object_takes_numeric_only	false	14-
 embedded-tests/src/ast/utility/analyze.tests.rs	analyze_option_takes_numeric_only	false	14-
 embedded-tests/src/ast/shared/expr.tests.rs	datetime_precision_is_an_iconst	false	14-
+embedded-tests/src/ast/ddl/database.tests.rs	createdb_number_is_signed_iconst_before_15	false	14-14
+embedded-tests/src/ast/ddl/database.tests.rs	createdb_number_is_numeric_only_from_15	false	15-
