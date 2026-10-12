@@ -899,9 +899,9 @@ recursa::ast_node! {
     /// and the in-place `alterfunc_opt_list` action.
     ///
     /// Variant ordering:
-    /// - `SetSchema` (`SET SCHEMA`) before `Options` (whose `Set` item
-    ///   starts with `SET <ident>`) so the dispatch on `SET` commits to the
-    ///   `SET SCHEMA` form when followed by the `SCHEMA` keyword.
+    /// - `SetSchema` (`SET SCHEMA name`) before `Options`. The `Set` item of
+    ///   `Options` also has a `SET SCHEMA` form, `SET SCHEMA 'string'`, so
+    ///   only the token after `SCHEMA` tells the two apart.
     /// - Other variants have distinct leading keywords (`RENAME`, `OWNER`,
     ///   `DEPENDS`, `NO`, plus all the `common_func_opt_item` first tokens),
     ///   so order is for clarity.
