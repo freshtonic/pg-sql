@@ -140,36 +140,60 @@ recursa::ast_node! {
         Character,
         #[tok(UNKNOWN)]
         Unknown,
+        /// gram.y `JsonType`: `json`, which takes no type modifiers.
+        // From 17, `json` is a COL_NAME keyword with its own `JsonType`
+        // production (research, PostgreSQL 17, "Keywords"; REL_17_11 gram.y
+        // 14744). Before 17 it is an identifier-spelled type name that `Ident`
+        // takes. Every version has the type, so this gate only moves the word
+        // and records no version: a plain `cfg`, not `config(since)`.
+        #[cfg(feature = "since-pg17")]
+        #[tok(JSON)]
+        Json,
         /// Qualified type name (`schema.type`) or a bare identifier.
         Ident(TypeNameIdent),
     }
 }
 
 recursa::ast_node! {
-    /// Identifier-spelled type name using the type-name-specific admission set.
-    /// Fixed legacy spellings are excluded so they retain their public enum
-    /// variants; `json` is included despite its `COL_NAME` keyword category.
+    /// Identifier-spelled type name: gram.y `GenericType`'s
+    /// `type_function_name attrs`. Fixed legacy spellings are excluded from
+    /// the first part so they retain their public enum variants. From 17,
+    /// `json` is a `COL_NAME` keyword, so it is no first part (gram.y
+    /// `JsonType` has its own variants) but stays a later one.
     #[derive(Debug)]
     pub struct TypeNameIdent {
-        #[sep(DOT)]
-        pub parts: one_or_many!(crate::tokens::type_name_ident),
+        pub first: crate::tokens::type_name_ident,
+        /// gram.y `attrs`: each part after a dot is `attr_name`, a `ColLabel`.
+        pub rest: zero_or_many!(TypeNameAttr),
+    }
+}
+
+recursa::ast_node! {
+    /// One `'.' attr_name` of gram.y `attrs` inside a [`TypeNameIdent`].
+    #[derive(Debug)]
+    pub struct TypeNameAttr {
+        #[tok(DOT, this)]
+        pub name: crate::tokens::ColLabel,
     }
 }
 
 impl<'input> TypeNameIdent<'input> {
+    /// The text of each dotted part, the first part included.
+    pub fn parts(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.first.text()).chain(self.rest.iter().map(|part| part.name.text()))
+    }
+
     pub fn object(&self) -> &str {
-        self.parts.last().text()
+        match self.rest.last() {
+            Some(part) => part.name.text(),
+            None => self.first.text(),
+        }
     }
 }
 
 impl PartialEq for TypeNameIdent<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.parts.len() == other.parts.len()
-            && self
-                .parts
-                .iter()
-                .zip(other.parts.iter())
-                .all(|(left, right)| left.text() == right.text())
+        self.parts().eq(other.parts())
     }
 }
 
@@ -1665,6 +1689,13 @@ recursa::ast_node! {
         DateTime(DateTimeCastType),
         Interval(IntervalCastType),
         General(GeneralCastType),
+        /// gram.y `JsonType`: `json`, which takes no type modifiers, so
+        /// `json(1)` is a syntax error.
+        // From 17: see `TypeName::Json`, which also says why the gate records
+        // no version.
+        #[cfg(feature = "since-pg17")]
+        #[tok(JSON)]
+        Json,
     }
 }
 

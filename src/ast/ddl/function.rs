@@ -159,23 +159,11 @@ recursa::ast_node! {
 recursa::ast_node! {
     /// Fixed PostgreSQL built-in type names. Identifier-spelled type names are
     /// factored separately so their shared qualified prefix can be parsed once.
-    ///
-    /// `JSON` belongs here rather than with the identifier-spelled names because
-    /// it is a `COL_NAME` keyword and so is excluded from `type_function_name`.
-    /// PostgreSQL reaches it through the dedicated `JsonType` production
-    /// (gram.y `SimpleTypename: … | JsonType`), which is what makes
-    /// `RETURNS json` and `f(node json)` legal while keeping `json` out of
-    /// `func_name`.
+    /// `json` is [`FunctionJsonType`] from 17.
     #[derive(Debug)]
     pub enum FunctionBuiltinTypeName {
         #[tok(BOOLEAN)]
         Boolean,
-        // Added in 17: `JsonType` (research, PostgreSQL 17, "Queries and
-        // expressions"). In 16, `json` is unreserved and is an identifier-spelled
-        // type name.
-        #[config(since = pg17)]
-        #[tok(JSON)]
-        Json,
         #[tok(INTEGER)]
         Integer,
         #[tok(INT)]
@@ -283,12 +271,34 @@ recursa::ast_node! {
     }
 }
 
+// Added in 17: `JsonType` (research, PostgreSQL 17, "Keywords"; REL_17_11
+// gram.y 14744). In 16, `json` is unreserved and is an identifier-spelled type
+// name.
+#[cfg(feature = "since-pg17")]
+recursa::ast_node! {
+    /// gram.y `SimpleTypename: JsonType`, with the array suffixes of
+    /// `Typename`. `json` is a `COL_NAME` keyword, so it is excluded from
+    /// `type_function_name` and reaches a type only through `JsonType`, which
+    /// takes no type modifiers: `f(json(1))` is a syntax error.
+    #[derive(Debug)]
+    #[tok(JSON, this)]
+    pub struct FunctionJsonType {
+        pub array_suffixes: zero_or_many!(ArraySuffix),
+        pub array_kw_suffix: Option<ArrayKwSuffix>,
+    }
+}
+
 recursa::ast_node! {
     /// A function type with the qualified identifier prefix factored before the
     /// `%TYPE` versus cast-suffix decision.
     #[derive(Debug)]
     pub enum FunctionType {
         Builtin(FunctionBuiltinType),
+        // From 17: see `FunctionJsonType`. Every version has the type, so the
+        // gate only moves the word and records no version (see
+        // `TypeName::Json`).
+        #[cfg(feature = "since-pg17")]
+        Json(FunctionJsonType),
         Identifier(FunctionIdentifierType),
     }
 }
@@ -641,6 +651,9 @@ recursa::ast_node! {
     pub struct CreateFunctionStmt {
         #[presence(OR, REPLACE)]
         pub or_replace: bool,
+        /// gram.y `func_name`: an unqualified name is a `type_function_name`,
+        /// so a COL_NAME keyword such as `coalesce` (or, from 17, `json`)
+        /// names a function only when qualified.
         #[tok(FUNCTION, this)]
         pub name: crate::ast::shared::names::FuncDefName,
         pub args: FunctionParameters,

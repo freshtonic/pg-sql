@@ -171,7 +171,7 @@ recursa::ast_node! {
         DropOperatorClass(DropOperatorClassStmt),
         DropOperatorFamily(DropOperatorFamilyStmt),
         DropOperator(boxed!(DropOperatorStmt)),
-        DropCast(DropCastStmt),
+        DropCast(boxed!(DropCastStmt)),
         DropTransform(DropTransformStmt),
         DropCollation(DropCollationStmt),
         DropExtension(DropExtensionStmt),
