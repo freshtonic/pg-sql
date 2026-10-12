@@ -961,11 +961,23 @@ recursa::tokens! {
         // scan.l `integer_junk`, `numeric_junk` (`decimal_junk` before 16),
         // `real_junk` and `realfail`.
         //
+        // An integer is an `ICONST` only when its value fits in `int32`; a
+        // larger one is an `FCONST`, so it lexes as `NumericLit` here
+        // (scan.l `process_integer_literal`: REL_17_11 scan.l 1370 with
+        // `pg_strtoint32_safe`, REL_14_24 scan.l 1305 with `strtoint`). The
+        // last alternative of each `NumericLit` pattern takes the integers
+        // above 2147483647, with any leading zeros and, from 16, any radix and
+        // `_` separators. `IntegerLit` also matches such an integer, to the
+        // same extent, and `priority = 1` makes `NumericLit` win that tie
+        // (issue #88). Bounding the `IntegerLit` pattern instead is exact too,
+        // but its automaton is too large for recursa's Pretty boundary proof
+        // after `[`, which then fails closed (RCA3211).
+        //
         // REL_16_15 scan.l 395-437: `decinteger {decdigit}(_?{decdigit})*`,
         // the `0x`/`0o`/`0b` integers, and `_` separators in `numeric` and
         // `real`.
         #[config(since = pg16)]
-        NumericLit => next_exclusion(pattern = r"(?:(?:[0-9](?:_?[0-9])*\.[0-9](?:_?[0-9])*|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\.)", excluded = r"[A-Za-z0-9_]"),
+        NumericLit => next_exclusion(pattern = r"(?:(?:[0-9](?:_?[0-9])*\.[0-9](?:_?[0-9])*|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?|[0-9](?:_?[0-9])*\.[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*|[0-9](?:_?[0-9])*\.|(?:0[xX](?:(?:_?0)*_?(?:[123456789aAbBcCdDeEfF](?:_?[0-9a-fA-F]){8,}|[89aAbBcCdDeEfF](?:_?[0-9a-fA-F]){7}))|0[oO](?:(?:_?0)*_?(?:[1-7](?:_?[0-7]){11,}|[2-7](?:_?[0-7]){10}))|0[bB](?:(?:_?0)*_?(?:1(?:_?[01]){31,}))|(?:0_?)*(?:[1-9](?:_?[0-9]){10,}|[3-9](?:_?[0-9]){9}|2_?[2-9](?:_?[0-9]){8}|2_?1_?[5-9](?:_?[0-9]){7}|2_?1_?4_?[8-9](?:_?[0-9]){6}|2_?1_?4_?7_?[5-9](?:_?[0-9]){5}|2_?1_?4_?7_?4_?9(?:_?[0-9]){4}|2_?1_?4_?7_?4_?8_?[4-9](?:_?[0-9]){3}|2_?1_?4_?7_?4_?8_?3_?[7-9](?:_?[0-9]){2}|2_?1_?4_?7_?4_?8_?3_?6_?[5-9](?:_?[0-9])|2_?1_?4_?7_?4_?8_?3_?6_?4_?[8-9])))", excluded = r"[A-Za-z0-9_]", priority = 1),
         #[config(since = pg16)]
         IntegerLit => next_exclusion(pattern = r"(?:0[xX](?:_?[0-9a-fA-F])+|0[oO](?:_?[0-7])+|0[bB](?:_?[01])+|[0-9](?:_?[0-9])*)", excluded = r"[A-Za-z0-9_]"),
         // Before 16 there are no non-decimal integers and no `_` separators:
@@ -976,7 +988,7 @@ recursa::tokens! {
         // are `integer_junk`, `1.5_0` is `decimal_junk` and `1e1_0` is
         // `real_junk`, and each is an error.
         #[config(since = pg15, before = pg16)]
-        NumericLit => next_exclusion(pattern = r"(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)[eE][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*", excluded = r"[A-Za-z0-9_]"),
+        NumericLit => next_exclusion(pattern = r"(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)[eE][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*|(?:0*(?:[1-9][0-9]{10,}|[3-9][0-9]{9}|2[2-9][0-9]{8}|21[5-9][0-9]{7}|214[8-9][0-9]{6}|2147[5-9][0-9]{5}|214749[0-9]{4}|214748[4-9][0-9]{3}|2147483[7-9][0-9]{2}|21474836[5-9][0-9]|214748364[8-9]))", excluded = r"[A-Za-z0-9_]", priority = 1),
         #[config(since = pg15, before = pg16)]
         IntegerLit => next_exclusion(pattern = r"[0-9]+", excluded = r"[A-Za-z0-9_]"),
         // Before 15 there is no trailing-junk check: research, PostgreSQL 15,
@@ -986,7 +998,7 @@ recursa::tokens! {
         // ends where its pattern ends, whatever follows: `123abc` is `123`
         // then `abc`, `0x1F` is `0` then `x1F`, and `1e+` is `1`, `e`, `+`.
         #[config(before = pg15)]
-        NumericLit => next_exclusion(pattern = r"(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)[eE][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*"),
+        NumericLit => next_exclusion(pattern = r"(?:[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)[eE][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*|(?:0*(?:[1-9][0-9]{10,}|[3-9][0-9]{9}|2[2-9][0-9]{8}|21[5-9][0-9]{7}|214[8-9][0-9]{6}|2147[5-9][0-9]{5}|214749[0-9]{4}|214748[4-9][0-9]{3}|2147483[7-9][0-9]{2}|21474836[5-9][0-9]|214748364[8-9]))", priority = 1),
         #[config(before = pg15)]
         IntegerLit => next_exclusion(pattern = r"[0-9]+"),
         // A parameter that an identifier character follows directly is a

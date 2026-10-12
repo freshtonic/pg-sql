@@ -124,4 +124,40 @@ mod tests {
             ],
         );
     }
+
+    /// Before 15 a `createdb_opt_item` number is `SignedIconst` (REL_14_24
+    /// gram.y 10203), so a float or an integer above `int32` is rejected.
+    /// Issue #88.
+    #[cfg(not(feature = "since-pg15"))]
+    #[test]
+    fn createdb_number_is_signed_iconst_before_15() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE DATABASE d CONNECTION LIMIT -1",
+                "ALTER DATABASE d CONNECTION LIMIT 2147483647",
+            ],
+            &[
+                "CREATE DATABASE d OID = 3000000000",
+                "CREATE DATABASE d CONNECTION LIMIT 1.5",
+                "ALTER DATABASE d CONNECTION LIMIT -3000000000",
+            ],
+        );
+    }
+
+    /// From 15 a `createdb_opt_item` number is `NumericOnly` (REL_15_19
+    /// gram.y 11077), so a float and an integer above `int32` parse.
+    /// Issue #88.
+    #[cfg(feature = "since-pg15")]
+    #[test]
+    fn createdb_number_is_numeric_only_from_15() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE DATABASE d CONNECTION LIMIT -1",
+                "CREATE DATABASE d OID = 3000000000",
+                "CREATE DATABASE d CONNECTION LIMIT 1.5",
+                "ALTER DATABASE d CONNECTION LIMIT -3000000000",
+            ],
+            &["CREATE DATABASE d CONNECTION LIMIT - x"],
+        );
+    }
 }

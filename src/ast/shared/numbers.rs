@@ -14,7 +14,7 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// Either an integer or a numeric (decimal/exponent) literal.
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq, Eq)]
     pub enum UnsignedNumberLit {
         /// Decimal/exponent forms come first so longest-match-wins picks them
         /// over a bare integer when a `.` or `e` is present.
@@ -31,6 +31,17 @@ recursa::ast_node! {
     pub struct NumericOnly {
         pub sign: Option<NumericSignToken>,
         pub value: UnsignedNumberLit,
+    }
+}
+
+recursa::ast_node! {
+    /// The `FCONST` arms of Postgres' `NumericOnly`: `FCONST`, `'+' FCONST`
+    /// and `'-' FCONST`. With [`SignedIconst`] they make all of `NumericOnly`.
+    /// An integer above `int32` is an `FCONST` too (issue #88).
+    #[derive(Debug)]
+    pub struct SignedFconst {
+        pub sign: Option<NumericSignToken>,
+        pub value: literal::NumericLit,
     }
 }
 

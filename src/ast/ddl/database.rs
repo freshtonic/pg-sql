@@ -34,16 +34,25 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// The value of a CREATE DATABASE option — Postgres' `createdb_opt_item`.
-    /// Three RHS forms: `NumericOnly`, `opt_boolean_or_string`, or `DEFAULT`.
+    /// Three RHS forms: a number, `opt_boolean_or_string`, or `DEFAULT`.
     ///
-    /// Variant ordering: `Default` (keyword) first, then `Numeric` (digits or
-    /// `+`/`-`), then `Boolean` (`TRUE`/`FALSE`/`ON`), then `String` (quoted),
-    /// then the catch-all `Word` (bareword incl. `off`, identifier-like values).
+    /// Variant ordering: `Default` (keyword) first, then the numbers (digits
+    /// or `+`/`-`), then `Boolean` (`TRUE`/`FALSE`/`ON`), then `String`
+    /// (quoted), then the catch-all `Word` (bareword incl. `off`,
+    /// identifier-like values).
     #[derive(Debug)]
     pub enum CreateDbOptValue {
         #[tok(DEFAULT)]
         Default,
-        Numeric(crate::ast::shared::numbers::NumericOnly),
+        /// `SignedIconst`, the only number of REL_14_24 gram.y 10203.
+        Integer(SignedIconst),
+        // Added in 15: the number is `NumericOnly` (REL_15_19 gram.y 11077),
+        // so its `FCONST` arms parse, an integer above `int32` among them
+        // (research, PostgreSQL 16, "Changes to existing statements",
+        // `CREATE DATABASE`; back-patched into 15.1 as commit 2c6d43650d1).
+        // A widening: the `SignedIconst` arm records nothing.
+        #[config(since = pg15)]
+        Float(SignedFconst),
         #[tok(TRUE)]
         True,
         #[tok(FALSE)]

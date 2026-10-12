@@ -73,15 +73,27 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A single typmod argument: an optionally-signed integer literal. Postgres'
+    /// A single typmod argument: an optionally-signed number. Postgres'
     /// gram.y allows `expr_list` here, but the corpus only exercises signed
-    /// integers (e.g. `numeric(3, -6)` in numeric.sql), so we model only that
-    /// shape. A leading `+` or `-` is permitted to mirror PG's behavior.
+    /// numbers (e.g. `numeric(3, -6)` in numeric.sql), so we model only that
+    /// shape. The number is an integer or a float, because an integer above
+    /// `int32` lexes as an `FCONST` (issue #88).
     #[derive(Debug, PartialEq, Eq)]
     pub struct TypeModifierArg {
         pub sign: Option<TypeModifierSign>,
-        pub value: literal::IntegerLit,
+        pub value: crate::ast::shared::numbers::UnsignedNumberLit,
     }
+}
+
+recursa::ast_node! {
+    /// `'(' Iconst ')'`: the precision of `TIMESTAMP`, `TIME`, `INTERVAL` and
+    /// `SECOND` (REL_17_11 gram.y `ConstDatetime` 14622, `ConstInterval '('
+    /// Iconst ')'` 14350 and 17274, `interval_second` 14737). Unlike the
+    /// `expr_list` of [`TypePrecision`], it takes one unsigned integer that
+    /// fits in `int32` (issue #88).
+    #[derive(Debug, PartialEq, Eq, derive_more :: Deref)]
+    #[tok(LPAREN, this, RPAREN)]
+    pub struct IconstPrecision(#[deref] pub literal::IntegerLit);
 }
 
 recursa::ast_node! {
@@ -1714,7 +1726,7 @@ recursa::ast_node! {
     #[derive(Debug, PartialEq, Eq)]
     pub struct DateTimeCastType {
         pub base: DateTimeCastTypeName,
-        pub precision: Option<TypePrecision>,
+        pub precision: Option<IconstPrecision>,
         pub tz: Option<TimeZoneQualifier>,
     }
 }
@@ -1741,7 +1753,7 @@ recursa::ast_node! {
 recursa::ast_node! {
     #[derive(Debug, PartialEq, Eq)]
     pub enum IntervalCastTypeModifier {
-        Precision(TypePrecision),
+        Precision(IconstPrecision),
         Qualifier(IntervalQualifier),
     }
 }
@@ -1937,7 +1949,7 @@ recursa::ast_node! {
     #[tok(TIMESTAMP, this)]
     pub struct TimestampLit {
         /// Optional precision, e.g., `timestamp(6)`.
-        pub precision: Option<TypePrecision>,
+        pub precision: Option<IconstPrecision>,
         pub tz: Option<TimeZoneQualifier>,
         pub value: literal::StringLit,
     }
@@ -1949,7 +1961,7 @@ recursa::ast_node! {
     #[tok(TIME, this)]
     pub struct TimeLit {
         /// Optional precision, e.g., `time(2)`.
-        pub precision: Option<TypePrecision>,
+        pub precision: Option<IconstPrecision>,
         pub tz: Option<TimeZoneQualifier>,
         pub value: literal::StringLit,
     }
@@ -1962,7 +1974,7 @@ recursa::ast_node! {
     #[derive(Debug, PartialEq, Eq)]
     #[tok(SECOND, this)]
     pub struct SecondWithPrecision {
-        pub precision: Option<TypePrecision>,
+        pub precision: Option<IconstPrecision>,
     }
 }
 
@@ -2006,7 +2018,7 @@ recursa::ast_node! {
     pub struct IntervalLit {
         pub interval: IntervalKeyword,
         /// Optional precision, e.g. `interval(2)` or `interval(0)`.
-        pub precision: Option<TypePrecision>,
+        pub precision: Option<IconstPrecision>,
         pub value: literal::StringLit,
         pub qualifier: Option<IntervalQualifier>,
     }

@@ -192,6 +192,9 @@ fn a_widening_reports_the_version_of_the_shape_that_it_adds() {
         // 18 added the `PERIOD` element to both column lists of a table-level
         // foreign key (REL_18_6 gram.y `opt_column_and_period_list`).
         "CREATE TABLE t (a int, b int, FOREIGN KEY (a) REFERENCES u (c))",
+        // 15 widened a `createdb_opt_item` number from `SignedIconst` to
+        // `NumericOnly` (REL_15_19 gram.y 11077; REL_14_24 gram.y 10203).
+        "CREATE DATABASE d CONNECTION LIMIT -1",
     ] {
         assert_eq!(
             parse_and_report(source),
@@ -219,6 +222,19 @@ fn a_widening_reports_the_version_of_the_shape_that_it_adds() {
         let source = "REVOKE INHERIT OPTION FOR r FROM u";
         let span = span_of(source).expect("a span");
         assert_eq!(&source[span], "INHERIT");
+    }
+
+    // The `FCONST` arms of `NumericOnly` are the shape that 15 adds.
+    #[cfg(feature = "since-pg15")]
+    for source in [
+        "CREATE DATABASE d OID = 3000000000",
+        "ALTER DATABASE d CONNECTION LIMIT -1.5",
+    ] {
+        assert_eq!(
+            parse_and_report(source),
+            Some(TargetVersion::Pg15),
+            "{source}"
+        );
     }
 
     #[cfg(feature = "since-pg17")]

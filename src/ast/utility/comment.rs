@@ -84,12 +84,12 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// `LARGE OBJECT NumericOnly` comment object (gram.y `COMMENT ON LARGE_P
-    /// OBJECT_P NumericOnly`). The OID is a numeric literal — corpus uses only
-    /// positive `IntegerLit`s.
+    /// OBJECT_P NumericOnly`, REL_17_11 gram.y 7199). An OID above `int32`
+    /// lexes as an `FCONST`, so this is `NumericOnly` (issue #88).
     #[derive(Debug)]
     pub struct CommentLargeObjectObject {
         #[tok(LARGE, OBJECT, this)]
-        pub oid: literal::IntegerLit,
+        pub oid: crate::ast::shared::numbers::NumericOnly,
     }
 }
 

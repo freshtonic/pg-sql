@@ -1306,3 +1306,11 @@ embedded-tests/src/ast/shared/expr.tests.rs	json_type_takes_modifiers_before_17	
 embedded-tests/src/ast/ddl/function.tests.rs	function_names_follow_gram_y_func_name	false	14-
 embedded-tests/src/ast/ddl/function.tests.rs	json_names_no_function_from_17	false	17-
 embedded-tests/src/ast/dml/select.tests.rs	fetch_count_is_select_fetch_first_value	false	14-
+embedded-tests/src/tokens.tests.rs	integer_above_int32_is_a_numeric_literal	false	14-
+embedded-tests/src/tokens.tests.rs	non_decimal_integer_above_int32_is_a_numeric_literal	false	16-
+embedded-tests/src/ast/ddl/role.tests.rs	iconst_rejects_an_integer_above_int32	false	14-
+embedded-tests/src/ast/utility/grant.tests.rs	large_object_takes_numeric_only	false	14-
+embedded-tests/src/ast/utility/analyze.tests.rs	analyze_option_takes_numeric_only	false	14-
+embedded-tests/src/ast/shared/expr.tests.rs	datetime_precision_is_an_iconst	false	14-
+embedded-tests/src/ast/ddl/database.tests.rs	createdb_number_is_signed_iconst_before_15	false	14-14
+embedded-tests/src/ast/ddl/database.tests.rs	createdb_number_is_numeric_only_from_15	false	15-
