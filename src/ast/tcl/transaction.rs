@@ -49,16 +49,6 @@ recursa::ast_node! {
         NotDeferrable,
         #[tok(DEFERRABLE)]
         Deferrable,
-        Snapshot(SnapshotMode),
-    }
-}
-
-recursa::ast_node! {
-    /// `SNAPSHOT 'snapshot_id'` — import a serializable transaction snapshot.
-    #[derive(Debug)]
-    pub struct SnapshotMode {
-        #[tok(SNAPSHOT, this)]
-        pub id: literal::StringLit,
     }
 }
 

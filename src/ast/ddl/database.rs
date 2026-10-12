@@ -134,6 +134,29 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// `WITH createdb_opt_list`, the first arm of PostgreSQL's
+    /// `AlterDatabaseStmt` (REL_17_11 gram.y 11349). `createdb_opt_list` can
+    /// be empty, so `ALTER DATABASE d WITH` is a statement.
+    ///
+    /// `WITH` sits on the struct: on the list field it would attach to each
+    /// option.
+    #[derive(Debug)]
+    #[tok(WITH, this)]
+    pub struct AlterDatabaseWithOptions {
+        pub options: zero_or_many!(CreateDbOption),
+    }
+}
+
+recursa::ast_node! {
+    /// The `createdb_opt_items` of `ALTER DATABASE name createdb_opt_list`,
+    /// the second arm of PostgreSQL's `AlterDatabaseStmt`. The empty
+    /// `createdb_opt_list` of that arm is an [`AlterDatabaseStmt`] with no
+    /// action.
+    #[derive(Debug, derive_more::Deref)]
+    pub struct AlterDatabaseOptions(#[deref] pub one_or_many!(CreateDbOption));
+}
+
+recursa::ast_node! {
     /// One action on `ALTER DATABASE name action` — covers Postgres'
     /// `AlterDatabaseStmt`, `AlterDatabaseRefreshCollStmt`,
     /// `AlterDatabaseSetStmt`, `RenameStmt` and `AlterOwnerStmt` branches for
@@ -142,15 +165,11 @@ recursa::ast_node! {
     /// Variant ordering: `SetTablespace` is the dedicated
     /// `AlterDatabaseStmt: ALTER DATABASE name SET TABLESPACE name` branch and
     /// comes before the general `SetReset`, whose `generic_set` would take
-    /// `TABLESPACE` as a `var_name`. The other variants begin with distinct
-    /// leading keywords (`RENAME`, `OWNER`, `REFRESH`), so their order is for
-    /// clarity only. The `[WITH] createdb_opt_list` branch isn't exercised by the
-    /// pg-sql differential corpus (which only uses a single bare option name
-    /// for ALTER DATABASE, e.g. `CONNECTION_LIMIT 123`), so we model the
-    /// single-option form as `WithOpt` — taking one `CreateDbOption` directly,
-    /// not a `[WITH] (list)`. When a corpus statement uses more than one
-    /// option or a leading `WITH`, extend this to a struct that wraps a
-    /// `recursa::ArenaVec<'input, CreateDbOption>` plus an optional `WITH` keyword.
+    /// `TABLESPACE` as a `var_name`. `With` leads with `WITH`. `Options`
+    /// comes last, so the `SET …`, `REFRESH …`, `OWNER TO …` and `RENAME TO
+    /// …` branches win when they apply: `createdb_opt_name` names no `SET`,
+    /// `REFRESH` or `RENAME`, and only the token after `OWNER` tells an
+    /// `OWNER` option from `OWNER TO`.
     #[derive(Debug)]
     pub enum AlterDatabaseAction {
         Rename(RenameTo),
@@ -162,21 +181,20 @@ recursa::ast_node! {
         /// gram.y `AlterDatabaseSetStmt: ALTER DATABASE name SetResetClause`.
         /// `RESET TABLESPACE` is its `RESET var_name` form.
         SetReset(crate::ast::ddl::role::SetResetClause),
-        /// A single `createdb_opt_item` (no leading `WITH`). Listed last so
-        /// the more specific `SET …`, `REFRESH …`, `OWNER TO …`, and
-        /// `RENAME TO …` branches win when they apply.
-        WithOpt(CreateDbOption),
+        With(AlterDatabaseWithOptions),
+        Options(AlterDatabaseOptions),
     }
 }
 
 recursa::ast_node! {
-    /// `ALTER DATABASE name action` — Postgres' `AlterDatabaseStmt`,
+    /// `ALTER DATABASE name [action]` — Postgres' `AlterDatabaseStmt`,
     /// `AlterDatabaseRefreshCollStmt`, `AlterDatabaseSetStmt`, `RenameStmt`,
-    /// and `AlterOwnerStmt` branches for databases.
+    /// and `AlterOwnerStmt` branches for databases. With no action, it is the
+    /// `ALTER DATABASE name createdb_opt_list` arm with an empty list.
     #[derive(Debug)]
     pub struct AlterDatabaseStmt {
         #[tok(ALTER, DATABASE, this)]
         pub name: crate::tokens::ColId,
-        pub action: AlterDatabaseAction,
+        pub action: Option<AlterDatabaseAction>,
     }
 }

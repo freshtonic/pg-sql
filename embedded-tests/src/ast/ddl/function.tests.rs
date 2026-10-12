@@ -536,4 +536,41 @@ mod tests {
             "ALTER ROUTINE cp_testfunc1(int) RENAME TO cp_testfunc1a",
         );
     }
+
+    /// `FunctionSetResetClause: SET set_rest_more` (REL_17_11 gram.y
+    /// 1948): every `set_rest_more` form, in `ALTER` and in `CREATE`, but not
+    /// the two transaction forms of `set_rest`. Issue #91.
+    #[test]
+    fn function_set_takes_set_rest_more() {
+        check_statement_forms(
+            &[
+                "ALTER FUNCTION f() SET TIME ZONE 'UTC'",
+                "ALTER FUNCTION f() SET TIME ZONE LOCAL",
+                "ALTER FUNCTION f() SET TIME ZONE INTERVAL '1' HOUR",
+                "ALTER FUNCTION f() SET SCHEMA 'x'",
+                "ALTER FUNCTION f() SET SCHEMA x",
+                "ALTER FUNCTION f() SET NAMES 'utf8'",
+                "ALTER FUNCTION f() SET NAMES",
+                "ALTER FUNCTION f() SET search_path FROM CURRENT",
+                "ALTER FUNCTION f() SET ROLE r",
+                "ALTER FUNCTION f() SET SESSION AUTHORIZATION DEFAULT",
+                "ALTER FUNCTION f() SET XML OPTION DOCUMENT",
+                "ALTER FUNCTION f() SET TRANSACTION SNAPSHOT 'x'",
+                "ALTER FUNCTION f() SET TIME ZONE 'UTC' SET NAMES DEFAULT STRICT",
+                "ALTER PROCEDURE p() SET TIME ZONE 'UTC'",
+                "ALTER ROUTINE p() SET XML OPTION CONTENT",
+                "CREATE FUNCTION f() RETURNS int LANGUAGE sql SET TIME ZONE 'UTC' RETURN 1",
+                "CREATE FUNCTION f() RETURNS int LANGUAGE sql SET search_path FROM CURRENT RETURN 1",
+                "CREATE FUNCTION f() RETURNS int LANGUAGE sql SET a.b = 1 RESET c RETURN 1",
+                "CREATE PROCEDURE p() LANGUAGE sql SET SCHEMA 'x' BEGIN ATOMIC END",
+            ],
+            &[
+                "ALTER FUNCTION f() SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+                "ALTER FUNCTION f() SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY",
+                "ALTER FUNCTION f() SET CATALOG 'x'",
+                "ALTER FUNCTION f() SET LOCAL x = 1",
+                "CREATE FUNCTION f() RETURNS int LANGUAGE sql SET TRANSACTION READ ONLY RETURN 1",
+            ],
+        );
+    }
 }

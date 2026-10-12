@@ -1716,4 +1716,33 @@ mod tests {
             "SELECT * FROM (a JOIN b ON true)",
         ]);
     }
+
+    /// `offset_clause: OFFSET select_fetch_first_value row_or_rows`
+    /// (REL_17_11 gram.y 13215): the count is a `c_expr` or a signed
+    /// constant. Issue #90.
+    #[test]
+    fn offset_takes_row_or_rows() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT 1 OFFSET 2 ROWS",
+                "SELECT 1 OFFSET 2 ROW",
+                "SELECT 1 OFFSET -2 ROWS",
+                "SELECT 1 OFFSET +2.5 ROWS",
+                "SELECT 1 OFFSET (1 + 1) ROWS",
+                "SELECT 1 OFFSET x ROWS",
+                "SELECT 1 OFFSET f(x) ROWS FETCH FIRST 3 ROWS ONLY",
+                "SELECT 1 FETCH FIRST 3 ROWS ONLY OFFSET 2 ROWS",
+                "SELECT 1 LIMIT 3 OFFSET 2 ROWS",
+                "SELECT 1 OFFSET 2 ROWS FOR UPDATE",
+                "SELECT 1 OFFSET 1 + 1",
+                "SELECT 1 OFFSET -x",
+                // `rows` is an unreserved key word, so this is a column.
+                "SELECT 1 OFFSET ROWS",
+            ],
+            &[
+                "SELECT 1 OFFSET 1 + 1 ROWS",
+                "SELECT 1 OFFSET -x ROWS",
+            ],
+        );
+    }
 }

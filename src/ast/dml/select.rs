@@ -1549,11 +1549,60 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// OFFSET clause: `OFFSET expr`
+    /// `OFFSET select_offset_value`, the first arm of PostgreSQL's
+    /// `offset_clause` (REL_17_11 gram.y 13212).
     #[derive(Debug)]
-    pub struct OffsetClause {
+    pub struct OffsetCount {
         #[tok(OFFSET, this)]
         pub count: Expr,
+    }
+}
+
+recursa::ast_node! {
+    /// `OFFSET select_fetch_first_value row_or_rows`, the second arm of
+    /// PostgreSQL's `offset_clause` (REL_17_11 gram.y 13215). The count is a
+    /// `c_expr` or a signed constant, so `OFFSET 1 + 1 ROWS` is a syntax error
+    /// and `OFFSET (1 + 1) ROWS` is not.
+    #[derive(Debug)]
+    pub struct OffsetRows {
+        #[tok(OFFSET, this)]
+        pub count: FetchFirstValue,
+        pub row_or_rows: FetchRowOrRows,
+    }
+}
+
+recursa::ast_node! {
+    /// PostgreSQL's `offset_clause`. Only the token after the count tells
+    /// the two arms apart.
+    #[derive(Debug)]
+    pub enum OffsetClause {
+        Rows(OffsetRows),
+        Count(OffsetCount),
+    }
+}
+
+recursa::ast_node! {
+    /// `'+' I_or_F_const` or `'-' I_or_F_const`, the signed arms of
+    /// PostgreSQL's `select_fetch_first_value` (REL_17_11 gram.y 13250). The
+    /// sign takes only a constant: `OFFSET -x ROWS` is a syntax error.
+    ///
+    /// The sign is part of each variant, not a node of its own: after
+    /// `OFFSET +` the parser cannot yet tell this arm from an `a_expr`, so it
+    /// cannot reduce a sign node there.
+    #[derive(Debug)]
+    pub enum SignedFetchConst {
+        Pos(#[tok(PLUS, this)] crate::ast::shared::numbers::UnsignedNumberLit),
+        Neg(#[tok(MINUS, this)] crate::ast::shared::numbers::UnsignedNumberLit),
+    }
+}
+
+recursa::ast_node! {
+    /// PostgreSQL's `select_fetch_first_value`: `c_expr`, or a signed
+    /// constant (REL_17_11 gram.y 13248).
+    #[derive(Debug)]
+    pub enum FetchFirstValue {
+        Signed(SignedFetchConst),
+        Value(crate::ast::shared::expr::CExpr),
     }
 }
 

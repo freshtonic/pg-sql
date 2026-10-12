@@ -455,4 +455,58 @@ mod tests {
             ],
         );
     }
+
+    /// PostgreSQL's `zone_value` (REL_17_11 gram.y 1840): the interval arms
+    /// take only `HOUR`, `MINUTE` or `HOUR TO MINUTE` (the action at gram.y
+    /// 1860 rejects the rest), and the name arm is `IDENT`, never a key word.
+    /// Issue #91.
+    #[test]
+    fn set_time_zone_takes_zone_value() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SET TIME ZONE INTERVAL '1' HOUR",
+                "SET TIME ZONE INTERVAL '1:30' HOUR TO MINUTE",
+                "SET TIME ZONE INTERVAL '1' MINUTE",
+                "SET TIME ZONE INTERVAL '-08:00'",
+                "SET TIME ZONE INTERVAL(3) '1'",
+                "SET TIME ZONE pst8pdt",
+                "SET TIME ZONE \"Europe/Rome\"",
+                "SET TIME ZONE local",
+                "SET TIME ZONE +1",
+                "SET TIME ZONE -1.5",
+                "SET TIME ZONE 3e2",
+                "ALTER DATABASE d SET TIME ZONE INTERVAL '1' HOUR",
+                "ALTER ROLE r SET TIME ZONE pst8pdt",
+            ],
+            &[
+                "SET TIME ZONE INTERVAL '1' DAY",
+                "SET TIME ZONE INTERVAL '1' HOUR TO SECOND",
+                "SET TIME ZONE INTERVAL '1' SECOND(3)",
+                "SET TIME ZONE INTERVAL '1' YEAR TO MONTH",
+                "SET TIME ZONE INTERVAL '1' MINUTE TO SECOND",
+                "SET TIME ZONE INTERVAL(3) '1' HOUR",
+                "SET TIME ZONE zone",
+            ],
+        );
+    }
+
+    /// `TRANSACTION SNAPSHOT Sconst` is a `set_rest_more` form (REL_17_11
+    /// gram.y 1788), not a `transaction_mode`. Issue #91.
+    #[test]
+    fn transaction_snapshot_is_not_a_transaction_mode() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SET TRANSACTION SNAPSHOT 'x'",
+                "SET LOCAL TRANSACTION SNAPSHOT 'x'",
+                "ALTER ROLE r SET TRANSACTION SNAPSHOT 'x'",
+            ],
+            &[
+                "BEGIN SNAPSHOT 'x'",
+                "START TRANSACTION SNAPSHOT 'x'",
+                "SET TRANSACTION SNAPSHOT 'x', READ ONLY",
+                "SET TRANSACTION READ ONLY, SNAPSHOT 'x'",
+                "SET SESSION CHARACTERISTICS AS TRANSACTION SNAPSHOT 'x'",
+            ],
+        );
+    }
 }
