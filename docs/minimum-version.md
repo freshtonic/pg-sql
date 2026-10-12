@@ -174,3 +174,30 @@ assert_eq!(&source[found.span().unwrap().range()], "(SELECT 1)");
 A build without the `spans` Cargo feature retains no provenance, so the span
 is `None` and only the version and the message data remain. pg-analyze enables
 `spans` in every build.
+
+## The flat form
+
+pg-analyze analyses the Flat AST that `Statement::parse_flat` returns. The two
+methods answer there as well (issue #94), so a consumer that holds the flat
+form needs no second parse:
+
+```rust,ignore
+use pg_sql::{MinimumVersion, TargetVersion};
+
+let flat = Statement::parse_flat(&mut input)?;
+let rejected = flat.minimum_version_above(TargetVersion::Pg15);
+```
+
+Recursa generates the walk over the pools (`recursa#137`). The fold, the
+per-node ceiling and the answer are the ones the arena form uses, so the two
+cannot drift apart: `tests/minimum_version.rs` asserts that the flat answer
+equals the arena answer, the span included, for an item gate, for both
+subquery-alias shape rules, and for a lexical gate.
+
+A flat result keeps one span per node and per text rather than an occurrence
+tree, so one extent can differ: a gate on an element that carries attached
+fixed syntax reports the value, not the element with the fixed tokens around
+it. No gate of this grammar sits on such an element. A class 2 gate takes the
+token stream, not the value, so it is the same answer for both forms: run
+`lexical_minimum_version` over the statement's tokens and keep the higher
+version.
