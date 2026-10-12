@@ -1745,4 +1745,27 @@ mod tests {
             ],
         );
     }
+
+    /// `opt_select_fetch_first_value` in `limit_clause: FETCH first_or_next
+    /// select_fetch_first_value row_or_rows ONLY | WITH TIES` (REL_17_11
+    /// gram.y 13186-13213): the count is a `c_expr` or a signed constant, as
+    /// for `OFFSET n ROWS`.
+    #[test]
+    fn fetch_count_is_select_fetch_first_value() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT 1 FETCH FIRST 3 ROWS ONLY",
+                "SELECT 1 FETCH NEXT x ROW ONLY",
+                "SELECT 1 FETCH FIRST (1 + 1) ROWS ONLY",
+                "SELECT 1 FETCH FIRST -1 ROWS ONLY",
+                "SELECT 1 FETCH FIRST +2.5 ROWS ONLY",
+                "SELECT 1 FETCH FIRST f(x) ROWS ONLY",
+                "SELECT a FROM t ORDER BY a FETCH FIRST 3 ROWS WITH TIES",
+            ],
+            &[
+                "SELECT 1 FETCH FIRST 1 + 1 ROWS ONLY",
+                "SELECT 1 FETCH FIRST -x ROWS ONLY",
+            ],
+        );
+    }
 }

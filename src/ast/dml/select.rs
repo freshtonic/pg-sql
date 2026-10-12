@@ -1666,10 +1666,13 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// FETCH with count: `expr { ROW | ROWS } { ONLY | WITH TIES }`.
+    /// FETCH with count: `select_fetch_first_value { ROW | ROWS } { ONLY |
+    /// WITH TIES }` (REL_17_11 gram.y 13186-13213). The count is a `c_expr`
+    /// or a signed constant, so `FETCH FIRST 1 + 1 ROWS ONLY` is a syntax
+    /// error and `FETCH FIRST (1 + 1) ROWS ONLY` is not.
     #[derive(Debug)]
     pub struct FetchWithCount {
-        pub count: boxed!(Expr),
+        pub count: boxed!(FetchFirstValue),
         pub row_or_rows: FetchRowOrRows,
         pub mode: FetchMode,
     }
