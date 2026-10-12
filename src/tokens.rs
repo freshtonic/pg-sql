@@ -210,6 +210,10 @@ recursa::tokens! {
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[config(since = pg17)]
         JSON_TABLE      => r"JSON_TABLE" in COL_NAME + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords" (`merge_action`,
+        // COL_NAME, commit c649fa24a). Before 17, the word is an identifier.
+        #[config(since = pg17)]
+        MERGE_ACTION    => r"MERGE_ACTION" in COL_NAME + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords". The `FORMAT_LA`
         // lookahead entry names it under the same predicate.
         #[config(since = pg16)]

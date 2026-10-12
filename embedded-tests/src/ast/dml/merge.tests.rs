@@ -232,4 +232,24 @@ mod tests {
             ],
         );
     }
+
+    // `merge_action()` is added in 17 as gram.y `func_expr_common_subexpr:
+    // MERGE_ACTION '(' ')'` (REL_17_11 16042), with `merge_action` a COL_NAME
+    // keyword: research, PostgreSQL 17, "Queries and expressions" and
+    // "Keywords".
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn merge_action_takes_no_arguments() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "MERGE INTO t USING s ON true WHEN MATCHED THEN DELETE RETURNING merge_action()",
+                "CREATE TABLE merge_action (merge_action int)",
+                "SELECT s.merge_action(1)",
+            ],
+            &[
+                "SELECT merge_action(1)",
+                "CREATE FUNCTION merge_action() RETURNS int AS 'select 1' LANGUAGE sql",
+            ],
+        );
+    }
 }

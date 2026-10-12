@@ -1099,6 +1099,12 @@ recursa::ast_node! {
         #[config(since = pg17)]
         #[tok(JSON_TABLE)]
         JsonTable,
+        // From 17, `merge_action` is a COL_NAME keyword: research, PostgreSQL
+        // 17, "Keywords". Before 17 `TableFunctionName` takes the word, so the
+        // gate only moves it and records no version.
+        #[cfg(feature = "since-pg17")]
+        #[tok(MERGE_ACTION)]
+        MergeAction,
         #[tok(BOOLEAN)]
         Boolean,
         #[tok(INT)]

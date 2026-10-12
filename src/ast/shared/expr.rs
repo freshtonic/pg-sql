@@ -2814,6 +2814,17 @@ recursa::ast_node! {
 }
 
 // Added in 17: research, PostgreSQL 17, "Queries and expressions"
+// (`merge_action()`; REL_17_11 gram.y 16042).
+#[cfg(feature = "since-pg17")]
+recursa::ast_node! {
+    /// `MERGE_ACTION ( )`: gram.y `func_expr_common_subexpr: MERGE_ACTION '('
+    /// ')'`, which takes no arguments.
+    #[derive(Debug)]
+    #[tok(MERGE_ACTION, LPAREN, RPAREN)]
+    pub struct MergeActionCall;
+}
+
+// Added in 17: research, PostgreSQL 17, "Queries and expressions"
 // (REL_17_11 gram.y 16014-16107, `func_expr_common_subexpr`).
 #[cfg(feature = "since-pg17")]
 recursa::ast_node! {
@@ -4121,6 +4132,13 @@ recursa::ast_node! {
         // Added in 17: see its node.
         #[config(since = pg17)]
         JsonSerialize(boxed!(JsonSerialize)),
+        /// `MERGE_ACTION()`, which takes no arguments. Before `Func`.
+        // Added in 17: research, PostgreSQL 17, "Queries and expressions"
+        // (`merge_action()`; REL_17_11 gram.y 16042 `func_expr_common_subexpr:
+        // MERGE_ACTION '(' ')'`). `merge_action` is a COL_NAME keyword from 17,
+        // so `merge_action(1)` is no ordinary function call either.
+        #[config(since = pg17)]
+        MergeAction(MergeActionCall),
         /// `JSON_OBJECT(...)` SQL/JSON object constructor. Before `Func`.
         // Added in 16: see its node.
         #[config(since = pg16)]
@@ -4392,6 +4410,9 @@ recursa::ast_node! {
         // Added in 17: see its node.
         #[config(since = pg17)]
         JsonSerialize,
+        // Added in 17: see `Expr::MergeAction`.
+        #[config(since = pg17)]
+        MergeAction,
         // Added in 16: see its node.
         #[config(since = pg16)]
         JsonObject,
@@ -4484,6 +4505,9 @@ recursa::ast_node! {
         // Added in 17: see its node.
         #[config(since = pg17)]
         JsonSerialize,
+        // Added in 17: see `Expr::MergeAction`.
+        #[config(since = pg17)]
+        MergeAction,
         // Added in 16: see its node.
         #[config(since = pg16)]
         JsonObject,
@@ -4638,6 +4662,9 @@ recursa::ast_node! {
         // Added in 17: see its node.
         #[config(since = pg17)]
         JsonSerialize,
+        // Added in 17: see `Expr::MergeAction`.
+        #[config(since = pg17)]
+        MergeAction,
         // Added in 16: see its node.
         #[config(since = pg16)]
         JsonObject,

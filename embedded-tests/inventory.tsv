@@ -1300,3 +1300,4 @@ embedded-tests/src/ast/ddl/database.tests.rs	alter_database_createdb_opt_list	fa
 embedded-tests/src/ast/ddl/function.tests.rs	function_set_takes_set_rest_more	false	14-
 embedded-tests/src/ast/session/set_reset.tests.rs	set_time_zone_takes_zone_value	false	14-
 embedded-tests/src/ast/session/set_reset.tests.rs	transaction_snapshot_is_not_a_transaction_mode	false	14-
+embedded-tests/src/ast/dml/merge.tests.rs	merge_action_takes_no_arguments	false	17-
