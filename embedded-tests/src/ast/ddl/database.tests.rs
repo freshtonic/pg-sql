@@ -99,4 +99,29 @@ mod tests {
         assert!(stmt.options.is_some());
         assert!(input.is_eof());
     }
+
+    /// `ALTER DATABASE name [WITH] createdb_opt_list` (REL_17_11 gram.y
+    /// 11349): the list can hold any number of options, also none. Issue #91.
+    #[test]
+    fn alter_database_createdb_opt_list() {
+        check_statement_forms(
+            &[
+                "ALTER DATABASE d WITH CONNECTION LIMIT 10",
+                "ALTER DATABASE d CONNECTION LIMIT 10 ALLOW_CONNECTIONS false",
+                "ALTER DATABASE d WITH CONNECTION LIMIT = 10 IS_TEMPLATE true",
+                "ALTER DATABASE d",
+                "ALTER DATABASE d WITH",
+                "ALTER DATABASE d WITH OWNER x",
+                "ALTER DATABASE d OWNER = x",
+                "ALTER DATABASE d TABLESPACE x",
+                "ALTER DATABASE d is_template DEFAULT",
+            ],
+            &[
+                "ALTER DATABASE d CONNECTION LIMIT 1 OWNER TO x",
+                "ALTER DATABASE d CONNECTION LIMIT 1 SET TABLESPACE x",
+                "ALTER DATABASE d WITH RENAME TO x",
+                "ALTER DATABASE d WITH CONNECTION LIMIT 1 WITH IS_TEMPLATE true",
+            ],
+        );
+    }
 }

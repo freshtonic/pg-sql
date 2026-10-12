@@ -1296,3 +1296,4 @@ embedded-tests/src/ast/session/set_reset.tests.rs	set_schema_names_and_from_curr
 embedded-tests/src/ast/session/set_reset.tests.rs	default_is_not_a_var_list_element	false	14-
 embedded-tests/src/ast/ddl/table.tests.rs	identity_sequence_options_mirror_seq_opt_elem	false	14-
 embedded-tests/src/ast/dml/select.tests.rs	offset_takes_row_or_rows	false	14-
+embedded-tests/src/ast/ddl/database.tests.rs	alter_database_createdb_opt_list	false	14-
