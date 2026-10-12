@@ -434,14 +434,18 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Parenthesized sequence-option list on `GENERATED ... AS IDENTITY (...)`.
+    /// Parenthesized sequence-option list on `GENERATED ... AS IDENTITY (...)`
+    /// — PostgreSQL's `OptParenthesizedSeqOptList` (REL_17_11 gram.y 4883),
+    /// which takes every `SeqOptElem`.
     ///
     /// `SeqOptList` is space-separated, so the parentheses have to surround the
     /// whole list; a field-level attachment would demand a fresh pair per option
     /// (`(START WITH 44) (INCREMENT BY 2)`).
     #[derive(Debug, derive_more :: Deref)]
     #[tok(LPAREN, this, RPAREN)]
-    pub struct IdentitySeqOptionList(#[deref] pub one_or_many!(IdentitySeqOption));
+    pub struct IdentitySeqOptionList(
+        #[deref] pub one_or_many!(crate::ast::ddl::sequence::SeqOption),
+    );
 }
 
 recursa::ast_node! {
@@ -454,8 +458,13 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// One option inside an `IDENTITY ( ... )` sequence option list, and the
-    /// option of `alter_identity_column_option: SET SeqOptElem`.
+    /// The option of `alter_identity_column_option: SET SeqOptElem`.
+    ///
+    /// gram.y takes every `SeqOptElem` there, but its action stops with
+    /// "sequence option \"%s\" not supported here" (REL_17_11 gram.y 3083)
+    /// for `AS`, `RESTART` and `OWNED BY`. That action is part of the raw
+    /// parser, so this is `SeqOptElem` without those three. A bare
+    /// `RESTART` is its own `alter_identity_column_option`.
     ///
     /// Variant ordering: longer multi-word forms first so longest-match-wins
     /// picks them.
@@ -474,6 +483,7 @@ recursa::ast_node! {
         Cycle,
         #[tok(NO, CYCLE)]
         NoCycle,
+        SequenceName(crate::ast::ddl::sequence::SeqSequenceNameOption),
         /// Added in 15: REL_15_19 gram.y `SeqOptElem: ... | LOGGED` (4741).
         /// The research lists it under PostgreSQL 17, "Changes to existing
         /// statements" (commit f7567f9e53d, back-patched to 15 and 16).
@@ -2437,12 +2447,9 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// One `SET seqOpt` action on an identity column —
-    /// `SET { START WITH | INCREMENT BY | MINVALUE | MAXVALUE | CACHE | CYCLE |
-    /// NO MINVALUE | NO MAXVALUE | NO CYCLE }`.
-    ///
-    /// Reuses `IdentitySeqOption` from `create_table.rs` so the full sequence-
-    /// option set is supported (and the formatter is shared).
+    /// One `SET SeqOptElem` action on an identity column. The option is
+    /// [`IdentitySeqOption`], which leaves out the three options that gram.y
+    /// rejects here.
     #[derive(Debug)]
     pub struct AlterColSetSeqOption {
         #[tok(SET, this)]
