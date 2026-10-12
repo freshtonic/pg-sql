@@ -8,17 +8,6 @@ use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
 recursa::ast_node! {
-    /// `function_with_argtypes` reference inside a `CREATE TRANSFORM` element.
-    /// Always parenthesised in this position (`prsd_lextype(internal)`) — the
-    /// bare-name form is not exercised by the transform grammar.
-    #[derive(Debug)]
-    pub struct TransformFunctionRef {
-        pub name: QualifiedName,
-        pub args: crate::ast::ddl::function::FunctionParameters,
-    }
-}
-
-recursa::ast_node! {
     /// One element of `CREATE TRANSFORM (..., ...)`. Per gram.y
     /// `transform_element_list`: either `FROM SQL WITH FUNCTION fn` or
     /// `TO SQL WITH FUNCTION fn`. Up to one of each is allowed, in either order
@@ -37,7 +26,7 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct TransformFromElement {
         #[tok(FROM, SQL, WITH, FUNCTION, this)]
-        pub func: TransformFunctionRef,
+        pub func: crate::ast::ddl::function::DropFunctionTarget,
     }
 }
 
@@ -45,7 +34,7 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct TransformToElement {
         #[tok(TO, SQL, WITH, FUNCTION, this)]
-        pub func: TransformFunctionRef,
+        pub func: crate::ast::ddl::function::DropFunctionTarget,
     }
 }
 

@@ -135,7 +135,8 @@ recursa::ast_node! {
     /// lets the LR parser decide on the `(` after the completed first group.
     #[derive(Debug)]
     pub struct AggregateSig {
-        pub name: QualifiedName,
+        /// gram.y `DefineStmt: CREATE … AGGREGATE func_name …`.
+        pub name: crate::ast::shared::expr::FuncCallName,
         pub args: CreateAggregateArgs,
         pub definition: Option<DefList>,
     }
@@ -156,7 +157,8 @@ recursa::ast_node! {
     /// argument signature — Postgres' `aggregate_with_argtypes`.
     #[derive(Debug)]
     pub struct DropAggregateTarget {
-        pub name: QualifiedName,
+        /// gram.y `aggregate_with_argtypes: func_name aggr_args`.
+        pub name: crate::ast::shared::expr::FuncCallName,
         pub args: AggregateArgs,
     }
 }
@@ -200,8 +202,9 @@ recursa::ast_node! {
     /// path.
     #[derive(Debug)]
     pub struct AlterAggregateStmt {
+        /// gram.y `aggregate_with_argtypes: func_name aggr_args`.
         #[tok(ALTER, AGGREGATE, this)]
-        pub name: QualifiedName,
+        pub name: crate::ast::shared::expr::FuncCallName,
         pub args: CreateAggregateArgs,
         pub action: AlterAggregateAction,
     }

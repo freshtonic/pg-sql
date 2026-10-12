@@ -615,17 +615,24 @@ mod tests {
         };
         assert_eq!(double.object(), "double");
 
+        // From 17, `json` is gram.y's `JsonType`; before 17 it is an
+        // identifier-spelled type name (research, PostgreSQL 17, "Keywords").
         let json_parsed = parse_type_name_classified("json");
-        let TypeName::Ident(json) = json_parsed.ast() else {
-            panic!("json must preserve the legacy identifier variant")
-        };
-        assert_eq!(json.object(), "json");
+        #[cfg(feature = "since-pg17")]
+        assert!(matches!(json_parsed.ast(), TypeName::Json));
+        #[cfg(not(feature = "since-pg17"))]
+        {
+            let TypeName::Ident(json) = json_parsed.ast() else {
+                panic!("json must be an identifier type name before 17")
+            };
+            assert_eq!(json.object(), "json");
+        }
 
         let qualified_parsed = parse_type_name_classified("pg_catalog.json");
         let TypeName::Ident(qualified) = qualified_parsed.ast() else {
             panic!("qualified json must remain an identifier type name")
         };
-        assert_eq!(qualified.parts.len(), 2);
+        assert_eq!(qualified.parts().collect::<Vec<_>>(), ["pg_catalog", "json"]);
         assert_eq!(qualified.object(), "json");
 
         assert_cast_type_families_track_type_name_spellings();
@@ -652,6 +659,9 @@ mod tests {
                 | TypeName::Character
                 | TypeName::Unknown
                 | TypeName::Ident(_) => true,
+                // From 17, `json` is gram.y `JsonType`, a head of its own.
+                #[cfg(feature = "since-pg17")]
+                TypeName::Json => false,
             }
         }
 
@@ -671,6 +681,10 @@ mod tests {
             ("bit", "BIT"),
             ("character", "CHARACTER"),
             ("unknown", "UNKNOWN"),
+            // From 17, `json` is the `JSON` keyword of gram.y `JsonType`.
+            #[cfg(feature = "since-pg17")]
+            ("json", "JSON"),
+            #[cfg(not(feature = "since-pg17"))]
             ("json", "json"),
             ("pg_catalog.custom_type", "pg_catalog.custom_type"),
         ] {
@@ -695,8 +709,14 @@ mod tests {
         use crate::formatter::format_tokens_sql;
         use recursa::PrettyConfig;
 
+        // From 17, `json` is gram.y `JsonType`, a keyword head of its own;
+        // before 17 it is an identifier-spelled general type.
+        #[cfg(feature = "since-pg17")]
+        let json = ("json", "json", "JSON");
+        #[cfg(not(feature = "since-pg17"))]
+        let json = ("json", "general", "json");
         for (src, expected_family, canonical) in [
-            ("json", "general", "json"),
+            json,
             (
                 "timestamp(2) without time zone",
                 "datetime",
@@ -714,6 +734,8 @@ mod tests {
                 CastTypeHead::General(_) => "general",
                 CastTypeHead::DateTime(_) => "datetime",
                 CastTypeHead::Interval(_) => "interval",
+                #[cfg(feature = "since-pg17")]
+                CastTypeHead::Json => "json",
             };
             assert_eq!(actual_family, expected_family, "cast family for {src:?}");
             assert_eq!(
@@ -4756,5 +4778,39 @@ mod tests {
             "CREATE DATABASE d parameter = 1",
         ]);
     }
-}
 
+    // From 17, `json` is gram.y `JsonType` (REL_17_11 14744), which takes no
+    // type modifiers: research, PostgreSQL 17, "Keywords". A qualified
+    // `s.json` is a `GenericType` and keeps them.
+    #[cfg(feature = "since-pg17")]
+    #[test]
+    fn json_type_takes_no_modifiers_from_17() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT '{}'::json",
+                "SELECT '{}'::json[]",
+                "SELECT '{}'::jsonb(1)",
+                "SELECT '{}'::s.json(1)",
+                "CREATE TABLE t (a json, b json ARRAY)",
+                "CREATE FUNCTION f(a json[]) RETURNS SETOF json AS 'select 1' LANGUAGE sql",
+            ],
+            &[
+                "SELECT '{}'::json(1)",
+                "SELECT CAST(x AS json(1))",
+                "CREATE TABLE t (a json(10))",
+                "CREATE FUNCTION f(json(1)) RETURNS int AS 'select 1' LANGUAGE sql",
+            ],
+        );
+    }
+
+    // Before 17, `json` is an identifier-spelled type name, so it takes type
+    // modifiers like any `GenericType`: research, PostgreSQL 17, "Keywords".
+    #[cfg(not(feature = "since-pg17"))]
+    #[test]
+    fn json_type_takes_modifiers_before_17() {
+        crate::ast::test_support::check_statement_forms(
+            &["SELECT '{}'::json(1)", "CREATE TABLE t (a json(10))"],
+            &[],
+        );
+    }
+}

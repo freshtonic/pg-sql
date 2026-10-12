@@ -3,7 +3,6 @@
 //! destination map, SECURITY LABEL is placed here rather than in a
 //! dedicated file because its grammar mirrors COMMENT.
 
-use crate::ast::ddl::function::FunctionParameters;
 use crate::ast::shared::names::{AggregateArgs, QualifiedName};
 use crate::tokens::literal;
 
@@ -410,45 +409,39 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `FUNCTION name(args)` comment object — Postgres' `function_with_argtypes`.
-    ///
-    /// Only the parenthesized-signature form is modelled; every corpus example
-    /// carries an explicit argument list. The bare-name (`args_unspecified`) form
-    /// is not exercised by any corpus statement.
+    /// `FUNCTION function_with_argtypes` comment object.
     #[derive(Debug)]
     pub struct CommentFunctionObject {
         #[tok(FUNCTION, this)]
-        pub name: QualifiedName,
-        pub args: FunctionParameters,
+        pub target: crate::ast::ddl::function::DropFunctionTarget,
     }
 }
 
 recursa::ast_node! {
-    /// `PROCEDURE name(args)` comment object.
+    /// `PROCEDURE function_with_argtypes` comment object.
     #[derive(Debug)]
     pub struct CommentProcedureObject {
         #[tok(PROCEDURE, this)]
-        pub name: QualifiedName,
-        pub args: FunctionParameters,
+        pub target: crate::ast::ddl::function::DropFunctionTarget,
     }
 }
 
 recursa::ast_node! {
-    /// `ROUTINE name(args)` comment object.
+    /// `ROUTINE function_with_argtypes` comment object.
     #[derive(Debug)]
     pub struct CommentRoutineObject {
         #[tok(ROUTINE, this)]
-        pub name: QualifiedName,
-        pub args: FunctionParameters,
+        pub target: crate::ast::ddl::function::DropFunctionTarget,
     }
 }
 
 recursa::ast_node! {
-    /// `AGGREGATE name(args)` — Postgres' `aggregate_with_argtypes`.
+    /// `AGGREGATE name(args)` — Postgres' `aggregate_with_argtypes`, whose
+    /// name is `func_name`.
     #[derive(Debug)]
     pub struct CommentAggregateObject {
         #[tok(AGGREGATE, this)]
-        pub name: QualifiedName,
+        pub name: crate::ast::shared::expr::FuncCallName,
         pub args: AggregateArgs,
     }
 }

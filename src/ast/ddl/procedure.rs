@@ -19,7 +19,7 @@ use crate::ast::shared::numbers::*;
 recursa::ast_node! {
     /// `CREATE [OR REPLACE] PROCEDURE name ( [ parameters ] ) options...`
     ///
-    /// `name` is a `QualifiedName` (gram.y `CreateFunctionStmt: … PROCEDURE
+    /// `name` is gram.y `func_name` (`CreateFunctionStmt: … PROCEDURE
     /// func_name`, where `func_name: type_function_name | ColId indirection`
     /// — accepting schema-qualified names like `testns.bar`).
     #[derive(Debug)]
@@ -28,20 +28,11 @@ recursa::ast_node! {
         #[presence(OR, REPLACE)]
         pub or_replace: bool,
         #[tok(PROCEDURE, this)]
-        pub name: crate::ast::shared::names::QualifiedName,
+        pub name: crate::ast::shared::expr::FuncCallName,
         pub args: FunctionParameters,
         pub options: zero_or_many!(FuncOption),
         /// gram.y `opt_routine_body`, after `opt_createfunc_opt_list`.
         pub body: Option<RoutineBody>,
-    }
-}
-
-recursa::ast_node! {
-    /// One target of `DROP PROCEDURE`: `name [(args)]`.
-    #[derive(Debug)]
-    pub struct DropProcedureTarget {
-        pub name: crate::ast::shared::names::QualifiedName,
-        pub args: Option<FunctionParameters>,
     }
 }
 
@@ -57,7 +48,7 @@ recursa::ast_node! {
         pub if_exists: bool,
         #[sep(COMMA)]
         /// gram.y `function_with_argtypes_list`: one or more targets.
-        pub targets: one_or_many!(DropProcedureTarget),
+        pub targets: one_or_many!(crate::ast::ddl::function::DropFunctionTarget),
         pub behavior: Option<crate::ast::shared::flags::DropBehavior>,
     }
 }

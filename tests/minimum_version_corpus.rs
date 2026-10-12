@@ -60,7 +60,7 @@ const REINTERPRETED_BY_AN_OLDER_GRAMMAR: &[&str] = &[
     "Expr::JsonScalar",
     "Expr::JsonSerialize",
     "Expr::JsonValue",
-    "FunctionBuiltinTypeName::Json",
+    "Expr::MergeAction",
     "SqlValueFunction::SystemUser",
     "TypeCastFunc::Json",
     // A lexical gate: an older lexer reads the same characters as more than

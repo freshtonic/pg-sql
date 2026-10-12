@@ -31,11 +31,7 @@ recursa::tokens! {
     // Orthogonal per-keyword booleans. `bare_label` marks keywords that
     // PG admits as bare-form column labels (no `AS` required); composes
     // with the category to derive `BareColLabel`'s admit set.
-    // `json_type` marks the `COL_NAME` keyword `json`, which gram.y admits as
-    // a type name through its own `JsonType` production (17 and later). In
-    // 16, `json` is unreserved, so `UNRESERVED` admits it and no entry has
-    // the flag.
-    flags { bare_label, json_type }
+    flags { bare_label }
     keywords {
         SELECT       => r"SELECT" in RESERVED + bare_label,
         FROM         => r"FROM" in RESERVED,
@@ -174,7 +170,7 @@ recursa::tokens! {
         // `json` changes category in 17 from UNRESERVED to COL_NAME: research,
         // PostgreSQL 17, "Keywords"; REL_16_15 kwlist.h line 233.
         #[config(since = pg17)]
-        JSON            => r"JSON" in COL_NAME + bare_label + json_type,
+        JSON            => r"JSON" in COL_NAME + bare_label,
         // Added in 16 as an unreserved keyword: research, PostgreSQL 16,
         // "Keywords". REL_15_19 kwlist.h has no `json`. The `FORMAT_LA`
         // lookahead entry names it under the same predicate.
@@ -210,6 +206,10 @@ recursa::tokens! {
         // Added in 17: research, PostgreSQL 17, "Keywords".
         #[config(since = pg17)]
         JSON_TABLE      => r"JSON_TABLE" in COL_NAME + bare_label,
+        // Added in 17: research, PostgreSQL 17, "Keywords" (`merge_action`,
+        // COL_NAME, commit c649fa24a). Before 17, the word is an identifier.
+        #[config(since = pg17)]
+        MERGE_ACTION    => r"MERGE_ACTION" in COL_NAME + bare_label,
         // Added in 16: research, PostgreSQL 16, "Keywords". The `FORMAT_LA`
         // lookahead entry names it under the same predicate.
         #[config(since = pg16)]
@@ -1027,8 +1027,11 @@ recursa::tokens! {
         AllWordKinds = keywords,
         ColId = UNRESERVED + COL_NAME,
         type_function_name = UNRESERVED + TYPE_FUNC_NAME,
-        TypeNameIdent = UNRESERVED + TYPE_FUNC_NAME + json_type
-            - { BOOL, TEXT, SERIAL, UNKNOWN },
+        // gram.y `GenericType: type_function_name ...`, less the legacy
+        // built-ins that `TypeName` keeps as fixed variants. From 17, `json`
+        // is a COL_NAME keyword and reaches a type name only through
+        // `JsonType`, which has its own variants.
+        TypeNameIdent = type_function_name - { BOOL, TEXT, SERIAL, UNKNOWN },
         NonReservedWord = UNRESERVED + COL_NAME + TYPE_FUNC_NAME,
         ColLabel = UNRESERVED + COL_NAME + TYPE_FUNC_NAME + RESERVED,
         BareColLabel = bare_label,
@@ -1505,8 +1508,9 @@ recursa::ast_node! {
     /// Identifier spelling admitted by an expression-level type name.
     ///
     /// PostgreSQL treats the legacy built-ins modeled as fixed `TypeName`
-    /// variants separately, while `json` remains an identifier-spelled type even
-    /// though the lexer classifies it as a `COL_NAME` keyword.
+    /// variants separately. From 17, `json` is a `COL_NAME` keyword and is no
+    /// identifier-spelled type: gram.y's `JsonType` takes it, with no type
+    /// modifiers.
     #[allow(non_camel_case_types)]
     #[derive(Debug, Clone)]
     pub enum type_name_ident {
