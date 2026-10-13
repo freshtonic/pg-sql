@@ -1328,6 +1328,74 @@ mod tests {
         );
     }
 
+    // `ConstraintAttributeSpec`'s action rejects two conflicts among the
+    // deferrability entries regardless of which kind carries them: the
+    // specific message for `NOT DEFERRABLE` beside `INITIALLY DEFERRED`
+    // (REL_14_24 gram.y 5559; REL_17_11 gram.y 6114; REL_18_6 gram.y 6229),
+    // and the generic message for `NOT DEFERRABLE` beside `DEFERRABLE` or
+    // `INITIALLY IMMEDIATE` beside `INITIALLY DEFERRED` (REL_14_24 gram.y
+    // 5566; REL_17_11 gram.y 6121; REL_18_6 gram.y 6237). A pair is unordered
+    // and a repeated variant is accepted.
+    #[test]
+    fn constraint_attribute_spec_rejects_conflicting_deferrability() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int, UNIQUE (a) DEFERRABLE DEFERRABLE)",
+                "CREATE TABLE t (a int, UNIQUE (a) DEFERRABLE INITIALLY DEFERRED)",
+                "CREATE TABLE t (a int, UNIQUE (a) NOT DEFERRABLE INITIALLY IMMEDIATE)",
+                "ALTER TABLE t ALTER CONSTRAINT c DEFERRABLE DEFERRABLE",
+            ],
+            &[
+                // UNIQUE: `IndexConstraintAttr`.
+                "CREATE TABLE t (a int, UNIQUE (a) NOT DEFERRABLE INITIALLY DEFERRED)",
+                "CREATE TABLE t (a int, UNIQUE (a) INITIALLY DEFERRED NOT DEFERRABLE)",
+                "CREATE TABLE t (a int, UNIQUE (a) DEFERRABLE NOT DEFERRABLE)",
+                "CREATE TABLE t (a int, UNIQUE (a) INITIALLY IMMEDIATE INITIALLY DEFERRED)",
+                // PRIMARY KEY: `IndexConstraintAttr`.
+                "CREATE TABLE t (a int, PRIMARY KEY (a) NOT DEFERRABLE INITIALLY DEFERRED)",
+                "CREATE TABLE t (a int, PRIMARY KEY (a) INITIALLY DEFERRED NOT DEFERRABLE)",
+                // EXCLUDE: `IndexConstraintAttr`.
+                "CREATE TABLE t (a int, EXCLUDE (a WITH =) NOT DEFERRABLE INITIALLY DEFERRED)",
+                "CREATE TABLE t (a int, EXCLUDE (a WITH =) INITIALLY DEFERRED NOT DEFERRABLE)",
+                // FOREIGN KEY: `ForeignKeyConstraintAttr`.
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u NOT DEFERRABLE INITIALLY DEFERRED)",
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u INITIALLY DEFERRED NOT DEFERRABLE)",
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u DEFERRABLE NOT DEFERRABLE)",
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u INITIALLY IMMEDIATE INITIALLY DEFERRED)",
+                // ALTER TABLE ... ALTER CONSTRAINT: `AlterConstraintAttr`.
+                "ALTER TABLE t ALTER CONSTRAINT c NOT DEFERRABLE INITIALLY DEFERRED",
+                "ALTER TABLE t ALTER CONSTRAINT c INITIALLY DEFERRED NOT DEFERRABLE",
+                "ALTER TABLE t ALTER CONSTRAINT c DEFERRABLE NOT DEFERRABLE",
+                "ALTER TABLE t ALTER CONSTRAINT c INITIALLY IMMEDIATE INITIALLY DEFERRED",
+            ],
+        );
+    }
+
+    // Added in 18: `ConstraintAttributeSpec`'s generic conflict message also
+    // covers `ENFORCED` beside `NOT ENFORCED` (REL_18_6 gram.y 6237,
+    // ConstraintAttributeSpec), on every kind that takes `[NOT] ENFORCED`
+    // (`TableCheckAttr`, `ForeignKeyConstraintAttr`, `AlterConstraintAttr`). A
+    // pair is unordered and a repeated variant is accepted.
+    #[cfg(feature = "since-pg18")]
+    #[test]
+    fn constraint_attribute_spec_rejects_conflicting_enforcement_from_18() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int, CHECK (a > 0) ENFORCED ENFORCED)",
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u ENFORCED ENFORCED)",
+                "ALTER TABLE t ALTER CONSTRAINT c ENFORCED ENFORCED",
+            ],
+            &[
+                "CREATE TABLE t (a int, CHECK (a > 0) ENFORCED NOT ENFORCED)",
+                "CREATE TABLE t (a int, CHECK (a > 0) NOT ENFORCED ENFORCED)",
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u ENFORCED NOT ENFORCED)",
+                "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u NOT ENFORCED ENFORCED)",
+                "ALTER TABLE t ALTER CONSTRAINT c ENFORCED NOT ENFORCED",
+                "ALTER TABLE t ALTER CONSTRAINT c NOT ENFORCED ENFORCED",
+            ],
+        );
+    }
+
     // Added in 18: `ALTER CONSTRAINT name` passes a `no_inherit` pointer
     // (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
     // item 5; REL_18_6 gram.y `alter_table_cmd` 2682-2683). Before 18 it
