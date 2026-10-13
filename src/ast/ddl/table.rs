@@ -210,8 +210,28 @@ recursa::ast_node! {
     /// raw-parser errors (REL_17_11 gram.y 4157, 4173, 4190, 4206, 4226;
     /// REL_18_6 gram.y 4244, 4260, 4278, 4294, 4314).
     ///
+    /// `ConstraintAttributeSpec`'s action also rejects two conflicts among the
+    /// deferrability entries themselves: `NOT DEFERRABLE` beside `INITIALLY
+    /// DEFERRED`, and (the generic conflict) `NOT DEFERRABLE` beside
+    /// `DEFERRABLE` or `INITIALLY IMMEDIATE` beside `INITIALLY DEFERRED`
+    /// (REL_14_24 gram.y 5559/5566; REL_17_11 gram.y 6114/6121; REL_18_6
+    /// gram.y 6229/6237).
+    ///
     /// Variant ordering: multi-keyword forms first.
     #[derive(Debug)]
+    #[reject(
+        pair(NotDeferrable, InitiallyDeferred),
+        code = "42601",
+        message = "constraint declared INITIALLY DEFERRED must be DEFERRABLE",
+        cite = "REL_14_24 gram.y 5559; REL_17_11 gram.y 6114; REL_18_6 gram.y 6229, ConstraintAttributeSpec",
+    )]
+    #[reject(
+        pair(NotDeferrable, Deferrable),
+        pair(InitiallyImmediate, InitiallyDeferred),
+        code = "42601",
+        message = "conflicting constraint properties",
+        cite = "REL_14_24 gram.y 5566; REL_17_11 gram.y 6121; REL_18_6 gram.y 6237, ConstraintAttributeSpec",
+    )]
     pub enum IndexConstraintAttr {
         #[tok(NOT, DEFERRABLE)]
         NotDeferrable,
@@ -232,8 +252,19 @@ recursa::ast_node! {
     /// `is_enforced` as well (REL_17_11 gram.y 4138-4140; REL_18_6 gram.y
     /// 4211-4213).
     ///
+    /// No deferrability pair is possible without `Deferrable` or
+    /// `InitiallyDeferred` variants, so from 18 the only conflict
+    /// `ConstraintAttributeSpec`'s action can still find here is `ENFORCED`
+    /// beside `NOT ENFORCED` (REL_18_6 gram.y 6237, ConstraintAttributeSpec).
+    ///
     /// Variant ordering: multi-keyword forms first.
     #[derive(Debug)]
+    #[config_attr(since = pg18, reject(
+        pair(NotEnforced, Enforced),
+        code = "42601",
+        message = "conflicting constraint properties",
+        cite = "REL_18_6 gram.y 6237, ConstraintAttributeSpec",
+    ))]
     pub enum TableCheckAttr {
         #[tok(NOT, DEFERRABLE)]
         NotDeferrable,
@@ -264,8 +295,35 @@ recursa::ast_node! {
     /// `processCASbits` does not get (REL_17_11 gram.y 4245-4248; REL_18_6
     /// gram.y 4343-4346).
     ///
+    /// `ConstraintAttributeSpec`'s action also rejects conflicts among the
+    /// deferrability entries: `NOT DEFERRABLE` beside `INITIALLY DEFERRED`,
+    /// and (the generic conflict) `NOT DEFERRABLE` beside `DEFERRABLE` or
+    /// `INITIALLY IMMEDIATE` beside `INITIALLY DEFERRED` (REL_14_24 gram.y
+    /// 5559/5566; REL_17_11 gram.y 6114/6121; REL_18_6 gram.y 6229/6237), and
+    /// from 18 also `ENFORCED` beside `NOT ENFORCED` (REL_18_6 gram.y 6237,
+    /// ConstraintAttributeSpec).
+    ///
     /// Variant ordering: multi-keyword forms first.
     #[derive(Debug)]
+    #[reject(
+        pair(NotDeferrable, InitiallyDeferred),
+        code = "42601",
+        message = "constraint declared INITIALLY DEFERRED must be DEFERRABLE",
+        cite = "REL_14_24 gram.y 5559; REL_17_11 gram.y 6114; REL_18_6 gram.y 6229, ConstraintAttributeSpec",
+    )]
+    #[reject(
+        pair(NotDeferrable, Deferrable),
+        pair(InitiallyImmediate, InitiallyDeferred),
+        code = "42601",
+        message = "conflicting constraint properties",
+        cite = "REL_14_24 gram.y 5566; REL_17_11 gram.y 6121; REL_18_6 gram.y 6237, ConstraintAttributeSpec",
+    )]
+    #[config_attr(since = pg18, reject(
+        pair(NotEnforced, Enforced),
+        code = "42601",
+        message = "conflicting constraint properties",
+        cite = "REL_18_6 gram.y 6237, ConstraintAttributeSpec",
+    ))]
     pub enum ForeignKeyConstraintAttr {
         #[tok(NOT, DEFERRABLE)]
         NotDeferrable,
@@ -295,8 +353,35 @@ recursa::ast_node! {
     /// 18 action rejects `NOT VALID` itself, before `processCASbits`
     /// (REL_17_11 gram.y 2652-2654; REL_18_6 gram.y 2671-2685).
     ///
+    /// `ConstraintAttributeSpec`'s action also rejects conflicts among the
+    /// deferrability entries: `NOT DEFERRABLE` beside `INITIALLY DEFERRED`,
+    /// and (the generic conflict) `NOT DEFERRABLE` beside `DEFERRABLE` or
+    /// `INITIALLY IMMEDIATE` beside `INITIALLY DEFERRED` (REL_14_24 gram.y
+    /// 5559/5566; REL_17_11 gram.y 6114/6121; REL_18_6 gram.y 6229/6237), and
+    /// from 18 also `ENFORCED` beside `NOT ENFORCED` (REL_18_6 gram.y 6237,
+    /// ConstraintAttributeSpec).
+    ///
     /// Variant ordering: multi-keyword forms first.
     #[derive(Debug)]
+    #[reject(
+        pair(NotDeferrable, InitiallyDeferred),
+        code = "42601",
+        message = "constraint declared INITIALLY DEFERRED must be DEFERRABLE",
+        cite = "REL_14_24 gram.y 5559; REL_17_11 gram.y 6114; REL_18_6 gram.y 6229, ConstraintAttributeSpec",
+    )]
+    #[reject(
+        pair(NotDeferrable, Deferrable),
+        pair(InitiallyImmediate, InitiallyDeferred),
+        code = "42601",
+        message = "conflicting constraint properties",
+        cite = "REL_14_24 gram.y 5566; REL_17_11 gram.y 6121; REL_18_6 gram.y 6237, ConstraintAttributeSpec",
+    )]
+    #[config_attr(since = pg18, reject(
+        pair(NotEnforced, Enforced),
+        code = "42601",
+        message = "conflicting constraint properties",
+        cite = "REL_18_6 gram.y 6237, ConstraintAttributeSpec",
+    ))]
     pub enum AlterConstraintAttr {
         #[tok(NOT, DEFERRABLE)]
         NotDeferrable,
