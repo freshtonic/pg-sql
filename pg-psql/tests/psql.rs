@@ -172,13 +172,18 @@ fn an_escape_string_may_escape_a_newline() {
 }
 
 #[test]
-fn an_unterminated_lexical_region_is_refused_rather_than_reinterpreted() {
+fn an_unterminated_string_or_identifier_is_refused_rather_than_reinterpreted() {
     // A deliberate divergence, pinned so it stays deliberate.
     //
     // psqlscan.l:983 has one `<<EOF>>` rule for every scanner state, so psql
     // tolerates reaching end of input inside an open string, dollar-quoted
-    // body or comment. recursa's closed matchers need their closer to exist,
-    // so this refuses the document instead (freshtonic/recursa#131).
+    // body or comment. `DollarString` and `BlockComment` are closed matchers
+    // and now opt into that tolerance (`pg-psql/src/tokens.rs`,
+    // freshtonic/recursa#131), so only the quoted string and
+    // quoted-identifier forms stay here: they are plain
+    // `#[lex(pattern = ...)]` tokens with no closer to extend, so an
+    // unterminated one still fails to match and the document is still
+    // refused rather than reinterpreted.
     //
     // The divergence is fail-closed, which is the half that matters: the
     // region is never silently reinterpreted as ordinary text, so a colon
@@ -192,13 +197,37 @@ fn an_unterminated_lexical_region_is_refused_rather_than_reinterpreted() {
         "SELECT X'1f",
         "SELECT \":v",
         "SELECT U&\":v",
-        "SELECT $$ :v",
-        "SELECT $tag$ :v",
-        "SELECT /* :v",
     ] {
         assert!(
             pg_psql::parse(source).is_err(),
             "{source:?} must be refused, not reinterpreted",
+        );
+    }
+}
+
+#[test]
+fn an_unterminated_dollar_quote_or_comment_runs_tolerant_to_end_of_input() {
+    // psqlscan.l:983's single `<<EOF>>` rule also covers `xdolq` and `xc`:
+    // reaching end of input inside a dollar-quoted body or a block comment
+    // asks for another line rather than erroring. `DollarString`
+    // (`same_delimiter`) and `BlockComment` (`nested`) opt into
+    // `unterminated = to_end_of_input` (`pg-psql/src/tokens.rs`,
+    // freshtonic/recursa#131), so each now lexes to end of input instead of
+    // refusing the document.
+    //
+    // The body is still never reinterpreted: it stays one opaque token, so a
+    // colon inside it is still never a variable reference. `:name` is never
+    // substituted.
+    for source in ["SELECT $$ :name", "SELECT $tag$ :name", "SELECT /* :name"] {
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} holds no interpolation"
+        );
+        assert_eq!(
+            interpolation_count(source),
+            0,
+            "{source:?} holds no interpolation"
         );
     }
 }

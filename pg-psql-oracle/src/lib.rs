@@ -126,9 +126,12 @@ impl Prompt {
     /// Whether the document ended inside a string, a comment, a dollar-quoted
     /// body or a quoted identifier.
     ///
-    /// psql tolerates this and asks for another line; pg-psql refuses the
-    /// document instead (ADR 0007, freshtonic/recursa#131), so this is the
-    /// oracle's side of that deliberate divergence.
+    /// psql tolerates this and asks for another line. pg-psql has no notion
+    /// of an open query buffer at all (ADR 0007, freshtonic/recursa#131): a
+    /// comment or a dollar-quoted body now runs its closed matcher to end of
+    /// input instead, and a string or a quoted identifier still refuses the
+    /// document. Either way this is the oracle's side of that deliberate
+    /// divergence.
     pub fn is_open_lexical_region(self) -> bool {
         matches!(
             self,

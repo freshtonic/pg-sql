@@ -151,7 +151,7 @@ that fits none of them is `unclassified`, which fails the test.
 | `unmodelled-meta-command` | The document holds a backslash command that is not a send or discard command. psql stops SQL lexing there and reads the rest of the line as arguments; pg-psql keeps the whole command as one `SqlAtom::MetaCommand` token and forwards it (ADR 0007; freshtonic/pg-sql#11, #12, #13). |
 | `send-command-arguments` | The document holds a send or discard command with arguments. psql reads them and the server never sees them; pg-psql ends the statement at the command name and forwards the rest as SQL text. It is the same gap as the one above, narrowed to a command pg-psql does model. |
 | `boundary-suppressed-by-nesting` | psql suppresses the `;` boundary inside parentheses and inside a tracked `BEGIN ... END` block of a `CREATE FUNCTION` (`psqlscan.l` 650, `psqlscan_is_create_routine`). pg-psql tracks neither, because it renders one string for the whole document rather than splitting it into submissions, so it only ever has more boundaries than psql. The forwarded text is the same. |
-| `open-lexical-region` | The document reaches end of input inside a string, a quoted identifier, a dollar-quoted body or a comment. psql asks for another line. pg-psql has no open region: it either refuses the document, which fails closed, or reads the region's bytes as shorter tokens, which does not. See "What the oracle found" (ADR 0007, freshtonic/recursa#131). |
+| `open-lexical-region` | The document reaches end of input inside a string, a quoted identifier, a dollar-quoted body or a comment. psql asks for another line. pg-psql has no open query buffer at all: a dollar-quoted body or a block comment now opts into `unterminated = to_end_of_input` and runs its matcher to end of input instead, which disagrees only on `complete`; a string or a quoted identifier has no closer to extend and still either refuses the document, which fails closed, or reads the region's bytes as shorter tokens, which does not. See "What the oracle found" (ADR 0007, freshtonic/recursa#131). |
 | `refused` | pg-psql refuses a document for any other reason. The list is empty at every target version. |
 
 ### Outcomes by target version
@@ -184,14 +184,20 @@ and its text goes to the server. pg-psql kept it as an unparsed
 meta-command. It is now a `SendCommand`, and `pg-psql/tests/psql.rs` records
 the corrected behaviour.
 
-**An unterminated `E'...'` is re-read, not refused.** ADR 0007 says that
+**An unterminated `E'...'` is re-read, not refused.** ADR 0007 said that
 pg-psql refuses a document that reaches end of input inside an open lexical
 region, so that "the region is refused, never reinterpreted as ordinary
-text". That holds for a plain string, a quoted identifier, a dollar-quoted
-body and a block comment, and the four `shaped/open/*` documents show it. It
-does not hold in general, because an unmatched quoted-string *pattern* simply
-does not match, and the lexer then reads the same bytes as shorter tokens.
-`SELECT 1e'\' :v` at `pg14` is the case the oracle found:
+text". `DollarString` and `BlockComment` are closed matchers and now opt into
+`unterminated = to_end_of_input` (freshtonic/recursa#131), so a dollar-quoted
+body or a block comment that reaches end of input runs tolerant instead of
+refusing: `shaped/open/dollar-quote` and `shaped/open/block-comment` move
+from disagreeing on text, interpolations and submissions to disagreeing only
+on `complete`, since pg-psql has no notion of an open query buffer. A plain
+string and a quoted identifier still refuse, because they are plain
+`#[lex(pattern = ...)]` tokens with no closer to extend, and an unmatched
+quoted-string *pattern* simply does not match, so the lexer then reads the
+same bytes as shorter tokens. `SELECT 1e'\' :v` at `pg14` is the case the
+oracle found for that remaining half:
 
 - psql gives the `e` back (`realfail1`), so `e'` opens an escape string, `\'`
   is an escaped quote, and the document ends inside the string. `:v` is
