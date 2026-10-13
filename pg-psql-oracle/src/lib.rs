@@ -324,7 +324,10 @@ pub fn scan(source: &str, variables: &[(&str, &str)]) -> Scan {
         .map(|(_, value)| std::ffi::CString::new(*value).expect("NUL in a variable value"))
         .collect::<Vec<_>>();
     let name_pointers = names.iter().map(|name| name.as_ptr()).collect::<Vec<_>>();
-    let value_pointers = values.iter().map(|value| value.as_ptr()).collect::<Vec<_>>();
+    let value_pointers = values
+        .iter()
+        .map(|value| value.as_ptr())
+        .collect::<Vec<_>>();
 
     let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     // SAFETY: the pointers live for the call, and the lengths agree with them.
@@ -390,8 +393,7 @@ fn read_event(event: &RawEvent, source_len: usize) -> Event {
     match event.kind {
         1 => Event::Interpolation {
             name: text(),
-            source: (event.source_start >= 0)
-                .then(|| source(event.source_start, event.source_end)),
+            source: (event.source_start >= 0).then(|| source(event.source_start, event.source_end)),
             quote: match event.detail {
                 0 => Quote::Plain,
                 1 => Quote::Literal,

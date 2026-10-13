@@ -399,7 +399,10 @@ fn the_flat_form_reports_what_the_arena_form_reports() {
     // Class 3, both subquery-alias shape rules, whose requirement belongs to
     // the absence of the alias.
     #[cfg(feature = "since-pg16")]
-    sources.extend(["SELECT * FROM (SELECT 1)", "SELECT * FROM LATERAL (SELECT 1)"]);
+    sources.extend([
+        "SELECT * FROM (SELECT 1)",
+        "SELECT * FROM LATERAL (SELECT 1)",
+    ]);
     // An item gate late in the statement above a shape rule early in it, so
     // the two questions have different answers in both forms.
     #[cfg(feature = "since-pg17")]

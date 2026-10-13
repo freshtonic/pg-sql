@@ -149,7 +149,10 @@ fn shaped_documents() -> Vec<(&'static str, String)> {
         ("shell/non-ascii-tag", "SELECT $tagé$:v$tagé$".into()),
         ("shell/line-comment", "SELECT 1 -- :v\nSELECT 2".into()),
         ("shell/block-comment", "SELECT 1 /* :v */".into()),
-        ("shell/nested-block-comment", "SELECT 1 /* /* :v */ */".into()),
+        (
+            "shell/nested-block-comment",
+            "SELECT 1 /* /* :v */ */".into(),
+        ),
         ("shell/escaped-newline", "SELECT E'a\\\nb' :v".into()),
         // Operators that begin with a colon.
         ("colon/cast", "SELECT a::v".into()),
@@ -167,7 +170,10 @@ fn shaped_documents() -> Vec<(&'static str, String)> {
         // Terminators.
         ("terminator/one", "SELECT 1;".into()),
         ("terminator/two", "SELECT 1; SELECT 2;".into()),
-        ("terminator/batch-separator", "SELECT 1 \\; SELECT 2;".into()),
+        (
+            "terminator/batch-separator",
+            "SELECT 1 \\; SELECT 2;".into(),
+        ),
         ("terminator/in-parentheses", "SELECT (1;".into()),
         ("terminator/in-string", "SELECT 'a;b';".into()),
         (
@@ -205,7 +211,10 @@ fn shaped_documents() -> Vec<(&'static str, String)> {
         // Leading trivia.
         ("trivia/leading-comment", "-- a\nSELECT :v;".into()),
         ("trivia/leading-space", "   SELECT :v;".into()),
-        ("trivia/between-statements", "SELECT 1;\n-- b\nSELECT 2;".into()),
+        (
+            "trivia/between-statements",
+            "SELECT 1;\n-- b\nSELECT 2;".into(),
+        ),
         // COPY ... FROM STDIN, whose data psql reads itself.
         (
             "copy/from-stdin",
@@ -509,7 +518,9 @@ fn first_difference(psql_side: &str, oracle_side: &str) -> String {
     let window = |text: &str| {
         let start = at.saturating_sub(20).min(text.len());
         let end = (at + 30).min(text.len());
-        text.get(start..end).unwrap_or("<not a boundary>").to_owned()
+        text.get(start..end)
+            .unwrap_or("<not a boundary>")
+            .to_owned()
     };
     format!(
         "forwarded text differs at byte {at}: pg-psql {:?} vs psql {:?}",
@@ -668,7 +679,11 @@ fn render_baseline(feature: &str, results: &[(String, Comparison)]) -> String {
         .collect::<Vec<_>>()
         .join(",\n");
     out.push_str(&gaps);
-    out.push_str(if gaps.is_empty() { "  ]\n}\n" } else { "\n  ]\n}\n" });
+    out.push_str(if gaps.is_empty() {
+        "  ]\n}\n"
+    } else {
+        "\n  ]\n}\n"
+    });
     out
 }
 
@@ -709,10 +724,7 @@ fn every_document_matches_its_pinned_outcome() {
 
     let (reference, commit) = oracle_pin(feature);
     assert_eq!(recorded["oracle"]["ref"].as_str(), Some(reference.as_str()));
-    assert_eq!(
-        recorded["oracle"]["commit"].as_str(),
-        Some(commit.as_str())
-    );
+    assert_eq!(recorded["oracle"]["commit"].as_str(), Some(commit.as_str()));
     assert_eq!(recorded["corpus"]["commit"].as_str(), Some(CORPUS_COMMIT));
 
     let expected = recorded["gaps"]

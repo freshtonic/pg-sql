@@ -133,5 +133,8 @@ fn target_versions_order_by_their_major_version() {
     let mut sorted = versions;
     sorted.sort();
     assert_eq!(sorted, versions);
-    assert_eq!(versions.iter().copied().max(), Some(TargetVersion::Pg19Beta));
+    assert_eq!(
+        versions.iter().copied().max(),
+        Some(TargetVersion::Pg19Beta)
+    );
 }

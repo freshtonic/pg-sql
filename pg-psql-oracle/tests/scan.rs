@@ -84,7 +84,11 @@ fn each_interpolation_form_is_reported_once() {
 fn an_unbound_variable_is_forwarded_as_it_stands() {
     let source = "SELECT :v, :'v', :\"v\", :{?v}";
     assert_eq!(scan(source, &[]).sql(), "SELECT :v, :'v', :\"v\", FALSE");
-    assert!(interpolations(source, &[]).iter().all(|(_, _, bound)| !bound));
+    assert!(
+        interpolations(source, &[])
+            .iter()
+            .all(|(_, _, bound)| !bound)
+    );
 }
 
 #[test]
@@ -128,7 +132,10 @@ fn a_semicolon_submits_the_query_buffer_but_a_nested_one_does_not() {
     // a boundary at all.
     assert_eq!(terminators("SELECT (1;"), 0);
     assert_eq!(terminators("SELECT 1 \\; SELECT 2"), 0);
-    assert_eq!(scan("SELECT 1 \\; SELECT 2", &[]).sql(), "SELECT 1 ; SELECT 2");
+    assert_eq!(
+        scan("SELECT 1 \\; SELECT 2", &[]).sql(),
+        "SELECT 1 ; SELECT 2"
+    );
 }
 
 #[test]
@@ -188,7 +195,10 @@ fn an_open_lexical_region_leaves_the_buffer_incomplete() {
 
 #[test]
 fn copy_from_stdin_is_counted() {
-    assert_eq!(scan("COPY t FROM STDIN;\n1\n\\.\n", &[]).copy_from_stdin(), 1);
+    assert_eq!(
+        scan("COPY t FROM STDIN;\n1\n\\.\n", &[]).copy_from_stdin(),
+        1
+    );
     assert_eq!(scan("SELECT 1;", &[]).copy_from_stdin(), 0);
 }
 
