@@ -41,12 +41,17 @@
 //! cannot parse, which is a diagnosable condition rather than a silent
 //! rewrite.
 //!
-//! One lexical divergence is deliberate: psql tolerates end of input inside
-//! an open string, dollar-quoted body or comment (`psqlscan.l:983`'s single
-//! `<<EOF>>` rule), and this crate refuses the document instead
-//! (freshtonic/recursa#131). It fails closed, so an unterminated region is
-//! never reinterpreted as ordinary text and a colon inside one is never
-//! substituted.
+//! psql tolerates end of input inside any open string, quoted identifier,
+//! dollar-quoted body or comment (`psqlscan.l:983`'s single `<<EOF>>` rule).
+//! `DollarString` and `BlockComment` are closed matchers
+//! (`same_delimiter`/`nested`, `pg-psql/src/tokens.rs`) and opt into the same
+//! tolerance with `unterminated = to_end_of_input` (freshtonic/recursa#131):
+//! an unterminated dollar-quoted body or comment runs to end of input rather
+//! than refusing the document, and a colon inside it is still never
+//! substituted. The quoted string and quoted-identifier forms are plain
+//! `#[lex(pattern = ...)]` tokens with no closer to extend, so an
+//! unterminated one still fails to match and this crate still refuses the
+//! document rather than reinterpreting the region as ordinary text.
 
 recursa::grammar! {
     module = crate,

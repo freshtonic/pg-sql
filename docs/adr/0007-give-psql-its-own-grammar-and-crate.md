@@ -52,12 +52,18 @@ the gap visible at the SQL parse rather than silent.
 
 One divergence is known and deliberate. `psqlscan.l:983` has a single
 `<<EOF>>` rule covering every scanner state, so psql tolerates reaching end
-of input inside an open string, dollar-quoted body or comment. recursa's
-closed matchers require their closer to exist, so `pg-psql` refuses such a
-document instead (freshtonic/recursa#131). The direction is what matters:
-the region is refused, never reinterpreted as ordinary text, so a colon
-inside an unterminated string can never be substituted. A caller is told the
-document is not psql rather than handed a wrong rendering.
+of input inside an open string, quoted identifier, dollar-quoted body or
+comment. `DollarString` and `BlockComment` are recursa closed matchers
+(`same_delimiter`/`nested`) and opt into `unterminated = to_end_of_input`
+(freshtonic/recursa#131), so an unterminated dollar-quoted body or block
+comment now runs to end of input the same way: it stays one opaque token, so
+a colon inside it is still never substituted. A string or a quoted
+identifier is a plain `#[lex(pattern = ...)]` token with no closer for
+`unterminated` to extend, so `pg-psql` still refuses such a document
+instead. The direction is what matters either way: an unterminated region is
+never reinterpreted as ordinary text, so a colon inside one can never be
+substituted. A caller is told the document is not psql rather than handed a
+wrong rendering.
 
 ## Substitution and the source map
 

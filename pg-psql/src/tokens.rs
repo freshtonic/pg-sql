@@ -49,8 +49,16 @@ recursa::tokens! {
         // non-ASCII scalar in UTF-8 source, and leaving it out would end the
         // opaque body early at a tag like `$tagé$` and expose a colon inside
         // it to the interpolation rules.
+        //
+        // psqlscan.l:951-983 has one `<<EOF>>` rule shared by every exclusive
+        // state, including `xdolq`, so reaching end of input inside the body
+        // asks for another line rather than erroring. `unterminated =
+        // to_end_of_input` opts this matcher into the same tolerance
+        // (freshtonic/recursa#131): the body runs to end of input instead of
+        // refusing the document.
         DollarString => same_delimiter(
-            opener = r"\$(?:[A-Za-z_\u{0080}-\u{10FFFF}][A-Za-z0-9_\u{0080}-\u{10FFFF}]*)?\$"
+            opener = r"\$(?:[A-Za-z_\u{0080}-\u{10FFFF}][A-Za-z0-9_\u{0080}-\u{10FFFF}]*)?\$",
+            unterminated = to_end_of_input
         ),
         // No `next_exclusion` appears in this lexer, and that is deliberate.
         // It reports a lexical error when the excluded character follows,
@@ -64,7 +72,15 @@ recursa::tokens! {
         // psqlscan.l:163 `comment` — `--` to the end of the physical line.
         LineComment => physical_line(prefix = r"--", priority = 2),
         // psqlscan.l:423-458 `xc` — block comments nest, tracked by
-        // `xcdepth`.
-        BlockComment => nested(opener = "/*", closer = "*/", priority = 2),
+        // `xcdepth`. psqlscan.l's shared `<<EOF>>` rule (951-983) also covers
+        // `xc`, so an unterminated comment asks for another line rather than
+        // erroring; `unterminated = to_end_of_input` opts this matcher into
+        // that tolerance (freshtonic/recursa#131).
+        BlockComment => nested(
+            opener = "/*",
+            closer = "*/",
+            priority = 2,
+            unterminated = to_end_of_input
+        ),
     }
 }
