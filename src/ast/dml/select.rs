@@ -398,7 +398,15 @@ recursa::ast_node! {
         /// gram.y `func_alias_clause: [AS] ColId '(' TableFuncElementList ')'`.
         #[tok(optional(AS), this)]
         pub name: Option<crate::tokens::ColId>,
-        #[tok(LPAREN, this, RPAREN)]
+        /// `this_each` states the element-wise attachment this site already
+        /// lowers to: the parentheses wrap every column, so `(a int), (b text)`
+        /// is accepted and `(a int, b text)` is not, where gram.y
+        /// `func_alias_clause: ... ColId '(' TableFuncElementList ')'`
+        /// (REL_17_11 gram.y 13694-13712, `TableFuncElementList` 13935) reads
+        /// them once around the whole list. RCA3152 asks only that the reading
+        /// be explicit; #59 section B holds the container repair, which waits
+        /// on the question of what absorbs the multi-column list.
+        #[tok(LPAREN, this_each, RPAREN)]
         #[sep(COMMA)]
         pub columns: zero_or_many!(FuncTableColumnDef),
     }

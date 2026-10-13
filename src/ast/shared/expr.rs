@@ -2437,7 +2437,13 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct TrimWithChars {
         pub chars: boxed!(Expr),
-        #[tok(FROM, this)]
+        /// `this_each` states the element-wise attachment this site already
+        /// lowers to: `FROM` wraps every value, so `FROM a FROM b` is accepted
+        /// where gram.y `trim_list: a_expr FROM expr_list` (REL_17_11 gram.y
+        /// 16710) reads it once. Every real `TRIM` form is single-element, so
+        /// the site is latent; #59 section C records that and leaves the
+        /// container repair open.
+        #[tok(FROM, this_each)]
         #[sep(COMMA)]
         pub args: one_or_many!(Expr),
     }
