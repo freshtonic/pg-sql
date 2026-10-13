@@ -314,7 +314,8 @@ where
 /// ```
 impl<R: FlatRequires> MinimumVersion for FlatAst<'_, R> {
     fn minimum_version(&self) -> Option<VersionRequirement> {
-        self.minimum_requirement().map(VersionRequirement::from_scan)
+        self.minimum_requirement()
+            .map(VersionRequirement::from_scan)
     }
 
     fn minimum_version_above(&self, target: TargetVersion) -> Option<VersionRequirement> {

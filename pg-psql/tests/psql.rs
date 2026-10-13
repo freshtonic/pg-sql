@@ -552,12 +552,20 @@ fn a_discard_command_removes_the_buffer_it_ends() {
         let source = format!("SELECT 1; SELECT 2 {command}\nSELECT 3;");
         assert_eq!(terminator_count(&source), 3, "{source:?}");
         let rendered = pg_psql::render(&source, &Variables::new()).unwrap();
-        assert_eq!(rendered.sql(), "SELECT 1; \nSELECT 3;", "rendering {source:?}");
+        assert_eq!(
+            rendered.sql(),
+            "SELECT 1; \nSELECT 3;",
+            "rendering {source:?}"
+        );
         assert_eq!(rendered.parse_sql().unwrap().statements().len(), 2);
         // With an empty buffer, only the command goes.
         let source = format!("SELECT 1;\n{command}\nSELECT 3;");
         let rendered = pg_psql::render(&source, &Variables::new()).unwrap();
-        assert_eq!(rendered.sql(), "SELECT 1;\n\nSELECT 3;", "rendering {source:?}");
+        assert_eq!(
+            rendered.sql(),
+            "SELECT 1;\n\nSELECT 3;",
+            "rendering {source:?}"
+        );
     }
 }
 
@@ -587,7 +595,11 @@ fn an_18_command_name_is_read_whole() {
     // unknown name is one meta-command, not a terminator.
     assert_eq!(terminator_count(r"\flushrequest"), 1);
     assert_eq!(render_unbound(r"SELECT 1 \flushrequest"), "");
-    for source in [r"SELECT 1 \flushx", r"SELECT 1 \parsed", r"SELECT 1 \sendpipelines"] {
+    for source in [
+        r"SELECT 1 \flushx",
+        r"SELECT 1 \parsed",
+        r"SELECT 1 \sendpipelines",
+    ] {
         assert_eq!(terminator_count(source), 0, "{source:?}");
         assert_eq!(render_unbound(source), source, "{source:?}");
     }

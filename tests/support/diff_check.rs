@@ -218,7 +218,10 @@ mod tests {
     #[test]
     fn numeric_junk_is_a_column_label_before_15() {
         assert_eq!(check("SELECT 123abc"), Outcome::Pass);
-        assert_eq!(pgsql_format("SELECT 123abc").as_deref(), Ok("SELECT 123 abc"));
+        assert_eq!(
+            pgsql_format("SELECT 123abc").as_deref(),
+            Ok("SELECT 123 abc")
+        );
     }
 
     #[test]

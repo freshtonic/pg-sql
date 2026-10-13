@@ -131,7 +131,10 @@ fn main() {
     let feature = target_version::require_one_target_version("pg-psql-oracle");
     let pin = pin_for(feature);
     // The tests compare these with the pin of their baseline.
-    println!("cargo:rustc-env=PG_PSQL_ORACLE_POSTGRES_REF={}", pin.reference);
+    println!(
+        "cargo:rustc-env=PG_PSQL_ORACLE_POSTGRES_REF={}",
+        pin.reference
+    );
     println!(
         "cargo:rustc-env=PG_PSQL_ORACLE_POSTGRES_COMMIT={}",
         pin.commit
@@ -156,9 +159,10 @@ fn main() {
     // psqlscan.c takes its declaration from `libpq-fe.h` and never sees that
     // header, so the rename is made here instead. The header itself says which
     // releases need it, so the trees of 14 to 16 are left alone.
-    let renames_encoding_functions = std::fs::read_to_string(tree.join("src/include/mb/pg_wchar.h"))
-        .expect("read pg_wchar.h")
-        .contains("USE_PRIVATE_ENCODING_FUNCS");
+    let renames_encoding_functions =
+        std::fs::read_to_string(tree.join("src/include/mb/pg_wchar.h"))
+            .expect("read pg_wchar.h")
+            .contains("USE_PRIVATE_ENCODING_FUNCS");
     if renames_encoding_functions {
         build.define(
             "pg_valid_server_encoding_id",
