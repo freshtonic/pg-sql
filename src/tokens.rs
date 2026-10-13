@@ -1079,7 +1079,11 @@ recursa::tokens! {
         CreateDbOptWord = { ENCODING, LOCATION, OWNER, TABLESPACE, TEMPLATE },
         // gram.y `utility_option_name`: `NonReservedWord | analyze_keyword |
         // FORMAT_LA` (`FORMAT` is unreserved, so it is already a member;
-        // `ANALYSE` is not a pg-sql keyword and lexes as an identifier).
+        // `ANALYSE` is not a pg-sql keyword and lexes as an identifier). The
+        // `FORMAT_LA` arm is not here: an admission set stands for a gram.y
+        // keyword category, and no category of gram.y holds an `_LA` token.
+        // `literal::UtilityOptionName` names that merged kind in its own
+        // variant, as gram.y names it in `utility_option_name` itself.
         UtilityOptionName = NonReservedWord + { ANALYZE },
         // gram.y `IDENT`: an identifier that is no keyword at all, the name
         // of an old-style `CREATE AGGREGATE (name = value)` option
@@ -1810,6 +1814,21 @@ pub mod literal {
         /// parenthesized statement and not an option list.
         #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub enum UtilityOptionName {
+            /// `FORMAT` immediately before `JSON`, which `base_yylex` reads as
+            /// `FORMAT_LA`: gram.y names the merged kind in this very rule
+            /// (REL_17_11 gram.y 11878-11881 and REL_16_15 gram.y
+            /// 11709-11712, `utility_option_name: NonReservedWord |
+            /// analyze_keyword | FORMAT_LA`), so `EXPLAIN (FORMAT json)`
+            /// parses. The arm is a keyword position, which the `Text`
+            /// admission set cannot carry: an admission set stands for a
+            /// `gram.y` keyword category, and no category of gram.y holds an
+            /// `_LA` token. Added in 16 with `FORMAT_LA` itself: research,
+            /// PostgreSQL 16, "Lexical and literal syntax" (REL_16_15
+            /// parser.c, case `FORMAT`); REL_15_19 gram.y 11648-11651 has no
+            /// such arm and REL_15_19 parser.c no such case.
+            #[config(since = pg16)]
+            #[tok(FORMAT_LA)]
+            Format,
             Text(
                 #[lex(
                     pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
@@ -1824,6 +1843,11 @@ pub mod literal {
         /// The raw text of the option name.
         pub fn text(&self) -> &str {
             match self {
+                // gram.y REL_17_11:11881 `FORMAT_LA { $$ = "format"; }`: the
+                // arm is a fixed keyword, so its name is the one spelling the
+                // rule action names.
+                #[cfg(feature = "since-pg16")]
+                UtilityOptionName::Format => "format",
                 UtilityOptionName::Text(text) => text.text(),
             }
         }

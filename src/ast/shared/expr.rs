@@ -21,10 +21,29 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// Required closing delimiter for structurally parenthesized SQL forms.
+    ///
+    /// `RPAREN` is this rule's last token, so the rule itself says nothing
+    /// about what follows it and the lookahead substitution, which reads
+    /// `FIRST` of the rest of the rule only, cannot reach the position. The
+    /// grammar therefore names the merged kind here, the way gram.y writes
+    /// `any_with: WITH | WITH_LA` by hand (REL_17_11 gram.y 11691-11692).
+    ///
+    /// `RPAREN_SELECT_LA` is pg-sql's own merged kind and has no gram.y
+    /// counterpart: it marks a `)` that a set operator or a further `)`
+    /// follows (`crate::tokens`, `RPAREN_SELECT_LA = RPAREN before { UNION,
+    /// INTERSECT, EXCEPT, RPAREN }`), which is what lets a completed
+    /// parenthesized form part from a grouped set query on one token. Every
+    /// close that may stand before `)` or a set operator reads it, so
+    /// `((1))`, `(SELECT 1) UNION SELECT 2` and `((SELECT 1))` all reach this
+    /// rule through the merged arm. Both arms render `)`: a merged kind is the
+    /// same record read differently, and keeps the source token's spelling and
+    /// span.
     #[derive(Debug)]
     pub enum ParenthesizedClose {
         #[tok(RPAREN)]
         Value,
+        #[tok(RPAREN_SELECT_LA)]
+        MergedSelect,
     }
 }
 
@@ -790,10 +809,29 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// Required closing delimiter shared by ordinary and quoted function calls.
+    ///
+    /// `RPAREN` is this rule's last token, so the rule itself says nothing
+    /// about what follows it and the lookahead substitution, which reads
+    /// `FIRST` of the rest of the rule only, cannot reach the position. The
+    /// grammar therefore names both merged kinds here, the way gram.y writes
+    /// `any_with: WITH | WITH_LA` by hand (REL_17_11 gram.y 11691-11692).
+    ///
+    /// Both are pg-sql's own merged kinds and have no gram.y counterpart
+    /// (`crate::tokens`): `RPAREN_TYPED_LA` marks the `)` of
+    /// [`FunctionTypedLiteralTail`], where a string payload follows and
+    /// gram.y's `AexprConst: func_name '(' func_arg_list opt_sort_clause ')'
+    /// Sconst` parts from `func_application`; `RPAREN_SELECT_LA` marks a `)`
+    /// that a further `)` or a set operator follows, as in `(f(x))`. Each arm
+    /// renders `)`: a merged kind is the same record read differently, and
+    /// keeps the source token's spelling and span.
     #[derive(Debug)]
     pub enum FunctionCallClose {
         #[tok(RPAREN)]
         Value,
+        #[tok(RPAREN_TYPED_LA)]
+        MergedTyped,
+        #[tok(RPAREN_SELECT_LA)]
+        MergedSelect,
     }
 }
 
