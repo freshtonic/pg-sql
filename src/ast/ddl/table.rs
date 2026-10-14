@@ -723,12 +723,13 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `COMPRESSION method` column clause. Sets the compression method
-    /// (e.g. `pglz`, `lz4`) for a toastable column.
+    /// gram.y `column_compression: COMPRESSION ColId | COMPRESSION DEFAULT`,
+    /// the `COMPRESSION` slot of `columnDef`. The grammar takes any `ColId`,
+    /// and parse analysis rejects an unknown method (principle 9).
     #[derive(Debug)]
     pub struct CompressionConstraint {
         #[tok(COMPRESSION, this)]
-        pub method: literal::Ident,
+        pub method: ColumnCompressionTarget,
     }
 }
 
@@ -746,43 +747,34 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Column constraint kind (without the optional `CONSTRAINT name` prefix).
+    /// gram.y `ColConstraintElem`: a column constraint that a
+    /// `CONSTRAINT name` can name.
     ///
     /// Variant ordering for longest-match-wins:
-    /// - GeneratedIdentity (`GENERATED`) first (unique keyword)
+    /// - Generated (`GENERATED`) first (unique keyword)
     /// - PrimaryKey (`PRIMARY KEY`) before others (unique keyword)
-    /// - NotNull (`NOT NULL`) before others
+    /// - NotNullNoInherit (4 tokens) before NotNull
     /// - References, Unique, Default, Check all start with distinct keywords
     #[derive(Debug)]
-    pub enum ColumnConstraintKind {
+    pub enum ColConstraintElem {
         Generated(GeneratedConstraint),
         PrimaryKey(PrimaryKeyConstraint),
-        #[tok(NOT, NULL)]
-        NotNull,
         /// Added in 18: gram.y `ColConstraintElem: NOT NULL_P opt_no_inherit`
         /// with `NO INHERIT` (docs/research/postgres-14-19-sql-syntax-changes.md,
         /// PostgreSQL 18, item 7; REL_18_6 gram.y `ColConstraintElem`).
         #[config(since = pg18)]
         #[tok(NOT, NULL, NO, INHERIT)]
         NotNullNoInherit,
+        #[tok(NOT, NULL)]
+        NotNull,
         #[tok(NULL)]
         /// Bare `NULL` — redundant (columns are nullable by default) but
         /// syntactically accepted.
         Null,
-        /// gram.y `ColConstraint: ConstraintAttr`: `[NOT] DEFERRABLE` and
-        /// `INITIALLY {DEFERRED | IMMEDIATE}` are entries of the column's
-        /// constraint list in their own right, not a tail of the constraint
-        /// before them, so `UNIQUE NOT DEFERRABLE NOT NULL` needs no
-        /// two-token decision after `UNIQUE`.
-        Attr(ColumnConstraintAttr),
         Unique(UniqueConstraint),
         References(ReferencesConstraint),
         Default(DefaultConstraint),
         Check(CheckConstraint),
-        Compression(CompressionConstraint),
-        // Added in 16: see `StorageConstraint`.
-        #[config(since = pg16)]
-        Storage(StorageConstraint),
     }
 }
 
@@ -817,8 +809,7 @@ recursa::ast_node! {
 // (REL_16_15 gram.y `columnDef ... opt_column_storage`, commit 784cedda0).
 #[cfg(feature = "since-pg16")]
 recursa::ast_node! {
-    /// `STORAGE mode` column-level storage specifier (used inline in CREATE
-    /// TABLE column definitions).
+    /// gram.y `column_storage`: the `STORAGE mode` slot of `columnDef`.
     #[derive(Debug)]
     pub struct StorageConstraint {
         #[tok(STORAGE, this)]
@@ -827,8 +818,7 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Optional `CONSTRAINT name` prefix shared by column-level and
-    /// table-level constraints.
+    /// Optional `CONSTRAINT name` prefix of a table-level constraint.
     #[derive(Debug)]
     pub struct ConstraintNamePrefix {
         #[tok(CONSTRAINT, this)]
@@ -837,16 +827,86 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A column constraint with its optional `CONSTRAINT name` prefix.
+    /// gram.y `ColConstraint: CONSTRAINT name ColConstraintElem`. A name goes
+    /// only before a `ColConstraintElem`: `CONSTRAINT c DEFERRABLE` and
+    /// `CONSTRAINT c COLLATE "C"` are syntax errors (REL_17_11 gram.y 3859).
     #[derive(Debug)]
-    pub struct ColumnConstraint {
-        pub name: Option<ConstraintNamePrefix>,
-        pub kind: ColumnConstraintKind,
+    pub struct NamedColConstraint {
+        #[tok(CONSTRAINT, this)]
+        pub name: crate::tokens::ColId,
+        pub elem: ColConstraintElem,
     }
 }
 
 recursa::ast_node! {
-    /// `COLLATE "name"` clause used after a column's type.
+    /// gram.y `ColConstraint` other than its `COLLATE any_name` arm, which
+    /// [`ColQualList`] holds in a slot of its own.
+    ///
+    /// `ConstraintAttr` (`[NOT] DEFERRABLE`, `INITIALLY …`, and from 18
+    /// `[NOT] ENFORCED`) is an entry of its own, not a tail of the constraint
+    /// before it, so `UNIQUE NOT DEFERRABLE NOT NULL` needs no two-token
+    /// decision after `UNIQUE`.
+    ///
+    /// Variant ordering: `Elem` and `Attr` share the `NOT` keyword and part
+    /// at the token after it (`NULL` against `DEFERRABLE` or `ENFORCED`).
+    #[derive(Debug)]
+    #[allow(clippy::large_enum_variant)]
+    pub enum ColConstraint {
+        Named(NamedColConstraint),
+        Elem(ColConstraintElem),
+        Attr(ColumnConstraintAttr),
+    }
+}
+
+impl<'input> ColConstraint<'input> {
+    /// The `ColConstraintElem` of this entry, named or not.
+    pub fn elem(&self) -> Option<&ColConstraintElem<'input>> {
+        match self {
+            ColConstraint::Named(named) => Some(&named.elem),
+            ColConstraint::Elem(elem) => Some(elem),
+            ColConstraint::Attr(_) => None,
+        }
+    }
+}
+
+recursa::ast_node! {
+    /// The `COLLATE any_name` entry of a [`ColQualList`] and the entries
+    /// after it.
+    #[derive(Debug)]
+    pub struct ColQualCollate {
+        pub collate: CollateClause,
+        pub after: zero_or_many!(ColConstraint),
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `ColQualList: ColQualList ColConstraint | /*EMPTY*/` (REL_17_11
+    /// gram.y 3854-3884), the qualifiers of a column or a domain. `COLLATE
+    /// any_name` is an entry of the list and can come anywhere in it, but
+    /// `SplitColQualList`, which every action that takes the list calls,
+    /// rejects a second one: `42601` "multiple COLLATE clauses not allowed"
+    /// (REL_14_24 gram.y 17114; REL_17_11 gram.y 19262; REL_18_6 gram.y 19429,
+    /// `SplitColQualList`). So the list is the entries before the one
+    /// `COLLATE`, then the `COLLATE` and the entries after it.
+    #[derive(Debug)]
+    pub struct ColQualList {
+        pub before: zero_or_many!(ColConstraint),
+        pub collate: Option<ColQualCollate>,
+    }
+}
+
+impl<'input> ColQualList<'input> {
+    /// Every `ColConstraint` entry in source order, without the `COLLATE`.
+    pub fn constraints(&self) -> impl Iterator<Item = &ColConstraint<'input>> {
+        self.before
+            .iter()
+            .chain(self.collate.iter().flat_map(|collate| collate.after.iter()))
+    }
+}
+
+recursa::ast_node! {
+    /// `COLLATE any_name`: gram.y `opt_collate_clause`, and the
+    /// `ColConstraint: COLLATE any_name` entry of a column's qualifier list.
     #[derive(Debug)]
     pub struct CollateClause {
         /// gram.y `opt_collate_clause: COLLATE any_name`.
@@ -882,26 +942,32 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A column definition: `name type [COLLATE "..."] [OPTIONS (...)] [constraints...]`.
-    ///
-    /// The `column_options` slot models Postgres' `create_generic_options` on
-    /// `columnDef` — used in CREATE FOREIGN TABLE column lists.
+    /// gram.y `columnDef: ColId Typename opt_column_storage
+    /// opt_column_compression create_generic_options ColQualList` (REL_17_11
+    /// gram.y 3770). The slots have a fixed order: `STORAGE`, then
+    /// `COMPRESSION`, then `OPTIONS (...)`, and all three come before every
+    /// `ColQualList` entry, `COLLATE` included.
     #[derive(Debug)]
     pub struct ColumnDef {
         pub name: crate::tokens::ColId,
         pub type_name: crate::ast::shared::expr::CastType,
-        pub collate: Option<CollateClause>,
+        /// Added in 16: research, PostgreSQL 16, "Changes to existing
+        /// statements" (REL_15_19 gram.y 3667 `columnDef` has no
+        /// `opt_column_storage`; REL_16_15 gram.y 3707, commit 784cedda0).
+        #[config(since = pg16)]
+        pub storage: Option<StorageConstraint>,
+        pub compression: Option<CompressionConstraint>,
         pub column_options: Option<CreateGenericOptions>,
-        pub constraints: zero_or_many!(ColumnConstraint),
+        pub quals: ColQualList,
     }
 }
 
 impl<'input> ColumnDef<'input> {
     /// Returns true if any of this column's constraints is a PRIMARY KEY.
     pub fn primary_key(&self) -> bool {
-        self.constraints
-            .iter()
-            .any(|c| matches!(c.kind, ColumnConstraintKind::PrimaryKey(_)))
+        self.quals
+            .constraints()
+            .any(|c| matches!(c.elem(), Some(ColConstraintElem::PrimaryKey(_))))
     }
 }
 
@@ -1535,16 +1601,16 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Per-partition column option: `name [WITH OPTIONS] [COLLATE "..."]
-    /// [constraints...]`. Overrides constraints/collation for a column
-    /// inherited from the partitioned parent table.
+    /// gram.y `columnOptions: ColId ColQualList | ColId WITH OPTIONS
+    /// ColQualList` (REL_17_11 gram.y 3794): the qualifiers of a column of a
+    /// typed table or a partition. `COLLATE` is a `ColQualList` entry, so it
+    /// can come after a constraint.
     #[derive(Debug)]
     pub struct PartitionColumnOptionDef {
         pub name: literal::Ident,
         #[presence(WITH, OPTIONS)]
         pub with_options: bool,
-        pub collate: Option<CollateClause>,
-        pub constraints: zero_or_many!(ColumnConstraint),
+        pub quals: ColQualList,
     }
 }
 

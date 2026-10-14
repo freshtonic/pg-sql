@@ -3,6 +3,7 @@ mod tests {
     use recursa::Parse;
 
     use super::*;
+    use crate::ast::ddl::table::ColConstraint;
     use crate::ast::test_support::*;
 
     #[test]
@@ -13,7 +14,7 @@ mod tests {
         let stmt_parsed = CreateDomainStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
         assert_eq!(stmt.name.object(), "domaintext");
-        assert!(stmt.quals.is_empty());
+        assert!(stmt.quals.before.is_empty() && stmt.quals.collate.is_none());
         assert!(input.is_eof());
     }
 
@@ -24,7 +25,7 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = CreateDomainStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert_eq!(stmt.quals.len(), 3);
+        assert_eq!(stmt.quals.constraints().count(), 3);
         assert!(input.is_eof());
     }
 
@@ -35,11 +36,12 @@ mod tests {
         let mut input = lexed.input();
         let stmt_parsed = CreateDomainStmt::parse(&mut input).unwrap();
         let stmt = stmt_parsed.ast();
-        assert_eq!(stmt.quals.len(), 1);
-        let DomainQual::Constraint(constraint) = &stmt.quals[0] else {
+        let quals: Vec<_> = stmt.quals.constraints().collect();
+        assert_eq!(quals.len(), 1);
+        let ColConstraint::Named(constraint) = quals[0] else {
             panic!("expected a named domain constraint");
         };
-        assert!(constraint.name.is_some());
+        assert!(format!("{:?}", constraint.name).contains("unsigned"));
         assert!(input.is_eof());
     }
 
@@ -322,6 +324,30 @@ mod tests {
         crate::ast::test_support::check_statement_forms(
             &[],
             &["ALTER DOMAIN d ADD NOT NULL NO INHERIT"],
+        );
+    }
+
+    // `CreateDomainStmt: CREATE DOMAIN_P any_name opt_as Typename
+    // ColQualList` (REL_17_11 gram.y 11510): `COLLATE any_name` is a
+    // `ColConstraint` (gram.y 3870), so it can come after `DEFAULT` or a
+    // constraint. `SplitColQualList` rejects a second `COLLATE` (REL_17_11
+    // gram.y 19262), and `CONSTRAINT name` goes only before a
+    // `ColConstraintElem` (gram.y 3859).
+    #[test]
+    fn create_domain_collate_is_a_qualifier_list_entry() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE DOMAIN d AS int DEFAULT 1 COLLATE \"C\"",
+                "CREATE DOMAIN d AS int DEFAULT 1 NOT NULL COLLATE \"C\"",
+                "CREATE DOMAIN d AS int COLLATE \"C\" DEFAULT 1",
+                "CREATE DOMAIN d AS int CONSTRAINT c NOT NULL DEFERRABLE",
+                "CREATE DOMAIN d AS int DEFERRABLE",
+            ],
+            &[
+                "CREATE DOMAIN d AS int COLLATE \"C\" COLLATE \"C\"",
+                "CREATE DOMAIN d AS int CONSTRAINT c COLLATE \"C\"",
+                "CREATE DOMAIN d AS int CONSTRAINT c DEFERRABLE",
+            ],
         );
     }
 }
