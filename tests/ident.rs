@@ -91,14 +91,23 @@ fn applies_a_uescape_character() {
 #[test]
 fn rejects_what_check_uescapechar_rejects() {
     for uescape in [
-        "", "ab", "0", "9", "a", "F", "+", "'", "''", "\"", " ", "\t", "\n", "\r", "\u{b}",
-        "\u{c}", "ä",
+        "", "ab", "0", "9", "a", "F", "+", "'", "''", "\"", " ", "\t", "\n", "\r", "\u{c}",
+        "ä",
     ] {
         assert_eq!(
             fold_identifier_with_uescape("U&\"x\"", uescape),
             Err(FoldError::InvalidEscapeCharacter),
             "UESCAPE {uescape:?}"
         );
+    }
+    // A vertical tab is scanner space from 17 only (REL_17_11 scan.l 222;
+    // REL_16_15 scansup.c `scanner_isspace` has no '\v'), so before 17 it is
+    // a valid escape character.
+    let vertical_tab = fold_identifier_with_uescape("U&\"x\"", "\u{b}");
+    if cfg!(feature = "since-pg17") {
+        assert_eq!(vertical_tab, Err(FoldError::InvalidEscapeCharacter));
+    } else {
+        assert_eq!(vertical_tab.map(|folded| folded.name), Ok(Cow::from("x")));
     }
     assert_eq!(
         FoldError::InvalidEscapeCharacter.to_string(),
@@ -227,7 +236,7 @@ fn folds_a_keyword_from_its_token_kind() {
     for (kind, name) in [
         (TokenKind::VALUE, "value"),
         (TokenKind::COALESCE, "coalesce"),
-        (TokenKind::JSON_VALUE, "json_value"),
+        (TokenKind::CURRENT_USER, "current_user"),
         (TokenKind::SELECT, "select"),
     ] {
         let folded = fold_keyword(kind).unwrap_or_else(|| panic!("{kind} is a keyword"));
