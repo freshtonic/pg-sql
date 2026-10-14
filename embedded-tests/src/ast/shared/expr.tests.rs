@@ -132,6 +132,12 @@ mod tests {
             // by the token after the matching inner close.
             "JSON_ARRAY((SELECT 1))",
             "JSON_ARRAY((SELECT 1) UNION SELECT 2)",
+            // `json_output_clause_opt` after `select_no_parens` (REL_16_15
+            // gram.y 15614-15619, 16392) is the one place a completed
+            // `select_with_parens` meets `RETURNING` while both the query and
+            // the expression reduction stand, which the scoped resolution on
+            // `SelectClause::Parens` decides for the query.
+            "JSON_ARRAY((SELECT 1) RETURNING jsonb)",
             "JSON_ARRAY()",
             "JSON_ARRAY(RETURNING jsonb)",
         ] {

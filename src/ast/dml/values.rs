@@ -192,6 +192,11 @@ recursa::ast_node! {
         /// reduction wins, and an expression keeps the parens only where no
         /// query can.
         ///
+        /// Three cells carry that one verdict, and the end marker carries it
+        /// by declaration order. `)` and the merged `)` are cells in every
+        /// build. `RETURNING` is a cell only from 16, so its declaration
+        /// carries the version gate.
+        ///
         /// [`Expr::SubSelect`]: crate::ast::shared::expr::Expr::SubSelect
         #[parse(lr_conflict(
         action = reduce,
@@ -205,12 +210,24 @@ recursa::ast_node! {
         lookahead = { RPAREN_SELECT_LA },
         expect = 1
     ))]
-        #[parse(lr_conflict(
+        // The `RETURNING` cell exists from 16, where the SQL/JSON
+        // constructors arrive: `JSON_ARRAY '(' select_no_parens
+        // json_format_clause_opt json_output_clause_opt ')'` (REL_16_15 gram.y
+        // 15614-15619) is the one position that admits both a query and an
+        // expression list, and `json_output_clause_opt: RETURNING Typename
+        // json_format_clause_opt` (REL_16_15 gram.y 16392) continues both with
+        // `RETURNING`. So `JSON_ARRAY((SELECT 1) RETURNING jsonb)` puts
+        // `RETURNING` after a completed `select_with_parens` while both
+        // reductions stand. Before 16 there is no SQL/JSON constructor
+        // (research, PostgreSQL 16, "Queries and expressions"; commit
+        // 7081ac46a), no other position admits a query and an expression and
+        // then `RETURNING`, and the cell is absent.
+        #[config_attr(since = pg16, parse(lr_conflict(
         action = reduce,
         against = ast::shared::expr::Expr,
         lookahead = { RETURNING },
         expect = 1
-    ))]
+    )))]
         Parens(SelectWithParens),
     }
 }
