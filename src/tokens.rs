@@ -1139,7 +1139,28 @@ recursa::tokens! {
         // kinds: their trigger sets are disjoint, and combining them would
         // make a function close before `)` look like a typed-literal close.
         RPAREN_TYPED_LA = RPAREN before { StringLit },
-        RPAREN_SELECT_LA = RPAREN before { UNION, INTERSECT, EXCEPT, RPAREN },
+        // A `)` that a set operator follows, which is how a completed
+        // parenthesized form parts from a grouped set query on one token:
+        // `(SELECT 1) UNION SELECT 2` continues the query, `(SELECT 1)` alone
+        // does not. Every closing rule that can end a `select_clause` names
+        // the merged kind, because lookahead substitution reads `FIRST` of
+        // the rest of the rule only and a closing `)` is rule-final: see
+        // `crate::ast::shared::expr::ParenthesizedClose`, `FunctionCallClose`
+        // and `TypeModifierClose`, and `crate::ast::dml::select::ValuesRow`
+        // and `TableAliasColumnList`.
+        //
+        // `RPAREN` is deliberately not a trigger. It was one, so that the
+        // inner `)` of `((SELECT 2))` shifted into
+        // `select_with_parens: '(' select_with_parens ')'` instead of closing
+        // an expression paren. As a trigger it merges the inner `)` of every
+        // `))` in the language, so each of the hundred-odd closing rules of
+        // the grammar would have to name the merged kind: 25 of them fail the
+        // embedded suite with the trigger in place, and nothing diagnoses the
+        // next one added. gram.y needs no lookahead there at all, because
+        // `select_with_parens` is its own nonterminal (REL_17_11 gram.y
+        // 12658-12663, second production at 12685), which pg-sql cannot
+        // mirror while every grammar type is also a parsing entry point.
+        RPAREN_SELECT_LA = RPAREN before { UNION, INTERSECT, EXCEPT },
     }
 
     // PostgreSQL's precedence declarations (`gram.y:829-908`, "Precedence:
@@ -1355,17 +1376,17 @@ recursa::tokens! {
         // gram.y wants this level so that `CUBE '('` and `ROLLUP '('` shift
         // rather than reduce `CUBE` as a function name (gram.y:871-873).
         //
-        // `)` is deliberately left without a level. pg-sql shares one
+        // `)` is deliberately left without a level. pg-sql still shares one
         // `(`-led production between a parenthesized expression and a
-        // parenthesized query (`ParenContent`, `ParenTableBody`), which
-        // gram.y does not do: gram.y factors `select_with_parens` as its own
-        // nonterminal. Where pg-sql's factoring leaves a decision on `)`, the
-        // answer is authored as a scoped LR resolution on the variant, and a
-        // level for `)` would take that decision over -- above
-        // `#[parse(prec = UMINUS)]`, which is the level gram.y gives
-        // `select_with_parens` (gram.y:15391), so `)` would shift where the
-        // grammar must reduce. Leaving `)` unlevelled also keeps any new
-        // decision on `)` a build error rather than a silent answer.
+        // parenthesized query (`ParenContent`), which gram.y does not do:
+        // gram.y factors `select_with_parens` as its own nonterminal. Where
+        // pg-sql's factoring leaves a decision on `)`, the answer is authored
+        // as a scoped LR resolution on the variant, and a level for `)` would
+        // take that decision over -- above `#[parse(prec = UMINUS)]`, which is
+        // the level gram.y gives `select_with_parens` (gram.y:15391), so `)`
+        // would shift where the grammar must reduce. Leaving `)` unlevelled
+        // also keeps any new decision on `)` a build error rather than a
+        // silent answer.
         left(bp = 200) { LPAREN },
         // gram.y:899 `%left TYPECAST` -- `Expr::Cast`, spelled `::`.
         left(bp = 210) { COLONCOLON },

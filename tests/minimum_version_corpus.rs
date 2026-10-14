@@ -63,6 +63,17 @@ const REINTERPRETED_BY_AN_OLDER_GRAMMAR: &[&str] = &[
     "Expr::MergeAction",
     "SqlValueFunction::SystemUser",
     "TypeCastFunc::Json",
+    // A reinterpretation of the second kind: a word that an older `base_yylex`
+    // does not merge with the word after it. `FORMAT` before `JSON` is
+    // `FORMAT_LA` from 16 (REL_16_15 `parser.c`, case `FORMAT`), and gram.y
+    // gained the arms that admit it in the same release. Before 16 there is no
+    // such kind and the same text reads `FORMAT` as an ordinary unreserved
+    // word, so `EXPLAIN (FORMAT json)` parses in 14 and 15 as well, and
+    // `COPY ... (FORMAT json)` parses there too -- 16, 17 and 18 are the
+    // releases that reject it, because only 19 gave
+    // `copy_generic_opt_elem` its `FORMAT_LA` arm (issue #87).
+    "CopyGenericOptionName::Format",
+    "UtilityOptionName::Format",
     // A lexical gate: an older lexer reads the same characters as more than
     // one token. `pg_sql::minimum_version::LEXICAL_GATES` names them.
     LEXICAL,

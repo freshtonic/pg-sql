@@ -29,15 +29,14 @@ recursa::ast_node! {
     /// `any_with: WITH | WITH_LA` by hand (REL_17_11 gram.y 11691-11692).
     ///
     /// `RPAREN_SELECT_LA` is pg-sql's own merged kind and has no gram.y
-    /// counterpart: it marks a `)` that a set operator or a further `)`
-    /// follows (`crate::tokens`, `RPAREN_SELECT_LA = RPAREN before { UNION,
-    /// INTERSECT, EXCEPT, RPAREN }`), which is what lets a completed
-    /// parenthesized form part from a grouped set query on one token. Every
-    /// close that may stand before `)` or a set operator reads it, so
-    /// `((1))`, `(SELECT 1) UNION SELECT 2` and `((SELECT 1))` all reach this
-    /// rule through the merged arm. Both arms render `)`: a merged kind is the
-    /// same record read differently, and keeps the source token's spelling and
-    /// span.
+    /// counterpart: it marks a `)` that a set operator follows
+    /// (`crate::tokens`, `RPAREN_SELECT_LA = RPAREN before { UNION,
+    /// INTERSECT, EXCEPT }`), which is what lets a completed parenthesized
+    /// form part from a grouped set query on one token. So `(SELECT 1)` of
+    /// `(SELECT 1) UNION SELECT 2` closes through the merged arm and
+    /// `(SELECT 1)` alone closes through the plain one. Both arms render `)`:
+    /// a merged kind is the same record read differently, and keeps the
+    /// source token's spelling and span.
     #[derive(Debug)]
     pub enum ParenthesizedClose {
         #[tok(RPAREN)]
@@ -62,18 +61,16 @@ recursa::ast_node! {
     /// Content inside IN parentheses: either a subquery or expression list.
     ///
     /// PG's `in_expr` is either `select_with_parens` or `'(' expr_list ')'`.
-    /// Both alternatives can begin with arbitrarily nested parentheses, so the
-    /// grammar shares the enclosing delimiters and lets the LR state after a
-    /// completed inner form decide whether a comma continues an expression list
-    /// or a set operator continues a grouped query.
+    /// pg-sql shares the enclosing delimiters: the `Subquery` arm is
+    /// `select_no_parens`, and a `select_with_parens` written inside it is
+    /// absorbed by the sub-select, the way gram.y absorbs it (REL_17_11
+    /// gram.y 12652-12656). This keeps both the expression-list form
+    /// (`IN ((SELECT 1), (SELECT 2))`) and the grouped set query
+    /// (`IN ((SELECT 1) UNION SELECT 2)`) reachable.
     ///
     /// The bare `Subquery` branch still wins on its non-`(` leading tokens
     /// (`SELECT`, `VALUES`, `TABLE`, `WITH`), where only `Subquery` has an LR
     /// action.
-    ///
-    /// This keeps both the expression-list form (`IN ((SELECT 1), (SELECT 2))`)
-    /// and a grouped set query (`IN ((SELECT 1) UNION SELECT 2)`) reachable
-    /// without declaration-order priority or parser-specific source scanning.
     #[derive(Debug)]
     pub enum InContent {
         Exprs(#[sep(COMMA)] one_or_many!(Expr)),
@@ -105,14 +102,57 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// Opening `(` of a parenthesized type-modifier list.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum TypeModifierOpen {
+        #[tok(LPAREN)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// Closing `)` of a parenthesized type-modifier list.
+    ///
+    /// `RPAREN` is this rule's last token, so the rule says nothing about what
+    /// follows it and lookahead substitution, which reads `FIRST` of the rest
+    /// of the rule only, cannot reach the position. A type-modifier list ends
+    /// a type name, and a type name stands before both of the records that
+    /// make one of pg-sql's own merged kinds (`crate::tokens`), so the rule
+    /// names them here, the way gram.y writes `any_with: WITH | WITH_LA` by
+    /// hand (REL_17_11 gram.y 11691-11692):
+    ///
+    /// - `RPAREN_TYPED_LA` for the string of a function-style typed literal,
+    ///   `numeric(10, 2) '1234.50'` and `timestamp(3) '2000-01-01'`
+    ///   (gram.y `AexprConst: ConstTypename Sconst`, REL_17_11 15403);
+    /// - `RPAREN_SELECT_LA` for a set operator after the last target of a
+    ///   query, `SELECT 1::numeric(3) UNION SELECT 2`.
+    ///
+    /// Each arm renders `)`: a merged kind is the same record read
+    /// differently, and keeps the source token's spelling and span.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum TypeModifierClose {
+        #[tok(RPAREN)]
+        Value,
+        #[tok(RPAREN_TYPED_LA)]
+        MergedTyped,
+        #[tok(RPAREN_SELECT_LA)]
+        MergedSelect,
+    }
+}
+
+recursa::ast_node! {
     /// `'(' Iconst ')'`: the precision of `TIMESTAMP`, `TIME`, `INTERVAL` and
     /// `SECOND` (REL_17_11 gram.y `ConstDatetime` 14622, `ConstInterval '('
     /// Iconst ')'` 14350 and 17274, `interval_second` 14737). Unlike the
     /// `expr_list` of [`TypePrecision`], it takes one unsigned integer that
     /// fits in `int32` (issue #88).
     #[derive(Debug, PartialEq, Eq, derive_more :: Deref)]
-    #[tok(LPAREN, this, RPAREN)]
-    pub struct IconstPrecision(#[deref] pub literal::IntegerLit);
+    pub struct IconstPrecision {
+        pub open: TypeModifierOpen,
+        #[deref]
+        pub value: literal::IntegerLit,
+        pub close: TypeModifierClose,
+    }
 }
 
 recursa::ast_node! {
@@ -129,12 +169,13 @@ recursa::ast_node! {
 recursa::ast_node! {
     /// Parenthesized precision/scale for type names: `(10,2)`, `(3)`, `(3,-6)`.
     #[derive(Debug, PartialEq, Eq, derive_more :: Deref)]
-    #[tok(LPAREN, this, RPAREN)]
-    pub struct TypePrecision(
+    pub struct TypePrecision {
+        pub open: TypeModifierOpen,
         #[sep(COMMA)]
         #[deref]
-        pub zero_or_many!(TypeModifierArg),
-    );
+        pub args: zero_or_many!(TypeModifierArg),
+        pub close: TypeModifierClose,
+    }
 }
 
 recursa::ast_node! {
@@ -821,8 +862,8 @@ recursa::ast_node! {
     /// [`FunctionTypedLiteralTail`], where a string payload follows and
     /// gram.y's `AexprConst: func_name '(' func_arg_list opt_sort_clause ')'
     /// Sconst` parts from `func_application`; `RPAREN_SELECT_LA` marks a `)`
-    /// that a further `)` or a set operator follows, as in `(f(x))`. Each arm
-    /// renders `)`: a merged kind is the same record read differently, and
+    /// that a set operator follows, as in `SELECT f(x) UNION SELECT 1`. Each
+    /// arm renders `)`: a merged kind is the same record read differently, and
     /// keeps the source token's spelling and span.
     #[derive(Debug)]
     pub enum FunctionCallClose {
