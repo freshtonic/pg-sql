@@ -521,6 +521,7 @@ tokens::tests::window_ref_name_rejects_frame_units	superseded	embedded-tests/src
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	constraint_attributes_match_the_constraint_kind	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	constraint_attribute_spec_rejects_conflicting_deferrability	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	constraint_attribute_spec_rejects_conflicting_enforcement_from_18	issue-9-generated-statement
+-	introduced	embedded-tests/src/ast/ddl/trigger.tests.rs	constraint_trigger_rejects_conflicting_attributes	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	alter_constraint_rejects_no_inherit_before_18	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	enforced_reaches_only_the_kinds_that_take_it_from_18	issue-9-generated-statement
 -	introduced	embedded-tests/src/ast/ddl/table.tests.rs	table_not_null_takes_only_its_own_attributes	issue-9-generated-statement

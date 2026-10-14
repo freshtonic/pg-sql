@@ -267,4 +267,30 @@ mod tests {
             ],
         );
     }
+
+    // `CreateTrigStmt`'s constraint arm takes `ConstraintAttributeSpec`, so
+    // its action rejects the same conflicts as on a table constraint: `NOT
+    // DEFERRABLE` beside `INITIALLY DEFERRED`, and `NOT DEFERRABLE` beside
+    // `DEFERRABLE` or `INITIALLY IMMEDIATE` beside `INITIALLY DEFERRED`
+    // (REL_14_24 gram.y 5559/5566; REL_17_11 gram.y 6114/6121; REL_18_6
+    // gram.y 6229/6237). A pair is unordered and a repeated variant is
+    // accepted.
+    #[test]
+    fn constraint_trigger_rejects_conflicting_attributes() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON x DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON x DEFERRABLE DEFERRABLE FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON x NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION f()",
+            ],
+            &[
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON x DEFERRABLE NOT DEFERRABLE FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON x NOT DEFERRABLE DEFERRABLE FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON x NOT DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON x INITIALLY DEFERRED NOT DEFERRABLE FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON x INITIALLY IMMEDIATE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION f()",
+                "CREATE CONSTRAINT TRIGGER t AFTER INSERT ON x INITIALLY DEFERRED INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION f()",
+            ],
+        );
+    }
 }

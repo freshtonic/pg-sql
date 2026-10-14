@@ -284,8 +284,29 @@ recursa::ast_node! {
     /// itself, and passes a dummy `is_enforced`, so `ENFORCED` is accepted
     /// (b73d13c gram.y 6128-6145 and 6164-6166).
     ///
+    /// `ConstraintAttributeSpec`'s action also rejects conflicts among the
+    /// deferrability entries: `NOT DEFERRABLE` beside `INITIALLY DEFERRED`,
+    /// and (the generic conflict) `NOT DEFERRABLE` beside `DEFERRABLE` or
+    /// `INITIALLY IMMEDIATE` beside `INITIALLY DEFERRED` (REL_14_24 gram.y
+    /// 5559/5566; REL_17_11 gram.y 6114/6121; REL_18_6 gram.y 6229/6237). The
+    /// `ENFORCED` conflict does not apply: from 19 only `ENFORCED` reaches
+    /// this list.
+    ///
     /// Variant ordering: multi-keyword forms first.
     #[derive(Debug)]
+    #[reject(
+        pair(NotDeferrable, InitiallyDeferred),
+        code = "42601",
+        message = "constraint declared INITIALLY DEFERRED must be DEFERRABLE",
+        cite = "REL_14_24 gram.y 5559; REL_17_11 gram.y 6114; REL_18_6 gram.y 6229, ConstraintAttributeSpec",
+    )]
+    #[reject(
+        pair(NotDeferrable, Deferrable),
+        pair(InitiallyImmediate, InitiallyDeferred),
+        code = "42601",
+        message = "conflicting constraint properties",
+        cite = "REL_14_24 gram.y 5566; REL_17_11 gram.y 6121; REL_18_6 gram.y 6237, ConstraintAttributeSpec",
+    )]
     pub enum ConstraintTriggerAttr {
         #[tok(NOT, DEFERRABLE)]
         NotDeferrable,
