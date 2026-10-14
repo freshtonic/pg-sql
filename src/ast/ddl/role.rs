@@ -119,17 +119,14 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Identifier-spelled def-arg type or function-style value.
+    /// Identifier-spelled def-arg type or function-style value: gram.y
+    /// `GenericType` with the array forms of `Typename`. The keyword-spelled
+    /// types, with their `PRECISION`, `VARYING`, time zone and interval
+    /// suffixes, are [`DefArg::BuiltinType`].
     #[derive(Debug)]
     pub struct DefArgNamedType {
         pub name: FunctionTypeName,
-        #[presence(PRECISION)]
-        pub precision_keyword: bool,
-        #[presence(VARYING)]
-        pub varying: bool,
         pub parameters: Option<DefArgNamedParameters>,
-        pub tz: Option<TimeZoneQualifier>,
-        pub interval_qualifier: Option<IntervalQualifier>,
         pub array_suffixes: zero_or_many!(ArraySuffix),
         pub array_kw_suffix: Option<ArrayKwSuffix>,
     }

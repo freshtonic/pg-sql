@@ -571,7 +571,9 @@ mod tests {
     #[test]
     fn parse_cast_func_with_precision() {
         for (src, identifier_led) in [
-            ("char(20) 'characters'", true),
+            ("mytype(20) 'characters'", true),
+            // `CHAR` is a COL_NAME keyword: gram.y `ConstCharacter` (issue #88).
+            ("char(20) 'characters'", false),
             ("numeric(10, 2) '1234.50'", false),
             ("varchar(8) 'postgres'", false),
         ] {
@@ -645,29 +647,54 @@ mod tests {
         assert_cast_type_family_modifiers_round_trip();
     }
 
+    /// The gram.y `SimpleTypename` arm of a cast type head.
+    fn cast_type_family(head: &CastTypeHead<'_>) -> &'static str {
+        match head {
+            CastTypeHead::Numeric(_) => "numeric",
+            CastTypeHead::Bit(_) => "bit",
+            CastTypeHead::Character(_) => "character",
+            CastTypeHead::DateTime(_) => "datetime",
+            CastTypeHead::Interval(_) => "interval",
+            CastTypeHead::Generic(_) => "generic",
+            #[cfg(feature = "since-pg17")]
+            CastTypeHead::Json => "json",
+        }
+    }
+
     fn assert_cast_type_families_track_type_name_spellings() {
         use crate::formatter::format_tokens_sql;
         use recursa::PrettyConfig;
 
-        fn expects_general_head(name: &TypeName<'_>) -> bool {
+        fn type_name_family(name: &TypeName<'_>) -> &'static str {
             match name {
-                TypeName::Timestamp | TypeName::Time | TypeName::Interval => false,
-                TypeName::Bool
-                | TypeName::Boolean
-                | TypeName::Text
+                TypeName::Timestamp | TypeName::Time => "datetime",
+                TypeName::Interval => "interval",
+                TypeName::Boolean
                 | TypeName::Integer
                 | TypeName::Int
-                | TypeName::Serial
                 | TypeName::Numeric
-                | TypeName::Varchar
                 | TypeName::DoublePrecision
-                | TypeName::Bit
+                | TypeName::Smallint
+                | TypeName::Bigint
+                | TypeName::Real
+                | TypeName::Float
+                | TypeName::Decimal
+                | TypeName::Dec => "numeric",
+                TypeName::Bit => "bit",
+                TypeName::Varchar
                 | TypeName::Character
+                | TypeName::NationalCharacter
+                | TypeName::NationalChar
+                | TypeName::Char
+                | TypeName::Nchar => "character",
+                TypeName::Bool
+                | TypeName::Text
+                | TypeName::Serial
                 | TypeName::Unknown
-                | TypeName::Ident(_) => true,
+                | TypeName::Ident(_) => "generic",
                 // From 17, `json` is gram.y `JsonType`, a head of its own.
                 #[cfg(feature = "since-pg17")]
-                TypeName::Json => false,
+                TypeName::Json => "json",
             }
         }
 
@@ -686,6 +713,16 @@ mod tests {
             ("interval", "INTERVAL"),
             ("bit", "BIT"),
             ("character", "CHARACTER"),
+            ("smallint", "SMALLINT"),
+            ("bigint", "BIGINT"),
+            ("real", "REAL"),
+            ("float", "FLOAT"),
+            ("decimal", "DECIMAL"),
+            ("dec", "DEC"),
+            ("char", "CHAR"),
+            ("nchar", "NCHAR"),
+            ("national character", "NATIONAL CHARACTER"),
+            ("national char", "NATIONAL CHAR"),
             ("unknown", "UNKNOWN"),
             // From 17, `json` is the `JSON` keyword of gram.y `JsonType`.
             #[cfg(feature = "since-pg17")]
@@ -699,8 +736,8 @@ mod tests {
             let ty_parsed = parse_cast_type_classified(src);
             let ty = ty_parsed.ast();
             assert_eq!(
-                matches!(&ty.head, CastTypeHead::General(_)),
-                expects_general_head(name),
+                cast_type_family(&ty.head),
+                type_name_family(name),
                 "cast family for {src:?}",
             );
             assert_eq!(
@@ -716,11 +753,11 @@ mod tests {
         use recursa::PrettyConfig;
 
         // From 17, `json` is gram.y `JsonType`, a keyword head of its own;
-        // before 17 it is an identifier-spelled general type.
+        // before 17 it is an identifier-spelled generic type.
         #[cfg(feature = "since-pg17")]
         let json = ("json", "json", "JSON");
         #[cfg(not(feature = "since-pg17"))]
-        let json = ("json", "general", "json");
+        let json = ("json", "generic", "json");
         for (src, expected_family, canonical) in [
             json,
             (
@@ -736,13 +773,7 @@ mod tests {
         ] {
             let ty_parsed = parse_cast_type_classified(src);
             let ty = ty_parsed.ast();
-            let actual_family = match &ty.head {
-                CastTypeHead::General(_) => "general",
-                CastTypeHead::DateTime(_) => "datetime",
-                CastTypeHead::Interval(_) => "interval",
-                #[cfg(feature = "since-pg17")]
-                CastTypeHead::Json => "json",
-            };
+            let actual_family = cast_type_family(&ty.head);
             assert_eq!(actual_family, expected_family, "cast family for {src:?}");
             assert_eq!(
                 format_tokens_sql(ty, PrettyConfig::default()).trim(),
@@ -824,7 +855,7 @@ mod tests {
                 "args",
                 "within-group",
             ),
-            ("char(20) 'x'", "typed", "typed-literal"),
+            ("mytype(20) 'x'", "typed", "typed-literal"),
             ("f(1, 2, 3, 4, 5, 6) 'x'", "typed", "typed-literal"),
             (r#""normalize"()"#, "empty", "plain"),
         ] {
@@ -893,7 +924,7 @@ mod tests {
             "f(1 ORDER BY 1) WITHIN GROUP (ORDER BY 1)",
             "f(DISTINCT 1) WITHIN GROUP (ORDER BY 1)",
             "f(VARIADIC xs) WITHIN GROUP (ORDER BY 1)",
-            "char(n => 1) 'x'",
+            "mytype(n => 1) 'x'",
         ] {
             let lexed = crate::lex(src);
             assert_eq!(lexed.errors().count(), 0, "lex errors in {src:?}");
@@ -4877,6 +4908,57 @@ mod tests {
                 "SELECT 1::interval second(3000000000)",
                 "SELECT timestamp(3000000000) '2000-01-01'",
                 "SELECT interval(3000000000) '1'",
+            ],
+        );
+    }
+
+    /// gram.y splits `SimpleTypename` into families with their own modifier
+    /// rules (REL_17_11 gram.y 14339-14612). `INT`, `INTEGER`, `SMALLINT`,
+    /// `BIGINT`, `REAL`, `DOUBLE PRECISION` and `BOOLEAN` take no modifier;
+    /// `FLOAT` and the `character` types take one `Iconst`; `DECIMAL`, `DEC`,
+    /// `NUMERIC`, `BIT` and a generic type take an `expr_list`. The type words
+    /// are COL_NAME keywords, so none of them is a generic type. Issue #88.
+    #[test]
+    fn type_modifiers_follow_the_type_families() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT 1::smallint, 1::bigint, 1::real, 1::double precision",
+                "SELECT 1::float, 1::float(53), CAST(1 AS float(1))",
+                "SELECT 1::decimal(5, 2), 1::dec(5), 1::numeric(3000000000)",
+                "SELECT 1::bit(3), 1::bit varying(3), 1::bit varying",
+                "SELECT 1::char(3), 1::character varying(3), 1::varchar(3)",
+                "SELECT 1::national char(3), 1::national character varying(3)",
+                "SELECT 1::nchar varying(3), 1::char varying, 1::nchar",
+                "SELECT 1::mytype(3000000000), 1::varchar(3)[]",
+                "SELECT varchar(3) 'x', bit(3) '101', float(5) '1', real '1'",
+                "SELECT national char(3) 'x', char varying '1'",
+                "CREATE TABLE t (a varchar(3), b national char varying(2), c float(24))",
+                "CREATE FUNCTION f(a char(3)) RETURNS smallint LANGUAGE sql AS 'select 1'",
+                "SELECT 1 AS char, 1 real",
+            ],
+            &[
+                "SELECT 1::int(5)",
+                "SELECT 1::integer(5)",
+                "SELECT 1::smallint(1)",
+                "SELECT 1::bigint(1)",
+                "SELECT 1::real(1)",
+                "SELECT 1::boolean(1)",
+                "SELECT 1::double precision(1)",
+                "SELECT 1::float(3000000000)",
+                "SELECT 1::float(-1)",
+                "SELECT 1::float(1, 2)",
+                "SELECT 1::float(1.5)",
+                "SELECT 1::char(3000000000)",
+                "SELECT 1::char(-1)",
+                "SELECT 1::char(1, 2)",
+                "SELECT 1::varchar(3000000000)",
+                "SELECT 1::character varying(3000000000)",
+                "SELECT int(5) 'x'",
+                "SELECT varchar(3000000000) 'x'",
+                "CREATE TABLE t (a int(5))",
+                "CREATE FUNCTION f(a varchar(3000000000)) RETURNS int LANGUAGE sql AS 'select 1'",
+                "CREATE FUNCTION real() RETURNS int LANGUAGE sql AS 'select 1'",
+                "SELECT 1 char",
             ],
         );
     }

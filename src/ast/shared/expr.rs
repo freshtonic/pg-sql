@@ -179,6 +179,120 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// gram.y `Numeric` (REL_17_11 14407-14465): the numeric and boolean type
+    /// names. Only `FLOAT` takes a precision, which is one `Iconst`
+    /// (`opt_float`); only `DECIMAL`, `DEC` and `NUMERIC` take type modifiers
+    /// (`opt_type_modifiers`). The others take none, so `int(5)` is a syntax
+    /// error (issue #88).
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum NumericType {
+        #[tok(INT)]
+        Int,
+        #[tok(INTEGER)]
+        Integer,
+        #[tok(SMALLINT)]
+        Smallint,
+        #[tok(BIGINT)]
+        Bigint,
+        #[tok(REAL)]
+        Real,
+        Float(FloatType),
+        #[tok(DOUBLE, PRECISION)]
+        DoublePrecision,
+        Decimal(DecimalType),
+        #[tok(BOOLEAN)]
+        Boolean,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `FLOAT_P opt_float`. The action of `opt_float` also rejects a
+    /// precision below 1 or above 53; pg-sql does not check the value.
+    #[derive(Debug, PartialEq, Eq)]
+    #[tok(FLOAT, this)]
+    pub struct FloatType {
+        pub precision: Option<IconstPrecision>,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `DECIMAL_P opt_type_modifiers | DEC opt_type_modifiers |
+    /// NUMERIC opt_type_modifiers`.
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct DecimalType {
+        pub name: DecimalTypeName,
+        pub modifiers: Option<TypePrecision>,
+    }
+}
+
+recursa::ast_node! {
+    /// The three spellings of gram.y's `numeric` type.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum DecimalTypeName {
+        #[tok(DECIMAL)]
+        Decimal,
+        #[tok(DEC)]
+        Dec,
+        #[tok(NUMERIC)]
+        Numeric,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `Bit` and `ConstBit`: `BIT opt_varying ['(' expr_list ')']`
+    /// (REL_17_11 14498-14553).
+    #[derive(Debug, PartialEq, Eq)]
+    #[tok(BIT, this)]
+    pub struct BitType {
+        #[presence(VARYING)]
+        pub varying: bool,
+        pub modifiers: Option<TypePrecision>,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `Character` and `ConstCharacter`: `character ['(' Iconst ')']`
+    /// (REL_17_11 14555-14598). The length is one unsigned `Iconst`, so
+    /// `varchar(3000000000)` and `char(1, 2)` are syntax errors (issue #88).
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct CharacterType {
+        pub name: CharacterTypeName,
+        pub length: Option<IconstPrecision>,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `character` (REL_17_11 14600-14612) with `opt_varying`.
+    ///
+    /// Variant ordering: the longer spellings first.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum CharacterTypeName {
+        #[tok(NATIONAL, CHARACTER, VARYING)]
+        NationalCharacterVarying,
+        #[tok(NATIONAL, CHARACTER)]
+        NationalCharacter,
+        #[tok(NATIONAL, CHAR, VARYING)]
+        NationalCharVarying,
+        #[tok(NATIONAL, CHAR)]
+        NationalChar,
+        #[tok(CHARACTER, VARYING)]
+        CharacterVarying,
+        #[tok(CHARACTER)]
+        Character,
+        #[tok(CHAR, VARYING)]
+        CharVarying,
+        #[tok(CHAR)]
+        Char,
+        #[tok(NCHAR, VARYING)]
+        NcharVarying,
+        #[tok(NCHAR)]
+        Nchar,
+        #[tok(VARCHAR)]
+        Varchar,
+    }
+}
+
+recursa::ast_node! {
     /// Type name for casts.
     #[derive(Debug, PartialEq, Eq)]
     pub enum TypeName {
@@ -210,6 +324,26 @@ recursa::ast_node! {
         Bit,
         #[tok(CHARACTER)]
         Character,
+        #[tok(SMALLINT)]
+        Smallint,
+        #[tok(BIGINT)]
+        Bigint,
+        #[tok(REAL)]
+        Real,
+        #[tok(FLOAT)]
+        Float,
+        #[tok(DECIMAL)]
+        Decimal,
+        #[tok(DEC)]
+        Dec,
+        #[tok(NATIONAL, CHARACTER)]
+        NationalCharacter,
+        #[tok(NATIONAL, CHAR)]
+        NationalChar,
+        #[tok(CHAR)]
+        Char,
+        #[tok(NCHAR)]
+        Nchar,
         #[tok(UNKNOWN)]
         Unknown,
         /// gram.y `JsonType`: `json`, which takes no type modifiers.
@@ -1793,11 +1927,16 @@ recursa::ast_node! {
     /// particular, `WITH/WITHOUT TIME ZONE` is not a suffix on an arbitrary type;
     /// keeping it structural prevents a following `WITH UNIQUE KEYS` JSON clause
     /// from being consumed as part of a `json` cast.
+    ///
+    /// The arms are gram.y `SimpleTypename` (REL_17_11 14339-14368).
     #[derive(Debug, PartialEq, Eq)]
     pub enum CastTypeHead {
+        Numeric(NumericType),
+        Bit(BitType),
+        Character(CharacterType),
         DateTime(DateTimeCastType),
         Interval(IntervalCastType),
-        General(GeneralCastType),
+        Generic(GenericType),
         /// gram.y `JsonType`: `json`, which takes no type modifiers, so
         /// `json(1)` is a syntax error.
         // From 17: see `TypeName::Json`, which also says why the gate records
@@ -1846,47 +1985,27 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// A type without the date/time- or interval-specific suffix grammar.
+    /// gram.y `GenericType: type_function_name [attrs] opt_type_modifiers`
+    /// (REL_17_11 14385-14398).
     #[derive(Debug, PartialEq, Eq)]
-    pub struct GeneralCastType {
-        pub base: GeneralCastTypeName,
-        #[presence(VARYING)]
-        /// `VARYING` modifier (e.g., `BIT VARYING`, `CHARACTER VARYING`).
-        /// Always precedes the precision parens.
-        pub varying: bool,
-        pub precision: Option<TypePrecision>,
+    pub struct GenericType {
+        pub name: GenericTypeName,
+        pub modifiers: Option<TypePrecision>,
     }
 }
 
 recursa::ast_node! {
-    /// A cast base without `TIME`, `TIMESTAMP`, or `INTERVAL`.
-    ///
-    /// This mirrors [`TypeName`] for the general PostgreSQL type production while
-    /// making the three suffix-bearing families disjoint by construction.
+    /// The `type_function_name [attrs]` of a [`GenericType`]. `bool`, `text`,
+    /// `serial` and `unknown` are pg-sql keywords that keep fixed variants;
+    /// to gram.y they are ordinary `type_function_name`s.
     #[derive(Debug, PartialEq, Eq)]
-    pub enum GeneralCastTypeName {
+    pub enum GenericTypeName {
         #[tok(BOOL)]
         Bool,
-        #[tok(BOOLEAN)]
-        Boolean,
         #[tok(TEXT)]
         Text,
-        #[tok(INTEGER)]
-        Integer,
-        #[tok(INT)]
-        Int,
         #[tok(SERIAL)]
         Serial,
-        #[tok(NUMERIC)]
-        Numeric,
-        #[tok(VARCHAR)]
-        Varchar,
-        #[tok(DOUBLE, PRECISION)]
-        DoublePrecision,
-        #[tok(BIT)]
-        Bit,
-        #[tok(CHARACTER)]
-        Character,
         #[tok(UNKNOWN)]
         Unknown,
         Ident(TypeNameIdent),
@@ -1913,52 +2032,34 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Fixed-keyword name accepted by PostgreSQL's function-style typed literal
-    /// syntax.
+    /// gram.y `ConstTypename` without `ConstDatetime` and `JsonType`, which
+    /// have their own literal nodes (REL_17_11 14370-14376).
     ///
     /// These are `COL_NAME` keywords and therefore cannot also be generic
-    /// function names.
+    /// function names. `double precision '1'` is `Numeric`: the two-token
+    /// spelling wins over `double` as an identifier-spelled type name.
     #[derive(Debug)]
     pub enum FixedTypeCastFuncName {
-        /// gram.y `Numeric: DOUBLE_P PRECISION`; `double precision '1'` is a
-        /// `ConstTypename Sconst` literal. Listed first: the two-token spelling
-        /// must win over `double` as an identifier-spelled type name.
-        #[tok(DOUBLE, PRECISION)]
-        DoublePrecision,
-        #[tok(BOOLEAN)]
-        Boolean,
-        #[tok(INTEGER)]
-        Integer,
-        #[tok(INT)]
-        Int,
-        #[tok(NUMERIC)]
-        Numeric,
-        #[tok(VARCHAR)]
-        Varchar,
-        #[tok(BIT)]
-        Bit,
-        #[tok(CHARACTER)]
-        Character,
+        Numeric(NumericType),
+        Bit(BitType),
+        Character(CharacterType),
     }
 }
 
 recursa::ast_node! {
-    /// Function-style typed literal for a fixed-keyword type. The optional typmod
-    /// list is kept on this same node so `numeric '1'` and
-    /// `numeric(10, 2) '1.00'` share their prefix honestly.
+    /// gram.y `AexprConst: ConstTypename Sconst` (REL_17_11 17263) for a
+    /// fixed-keyword type: `numeric '1'`, `numeric(10, 2) '1.00'`,
+    /// `varchar(3) 'x'`.
     #[derive(Debug)]
     pub struct FixedTypeCastFunc {
         pub type_name: FixedTypeCastFuncName,
-        #[presence(VARYING)]
-        pub varying: bool,
-        pub typmods: Option<TypePrecision>,
         pub value: literal::StringLit,
     }
 }
 
 recursa::ast_node! {
     /// Function-style typed literal for an identifier-spelled type without
-    /// typmods: `bool 'value'`, `text 'hello'`, or `double precision 'value'`.
+    /// typmods: `bool 'value'` or `text 'hello'`.
     ///
     /// The payload is PostgreSQL's `Sconst` and nothing else, as
     /// `AexprConst: func_name Sconst` has it: nothing stands between the name
@@ -1971,7 +2072,7 @@ recursa::ast_node! {
     pub struct NamedTypeCastFunc {
         /// gram.y `AexprConst: func_name Sconst` — nothing stands between the
         /// name and the string. `double precision '1'` is
-        /// `FixedTypeCastFuncName::DoublePrecision`; a `PRECISION` admitted
+        /// `NumericType::DoublePrecision` in a `FixedTypeCastFunc`; a `PRECISION` admitted
         /// here would follow `type_function_name` where gram.y never has it,
         /// and `precision` is also an operator class after a column in an
         /// index element, which the LR parser could not tell apart.

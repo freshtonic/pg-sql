@@ -557,7 +557,20 @@ recursa::tokens! {
         BIT             => r"BIT" in COL_NAME + bare_label,
         VARYING         => r"VARYING" in UNRESERVED,
         CHARACTER       => r"CHARACTER" in COL_NAME,
-        SHARE           => r"SHARE" in UNRESERVED + bare_label,
+        // gram.y `Numeric` and `character` spell these type names as
+        // COL_NAME keywords in every target version (REL_14_24 and REL_17_11
+        // kwlist.h), so they never reach `GenericType`'s `opt_type_modifiers`
+        // (issue #88).
+        SMALLINT        => r"SMALLINT" in COL_NAME + bare_label,
+        BIGINT          => r"BIGINT" in COL_NAME + bare_label,
+        REAL            => r"REAL" in COL_NAME + bare_label,
+        FLOAT           => r"FLOAT" in COL_NAME + bare_label,
+        DECIMAL         => r"DECIMAL" in COL_NAME + bare_label,
+        DEC             => r"DEC" in COL_NAME + bare_label,
+        CHAR            => r"CHAR" in COL_NAME,
+        NCHAR           => r"NCHAR" in COL_NAME + bare_label,
+        NATIONAL        => r"NATIONAL" in COL_NAME + bare_label,
+        SHARE          => r"SHARE" in UNRESERVED + bare_label,
         IMPORT          => r"IMPORT" in UNRESERVED + bare_label,
         DEFINER         => r"DEFINER" in UNRESERVED + bare_label,
         INVOKER         => r"INVOKER" in UNRESERVED + bare_label,
