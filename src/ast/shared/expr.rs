@@ -983,24 +983,22 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Content inside parentheses: either a query or a non-empty,
-    /// comma-separated expression list.
+    /// Content inside parentheses: a non-empty, comma-separated expression
+    /// list. It is gram.y `c_expr: '(' a_expr ')' opt_indirection` (gram.y
+    /// 15378) and `row: '(' expr_list ')'` (gram.y 16585) sharing their
+    /// delimiters.
+    ///
+    /// A parenthesized query is not a variant here. gram.y is "careful to use
+    /// `select_with_parens`, never `'(' SelectStmt ')'`, in the expression
+    /// grammar" (gram.y 12658-12661), and [`Expr::SubSelect`] mirrors that.
+    /// A query arm here shared one `(`-led production with
+    /// `select_with_parens` and left a decision on `)` that two scoped
+    /// resolutions had to answer; the factoring leaves no decision there.
+    ///
+    /// It stays an enum of one variant so a consumer that matches on it keeps
+    /// the shape it had.
     #[derive(Debug)]
     pub enum ParenContent {
-        #[parse(prec = UMINUS)]
-        #[parse(lr_conflict(
-        action = reduce,
-        against = ast::dml::values::SelectWithParens,
-        lookahead = { RPAREN },
-        expect = 1
-    ))]
-        #[parse(lr_conflict(
-        action = shift,
-        against = ast::dml::values::SelectWithParens,
-        lookahead = { RPAREN_SELECT_LA },
-        expect = 1
-    ))]
-        Subquery(boxed!(Subquery)),
         Exprs(#[sep(COMMA)] one_or_many!(Expr)),
     }
 }
@@ -1022,6 +1020,16 @@ recursa::ast_node! {
         Field(IndirectionField),
         Subscript(BracketSubscript),
         Star(ParenthesizedDotStar),
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y:15403 `select_with_parens indirection`: a sub-select with a
+    /// field, wildcard or subscript chain applied to its result.
+    #[derive(Debug)]
+    pub struct SubSelectIndirectionExpr {
+        pub query: crate::ast::dml::values::SelectWithParens,
+        pub indirection: one_or_many!(ParenthesizedIndirection),
     }
 }
 
@@ -4324,6 +4332,19 @@ recursa::ast_node! {
         /// Qualified reference: `table.column`, `schema.table.column`, or
         /// `schema.table.*` -- must come before ColumnRef.
         QualRef(QualifiedRef),
+        /// gram.y:15391 `select_with_parens %prec UMINUS`: the factoring that
+        /// absorbs every extra paren into the sub-select.
+        #[parse(prec = UMINUS)]
+        SubSelect(crate::ast::dml::values::SelectWithParens),
+        /// gram.y:15403 `select_with_parens indirection`, the production
+        /// gram.y calls "redundant-looking": `select_with_parens` eats every
+        /// level of parens, so `'(' a_expr ')' opt_indirection` can never
+        /// match a decorated sub-select, and `(SELECT f()).x` needs an arm of
+        /// its own. The chain is required, which is what parts this arm from
+        /// [`Expr::SubSelect`]; gram.y writes `indirection`, not
+        /// `opt_indirection`, for the same reason.
+        #[parse(prec = UMINUS)]
+        SubSelectIndirection(SubSelectIndirectionExpr),
         /// Parenthesized scalar, row, or subquery, with optional field
         /// indirection. Its singleton expression route supplies Pretty's authored
         /// precedence grouping syntax.
@@ -4576,6 +4597,8 @@ recursa::ast_node! {
         User,
         SqlValue,
         QualRef,
+        SubSelect,
+        SubSelectIndirection,
         Parenthesized,
         NumericLit,
         IntegerLit,
@@ -4671,6 +4694,8 @@ recursa::ast_node! {
         User,
         SqlValue,
         QualRef,
+        SubSelect,
+        SubSelectIndirection,
         Parenthesized,
         NumericLit,
         IntegerLit,

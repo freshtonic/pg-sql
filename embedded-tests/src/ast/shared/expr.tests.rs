@@ -2147,6 +2147,38 @@ mod tests {
         assert!(input.is_eof());
     }
 
+    /// gram.y's own two examples for factoring `select_with_parens`
+    /// (gram.y 12652-12656): "in `SELECT (((SELECT 2)) + 3)` the extra
+    /// parentheses are treated as part of the sub-select. The necessity of
+    /// doing it that way is shown by `SELECT (((SELECT 2)) UNION SELECT 2)`.
+    /// Had we parsed `((SELECT 2))` as an a_expr, it'd be too late to go back
+    /// to the SELECT viewpoint when we see the UNION."
+    ///
+    /// Both reach [`Expr::SubSelect`] (gram.y:15391), and the decorated forms
+    /// reach [`Expr::SubSelectIndirection`] (gram.y:15403), which the
+    /// `'(' a_expr ')' opt_indirection` route cannot match while the parens
+    /// belong to the sub-select.
+    #[test]
+    fn extra_parens_are_absorbed_into_the_sub_select() {
+        for src in [
+            "SELECT (((SELECT 2)) UNION SELECT 2)",
+            "SELECT (((SELECT 2)) + 3)",
+            "SELECT (SELECT 1)",
+            "SELECT ((SELECT 1))",
+            "SELECT (SELECT f()).x",
+            "SELECT (SELECT f()).*",
+            "SELECT (SELECT ARRAY[1])[1]",
+            "SELECT ((SELECT f())).x",
+            "SELECT q1 FROM t INTERSECT (((SELECT q2 FROM t))) ORDER BY 1",
+            // The same decision under `RETURNING`, where the parenthesized
+            // query is the source of the INSERT and not an expression.
+            "INSERT INTO t (SELECT 1) RETURNING *",
+            "INSERT INTO t ((SELECT 1)) RETURNING a",
+        ] {
+            crate::ast::test_support::reparse_stable::<crate::ast::Statement>(src);
+        }
+    }
+
     #[test]
     fn parse_parenthesized_grouped_set_query() {
         let lexed = crate::lex("((SELECT 1) UNION SELECT 2)");
@@ -2154,17 +2186,16 @@ mod tests {
         let mut input = lexed.input();
         let expr_parsed = Expr::parse(&mut input).unwrap();
         let expr = expr_parsed.ast();
+        // gram.y:15391 `c_expr: select_with_parens`: the outer parens belong
+        // to the sub-select, not to a parenthesized expression, and the inner
+        // `(SELECT 1)` is the left operand of the set operation.
         assert!(matches!(
             expr,
-            Expr::Parenthesized(ParenthesizedExpr {
-                content: ParenContent::Subquery(subquery),
-                indirection,
-                ..
-            }) if matches!(
-                &subquery.body.clause,
-                SelectClause::Union(left, _, _) if matches!(**left, SelectClause::Parens(_))
+            Expr::SubSelect(parens) if matches!(
+                &parens.inner.body.clause,
+                SelectClause::Union(left, _, _)
+                    if matches!(left.as_ref(), SelectClause::Parens(_))
             )
-                && indirection.is_empty()
         ));
         assert!(input.is_eof());
     }
@@ -3080,14 +3111,9 @@ mod tests {
         let mut input = lexed.input();
         let expr_parsed = Expr::parse(&mut input).unwrap();
         let expr = expr_parsed.ast();
-        assert!(matches!(
-            expr,
-            Expr::Parenthesized(ParenthesizedExpr {
-                content: ParenContent::Subquery(_),
-                indirection,
-                ..
-            }) if indirection.is_empty()
-        ));
+        // gram.y:15391 `c_expr: select_with_parens`: the parens are the
+        // sub-select's own, which is why no indirection chain can stand here.
+        assert!(matches!(expr, Expr::SubSelect(_)));
         assert!(input.is_eof());
     }
 
