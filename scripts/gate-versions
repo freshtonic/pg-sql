@@ -35,6 +35,51 @@ run() {
   "$@"
 }
 
+# The pg-sql test targets that the gate runs at each version (#95). A new
+# target goes in one of the two lists, or in `excluded_tests` with a reason;
+# the check below fails before any build when a target is in none of them.
+core_tests=(
+  embedded embedded_inventory differential_baseline target_version
+  strict_statement fmt flat_parity minimum_version minimum_version_corpus
+  declared_precedence declared_rejections document ident lex_identity
+  table_parser
+)
+oracle_tests=(differential accepted_legacy_gaps)
+# Format: "name: reason". The gate runs every pg-sql test target now, so the
+# list is empty.
+excluded_tests=()
+
+command -v jq >/dev/null || { echo "jq is required" >&2; exit 2; }
+listed_tests="$(
+  printf '%s\n' "${core_tests[@]}" "${oracle_tests[@]}"
+  for entry in ${excluded_tests[@]+"${excluded_tests[@]}"}; do
+    printf '%s\n' "${entry%%:*}"
+  done
+)"
+package_tests="$(
+  cargo metadata --locked --no-deps --format-version 1 |
+    jq -r --arg manifest "$PWD/Cargo.toml" '
+      .packages[] | select(.manifest_path == $manifest)
+      | .targets[] | select(.kind | index("test")) | .name'
+)"
+unlisted="$(comm -23 <(sort -u <<<"$package_tests") <(sort -u <<<"$listed_tests"))"
+if [ -n "$unlisted" ]; then
+  echo "pg-sql test targets that the gate neither runs nor excludes:" >&2
+  echo "$unlisted" >&2
+  exit 1
+fi
+unknown="$(comm -13 <(sort -u <<<"$package_tests") <(sort -u <<<"$listed_tests"))"
+if [ -n "$unknown" ]; then
+  echo "gate lists that name no pg-sql test target:" >&2
+  echo "$unknown" >&2
+  exit 1
+fi
+
+core_args=()
+for name in "${core_tests[@]}"; do core_args+=(--test "$name"); done
+oracle_args=()
+for name in "${oracle_tests[@]}"; do oracle_args+=(--test "$name"); done
+
 for version in "${versions[@]}"; do
   case "$version" in
     pg14|pg15|pg16|pg17|pg18|pg19-beta) ;;
@@ -45,12 +90,8 @@ for version in "${versions[@]}"; do
   oracle=(--no-default-features --features "$version,spans,postgres-oracle")
 
   run cargo build --locked -p pg-sql "${spans[@]}"
-  run cargo test --locked -p pg-sql "${spans[@]}" \
-    --test embedded --test embedded_inventory --test differential_baseline \
-    --test target_version --test strict_statement --test fmt --test flat_parity \
-    --test minimum_version --test minimum_version_corpus
-  run cargo test --locked -p pg-sql "${oracle[@]}" \
-    --test differential --test accepted_legacy_gaps
+  run cargo test --locked -p pg-sql "${spans[@]}" "${core_args[@]}"
+  run cargo test --locked -p pg-sql "${oracle[@]}" "${oracle_args[@]}"
   run cargo test --locked -p pg-psql --no-default-features --features "$version"
   run cargo test --locked -p pg-oracle --no-default-features --features "$version"
   # The psql oracle (#79): psql's own lexer of the same pinned release.
