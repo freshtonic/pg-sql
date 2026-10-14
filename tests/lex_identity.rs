@@ -136,7 +136,23 @@ fn sql_files(root: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Checked-in expectation for the adversarial arbitration inputs.
+/// Checked-in expectation for the adversarial arbitration inputs, one for
+/// each lexer that the target versions have. 15 rejects junk after a number
+/// or a parameter (RCA4004), and 16 adds the radix and `_` integer forms
+/// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 15 and 16,
+/// "Lexical and literal syntax"). From 16 the output is the same at every
+/// version.
+#[cfg(not(feature = "since-pg15"))]
+const EDGE_FIXTURE: &str = "lex_edge_cases.pg14.txt";
+#[cfg(not(feature = "since-pg15"))]
+const EDGE_EXPECTATION: &str = include_str!("fixtures/lex_edge_cases.pg14.txt");
+#[cfg(all(feature = "since-pg15", not(feature = "since-pg16")))]
+const EDGE_FIXTURE: &str = "lex_edge_cases.pg15.txt";
+#[cfg(all(feature = "since-pg15", not(feature = "since-pg16")))]
+const EDGE_EXPECTATION: &str = include_str!("fixtures/lex_edge_cases.pg15.txt");
+#[cfg(feature = "since-pg16")]
+const EDGE_FIXTURE: &str = "lex_edge_cases.txt";
+#[cfg(feature = "since-pg16")]
 const EDGE_EXPECTATION: &str = include_str!("fixtures/lex_edge_cases.txt");
 
 #[test]
@@ -146,8 +162,9 @@ fn adversarial_inputs_keep_their_pinned_arbitration() {
         dump_lex_records(&format!("edge {source:?}"), source, &mut out);
     }
 
-    let expectation =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lex_edge_cases.txt");
+    let expectation = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(EDGE_FIXTURE);
     if std::env::var_os("PG_SQL_LEX_BLESS").is_some() {
         fs::create_dir_all(expectation.parent().expect("fixture directory"))
             .expect("create fixture directory");
