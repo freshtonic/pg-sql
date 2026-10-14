@@ -751,6 +751,48 @@ mod tests {
     /// and in `TableFuncElement`, and `part_elem`. pg-sql had four different
     /// single-identifier types there. PostgreSQL 17.9 accepts every statement
     /// of the first list and rejects every one of the second.
+    // One statement per lookahead filter, each at a site that must name the
+    // merged kind. A merged kind is admitted only where the grammar names it
+    // (freshtonic/recursa#139), and a closing or rule-final token position
+    // cannot be reached by substitution over `FIRST` of the rest of its own
+    // rule, so each of these stops parsing the moment its site loses the arm.
+    #[test]
+    fn every_lookahead_filter_keeps_the_syntax_it_exists_for() {
+        crate::ast::test_support::assert_statements_parse(&[
+            // `WITH_LA`: gram.y `with_clause: WITH_LA cte_list` and
+            // `any_with: WITH | WITH_LA` (REL_17_11 gram.y 11691-11692), for a
+            // first CTE named `time` or `ordinality`.
+            "WITH t AS (SELECT 1) SELECT * FROM t",
+            "WITH RECURSIVE t AS (SELECT 1) SELECT * FROM t",
+            "WITH time AS (SELECT 1) SELECT * FROM time",
+            "SELECT * FROM unnest(ARRAY[1]) WITH ORDINALITY",
+            // `WITHOUT_LA`: gram.y `ConstDatetime ... WITHOUT_LA TIME ZONE`.
+            "SELECT CAST(a AS timestamp WITHOUT TIME ZONE)",
+            // `NULLS_LA`: gram.y `opt_nulls_order: NULLS_LA FIRST_P`.
+            "SELECT a FROM t ORDER BY a NULLS FIRST",
+            // `NOT_LA`: gram.y `a_expr NOT_LA LIKE a_expr`.
+            "SELECT a FROM t WHERE a NOT LIKE 'x'",
+            // `UESCAPE_LA`: the escape clause of a Unicode string.
+            "SELECT U&'\\0041' UESCAPE '\\'",
+            // `RPAREN_TYPED_LA`, pg-sql's own: the `)` of a function-style
+            // typed literal, before its string payload.
+            "SELECT char(20) 'x'",
+            "SELECT numeric(10, 2) '1234.50'",
+            // `RPAREN_SELECT_LA`, pg-sql's own: the `)` of a parenthesized
+            // form that a set operator continues. One statement per closing
+            // rule that names it.
+            "(SELECT 1) UNION SELECT 2",
+            "SELECT f(g(x)) UNION SELECT 1",
+            "VALUES (1, 2) UNION ALL SELECT 3, 4",
+            "SELECT * FROM t AS t2(a) UNION SELECT 1",
+            "SELECT 1::numeric(3) UNION SELECT 2",
+            // A parenthesized query in FROM, which gram.y reads as
+            // `select_with_parens: '(' select_with_parens ')'` and needs no
+            // lookahead for.
+            "SELECT * FROM ((SELECT 1)) s",
+        ]);
+    }
+
     #[test]
     fn parse_collation_and_opclass_names_as_any_name() {
         let accepted = [

@@ -1049,6 +1049,10 @@ embedded-tests/src/ast/utility/copy.tests.rs	copy_table_with_generic_options	fal
 embedded-tests/src/ast/utility/copy.tests.rs	copy_table_with_legacy_delimiter_null_as	false	14-
 embedded-tests/src/ast/utility/copy.tests.rs	copy_17_option_forms	false	17-
 embedded-tests/src/ast/utility/copy.tests.rs	copy_17_option_forms_are_rejected_before_17	false	14-16
+embedded-tests/src/ast/utility/copy.tests.rs	copy_generic_format_csv_and_text_parse_in_every_version	false	14-
+embedded-tests/src/ast/utility/copy.tests.rs	copy_generic_format_json_is_rejected_from_16_to_18	false	16-18
+embedded-tests/src/ast/utility/copy.tests.rs	copy_generic_format_json_parses_before_16	false	14-15
+embedded-tests/src/ast/utility/copy.tests.rs	copy_generic_format_json_parses_from_19	false	19-
 embedded-tests/src/ast/utility/explain.tests.rs	parse_explain_bool_option_value	false	14-
 embedded-tests/src/ast/utility/explain.tests.rs	parse_explain_costs_off	false	14-
 embedded-tests/src/ast/utility/explain.tests.rs	parse_explain_multiple_options	false	14-
@@ -1262,6 +1266,7 @@ embedded-tests/src/ast/shared/expr.tests.rs	sql_value_function_words_are_reserve
 embedded-tests/src/ast/shared/expr.tests.rs	system_user_is_reserved_from_16	false	16-
 embedded-tests/src/ast/shared/expr.tests.rs	system_user_is_a_name_before_16	false	14-15
 embedded-tests/src/ast/mod.tests.rs	checkpoint_takes_utility_options_from_19	false	19-
+embedded-tests/src/ast/mod.tests.rs	every_lookahead_filter_keeps_the_syntax_it_exists_for	false	14-
 embedded-tests/src/ast/mod.tests.rs	repack_statement_forms_from_19	false	19-
 embedded-tests/src/ast/mod.tests.rs	wait_for_lsn_forms_from_19	false	19-
 embedded-tests/src/ast/mod.tests.rs	reject_19_utility_statements_before_19	false	14-18

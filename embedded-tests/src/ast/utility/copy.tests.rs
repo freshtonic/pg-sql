@@ -123,6 +123,50 @@ mod tests {
         reparse_stable::<CopyStmt>("COPY t FROM STDIN (FORCE_QUOTE *)");
     }
 
+    // `COPY ... (FORMAT json)`: issue #87. `base_yylex` reads `FORMAT`
+    // immediately before `JSON` as `FORMAT_LA` from 16 on (REL_16_15
+    // `parser.c`, case `FORMAT`), and `copy_generic_opt_elem` is
+    // `ColLabel copy_generic_opt_arg` and nothing else through 18 (REL_18_6
+    // gram.y 3572-3577), which holds no `_LA` token. So 16, 17 and 18 reject
+    // the option. 14 and 15 have no such merged kind, read `FORMAT` as an
+    // ordinary unreserved word and accept it (REL_15_19 `parser.c` has no
+    // `FORMAT` case). 19 adds `copy_generic_opt_elem: ... | FORMAT_LA
+    // copy_generic_opt_arg` (b73d13c:3653-3657) and accepts it again.
+    #[cfg(not(feature = "since-pg16"))]
+    #[test]
+    fn copy_generic_format_json_parses_before_16() {
+        reparse_stable::<CopyStmt>("COPY t TO STDOUT (FORMAT json)");
+        reparse_stable::<CopyStmt>("COPY t FROM STDIN (FORMAT json)");
+    }
+
+    // See `copy_generic_format_json_parses_before_16`.
+    #[cfg(all(feature = "since-pg16", not(feature = "since-pg19")))]
+    #[test]
+    fn copy_generic_format_json_is_rejected_from_16_to_18() {
+        assert_statements_rejected(&[
+            "COPY t TO STDOUT (FORMAT json)",
+            "COPY t FROM STDIN (FORMAT json)",
+        ]);
+    }
+
+    // See `copy_generic_format_json_parses_before_16`.
+    #[cfg(feature = "since-pg19")]
+    #[test]
+    fn copy_generic_format_json_parses_from_19() {
+        reparse_stable::<CopyStmt>("COPY t TO STDOUT (FORMAT json)");
+        reparse_stable::<CopyStmt>("COPY t FROM STDIN (FORMAT json)");
+    }
+
+    // The option name that no merged kind touches: `csv` and `text` are not
+    // `JSON`, so `FORMAT` stays `FORMAT` and `ColLabel` admits it in every
+    // version. This is the other half of issue #87: the rejection above must
+    // not cost the ordinary spellings.
+    #[test]
+    fn copy_generic_format_csv_and_text_parse_in_every_version() {
+        reparse_stable::<CopyStmt>("COPY t TO STDOUT (FORMAT csv)");
+        reparse_stable::<CopyStmt>("COPY t TO STDOUT (FORMAT text)");
+    }
+
     #[test]
     fn copy_table_generic_option_paren_list() {
         reparse_stable::<CopyStmt>("COPY t FROM STDIN (FORCE_QUOTE (a, b))");
