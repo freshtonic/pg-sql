@@ -81,7 +81,13 @@ recursa::ast_node! {
     pub struct CreateDatabaseStmt {
         #[tok(CREATE, DATABASE, this)]
         pub name: crate::tokens::ColId,
-        #[tok(optional(WITH), this)]
+        // `this_each` states the element-wise attachment this site already
+        // lowers to: the lead-in wraps every option, so
+        // `WITH OWNER = x WITH TEMPLATE = y` is accepted where gram.y
+        // `CREATE DATABASE name opt_with createdb_opt_list` (REL_17_11 gram.y
+        // 11277) reads `WITH` once. RCA3152 asks only that the reading be
+        // explicit; the container repair is #59 section B, which is open.
+        #[tok(optional(WITH), this_each)]
         pub options: zero_or_many!(CreateDbOption),
     }
 }
@@ -101,7 +107,15 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct DropDatabaseOptions {
         /// gram.y `drop_option_list`: one or more options.
-        #[tok(optional(WITH), LPAREN, this, RPAREN)]
+        ///
+        /// `this_each` states the element-wise attachment this site already
+        /// lowers to: the delimiters wrap every option, so `(FORCE), (FORCE)`
+        /// is accepted where gram.y `DROP DATABASE ... opt_with '('
+        /// drop_option_list ')'` (REL_17_11 gram.y 11429, `drop_option_list`
+        /// 11440) reads them once. PostgreSQL defines one drop option, so no
+        /// multi-element list can be written and the site is latent; #59
+        /// section C records that and leaves the container repair open.
+        #[tok(optional(WITH), LPAREN, this_each, RPAREN)]
         #[sep(COMMA)]
         pub options: one_or_many!(DropDatabaseOption),
     }

@@ -355,7 +355,12 @@ recursa::ast_node! {
     pub struct CreateGroupStmt {
         #[tok(CREATE, GROUP, this)]
         pub name: crate::tokens::NonReservedWord,
-        #[tok(optional(WITH), this)]
+        // `this_each` states the element-wise attachment this site already
+        // lowers to: the lead-in wraps every option, so `WITH LOGIN WITH
+        // SUPERUSER` is accepted where gram.y `CREATE GROUP RoleId opt_with
+        // OptRoleList` reads `WITH` once. RCA3152 asks only that the reading
+        // be explicit; the container repair is #59 section B, which is open.
+        #[tok(optional(WITH), this_each)]
         pub options: zero_or_many!(CreateRoleOption),
     }
 }
@@ -375,7 +380,12 @@ recursa::ast_node! {
     pub struct CreateRoleStmt {
         #[tok(CREATE, ROLE, this)]
         pub name: crate::tokens::NonReservedWord,
-        #[tok(optional(WITH), this)]
+        // `this_each` states the element-wise attachment this site already
+        // lowers to: the lead-in wraps every option, so `WITH LOGIN WITH
+        // SUPERUSER` is accepted where gram.y `CREATE ROLE RoleId opt_with
+        // OptRoleList` reads `WITH` once. RCA3152 asks only that the reading
+        // be explicit; the container repair is #59 section B, which is open.
+        #[tok(optional(WITH), this_each)]
         pub options: zero_or_many!(CreateRoleOption),
     }
 }
@@ -395,7 +405,12 @@ recursa::ast_node! {
     pub struct CreateUserStmt {
         #[tok(CREATE, USER, this)]
         pub name: crate::tokens::NonReservedWord,
-        #[tok(optional(WITH), this)]
+        // `this_each` states the element-wise attachment this site already
+        // lowers to: the lead-in wraps every option, so `WITH LOGIN WITH
+        // SUPERUSER` is accepted where gram.y `CREATE USER RoleId opt_with
+        // OptRoleList` reads `WITH` once. RCA3152 asks only that the reading
+        // be explicit; the container repair is #59 section B, which is open.
+        #[tok(optional(WITH), this_each)]
         pub options: zero_or_many!(CreateRoleOption),
     }
 }

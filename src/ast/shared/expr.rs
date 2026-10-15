@@ -21,10 +21,28 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// Required closing delimiter for structurally parenthesized SQL forms.
+    ///
+    /// `RPAREN` is this rule's last token, so the rule itself says nothing
+    /// about what follows it and the lookahead substitution, which reads
+    /// `FIRST` of the rest of the rule only, cannot reach the position. The
+    /// grammar therefore names the merged kind here, the way gram.y writes
+    /// `any_with: WITH | WITH_LA` by hand (REL_17_11 gram.y 11691-11692).
+    ///
+    /// `RPAREN_SELECT_LA` is pg-sql's own merged kind and has no gram.y
+    /// counterpart: it marks a `)` that a set operator follows
+    /// (`crate::tokens`, `RPAREN_SELECT_LA = RPAREN before { UNION,
+    /// INTERSECT, EXCEPT }`), which is what lets a completed parenthesized
+    /// form part from a grouped set query on one token. So `(SELECT 1)` of
+    /// `(SELECT 1) UNION SELECT 2` closes through the merged arm and
+    /// `(SELECT 1)` alone closes through the plain one. Both arms render `)`:
+    /// a merged kind is the same record read differently, and keeps the
+    /// source token's spelling and span.
     #[derive(Debug)]
     pub enum ParenthesizedClose {
         #[tok(RPAREN)]
         Value,
+        #[tok(RPAREN_SELECT_LA)]
+        MergedSelect,
     }
 }
 
@@ -43,18 +61,16 @@ recursa::ast_node! {
     /// Content inside IN parentheses: either a subquery or expression list.
     ///
     /// PG's `in_expr` is either `select_with_parens` or `'(' expr_list ')'`.
-    /// Both alternatives can begin with arbitrarily nested parentheses, so the
-    /// grammar shares the enclosing delimiters and lets the LR state after a
-    /// completed inner form decide whether a comma continues an expression list
-    /// or a set operator continues a grouped query.
+    /// pg-sql shares the enclosing delimiters: the `Subquery` arm is
+    /// `select_no_parens`, and a `select_with_parens` written inside it is
+    /// absorbed by the sub-select, the way gram.y absorbs it (REL_17_11
+    /// gram.y 12652-12656). This keeps both the expression-list form
+    /// (`IN ((SELECT 1), (SELECT 2))`) and the grouped set query
+    /// (`IN ((SELECT 1) UNION SELECT 2)`) reachable.
     ///
     /// The bare `Subquery` branch still wins on its non-`(` leading tokens
     /// (`SELECT`, `VALUES`, `TABLE`, `WITH`), where only `Subquery` has an LR
     /// action.
-    ///
-    /// This keeps both the expression-list form (`IN ((SELECT 1), (SELECT 2))`)
-    /// and a grouped set query (`IN ((SELECT 1) UNION SELECT 2)`) reachable
-    /// without declaration-order priority or parser-specific source scanning.
     #[derive(Debug)]
     pub enum InContent {
         Exprs(#[sep(COMMA)] one_or_many!(Expr)),
@@ -86,14 +102,57 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
+    /// Opening `(` of a parenthesized type-modifier list.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum TypeModifierOpen {
+        #[tok(LPAREN)]
+        Value,
+    }
+}
+
+recursa::ast_node! {
+    /// Closing `)` of a parenthesized type-modifier list.
+    ///
+    /// `RPAREN` is this rule's last token, so the rule says nothing about what
+    /// follows it and lookahead substitution, which reads `FIRST` of the rest
+    /// of the rule only, cannot reach the position. A type-modifier list ends
+    /// a type name, and a type name stands before both of the records that
+    /// make one of pg-sql's own merged kinds (`crate::tokens`), so the rule
+    /// names them here, the way gram.y writes `any_with: WITH | WITH_LA` by
+    /// hand (REL_17_11 gram.y 11691-11692):
+    ///
+    /// - `RPAREN_TYPED_LA` for the string of a function-style typed literal,
+    ///   `numeric(10, 2) '1234.50'` and `timestamp(3) '2000-01-01'`
+    ///   (gram.y `AexprConst: ConstTypename Sconst`, REL_17_11 15403);
+    /// - `RPAREN_SELECT_LA` for a set operator after the last target of a
+    ///   query, `SELECT 1::numeric(3) UNION SELECT 2`.
+    ///
+    /// Each arm renders `)`: a merged kind is the same record read
+    /// differently, and keeps the source token's spelling and span.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum TypeModifierClose {
+        #[tok(RPAREN)]
+        Value,
+        #[tok(RPAREN_TYPED_LA)]
+        MergedTyped,
+        #[tok(RPAREN_SELECT_LA)]
+        MergedSelect,
+    }
+}
+
+recursa::ast_node! {
     /// `'(' Iconst ')'`: the precision of `TIMESTAMP`, `TIME`, `INTERVAL` and
     /// `SECOND` (REL_17_11 gram.y `ConstDatetime` 14622, `ConstInterval '('
     /// Iconst ')'` 14350 and 17274, `interval_second` 14737). Unlike the
     /// `expr_list` of [`TypePrecision`], it takes one unsigned integer that
     /// fits in `int32` (issue #88).
     #[derive(Debug, PartialEq, Eq, derive_more :: Deref)]
-    #[tok(LPAREN, this, RPAREN)]
-    pub struct IconstPrecision(#[deref] pub literal::IntegerLit);
+    pub struct IconstPrecision {
+        pub open: TypeModifierOpen,
+        #[deref]
+        pub value: literal::IntegerLit,
+        pub close: TypeModifierClose,
+    }
 }
 
 recursa::ast_node! {
@@ -110,12 +169,13 @@ recursa::ast_node! {
 recursa::ast_node! {
     /// Parenthesized precision/scale for type names: `(10,2)`, `(3)`, `(3,-6)`.
     #[derive(Debug, PartialEq, Eq, derive_more :: Deref)]
-    #[tok(LPAREN, this, RPAREN)]
-    pub struct TypePrecision(
+    pub struct TypePrecision {
+        pub open: TypeModifierOpen,
         #[sep(COMMA)]
         #[deref]
-        pub zero_or_many!(TypeModifierArg),
-    );
+        pub args: zero_or_many!(TypeModifierArg),
+        pub close: TypeModifierClose,
+    }
 }
 
 recursa::ast_node! {
@@ -790,10 +850,29 @@ recursa::ast_node! {
 
 recursa::ast_node! {
     /// Required closing delimiter shared by ordinary and quoted function calls.
+    ///
+    /// `RPAREN` is this rule's last token, so the rule itself says nothing
+    /// about what follows it and the lookahead substitution, which reads
+    /// `FIRST` of the rest of the rule only, cannot reach the position. The
+    /// grammar therefore names both merged kinds here, the way gram.y writes
+    /// `any_with: WITH | WITH_LA` by hand (REL_17_11 gram.y 11691-11692).
+    ///
+    /// Both are pg-sql's own merged kinds and have no gram.y counterpart
+    /// (`crate::tokens`): `RPAREN_TYPED_LA` marks the `)` of
+    /// [`FunctionTypedLiteralTail`], where a string payload follows and
+    /// gram.y's `AexprConst: func_name '(' func_arg_list opt_sort_clause ')'
+    /// Sconst` parts from `func_application`; `RPAREN_SELECT_LA` marks a `)`
+    /// that a set operator follows, as in `SELECT f(x) UNION SELECT 1`. Each
+    /// arm renders `)`: a merged kind is the same record read differently, and
+    /// keeps the source token's spelling and span.
     #[derive(Debug)]
     pub enum FunctionCallClose {
         #[tok(RPAREN)]
         Value,
+        #[tok(RPAREN_TYPED_LA)]
+        MergedTyped,
+        #[tok(RPAREN_SELECT_LA)]
+        MergedSelect,
     }
 }
 
@@ -904,24 +983,22 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Content inside parentheses: either a query or a non-empty,
-    /// comma-separated expression list.
+    /// Content inside parentheses: a non-empty, comma-separated expression
+    /// list. It is gram.y `c_expr: '(' a_expr ')' opt_indirection` (gram.y
+    /// 15378) and `row: '(' expr_list ')'` (gram.y 16585) sharing their
+    /// delimiters.
+    ///
+    /// A parenthesized query is not a variant here. gram.y is "careful to use
+    /// `select_with_parens`, never `'(' SelectStmt ')'`, in the expression
+    /// grammar" (gram.y 12658-12661), and [`Expr::SubSelect`] mirrors that.
+    /// A query arm here shared one `(`-led production with
+    /// `select_with_parens` and left a decision on `)` that two scoped
+    /// resolutions had to answer; the factoring leaves no decision there.
+    ///
+    /// It stays an enum of one variant so a consumer that matches on it keeps
+    /// the shape it had.
     #[derive(Debug)]
     pub enum ParenContent {
-        #[parse(prec = UMINUS)]
-        #[parse(lr_conflict(
-        action = reduce,
-        against = ast::dml::values::SelectWithParens,
-        lookahead = { RPAREN },
-        expect = 1
-    ))]
-        #[parse(lr_conflict(
-        action = shift,
-        against = ast::dml::values::SelectWithParens,
-        lookahead = { RPAREN_SELECT_LA },
-        expect = 1
-    ))]
-        Subquery(boxed!(Subquery)),
         Exprs(#[sep(COMMA)] one_or_many!(Expr)),
     }
 }
@@ -943,6 +1020,16 @@ recursa::ast_node! {
         Field(IndirectionField),
         Subscript(BracketSubscript),
         Star(ParenthesizedDotStar),
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y:15403 `select_with_parens indirection`: a sub-select with a
+    /// field, wildcard or subscript chain applied to its result.
+    #[derive(Debug)]
+    pub struct SubSelectIndirectionExpr {
+        pub query: crate::ast::dml::values::SelectWithParens,
+        pub indirection: one_or_many!(ParenthesizedIndirection),
     }
 }
 
@@ -2437,7 +2524,13 @@ recursa::ast_node! {
     #[derive(Debug)]
     pub struct TrimWithChars {
         pub chars: boxed!(Expr),
-        #[tok(FROM, this)]
+        /// `this_each` states the element-wise attachment this site already
+        /// lowers to: `FROM` wraps every value, so `FROM a FROM b` is accepted
+        /// where gram.y `trim_list: a_expr FROM expr_list` (REL_17_11 gram.y
+        /// 16710) reads it once. Every real `TRIM` form is single-element, so
+        /// the site is latent; #59 section C records that and leaves the
+        /// container repair open.
+        #[tok(FROM, this_each)]
         #[sep(COMMA)]
         pub args: one_or_many!(Expr),
     }
@@ -4239,6 +4332,19 @@ recursa::ast_node! {
         /// Qualified reference: `table.column`, `schema.table.column`, or
         /// `schema.table.*` -- must come before ColumnRef.
         QualRef(QualifiedRef),
+        /// gram.y:15391 `select_with_parens %prec UMINUS`: the factoring that
+        /// absorbs every extra paren into the sub-select.
+        #[parse(prec = UMINUS)]
+        SubSelect(crate::ast::dml::values::SelectWithParens),
+        /// gram.y:15403 `select_with_parens indirection`, the production
+        /// gram.y calls "redundant-looking": `select_with_parens` eats every
+        /// level of parens, so `'(' a_expr ')' opt_indirection` can never
+        /// match a decorated sub-select, and `(SELECT f()).x` needs an arm of
+        /// its own. The chain is required, which is what parts this arm from
+        /// [`Expr::SubSelect`]; gram.y writes `indirection`, not
+        /// `opt_indirection`, for the same reason.
+        #[parse(prec = UMINUS)]
+        SubSelectIndirection(SubSelectIndirectionExpr),
         /// Parenthesized scalar, row, or subquery, with optional field
         /// indirection. Its singleton expression route supplies Pretty's authored
         /// precedence grouping syntax.
@@ -4491,6 +4597,8 @@ recursa::ast_node! {
         User,
         SqlValue,
         QualRef,
+        SubSelect,
+        SubSelectIndirection,
         Parenthesized,
         NumericLit,
         IntegerLit,
@@ -4586,6 +4694,8 @@ recursa::ast_node! {
         User,
         SqlValue,
         QualRef,
+        SubSelect,
+        SubSelectIndirection,
         Parenthesized,
         NumericLit,
         IntegerLit,

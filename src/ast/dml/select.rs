@@ -139,13 +139,20 @@ recursa::ast_node! {
     /// The delimiters wrap the list as a whole. Attaching them to the repeated
     /// field would instead require a fresh pair of parentheses around every
     /// element after a comma.
+    ///
+    /// The closing `)` is its own rule because it can end a `select_clause`:
+    /// in `SELECT x FROM (VALUES (1)) _(x) UNION SELECT 2` a set operator
+    /// follows it directly, which the token feed reads as `RPAREN_SELECT_LA`.
+    /// [`ParenthesizedClose`] names that merged kind, which a fixed `RPAREN`
+    /// at the end of this rule could not.
     #[derive(Debug, derive_more :: Deref)]
-    #[tok(LPAREN, this, RPAREN)]
+    #[tok(LPAREN, this)]
     pub struct TableAliasColumnList(
         /// gram.y `name_list`.
         #[sep(COMMA)]
         #[deref]
         pub one_or_many!(crate::tokens::ColId),
+        pub ParenthesizedClose,
     );
 }
 
@@ -186,12 +193,18 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `( query ) [alias]`. Before 16 the alias is required.
+    /// gram.y `table_ref: select_with_parens opt_alias_clause` (REL_17_11
+    /// gram.y 13296). Before 16 the alias is required.
+    ///
+    /// The query carries its own parentheses, as gram.y has it, so
+    /// `select_with_parens: '(' select_with_parens ')'` (REL_17_11 gram.y
+    /// 12685) is what parses `FROM ((SELECT 1))`. A `'(' select_no_parens ')'`
+    /// written here instead shared one `(`-led production with
+    /// `select_with_parens` and left a decision on the inner `)` that only a
+    /// merged lookahead kind on every `))` in the language could answer.
     #[derive(Debug)]
     pub struct ParenQueryRef {
-        pub open: SelectLParen,
-        pub body: ParenTableBody,
-        pub close: SelectRParen,
+        pub query: boxed!(crate::ast::dml::values::SelectWithParens),
         // The alias is optional from 16: research, PostgreSQL 16, "Queries and
         // expressions" (commit bcedd8f5f). The REL_15_19 gram.y action of
         // `table_ref: select_with_parens opt_alias_clause` raises "subquery in
@@ -214,30 +227,6 @@ recursa::ast_node! {
         pub alias: Option<PlainTableAlias>,
         #[config(before = pg16)]
         pub alias: PlainTableAlias,
-    }
-}
-
-recursa::ast_node! {
-    /// The query inside a parenthesized FROM source. It is an enum of one
-    /// variant so that the scoped resolutions against [`SelectWithParens`]
-    /// have a variant to stand on.
-    ///
-    /// [`SelectWithParens`]: crate::ast::dml::values::SelectWithParens
-    #[derive(Debug)]
-    pub enum ParenTableBody {
-        #[parse(lr_conflict(
-        action = reduce,
-        against = ast::dml::values::SelectWithParens,
-        lookahead = { RPAREN },
-        expect = 1
-    ))]
-        #[parse(lr_conflict(
-        action = shift,
-        against = ast::dml::values::SelectWithParens,
-        lookahead = { RPAREN_SELECT_LA },
-        expect = 1
-    ))]
-        Query(boxed!(Subquery)),
     }
 }
 
@@ -398,7 +387,15 @@ recursa::ast_node! {
         /// gram.y `func_alias_clause: [AS] ColId '(' TableFuncElementList ')'`.
         #[tok(optional(AS), this)]
         pub name: Option<crate::tokens::ColId>,
-        #[tok(LPAREN, this, RPAREN)]
+        /// `this_each` states the element-wise attachment this site already
+        /// lowers to: the parentheses wrap every column, so `(a int), (b text)`
+        /// is accepted and `(a int, b text)` is not, where gram.y
+        /// `func_alias_clause: ... ColId '(' TableFuncElementList ')'`
+        /// (REL_17_11 gram.y 13694-13712, `TableFuncElementList` 13935) reads
+        /// them once around the whole list. RCA3152 asks only that the reading
+        /// be explicit; #59 section B holds the container repair, which waits
+        /// on the question of what absorbs the multi-column list.
+        #[tok(LPAREN, this_each, RPAREN)]
         #[sep(COMMA)]
         pub columns: zero_or_many!(FuncTableColumnDef),
     }
@@ -2287,11 +2284,22 @@ impl<'input> SelectStmt<'input> {
 }
 
 recursa::ast_node! {
+    /// One row of a `VALUES` list: gram.y `'(' expr_list ')'` of
+    /// `values_clause` (REL_17_11 gram.y 12935).
+    ///
+    /// The delimiters are their own rules rather than fixed tokens of this
+    /// one, because the closing `)` of the last row stands directly before a
+    /// set operator in `VALUES (1, 2) UNION ALL SELECT 3, 4`, which the token
+    /// feed reads as `RPAREN_SELECT_LA`. [`ParenthesizedClose`] names that
+    /// merged kind; a fixed `RPAREN` at the end of this rule could not,
+    /// because lookahead substitution reads `FIRST` of the rest of the rule
+    /// only and nothing follows it here.
     #[derive(Debug)]
-    #[tok(LPAREN, this, RPAREN)]
     pub struct ValuesRow {
+        pub open: ParenthesizedOpen,
         #[sep(COMMA)]
         pub values: zero_or_many!(Expr),
+        pub close: ParenthesizedClose,
     }
 }
 

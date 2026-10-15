@@ -206,13 +206,38 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// One entry in the parenthesised generic options list: `name [arg]`.
+    /// The name of one generic COPY option: gram.y `copy_generic_opt_elem`'s
+    /// left-hand side.
     ///
-    /// `name` is `AliasName` so unreserved keywords (e.g. `format`, `freeze`,
-    /// `header`) and identifiers are both accepted.
+    /// Through 18 that is `ColLabel` and nothing else (REL_18_6 gram.y
+    /// 3572-3576), so `FORMAT json` is a syntax error: `base_yylex` reads
+    /// `FORMAT` before `JSON` as `FORMAT_LA` from 16 on, no keyword category
+    /// of gram.y holds an `_LA` token, and `copy_generic_opt_elem` had no
+    /// `FORMAT_LA` arm. The absence of that arm here is what rejects
+    /// `COPY t TO STDOUT (FORMAT json)` on 16, 17 and 18 (issue #87); 14 and
+    /// 15 accept it because they have no `FORMAT_LA` at all.
+    ///
+    /// It is an enum so the arm 19 adds has a variant to stand on.
+    #[derive(Debug)]
+    pub enum CopyGenericOptionName {
+        /// Added in 19: gram.y `copy_generic_opt_elem: ... | FORMAT_LA
+        /// copy_generic_opt_arg` (b73d13c:3653-3657; research PostgreSQL 19,
+        /// "Changes to existing statements", `COPY ... (FORMAT json)`).
+        /// REL_18_6 gram.y 3572-3577 has only the `ColLabel` arm.
+        #[config(since = pg19)]
+        #[tok(FORMAT_LA)]
+        Format,
+        /// gram.y `ColLabel`, so unreserved keywords (e.g. `format`, `freeze`,
+        /// `header`) and identifiers are both accepted.
+        Name(literal::AliasName),
+    }
+}
+
+recursa::ast_node! {
+    /// One entry in the parenthesised generic options list: `name [arg]`.
     #[derive(Debug)]
     pub struct CopyGenericOption {
-        pub name: literal::AliasName,
+        pub name: CopyGenericOptionName,
         pub arg: Option<CopyGenericOptionArg>,
     }
 }

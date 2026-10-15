@@ -7,7 +7,6 @@
 
 use crate::ast::shared::flags::DropBehavior;
 use crate::ast::shared::names::{NameList, QualifiedName, RoleList, RoleSpec};
-use crate::tokens::literal;
 
 // --- GRANT / REVOKE / ALTER DEFAULT PRIVILEGES ---
 //

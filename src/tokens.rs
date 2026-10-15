@@ -1079,7 +1079,11 @@ recursa::tokens! {
         CreateDbOptWord = { ENCODING, LOCATION, OWNER, TABLESPACE, TEMPLATE },
         // gram.y `utility_option_name`: `NonReservedWord | analyze_keyword |
         // FORMAT_LA` (`FORMAT` is unreserved, so it is already a member;
-        // `ANALYSE` is not a pg-sql keyword and lexes as an identifier).
+        // `ANALYSE` is not a pg-sql keyword and lexes as an identifier). The
+        // `FORMAT_LA` arm is not here: an admission set stands for a gram.y
+        // keyword category, and no category of gram.y holds an `_LA` token.
+        // `literal::UtilityOptionName` names that merged kind in its own
+        // variant, as gram.y names it in `utility_option_name` itself.
         UtilityOptionName = NonReservedWord + { ANALYZE },
         // gram.y `IDENT`: an identifier that is no keyword at all, the name
         // of an old-style `CREATE AGGREGATE (name = value)` option
@@ -1135,7 +1139,28 @@ recursa::tokens! {
         // kinds: their trigger sets are disjoint, and combining them would
         // make a function close before `)` look like a typed-literal close.
         RPAREN_TYPED_LA = RPAREN before { StringLit },
-        RPAREN_SELECT_LA = RPAREN before { UNION, INTERSECT, EXCEPT, RPAREN },
+        // A `)` that a set operator follows, which is how a completed
+        // parenthesized form parts from a grouped set query on one token:
+        // `(SELECT 1) UNION SELECT 2` continues the query, `(SELECT 1)` alone
+        // does not. Every closing rule that can end a `select_clause` names
+        // the merged kind, because lookahead substitution reads `FIRST` of
+        // the rest of the rule only and a closing `)` is rule-final: see
+        // `crate::ast::shared::expr::ParenthesizedClose`, `FunctionCallClose`
+        // and `TypeModifierClose`, and `crate::ast::dml::select::ValuesRow`
+        // and `TableAliasColumnList`.
+        //
+        // `RPAREN` is deliberately not a trigger. It was one, so that the
+        // inner `)` of `((SELECT 2))` shifted into
+        // `select_with_parens: '(' select_with_parens ')'` instead of closing
+        // an expression paren. As a trigger it merges the inner `)` of every
+        // `))` in the language, so each of the hundred-odd closing rules of
+        // the grammar would have to name the merged kind: 25 of them fail the
+        // embedded suite with the trigger in place, and nothing diagnoses the
+        // next one added. gram.y needs no lookahead there at all, because
+        // `select_with_parens` is its own nonterminal (REL_17_11 gram.y
+        // 12658-12663, second production at 12685), which pg-sql cannot
+        // mirror while every grammar type is also a parsing entry point.
+        RPAREN_SELECT_LA = RPAREN before { UNION, INTERSECT, EXCEPT },
     }
 
     // PostgreSQL's precedence declarations (`gram.y:829-908`, "Precedence:
@@ -1351,17 +1376,17 @@ recursa::tokens! {
         // gram.y wants this level so that `CUBE '('` and `ROLLUP '('` shift
         // rather than reduce `CUBE` as a function name (gram.y:871-873).
         //
-        // `)` is deliberately left without a level. pg-sql shares one
+        // `)` is deliberately left without a level. pg-sql still shares one
         // `(`-led production between a parenthesized expression and a
-        // parenthesized query (`ParenContent`, `ParenTableBody`), which
-        // gram.y does not do: gram.y factors `select_with_parens` as its own
-        // nonterminal. Where pg-sql's factoring leaves a decision on `)`, the
-        // answer is authored as a scoped LR resolution on the variant, and a
-        // level for `)` would take that decision over -- above
-        // `#[parse(prec = UMINUS)]`, which is the level gram.y gives
-        // `select_with_parens` (gram.y:15391), so `)` would shift where the
-        // grammar must reduce. Leaving `)` unlevelled also keeps any new
-        // decision on `)` a build error rather than a silent answer.
+        // parenthesized query (`ParenContent`), which gram.y does not do:
+        // gram.y factors `select_with_parens` as its own nonterminal. Where
+        // pg-sql's factoring leaves a decision on `)`, the answer is authored
+        // as a scoped LR resolution on the variant, and a level for `)` would
+        // take that decision over -- above `#[parse(prec = UMINUS)]`, which is
+        // the level gram.y gives `select_with_parens` (gram.y:15391), so `)`
+        // would shift where the grammar must reduce. Leaving `)` unlevelled
+        // also keeps any new decision on `)` a build error rather than a
+        // silent answer.
         left(bp = 200) { LPAREN },
         // gram.y:899 `%left TYPECAST` -- `Expr::Cast`, spelled `::`.
         left(bp = 210) { COLONCOLON },
@@ -1810,6 +1835,21 @@ pub mod literal {
         /// parenthesized statement and not an option list.
         #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub enum UtilityOptionName {
+            /// `FORMAT` immediately before `JSON`, which `base_yylex` reads as
+            /// `FORMAT_LA`: gram.y names the merged kind in this very rule
+            /// (REL_17_11 gram.y 11878-11881 and REL_16_15 gram.y
+            /// 11709-11712, `utility_option_name: NonReservedWord |
+            /// analyze_keyword | FORMAT_LA`), so `EXPLAIN (FORMAT json)`
+            /// parses. The arm is a keyword position, which the `Text`
+            /// admission set cannot carry: an admission set stands for a
+            /// `gram.y` keyword category, and no category of gram.y holds an
+            /// `_LA` token. Added in 16 with `FORMAT_LA` itself: research,
+            /// PostgreSQL 16, "Lexical and literal syntax" (REL_16_15
+            /// parser.c, case `FORMAT`); REL_15_19 gram.y 11648-11651 has no
+            /// such arm and REL_15_19 parser.c no such case.
+            #[config(since = pg16)]
+            #[tok(FORMAT_LA)]
+            Format,
             Text(
                 #[lex(
                     pattern = r#"[Uu]&"[^"]*(?:""[^"]*)*"|"[^"]*(?:""[^"]*)*"|[A-Za-z_][A-Za-z0-9_]*"#,
@@ -1824,6 +1864,11 @@ pub mod literal {
         /// The raw text of the option name.
         pub fn text(&self) -> &str {
             match self {
+                // gram.y REL_17_11:11881 `FORMAT_LA { $$ = "format"; }`: the
+                // arm is a fixed keyword, so its name is the one spelling the
+                // rule action names.
+                #[cfg(feature = "since-pg16")]
+                UtilityOptionName::Format => "format",
                 UtilityOptionName::Text(text) => text.text(),
             }
         }

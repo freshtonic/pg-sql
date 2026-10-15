@@ -27,12 +27,22 @@ recursa::ast_node! {
     /// PostgreSQL's `base_yylex` merges `WITH` with a following `TIME` or
     /// `ORDINALITY` into `WITH_LA` before the parser sees it, and gram.y spells
     /// the positions where a name may still follow as the twin `WITH | WITH_LA`
-    /// (`with_clause`, `any_with`, `opt_with`). recursa's lookahead-filter
-    /// lowering emits that twin for this marker rule.
+    /// (REL_17_11 gram.y 11691-11692 `any_with: WITH | WITH_LA`, 1187-1189
+    /// `opt_with: WITH | WITH_LA | /*EMPTY*/`).
+    ///
+    /// This is a marker rule: `WITH` is its last token, so its own rule says
+    /// nothing about what follows and the substitution pass, which reads
+    /// `FIRST` of the rest of the rule only, cannot reach the position. The
+    /// grammar therefore names the merged kind at the site, exactly as gram.y
+    /// writes the twin by hand. Both arms render `with`: a merged kind is the
+    /// same record read differently, and keeps the source token's spelling and
+    /// span.
     #[derive(Debug)]
     pub enum AnyWith {
         #[tok(WITH)]
         Value,
+        #[tok(WITH_LA)]
+        Merged,
     }
 }
 
