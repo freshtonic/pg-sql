@@ -91,8 +91,7 @@ fn applies_a_uescape_character() {
 #[test]
 fn rejects_what_check_uescapechar_rejects() {
     for uescape in [
-        "", "ab", "0", "9", "a", "F", "+", "'", "''", "\"", " ", "\t", "\n", "\r", "\u{c}",
-        "ä",
+        "", "ab", "0", "9", "a", "F", "+", "'", "''", "\"", " ", "\t", "\n", "\r", "\u{c}", "ä",
     ] {
         assert_eq!(
             fold_identifier_with_uescape("U&\"x\"", uescape),
