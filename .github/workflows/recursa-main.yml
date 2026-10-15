@@ -18,6 +18,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: freshtonic/recursa
+          # recursa is private: the default GITHUB_TOKEN cannot read it. The secret is a
+          # fine-grained personal access token with contents:read on freshtonic/recursa.
+          token: ${{ secrets.RECURSA_READ_TOKEN }}
           ref: main
           path: recursa
       - name: Install the pinned toolchain from rust-toolchain.toml
