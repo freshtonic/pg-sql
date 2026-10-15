@@ -41,6 +41,7 @@ fn a_statement_with_no_gated_construct_needs_only_the_oldest_version() {
 }
 
 /// The span of one requirement, as `start..end`, or `None`.
+#[cfg(feature = "spans")]
 fn span_of(source: &str) -> Option<std::ops::Range<usize>> {
     let lexed = lex(source);
     let mut input = lexed.input();
@@ -77,7 +78,7 @@ fn an_item_gate_reports_the_version_that_added_the_item() {
 
     // The answer keeps the span of the construct that sets the version
     // (recursa#136). `JSON_ARRAY(1, 2)` starts after `SELECT `.
-    #[cfg(feature = "since-pg16")]
+    #[cfg(all(feature = "since-pg16", feature = "spans"))]
     {
         let source = "SELECT JSON_ARRAY(1, 2)";
         let span = span_of(source).expect("a span");
@@ -116,12 +117,15 @@ fn a_shape_rule_reports_the_version_that_made_the_value_optional() {
         assert!(found.citation().is_some(), "{source}");
         // The span of a shape rule covers the element that holds no value:
         // the parenthesised subquery that needs the alias (recursa#136).
-        let span = found.span().expect("a span");
-        assert_eq!(
-            &source[span.start() as usize..span.end() as usize],
-            "(SELECT 1)",
-            "{source}"
-        );
+        #[cfg(feature = "spans")]
+        {
+            let span = found.span().expect("a span");
+            assert_eq!(
+                &source[span.start() as usize..span.end() as usize],
+                "(SELECT 1)",
+                "{source}"
+            );
+        }
         // A PostgreSQL 15 server rejects it; a PostgreSQL 16 server does not.
         assert!(minimum_version_above(&parsed, TargetVersion::Pg15).is_some());
         assert!(minimum_version_above(&parsed, TargetVersion::Pg16).is_none());
@@ -147,11 +151,14 @@ fn a_shape_rule_reports_the_version_that_made_the_value_optional() {
         assert_eq!(found.sqlstate(), None, "{source}");
         assert!(found.citation().is_some(), "{source}");
         // The absent name still has a span inside the statement.
-        let span = found.span().expect("a span");
-        assert!(
-            span.end() as usize <= source.len() && span.start() <= span.end(),
-            "{source}: {span:?}"
-        );
+        #[cfg(feature = "spans")]
+        {
+            let span = found.span().expect("a span");
+            assert!(
+                span.end() as usize <= source.len() && span.start() <= span.end(),
+                "{source}: {span:?}"
+            );
+        }
     }
     assert_eq!(
         parse_and_report("CREATE STATISTICS s ON a, b FROM t"),
@@ -219,9 +226,12 @@ fn a_widening_reports_the_version_of_the_shape_that_it_adds() {
                 "{source}"
             );
         }
-        let source = "REVOKE INHERIT OPTION FOR r FROM u";
-        let span = span_of(source).expect("a span");
-        assert_eq!(&source[span], "INHERIT");
+        #[cfg(feature = "spans")]
+        {
+            let source = "REVOKE INHERIT OPTION FOR r FROM u";
+            let span = span_of(source).expect("a span");
+            assert_eq!(&source[span], "INHERIT");
+        }
     }
 
     // The `FCONST` arms of `NumericOnly` are the shape that 15 adds.
