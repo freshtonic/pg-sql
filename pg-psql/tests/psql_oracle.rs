@@ -546,8 +546,8 @@ fn classify(
     }
     // The document reaches end of input inside a string, a quoted identifier,
     // a dollar-quoted body or a comment. psql asks for another line; pg-psql
-    // has no open region, so it either refuses the document or reads the
-    // region's text as other tokens (ADR 0007, freshtonic/recursa#131).
+    // runs the region to end of input as one token but has no open query
+    // buffer, so it disagrees on `complete` (ADR 0007, freshtonic/pg-sql#89).
     if !scanned.is_complete() && scanned.final_prompt().is_open_lexical_region() {
         return "open-lexical-region";
     }

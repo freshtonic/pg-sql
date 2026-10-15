@@ -113,12 +113,12 @@
     { "document": "shaped/meta/d", "class": "unmodelled-meta-command", "reasons": ["text"] },
     { "document": "shaped/meta/timing", "class": "unmodelled-meta-command", "reasons": ["text"] },
     { "document": "shaped/meta/bare-backslash", "class": "unmodelled-meta-command", "reasons": ["text"] },
-    { "document": "shaped/open/string", "class": "open-lexical-region", "reasons": ["text", "interpolations", "submissions"] },
-    { "document": "shaped/open/quoted-identifier", "class": "open-lexical-region", "reasons": ["text", "interpolations", "submissions"] },
+    { "document": "shaped/open/string", "class": "open-lexical-region", "reasons": ["complete"] },
+    { "document": "shaped/open/quoted-identifier", "class": "open-lexical-region", "reasons": ["complete"] },
     { "document": "shaped/open/dollar-quote", "class": "open-lexical-region", "reasons": ["complete"] },
     { "document": "shaped/open/block-comment", "class": "open-lexical-region", "reasons": ["complete"] },
-    { "document": "shaped/number/exponent-string", "class": "open-lexical-region", "reasons": ["interpolations", "complete"] },
-    { "document": "shaped/number/param-junk", "class": "open-lexical-region", "reasons": ["interpolations", "complete"] },
+    { "document": "shaped/number/exponent-string", "class": "open-lexical-region", "reasons": ["complete"] },
+    { "document": "shaped/number/param-junk", "class": "open-lexical-region", "reasons": ["complete"] },
     { "document": "shaped/copy/from-stdin", "class": "unmodelled-meta-command", "reasons": ["text"] },
     { "document": "shaped/name/vertical-tab", "class": "unmodelled-meta-command", "reasons": ["text"] }
   ]

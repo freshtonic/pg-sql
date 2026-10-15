@@ -50,20 +50,23 @@ issues #11, #12 and #13. `psqlscan.l` does not scan them either — it returns
 backslash command stays inside a text run and renders verbatim, which makes
 the gap visible at the SQL parse rather than silent.
 
-One divergence is known and deliberate. `psqlscan.l:983` has a single
-`<<EOF>>` rule covering every scanner state, so psql tolerates reaching end
-of input inside an open string, quoted identifier, dollar-quoted body or
-comment. `DollarString` and `BlockComment` are recursa closed matchers
-(`same_delimiter`/`nested`) and opt into `unterminated = to_end_of_input`
-(freshtonic/recursa#131), so an unterminated dollar-quoted body or block
-comment now runs to end of input the same way: it stays one opaque token, so
-a colon inside it is still never substituted. A string or a quoted
-identifier is a plain `#[lex(pattern = ...)]` token with no closer for
-`unterminated` to extend, so `pg-psql` still refuses such a document
-instead. The direction is what matters either way: an unterminated region is
-never reinterpreted as ordinary text, so a colon inside one can never be
-substituted. A caller is told the document is not psql rather than handed a
-wrong rendering.
+`psqlscan.l:983` has a single `<<EOF>>` rule covering every scanner state, so
+psql tolerates reaching end of input inside an open string, quoted
+identifier, dollar-quoted body or comment. `pg-psql` does the same for each
+of them: an unterminated region runs to end of input as one opaque token, so
+a colon inside it is never substituted. `DollarString` and `BlockComment` are
+recursa closed matchers (`same_delimiter`/`nested`) and opt into
+`unterminated = to_end_of_input` (freshtonic/recursa#131). A string or a
+quoted identifier is a plain `#[lex(pattern = ...)]` token with no closer for
+`unterminated` to extend, so each has an open form instead,
+`SqlAtom::OpenQuoted`: the same pattern without its closing quote. Where the
+closing quote follows, the closed form is one character longer and wins, so
+the open form wins only at end of input (freshtonic/pg-sql#89).
+
+One divergence is left, and it is deliberate. psql reports that its query
+buffer is still open and asks for another line; `pg-psql` has no notion of an
+open query buffer (freshtonic/pg-sql#11), so it treats the document as
+complete. The forwarded text and the interpolations are the same.
 
 ## Substitution and the source map
 
