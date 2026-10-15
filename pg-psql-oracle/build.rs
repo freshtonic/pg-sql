@@ -41,17 +41,22 @@ fn pin_for(feature: &str) -> Pin {
 
 /// The PostgreSQL tree of this build.
 ///
-/// This is `build-pg.sh`'s own default location, `target/pg-trees/<ref>`, not
-/// `OUT_DIR`. The tree is keyed by the pinned release, so one debug build,
-/// one release build and a manual `pg-oracle/scripts/build-pg.sh <feature>`
-/// all share it, and a psql oracle for each of the six target versions costs
-/// six trees rather than six for each Cargo profile. pg-oracle keeps its own
-/// tree under its `OUT_DIR`, so the two build scripts never write to the same
-/// directory and can run at the same time.
-fn pg_tree_dir(reference: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../target/pg-trees")
-        .join(reference)
+/// This is `build-pg.sh`'s own default location, the shared cache of the
+/// machine (ADR 0012): `<cache>/<ref>-<commit>`, where the cache is
+/// `PG_SQL_POSTGRES_CACHE`, else `${XDG_CACHE_HOME:-~/.cache}/pg-sql/postgres`.
+/// pg-oracle reads the same tree, so each pinned release is built once per
+/// machine, whatever the checkout, worktree or Cargo profile. `build-pg.sh`
+/// takes a lock on the tree, so the two build scripts can run at the same
+/// time.
+fn pg_tree_dir(pin: &Pin) -> PathBuf {
+    let cache = if let Some(dir) = std::env::var_os("PG_SQL_POSTGRES_CACHE") {
+        PathBuf::from(dir)
+    } else if let Some(dir) = std::env::var_os("XDG_CACHE_HOME") {
+        PathBuf::from(dir).join("pg-sql/postgres")
+    } else {
+        PathBuf::from(std::env::var_os("HOME").expect("HOME is set")).join(".cache/pg-sql/postgres")
+    };
+    cache.join(format!("{}-{}", pin.reference, pin.commit))
 }
 
 /// Files that only exist after `configure && make`. If any is missing, the
@@ -128,6 +133,8 @@ fn main() {
     println!("cargo:rerun-if-changed={PINS}");
     println!("cargo:rerun-if-changed={BUILD_PG}");
     println!("cargo:rerun-if-changed=../build-support/target_version.rs");
+    println!("cargo:rerun-if-env-changed=PG_SQL_POSTGRES_CACHE");
+    println!("cargo:rerun-if-env-changed=XDG_CACHE_HOME");
     let feature = target_version::require_one_target_version("pg-psql-oracle");
     let pin = pin_for(feature);
     // The tests compare these with the pin of their baseline.
@@ -139,7 +146,7 @@ fn main() {
         "cargo:rustc-env=PG_PSQL_ORACLE_POSTGRES_COMMIT={}",
         pin.commit
     );
-    let tree = pg_tree_dir(&pin.reference);
+    let tree = pg_tree_dir(&pin);
     verify_pg_built(&pin, &tree);
 
     let mut build = cc::Build::new();
