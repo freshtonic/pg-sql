@@ -1328,3 +1328,6 @@ embedded-tests/src/ast/shared/expr.tests.rs	extra_parens_are_absorbed_into_the_s
 embedded-tests/src/ast/ddl/database.tests.rs	createdb_number_is_signed_iconst_before_15	false	14-14
 embedded-tests/src/ast/ddl/database.tests.rs	createdb_number_is_numeric_only_from_15	false	15-
 embedded-tests/src/ast/shared/expr.tests.rs	type_modifiers_follow_the_type_families	false	14-
+embedded-tests/src/ast/dml/select.tests.rs	xmltable_column_options_follow_xmltable_column_el	false	14-
+embedded-tests/src/ast/dml/select.tests.rs	xmltable_is_not_null_names_the_nullability_before_15	false	14-14
+embedded-tests/src/ast/dml/select.tests.rs	xmltable_is_not_null_is_unrecognized_from_15	false	15-

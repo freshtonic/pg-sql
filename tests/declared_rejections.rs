@@ -1,6 +1,7 @@
-//! `ConstraintAttributeSpec`'s own conflict checks, reproduced as Recursa
-//! declared-rejection rules (`docs/declared-rejections.md` in Recursa;
-//! `freshtonic/recursa#138`, `freshtonic/pg-sql#86`).
+//! `ConstraintAttributeSpec`'s own conflict checks, and the option checks of
+//! `xmltable_column_el`, reproduced as Recursa declared-rejection rules
+//! (`docs/declared-rejections.md` in Recursa; `freshtonic/recursa#138` and
+//! `#141`, `freshtonic/pg-sql#86`, `#85` and `#87`).
 //!
 //! `processCASbits`'s action (REL_17_11 gram.y 6098-6125, `ConstraintAttributeSpec`)
 //! rejects two conflicts among the deferrability entries of a constraint
@@ -111,5 +112,83 @@ fn deferrable_beside_not_deferrable_is_the_generic_rule() {
         "42601",
         "conflicting constraint properties",
         "NOT DEFERRABLE",
+    );
+}
+
+/// One XMLTABLE column whose option list is `options`.
+macro_rules! xmltable_column {
+    ($options:literal) => {
+        concat!(
+            "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int ",
+            $options,
+            ")"
+        )
+    };
+}
+
+#[test]
+fn an_unknown_xmltable_option_name_is_unrecognized_even_when_it_is_the_first() {
+    // REL_17_11 gram.y 14065, `xmltable_column_el`.
+    assert_declared_rejection(
+        xmltable_column!("foo 'a'"),
+        "42601",
+        "unrecognized column option",
+        "foo 'a'",
+    );
+    assert_declared_rejection(
+        xmltable_column!("NULL \"PATH\" 'a'"),
+        "42601",
+        "unrecognized column option",
+        "\"PATH\" 'a'",
+    );
+}
+
+#[test]
+fn a_second_path_is_refused_whichever_spelling_it_has() {
+    // REL_17_11 gram.y 14047: an `IDENT b_expr` option named `path` counts as PATH.
+    assert_declared_rejection(
+        xmltable_column!("PATH 'a' \"path\" 'b'"),
+        "42601",
+        "only one PATH value per column is allowed",
+        "\"path\" 'b'",
+    );
+}
+
+#[test]
+fn a_second_default_is_refused_whichever_spelling_it_has() {
+    // REL_17_11 gram.y 14038.
+    assert_declared_rejection(
+        xmltable_column!("DEFAULT 1 \"default\" 2"),
+        "42601",
+        "only one DEFAULT value is allowed",
+        "\"default\" 2",
+    );
+}
+
+#[test]
+fn a_second_nullability_is_refused() {
+    // REL_17_11 gram.y 14056.
+    assert_declared_rejection(
+        xmltable_column!("NULL NOT NULL"),
+        "42601",
+        "conflicting or redundant NULL / NOT NULL declarations",
+        "NOT NULL",
+    );
+}
+
+/// From 15 the `IDENT b_expr` action refuses the internal nullability name
+/// itself (REL_15_19 gram.y 13867-13871); before 15 it is only unrecognized.
+#[test]
+fn the_internal_nullability_name_is_refused_by_name() {
+    let message = if cfg!(feature = "since-pg15") {
+        "option name cannot be used in XMLTABLE"
+    } else {
+        "unrecognized column option"
+    };
+    assert_declared_rejection(
+        xmltable_column!("\"__pg__is_not_null\" true"),
+        "42601",
+        message,
+        "\"__pg__is_not_null\" true",
     );
 }
