@@ -4962,4 +4962,45 @@ mod tests {
             ],
         );
     }
+
+    /// The `opt_float` action refuses a `FLOAT` precision below 1 or above 53
+    /// (REL_17_11 gram.y 14473-14486). It reads the value, so leading zeros do
+    /// not change the answer. Issue #88.
+    #[test]
+    fn float_precision_is_one_to_fifty_three() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT 1::float(1), 1::float(24), 1::float(25), 1::float(53)",
+                "SELECT 1::float(001), CAST(1 AS float(053)), float(53) '1'",
+                "CREATE TABLE t (a float(1), b float(53))",
+            ],
+            &[
+                "SELECT 1::float(0)",
+                "SELECT 1::float(000)",
+                "SELECT 1::float(54)",
+                "SELECT 1::float(2147483647)",
+                "SELECT float(0) '1'",
+                "CREATE TABLE t (a float(54))",
+            ],
+        );
+    }
+
+    /// From 16 an `Iconst` may have a radix prefix and `_` separators
+    /// (REL_16_15 scan.l 395-410), and the `opt_float` check reads its value.
+    /// Issue #88.
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn float_precision_reads_every_integer_radix() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT 1::float(0x35), 1::float(0o1), 1::float(0b1), 1::float(5_3)",
+            ],
+            &[
+                "SELECT 1::float(0x36)",
+                "SELECT 1::float(0x0)",
+                "SELECT 1::float(0b0)",
+                "SELECT 1::float(5_4)",
+            ],
+        );
+    }
 }
