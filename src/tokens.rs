@@ -1734,6 +1734,30 @@ pub mod literal {
         }
     }
 
+    /// Folds the `Iconst` of `FLOAT(p)` to the range that the `opt_float`
+    /// action checks (REL_17_11 gram.y 14473-14486): `"below_1"`, `"fits"` or
+    /// `"above_53"`. The `#[classify]` of `FloatPrecision` reads it.
+    ///
+    /// The text is an `IntegerLit`, so the lexer has already chosen its form
+    /// for the target version: decimal digits, and from 16 also `0x`, `0o` and
+    /// `0b` prefixes and `_` separators (REL_16_15 scan.l 395-410). The value
+    /// fits in `int32`, because a larger integer lexes as `NumericLit`.
+    pub fn float_precision_class(raw: &str) -> Option<&'static str> {
+        let digits = raw.replace('_', "");
+        let (radix, digits) = match digits.get(..2) {
+            Some("0x" | "0X") => (16, &digits[2..]),
+            Some("0o" | "0O") => (8, &digits[2..]),
+            Some("0b" | "0B") => (2, &digits[2..]),
+            _ => (10, digits.as_str()),
+        };
+        let value = u64::from_str_radix(digits, radix).ok()?;
+        Some(match value {
+            0 => "below_1",
+            1..=53 => "fits",
+            _ => "above_53",
+        })
+    }
+
     // Catch-all for Postgres user-defined operator names.
     //
     // Matches any sequence of the characters `+ - * / < > = ~ ! @ # % ^ & | ?`.

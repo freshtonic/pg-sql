@@ -1,7 +1,8 @@
 //! `ConstraintAttributeSpec`'s own conflict checks, and the option checks of
-//! `xmltable_column_el`, reproduced as Recursa declared-rejection rules
-//! (`docs/declared-rejections.md` in Recursa; `freshtonic/recursa#138` and
-//! `#141`, `freshtonic/pg-sql#86`, `#85` and `#87`).
+//! `xmltable_column_el` and the precision check of `opt_float`, reproduced as
+//! Recursa declared-rejection rules (`docs/declared-rejections.md` in Recursa;
+//! `freshtonic/recursa#138`, `#141` and `#144`, `freshtonic/pg-sql#86`, `#85`,
+//! `#87` and `#88`).
 //!
 //! `processCASbits`'s action (REL_17_11 gram.y 6098-6125, `ConstraintAttributeSpec`)
 //! rejects two conflicts among the deferrability entries of a constraint
@@ -190,5 +191,23 @@ fn the_internal_nullability_name_is_refused_by_name() {
         "42601",
         message,
         "\"__pg__is_not_null\" true",
+    );
+}
+
+/// The `opt_float` action refuses a precision below 1 and one above 53, each
+/// with its own message, at the `Iconst` (REL_17_11 gram.y 14474 and 14483).
+#[test]
+fn a_float_precision_out_of_range_is_refused_at_the_iconst() {
+    assert_declared_rejection(
+        "SELECT 1::float(0)",
+        "22023",
+        "precision for type float must be at least 1 bit",
+        "0",
+    );
+    assert_declared_rejection(
+        "CREATE TABLE t (a float(54))",
+        "22023",
+        "precision for type float must be less than 54 bits",
+        "54",
     );
 }

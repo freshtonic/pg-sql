@@ -206,12 +206,40 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// gram.y `FLOAT_P opt_float`. The action of `opt_float` also rejects a
-    /// precision below 1 or above 53; pg-sql does not check the value.
+    /// gram.y `FLOAT_P opt_float`.
     #[derive(Debug, PartialEq, Eq)]
     #[tok(FLOAT, this)]
     pub struct FloatType {
-        pub precision: Option<IconstPrecision>,
+        pub precision: Option<FloatPrecision>,
+    }
+}
+
+recursa::ast_node! {
+    /// gram.y `opt_float: '(' Iconst ')'` (REL_17_11 14467-14487). The action
+    /// refuses a precision below 1 or above 53, each with its own message, at
+    /// the `Iconst` (`parser_errposition(@2)`). The fold reads the value, so
+    /// leading zeros, and from 16 a radix prefix and `_` separators, give the
+    /// same answer as the decimal spelling (issue #88). PostgreSQL 14 has the
+    /// same check (REL_14_24 gram.y 12948 and 12957).
+    #[classify(value, fold = crate::tokens::literal::float_precision_class)]
+    #[reject(
+        one_of(value, "below_1"),
+        code = "22023",
+        message = "precision for type float must be at least 1 bit",
+        cite = "REL_17_11 gram.y 14474, opt_float",
+    )]
+    #[reject(
+        one_of(value, "above_53"),
+        code = "22023",
+        message = "precision for type float must be less than 54 bits",
+        cite = "REL_17_11 gram.y 14483, opt_float",
+    )]
+    #[derive(Debug, PartialEq, Eq, derive_more :: Deref)]
+    pub struct FloatPrecision {
+        pub open: TypeModifierOpen,
+        #[deref]
+        pub value: literal::IntegerLit,
+        pub close: TypeModifierClose,
     }
 }
 
