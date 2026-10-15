@@ -984,6 +984,24 @@ fn main() {
         ratio(pg_sql_total, pg_sql_flat_total),
     );
 
+    // The parity gate (ADR 0006): the geomean of the per-benchmark
+    // pg-sql/sqlparser medians, over the benchmarks sqlparser could time.
+    // `PG_SQL_PARITY_MAX` is the ceiling the release gate enforces.
+    let ratios: Vec<f64> = rows
+        .iter()
+        .filter(|r| !r.sqlparser.is_zero() && !r.pg_sql.is_zero())
+        .map(|r| r.pg_sql.as_secs_f64() / r.sqlparser.as_secs_f64())
+        .collect();
+    let geomean = (ratios.iter().map(|r| r.ln()).sum::<f64>() / ratios.len() as f64).exp();
+    println!(
+        "parity gate: pg-sql/sqlparser geomean over {} benchmarks: {geomean:.3}x",
+        ratios.len()
+    );
+    let parity_max = std::env::var("PG_SQL_PARITY_MAX").ok().map(|s| {
+        s.parse::<f64>()
+            .unwrap_or_else(|e| panic!("PG_SQL_PARITY_MAX={s:?}: {e}"))
+    });
+
     // Identify the run: an ISO-8601 UTC timestamp (`:` swapped for `-` so it is
     // a safe filename) and the short commit SHA.
     let timestamp = command_stdout("date", &["-u", "+%Y-%m-%dT%H-%M-%SZ"])
@@ -1034,4 +1052,12 @@ fn main() {
     );
 
     println!("\nbenchmark report written to {}", md_path.display());
+
+    if let Some(max) = parity_max {
+        if geomean > max {
+            eprintln!("parity gate failed: geomean {geomean:.3}x is above the ceiling {max}x");
+            std::process::exit(1);
+        }
+        println!("parity gate passed: geomean {geomean:.3}x is at or below {max}x");
+    }
 }

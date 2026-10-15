@@ -6,3 +6,9 @@
 rustc-wrapper = ""
 # Parallel rustc front end (nightly). Measured 2026-09-03 on the pg-sql lib.
 rustflags = ["-Z", "threads=8"]
+
+# `cargo loop ...` is the edit loop: it tests pg-sql in the merge gate's own
+# configuration (scripts/merge-gate), so the loop and the gate share one build
+# and one incremental cache. Example: `cargo loop --test embedded`.
+[alias]
+loop = "test -p pg-sql --no-default-features --features pg17,spans,arbitrary,postgres-oracle"

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# The release gate (ADR 0011): what main passes before a release, and what a
+# change to a version gate passes for its oldest affected version before it
+# merges (CLAUDE.md principle 11).
+#
+# Usage: scripts/release-gate [FEATURE...]
+#
+# FEATURE is a version feature: pg14, pg15, pg16, pg17, pg18 or pg19-beta.
+# With no argument the script runs all six. For each version it builds the
+# merge gate configuration of that version (`spans`, `arbitrary`, both
+# oracles) in one cargo invocation and runs every test of pg-sql, pg-psql,
+# pg-oracle and pg-psql-oracle, then prints the corpus coverage of the
+# version baseline. For pg17 it also runs pg-sql without `spans` and without
+# `arbitrary`, and the parity gate (ADR 0006): the parse bench's
+# pg-sql/sqlparser geomean must be at or below 1.0.
+#
+# Each version is its own build of the generated grammar, so the run keeps no
+# incremental cache (CARGO_INCREMENTAL=1 restores it), and at the end it
+# removes every configuration but the merge gate's (scripts/gate-lib.sh).
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/gate-lib.sh"
+
+export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
+
+versions=("$@")
+if [ "${#versions[@]}" -eq 0 ]; then
+  versions=(pg14 pg15 pg16 pg17 pg18 pg19-beta)
+fi
+for version in "${versions[@]}"; do
+  case "$version" in
+    pg14|pg15|pg16|pg17|pg18|pg19-beta) ;;
+    *) echo "unknown version feature: $version" >&2; exit 2 ;;
+  esac
+done
+
+gate_setup
+gate_lock
+
+coverage() {
+  local baseline="baselines/target-versions/$1.json"
+  jq -r --arg v "$1" '
+    "corpus coverage \($v): " + (.totals | to_entries | map("\(.key)=\(.value)") | join(" "))' "$baseline" >&2
+}
+
+for version in "${versions[@]}"; do
+  echo "=== target version $version" >&2
+  run cargo test --locked "${gate_packages[@]}" --features "$(gate_features "$version")"
+  coverage "$version"
+
+  if [ "$version" = pg17 ]; then
+    echo "=== pg17 without spans and without arbitrary" >&2
+    run cargo test --locked -p pg-sql --no-default-features --features pg17,postgres-oracle
+    echo "=== parity gate" >&2
+    PG_SQL_PARITY_MAX=1.0 run cargo bench --locked -p pg-sql --features postgres-oracle --bench parse
+  fi
+done
+
+gate_prune
+echo "release gate passed: ${versions[*]}" >&2

@@ -70,7 +70,9 @@ lexer of one target version. The version features `pg14`, `pg15`, `pg16`,
     gated with `since-*`.
 13. **Gate.** The merge gate runs all six versions with `spans`, and the
     no-`spans` and `arbitrary` combinations on `pg17` only. The local edit
-    loop uses `pg17`.
+    loop uses `pg17`. *Superseded 2026-10-15 by ADR 0011: the merge gate
+    proves `pg17` with `spans` and `arbitrary` only, and the six-version run
+    is the release gate.*
 14. **Principle 5** in `CLAUDE.md` changes to "test against the target
     version's raw-parser oracle".
 

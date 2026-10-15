@@ -86,8 +86,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes bison flex
-      - name: Test PostgreSQL oracle
-        run: cargo test --locked --package pg-oracle
+      - name: Run the merge gate (ADR 0011)
+        run: scripts/merge-gate
       - name: Verify frozen statement spans and PostgreSQL source blobs
         run: cargo run --locked --package pg-sql-migrate -- baseline verify-statements
       - name: Recapture and review frozen statement spans
@@ -98,26 +98,6 @@ jobs:
           --postgres-repository vendor/postgres
           --baseline baselines/postgresql-17.9.json
           --spans baselines/postgresql-17.9-statements.json
-      - name: Check the frozen differential baseline
-        run: cargo test --locked --package pg-sql --test differential_baseline
-      - name: Check accepted legacy gap outcomes and diagnostics
-        run: >-
-          cargo test --locked --package pg-sql
-          --features postgres-oracle --test accepted_legacy_gaps
-      - name: Check the strict PostgreSQL statement seam
-        run: cargo test --locked --package pg-sql --test strict_statement
-      - name: Check strict-statement formatting fixtures
-        run: cargo test --locked --package pg-sql --test fmt
-      - name: Check the imported embedded-test inventory
-        run: cargo test --locked --package pg-sql --test embedded_inventory
-      - name: Run imported embedded tests
-        run: cargo test --locked --package pg-sql --test embedded
-      - name: Check the psql client grammar and substitution
-        run: cargo test --locked --package pg-psql
-      - name: Run the pg17 differential baseline against the PostgreSQL 17.11 oracle
-        run: >-
-          cargo test --locked --package pg-sql
-          --features postgres-oracle --test differential
       - name: Reject warnings in the strict-statement acceptance targets
         run: >-
           cargo clippy --locked --package pg-sql --features postgres-oracle
@@ -133,8 +113,8 @@ jobs:
       - name: Verify the PostgreSQL source stayed immutable
         run: test -z "$(git -C vendor/postgres status --porcelain)"
 
-  # The merge gate runs every target version with `spans` (ADR 0009). The
-  # other jobs cover the no-spans combination on pg17.
+  # The release gate runs every target version (ADR 0011), one version for
+  # each job. The merge gate above covers pg17.
   versions:
     name: target version ${{ matrix.version }}
     runs-on: ubuntu-latest
@@ -166,5 +146,5 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes bison flex
-      - name: Build and test target version ${{ matrix.version }}
-        run: scripts/gate-versions ${{ matrix.version }}
+      - name: Release gate for target version ${{ matrix.version }}
+        run: scripts/release-gate ${{ matrix.version }}

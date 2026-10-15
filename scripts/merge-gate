@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# The merge gate (ADR 0011): what a branch passes before it merges to main.
+#
+# Usage: scripts/merge-gate
+#
+# It proves one gate configuration, the default target version (pg17) with
+# `spans`, `arbitrary` and the oracles of that version, in one cargo
+# invocation over pg-sql, pg-psql, pg-oracle and pg-psql-oracle. That is one
+# build of the generated grammar, shared with the edit loop (`cargo loop`).
+# The other target versions, the no-spans build and the parity bench are the
+# release gate's (scripts/release-gate).
+#
+# The gate takes the machine-wide gate lock and, after the build, removes the
+# build artefacts of configurations it does not use (scripts/gate-lib.sh).
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/gate-lib.sh"
+
+gate_setup
+gate_lock
+run cargo test --locked "${gate_packages[@]}" --features "$merge_features"
+gate_prune
+echo "merge gate passed" >&2
