@@ -1,10 +1,6 @@
 //! DOMAIN DDL statements (CREATE/ALTER/DROP).
 #![allow(unused_imports)]
 
-use crate::ast::ddl::table::{
-    CheckConstraint, ColumnConstraintAttr, GeneratedConstraint, PrimaryKeyConstraint,
-    ReferencesConstraint, UniqueConstraint,
-};
 use crate::ast::shared::expr::*;
 use crate::ast::shared::flags::*;
 use crate::ast::shared::names::*;
@@ -12,17 +8,8 @@ use crate::ast::shared::numbers::*;
 use crate::tokens::{literal, punct};
 
 recursa::ast_node! {
-    /// `COLLATE name` clause on a domain.
-    #[derive(Debug)]
-    pub struct DomainCollate {
-        #[tok(COLLATE, this)]
-        pub name: QualifiedName,
-    }
-}
-
-recursa::ast_node! {
-    /// `[CONSTRAINT name]` prefix on a domain constraint — gram.y
-    /// `ColConstraint: CONSTRAINT name ColConstraintElem`.
+    /// `[CONSTRAINT name]` prefix of an `ALTER DOMAIN ... ADD` constraint —
+    /// gram.y `DomainConstraint: CONSTRAINT name DomainConstraintElem`.
     #[derive(Debug)]
     pub struct DomainConstraintName {
         #[tok(CONSTRAINT, this)]
@@ -31,81 +18,18 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `DEFAULT expr` clause — domain default value.
-    #[derive(Debug)]
-    pub struct DomainDefault {
-        /// gram.y `ColConstraintElem: DEFAULT b_expr`, the restricted
-        /// expression, so `DEFAULT 1 NOT NULL` ends the default at `NOT`.
-        #[tok(DEFAULT, this)]
-        pub expr: boxed!(BExpr),
-    }
-}
-
-recursa::ast_node! {
-    /// Body of a domain constraint — gram.y `ColConstraintElem`, which
-    /// `CreateDomainStmt` reaches through `ColQualList`. The same element set
-    /// serves a column of a table, so the arms reuse the nodes of
-    /// [`crate::ast::ddl::table`]. Execution, not the raw parser, rejects the
-    /// kinds that a domain cannot hold.
-    ///
-    /// Variant ordering: `NotNullNoInherit` (4 tokens) before `NotNull`; every
-    /// other arm has its own leading keyword.
-    #[derive(Debug)]
-    pub enum DomainConstraintBody {
-        Generated(GeneratedConstraint),
-        PrimaryKey(PrimaryKeyConstraint),
-        /// Added in 18: gram.y `ColConstraintElem: NOT NULL_P opt_no_inherit`
-        /// (docs/research/postgres-14-19-sql-syntax-changes.md, PostgreSQL 18,
-        /// item 7; REL_18_6 gram.y `ColConstraintElem`).
-        #[config(since = pg18)]
-        #[tok(NOT, NULL, NO, INHERIT)]
-        NotNullNoInherit,
-        #[tok(NOT, NULL)]
-        NotNull,
-        #[tok(NULL)]
-        Null,
-        Unique(UniqueConstraint),
-        References(ReferencesConstraint),
-        Default(DomainDefault),
-        Check(CheckConstraint),
-    }
-}
-
-recursa::ast_node! {
-    /// A named or unnamed domain constraint — gram.y `ColConstraint`'s two
-    /// `ColConstraintElem` arms.
-    #[derive(Debug)]
-    pub struct DomainConstraint {
-        pub name: Option<DomainConstraintName>,
-        pub body: DomainConstraintBody,
-    }
-}
-
-recursa::ast_node! {
-    /// One entry of gram.y `ColQualList` — `ColConstraint`. A `ConstraintAttr`
-    /// (`[NOT] DEFERRABLE`, `INITIALLY …`, and from 18 `[NOT] ENFORCED`) is an
-    /// entry of its own, so it takes no `CONSTRAINT name` prefix.
-    ///
-    /// Variant ordering: `Attr` and `Constraint` share the `NOT` keyword and
-    /// part at the token after it (`DEFERRABLE` or `ENFORCED` against `NULL`).
-    #[derive(Debug)]
-    pub enum DomainQual {
-        Constraint(DomainConstraint),
-        Attr(ColumnConstraintAttr),
-    }
-}
-
-recursa::ast_node! {
-    /// `CREATE DOMAIN name [AS] Typename [COLLATE name] ColQualList` — gram.y
-    /// `CreateDomainStmt`.
+    /// `CREATE DOMAIN name [AS] Typename ColQualList` — gram.y
+    /// `CreateDomainStmt` (REL_17_11 gram.y 11510). The qualifier list is the
+    /// one of a table column, so `COLLATE` is an entry of the list and can
+    /// come after `DEFAULT` or a constraint. Execution, not the raw parser,
+    /// rejects the constraint kinds that a domain cannot hold.
     #[derive(Debug)]
     pub struct CreateDomainStmt {
         #[tok(CREATE, DOMAIN, this)]
         pub name: QualifiedName,
         #[tok(optional(AS), this)]
         pub type_name: CastType,
-        pub collate: Option<DomainCollate>,
-        pub quals: zero_or_many!(DomainQual),
+        pub quals: crate::ast::ddl::table::ColQualList,
     }
 }
 

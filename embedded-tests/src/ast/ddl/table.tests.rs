@@ -1012,9 +1012,12 @@ mod tests {
             panic!("the first item of {src:?} is a column");
         };
         column
-            .constraints
-            .iter()
-            .map(|constraint| format!("{:?}", constraint.kind))
+            .quals
+            .constraints()
+            .map(|constraint| match constraint.elem() {
+                Some(elem) => format!("{elem:?}"),
+                None => format!("{constraint:?}"),
+            })
             .collect()
     }
 
@@ -1047,7 +1050,9 @@ mod tests {
             let ColumnOrConstraint::Column(column) = &stmt.items().unwrap()[0] else {
                 panic!("{src:?} holds a column");
             };
-            let ColumnConstraintKind::Generated(generated) = &column.constraints[0].kind else {
+            let Some(ColConstraintElem::Generated(generated)) =
+                column.quals.constraints().next().and_then(|c| c.elem())
+            else {
                 panic!("{src:?} holds a generated column");
             };
             let GeneratedConstraint::Always(always) = generated else {
@@ -1392,6 +1397,99 @@ mod tests {
                 "CREATE TABLE t (a int, FOREIGN KEY (a) REFERENCES u NOT ENFORCED ENFORCED)",
                 "ALTER TABLE t ALTER CONSTRAINT c ENFORCED NOT ENFORCED",
                 "ALTER TABLE t ALTER CONSTRAINT c NOT ENFORCED ENFORCED",
+            ],
+        );
+    }
+
+    // gram.y `ColConstraint: CONSTRAINT name ColConstraintElem |
+    // ColConstraintElem | ConstraintAttr | COLLATE any_name` (REL_17_11 gram.y
+    // 3859). A name goes only before a `ColConstraintElem`, `COLLATE` is an
+    // entry of the qualifier list that can follow a constraint, and
+    // `SplitColQualList` rejects a second `COLLATE` (REL_14_24 gram.y 17114;
+    // REL_17_11 gram.y 19262). The same list serves table columns, `ALTER
+    // TABLE ... ADD COLUMN`, and typed and partition column options
+    // (`columnOptions`, REL_17_11 gram.y 3794).
+    #[test]
+    fn column_qualifier_list_follows_col_constraint() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a int CONSTRAINT c NOT NULL DEFERRABLE)",
+                "CREATE TABLE t (a int UNIQUE DEFERRABLE)",
+                "CREATE TABLE t (a int DEFERRABLE)",
+                "CREATE TABLE t (a text NOT NULL COLLATE \"C\")",
+                "ALTER TABLE t ADD COLUMN a text NOT NULL COLLATE \"C\"",
+                "CREATE TABLE t OF ty (a NOT NULL COLLATE \"C\")",
+                "CREATE TABLE t OF ty (a WITH OPTIONS COLLATE \"C\" NOT NULL)",
+                "CREATE TABLE t PARTITION OF p (a NOT NULL COLLATE \"C\") FOR VALUES IN (1)",
+            ],
+            &[
+                "CREATE TABLE t (a int CONSTRAINT c DEFERRABLE)",
+                "CREATE TABLE t (a int CONSTRAINT c INITIALLY DEFERRED)",
+                "ALTER TABLE t ADD COLUMN a int CONSTRAINT c DEFERRABLE",
+                "CREATE TABLE t (a int CONSTRAINT c COLLATE \"C\")",
+                "CREATE TABLE t (a text COLLATE \"C\" NOT NULL COLLATE \"C\")",
+                "CREATE TABLE t OF ty (a CONSTRAINT c DEFERRABLE)",
+                "CREATE TABLE t PARTITION OF p (a CONSTRAINT c DEFERRABLE) FOR VALUES IN (1)",
+            ],
+        );
+    }
+
+    // gram.y `columnDef: ColId Typename opt_column_compression
+    // create_generic_options ColQualList` (REL_14_24 gram.y 3466): the
+    // `COMPRESSION` and `OPTIONS (...)` slots come in that order and before
+    // every qualifier, `COLLATE` included. `column_compression` takes
+    // `COMPRESSION ColId | COMPRESSION DEFAULT` (REL_17_11 gram.y 3834).
+    #[test]
+    fn column_definition_slots_precede_the_qualifier_list() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a text COMPRESSION pglz COLLATE \"C\")",
+                "CREATE TABLE t (a text COMPRESSION default)",
+                "ALTER TABLE t ADD COLUMN a text COMPRESSION default",
+                "CREATE TABLE t (a text COMPRESSION pglz OPTIONS (x 'y'))",
+                "CREATE TABLE t (a text OPTIONS (x 'y') COLLATE \"C\")",
+                "CREATE FOREIGN TABLE t (a text OPTIONS (x 'y') COLLATE \"C\") SERVER s",
+                "CREATE FOREIGN TABLE t (a text OPTIONS (x 'y') NOT NULL) SERVER s",
+            ],
+            &[
+                "CREATE TABLE t (a text DEFAULT 'x' COMPRESSION pglz)",
+                "ALTER TABLE t ADD COLUMN a text DEFAULT 'x' COMPRESSION pglz",
+                "CREATE TABLE t (a text CONSTRAINT c COMPRESSION pglz)",
+                "CREATE TABLE t (a text COMPRESSION pglz COMPRESSION lz4)",
+                "CREATE TABLE t (a text OPTIONS (x 'y') COMPRESSION pglz)",
+                "CREATE TABLE t (a text COLLATE \"C\" OPTIONS (x 'y'))",
+                "CREATE FOREIGN TABLE t (a text COLLATE \"C\" OPTIONS (x 'y')) SERVER s",
+                "CREATE FOREIGN TABLE t (a text NOT NULL OPTIONS (x 'y')) SERVER s",
+            ],
+        );
+    }
+
+    // Added in 16: `columnDef` gains `opt_column_storage` before
+    // `opt_column_compression` (research, PostgreSQL 16, "Changes to
+    // existing statements"; REL_16_15 gram.y 3707). `STORAGE` is a slot of
+    // the column definition, not a qualifier, so it comes first and once, and
+    // a typed or partition column (`columnOptions`) has no such slot.
+    #[cfg(feature = "since-pg16")]
+    #[test]
+    fn column_storage_is_the_first_column_definition_slot() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "CREATE TABLE t (a text STORAGE plain COLLATE \"C\")",
+                "ALTER TABLE t ADD COLUMN a text STORAGE plain COLLATE \"C\"",
+                "CREATE TABLE t (a text STORAGE plain COMPRESSION pglz NOT NULL)",
+                "CREATE TABLE t (a text STORAGE plain OPTIONS (x 'y'))",
+                "CREATE FOREIGN TABLE t (a text STORAGE plain OPTIONS (x 'y')) SERVER s",
+            ],
+            &[
+                "CREATE TABLE t (a text NOT NULL STORAGE plain)",
+                "ALTER TABLE t ADD COLUMN a text NOT NULL STORAGE plain",
+                "CREATE TABLE t (a text COMPRESSION pglz STORAGE plain)",
+                "CREATE TABLE t (a text COLLATE \"C\" STORAGE plain)",
+                "CREATE TABLE t (a text OPTIONS (x 'y') STORAGE plain)",
+                "CREATE TABLE t (a text CONSTRAINT c STORAGE plain)",
+                "CREATE TABLE t (a text STORAGE plain STORAGE main)",
+                "CREATE TABLE t OF ty (a STORAGE plain)",
+                "CREATE TABLE t PARTITION OF p (a STORAGE plain) FOR VALUES IN (1)",
             ],
         );
     }
