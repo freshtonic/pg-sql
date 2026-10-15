@@ -157,57 +157,27 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// Fixed PostgreSQL built-in type names. Identifier-spelled type names are
-    /// factored separately so their shared qualified prefix can be parsed once.
-    /// `json` is [`FunctionJsonType`] from 17.
+    /// The keyword-spelled arms of gram.y `SimpleTypename` (REL_17_11
+    /// 14339-14368). Identifier-spelled type names are factored separately so
+    /// their shared qualified prefix can be parsed once. `json` is
+    /// [`FunctionJsonType`] from 17.
     #[derive(Debug)]
-    pub enum FunctionBuiltinTypeName {
-        #[tok(BOOLEAN)]
-        Boolean,
-        #[tok(INTEGER)]
-        Integer,
-        #[tok(INT)]
-        Int,
-        #[tok(NUMERIC)]
-        Numeric,
-        #[tok(VARCHAR)]
-        Varchar,
-        #[tok(TIMESTAMP)]
-        Timestamp,
-        #[tok(TIME)]
-        Time,
-        #[tok(INTERVAL)]
-        Interval,
-        #[tok(BIT)]
-        Bit,
-        #[tok(CHARACTER)]
-        Character,
+    pub enum FunctionBuiltinTypeHead {
+        Numeric(NumericType),
+        Bit(BitType),
+        Character(CharacterType),
+        DateTime(DateTimeCastType),
+        Interval(IntervalCastType),
     }
 }
 
 recursa::ast_node! {
-    /// Suffix shared by built-in and identifier-spelled cast types.
-    #[derive(Debug)]
-    pub struct FunctionCastTypeTail {
-        /// `PRECISION` in `DOUBLE PRECISION`.
-        #[presence(PRECISION)]
-        pub precision_keyword: bool,
-        #[presence(VARYING)]
-        pub varying: bool,
-        pub precision: Option<TypePrecision>,
-        pub tz: Option<TimeZoneQualifier>,
-        pub interval_qualifier: Option<IntervalQualifier>,
-        pub array_suffixes: zero_or_many!(ArraySuffix),
-        pub array_kw_suffix: Option<ArrayKwSuffix>,
-    }
-}
-
-recursa::ast_node! {
-    /// A built-in type plus the ordinary cast-type suffixes.
+    /// A keyword-spelled type with the array forms of gram.y `Typename`.
     #[derive(Debug)]
     pub struct FunctionBuiltinType {
-        pub base: FunctionBuiltinTypeName,
-        pub tail: FunctionCastTypeTail,
+        pub head: FunctionBuiltinTypeHead,
+        pub array_suffixes: zero_or_many!(ArraySuffix),
+        pub array_kw_suffix: Option<ArrayKwSuffix>,
     }
 }
 

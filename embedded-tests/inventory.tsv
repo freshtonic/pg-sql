@@ -1327,3 +1327,4 @@ embedded-tests/src/ast/shared/expr.tests.rs	datetime_precision_is_an_iconst	fals
 embedded-tests/src/ast/shared/expr.tests.rs	extra_parens_are_absorbed_into_the_sub_select	false	14-
 embedded-tests/src/ast/ddl/database.tests.rs	createdb_number_is_signed_iconst_before_15	false	14-14
 embedded-tests/src/ast/ddl/database.tests.rs	createdb_number_is_numeric_only_from_15	false	15-
+embedded-tests/src/ast/shared/expr.tests.rs	type_modifiers_follow_the_type_families	false	14-
