@@ -41,7 +41,12 @@ pg-sql and forward the version features, as `pg-psql` does.
 `pg19-beta` is not complete yet (#77, #78). See ADR 0009 and
 `docs/plans/2026-09-22-target-versions.md`.
 
-`scripts/gate-versions` builds and tests every target version.
+`cargo loop` is the edit loop: it tests pg-sql in the merge gate's
+configuration, so `cargo loop --test embedded` and the gate share one build.
+`scripts/merge-gate` proves that configuration before a merge, and
+`scripts/release-gate` builds and tests every target version before a
+release (ADR 0011). `docs/notes/build-times.md` records what the build costs
+and what was tried against it.
 
 ### The minimum version of a statement
 

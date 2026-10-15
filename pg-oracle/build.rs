@@ -34,10 +34,22 @@ fn pin_for(feature: &str) -> Pin {
 }
 
 /// The PostgreSQL tree of this build: the pinned commit, extracted and built
-/// in place under `OUT_DIR`. `OUT_DIR` differs for each feature set, so each
-/// target version has its own tree.
-fn pg_tree_dir() -> PathBuf {
-    PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo must set OUT_DIR")).join("postgres")
+/// once per machine in the shared cache (ADR 0012), under the name
+/// `<ref>-<commit>`. This is `build-pg.sh`'s own default, and
+/// pg-psql-oracle reads the same tree. `PG_SQL_POSTGRES_CACHE` moves the
+/// cache; otherwise it is `${XDG_CACHE_HOME:-~/.cache}/pg-sql/postgres`.
+fn pg_tree_dir(pin: &Pin) -> PathBuf {
+    postgres_cache_dir().join(format!("{}-{}", pin.reference, pin.commit))
+}
+
+fn postgres_cache_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os("PG_SQL_POSTGRES_CACHE") {
+        return PathBuf::from(dir);
+    }
+    if let Some(dir) = std::env::var_os("XDG_CACHE_HOME") {
+        return PathBuf::from(dir).join("pg-sql/postgres");
+    }
+    PathBuf::from(std::env::var_os("HOME").expect("HOME is set")).join(".cache/pg-sql/postgres")
 }
 
 /// Files that only exist after `configure && make`. If any is missing, the
@@ -70,12 +82,11 @@ const SOURCE_COMMIT_STAMP: &str = "pg-oracle-source-commit";
 /// Ensure the pinned PostgreSQL tree is built far enough for pg-oracle to
 /// link.
 ///
-/// The first build of each target version extracts the pinned commit from
-/// the `vendor/postgres` object store and runs `configure && make` with
-/// `scripts/build-pg.sh`. The script is idempotent, so the slow path runs
-/// only once. When the pin moves, the commit stamp does not agree, and the
-/// script builds the tree again from an empty directory, so the oracle always
-/// comes from the pinned release.
+/// The first build of each pinned release on the machine extracts the
+/// commit from the `vendor/postgres` object store and runs
+/// `configure && make` with `scripts/build-pg.sh`. The script is idempotent
+/// and the tree is named by the commit, so the slow path runs once per pin
+/// per machine, and a moved pin gets a new tree.
 fn verify_pg_built(pin: &Pin, major: u32, tree: &Path) {
     let stamp = std::fs::read_to_string(tree.join(SOURCE_COMMIT_STAMP)).ok();
     let same_commit = stamp.as_deref().map(str::trim) == Some(pin.commit.as_str());
@@ -174,6 +185,8 @@ fn main() {
     println!("cargo:rerun-if-changed=scripts/build-pg.sh");
     println!("cargo:rerun-if-changed={PINS}");
     println!("cargo:rerun-if-changed=../build-support/target_version.rs");
+    println!("cargo:rerun-if-env-changed=PG_SQL_POSTGRES_CACHE");
+    println!("cargo:rerun-if-env-changed=XDG_CACHE_HOME");
     let feature = target_version::require_one_target_version("pg-oracle");
     let major = target_version::VERSION_FEATURES
         .iter()
@@ -184,7 +197,7 @@ fn main() {
     // The tests compare these with the pin of their baseline.
     println!("cargo:rustc-env=PG_ORACLE_POSTGRES_REF={}", pin.reference);
     println!("cargo:rustc-env=PG_ORACLE_POSTGRES_COMMIT={}", pin.commit);
-    let tree = pg_tree_dir();
+    let tree = pg_tree_dir(&pin);
     verify_pg_built(&pin, major, &tree);
 
     let mut build = cc::Build::new();

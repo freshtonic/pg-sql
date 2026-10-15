@@ -129,7 +129,7 @@ which `ALTER SUBSCRIPTION` and `ALTER PUBLICATION` share with it.
 `tests/minimum_version_corpus.rs` checks the reported minimum of every frozen
 corpus statement against the oracle outcome of all six target versions, which
 the version baselines record (`baselines/target-versions/*.json`). The check
-needs no PostgreSQL build of its own, and `scripts/gate-versions` runs it once
+needs no PostgreSQL build of its own, and `scripts/release-gate` runs it once
 for each version.
 
 ADR 0010 asks for equality: the reported minimum must be the oldest target

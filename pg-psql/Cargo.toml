@@ -45,13 +45,16 @@ since-pg19 = ["pg-sql/since-pg19"]
 psql-oracle = ["dep:pg-psql-oracle"]
 
 [dependencies]
-recursa = { path = "../../recursa/recursa", features = ["diagrams", "explorer", "spans"] }
+# `default-features = false` on both recursa crates, as pg-sql has: with the
+# (empty) default feature in the set, recursa is a different build unit from
+# the one pg-sql links, and pg-sql itself is compiled a second time.
+recursa = { path = "../../recursa/recursa", default-features = false, features = ["diagrams", "explorer", "spans"] }
 pg-sql = { path = "..", default-features = false, features = ["spans"] }
 derive_more = { version = "2.1.1", features = ["deref"] }
 pg-psql-oracle = { path = "../pg-psql-oracle", optional = true, default-features = false }
 
 [build-dependencies]
-recursa-codegen = { path = "../../recursa/recursa-codegen", features = ["diagrams", "explorer", "spans"] }
+recursa-codegen = { path = "../../recursa/recursa-codegen", default-features = false, features = ["diagrams", "explorer", "spans"] }
 
 [dev-dependencies]
 serde_json = "1"

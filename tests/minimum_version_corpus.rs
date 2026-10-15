@@ -5,7 +5,7 @@
 //! The six version baselines already record that oracle outcome for every
 //! statement of every version (`baselines/target-versions/*.json`), and the
 //! differential gate keeps each one true of its oracle. So one build checks
-//! its own reports against all six oracles, and `scripts/gate-versions` runs
+//! its own reports against all six oracles, and `scripts/release-gate` runs
 //! the check once for each version. The check itself needs no PostgreSQL
 //! build: it reads only the frozen corpus and the pinned baselines.
 //!

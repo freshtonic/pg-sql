@@ -33,14 +33,15 @@ or a dollar-quoted body can never appear as an interpolation.
 
 ### The PostgreSQL tree
 
-`pg-psql-oracle` builds its tree at `target/pg-trees/<ref>`, which is
-`build-pg.sh`'s own default. The tree is keyed by the pinned release, so one
-debug build, one release build and a manual
-`pg-oracle/scripts/build-pg.sh <feature>` all share it. `pg-oracle` keeps its
-own tree under its `OUT_DIR`, so the two build scripts never write to the same
-directory and can run at the same time. The cost is one more PostgreSQL build
-for each target version; the benefit is that neither crate can disturb the
-other's oracle.
+`pg-psql-oracle` reads its tree from the shared PostgreSQL cache of the
+machine, `build-pg.sh`'s own default (ADR 0012): `<cache>/<ref>-<commit>`,
+where the cache is `$PG_SQL_POSTGRES_CACHE`, else
+`${XDG_CACHE_HOME:-~/.cache}/pg-sql/postgres`. The tree is keyed by the
+pinned commit, so one debug build, one release build, every checkout and
+worktree, `pg-oracle` and a manual `pg-oracle/scripts/build-pg.sh <feature>`
+all share it, and each pinned release is built once per machine.
+`build-pg.sh` takes a lock on the tree, so the two build scripts can run at
+the same time.
 
 ## Adaptations, and what each one costs
 

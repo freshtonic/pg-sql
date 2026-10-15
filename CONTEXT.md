@@ -33,6 +33,17 @@ API.
   Every version gate cites the research entry or the `gram.y`/`scan.l` change
   that justifies it. A `since` gate both removes the element and records the
   requirement (ADR 0010).
+- **Merge gate**: the check that a branch passes before it merges to main.
+  It proves one gate configuration: the default target version with spans
+  and the arbitrary derives, against that version's oracles.
+- **Release gate**: the check that main passes before a release. It proves
+  every target version with spans, the default target version without
+  spans, the parity gate, and the corpus coverage of each version baseline.
+- **Gate step**: one build-and-test invocation inside a merge gate or a
+  release gate, for one target version and one gate configuration.
+- **Gate configuration**: one distinct set of Cargo features that a gate
+  builds the PostgreSQL parser with. Each one is a separate build of the
+  generated grammar.
 - **Version requirement**: the lowest target version whose grammar accepts
   one construct, which a `since` gate records. `pg_sql::minimum_version`
   reports the requirement of a parsed statement, with the construct, and,
