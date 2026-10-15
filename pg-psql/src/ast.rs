@@ -260,6 +260,7 @@ recursa::ast_node! {
         HexStringText,
         UnicodeIdentifierText,
         QuotedIdentifierText,
+        OpenQuotedText,
         DollarString,
         DollarNumber,
         EscapedText,
@@ -276,7 +277,7 @@ recursa::ast_node! {
         BACKSLASH,
         NumberText,
     },
-    expect = 22
+    expect = 23
 )))]
     #[cfg_attr(not(feature = "since-pg15"), parse(lr_conflict(
     action = shift,
@@ -289,6 +290,7 @@ recursa::ast_node! {
         HexStringText,
         UnicodeIdentifierText,
         QuotedIdentifierText,
+        OpenQuotedText,
         DollarString,
         DollarNumber,
         EscapedText,
@@ -305,7 +307,7 @@ recursa::ast_node! {
         BACKSLASH,
         LineCommentText,
     },
-    expect = 22
+    expect = 23
 )))]
     pub struct SqlText {
         #[deref]
@@ -344,6 +346,24 @@ recursa::ast_node! {
         UnicodeIdentifier(#[lex(pattern = r#"(?i:U)&"[^"]*(?:""[^"]*)*""#)] UnicodeIdentifierText),
         /// `"..."` — psqlscan.l:622-624 `xd`, with `""` doubling.
         QuotedIdentifier(#[lex(pattern = r#""[^"]*(?:""[^"]*)*""#)] QuotedIdentifierText),
+        /// A string or a quoted identifier that reaches end of input before
+        /// its closing quote. psqlscan.l:951-983 has one `<<EOF>>` rule for
+        /// every exclusive state, so psql asks for another line inside an open
+        /// `xq`, `xe`, `xus`, `xb`, `xh`, `xd` or `xui` and never scans the rest
+        /// for an interpolation (freshtonic/pg-sql#89).
+        ///
+        /// Each alternative is a closed form above without its closing quote,
+        /// so it stops before the first quote that would close the region.
+        /// Where that quote follows, the closed form is one character longer
+        /// and wins; only at end of input does this one win. The `xe`
+        /// alternative also takes a final lone backslash, which has nothing
+        /// left to escape.
+        OpenQuoted(
+            #[lex(
+                pattern = r#"'[^']*(?:''[^']*)*|(?i:E)'(?:[^'\\]|\\[\s\S]|'')*\\?|(?i:U)&'[^']*(?:''[^']*)*|(?i:B)'[^']*|(?i:X)'[^']*|(?i:U)&"[^"]*(?:""[^"]*)*|"[^"]*(?:""[^"]*)*"#
+            )]
+            OpenQuotedText,
+        ),
         /// `$tag$...$tag$` — psqlscan.l:564-601 `xdolq`.
         DollarString(#[lex(matcher)] DollarString),
         /// `$1` — psqlscan.l:352 `param`, which is `\${decdigit}+` and carries

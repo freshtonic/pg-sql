@@ -172,35 +172,78 @@ fn an_escape_string_may_escape_a_newline() {
 }
 
 #[test]
-fn an_unterminated_string_or_identifier_is_refused_rather_than_reinterpreted() {
-    // A deliberate divergence, pinned so it stays deliberate.
-    //
-    // psqlscan.l:983 has one `<<EOF>>` rule for every scanner state, so psql
-    // tolerates reaching end of input inside an open string, dollar-quoted
-    // body or comment. `DollarString` and `BlockComment` are closed matchers
-    // and now opt into that tolerance (`pg-psql/src/tokens.rs`,
-    // freshtonic/recursa#131), so only the quoted string and
-    // quoted-identifier forms stay here: they are plain
-    // `#[lex(pattern = ...)]` tokens with no closer to extend, so an
-    // unterminated one still fails to match and the document is still
-    // refused rather than reinterpreted.
-    //
-    // The divergence is fail-closed, which is the half that matters: the
-    // region is never silently reinterpreted as ordinary text, so a colon
-    // inside an unterminated string can never be substituted. A caller is
-    // told the document is not psql rather than handed a wrong rendering.
+fn an_unterminated_string_or_identifier_runs_to_end_of_input() {
+    // psqlscan.l:983's single `<<EOF>>` rule covers every quoted state too:
+    // `xq`, `xe`, `xus`, `xb`, `xh`, `xd` and `xui`. Reaching end of input
+    // inside one asks for another line, and the text after the opening
+    // quote is never scanned for interpolations. `SqlAtom::OpenQuoted` lexes
+    // such a region to end of input as one opaque token, so `:v` inside it
+    // is never substituted (freshtonic/pg-sql#89).
     for source in [
         "SELECT ':v",
+        "SELECT 'a'' :v",
         "SELECT E':v",
+        "SELECT E'\\' :v",
+        "SELECT E'a'' :v",
+        "SELECT E'a\\",
+        "SELECT e':v",
         "SELECT U&':v",
-        "SELECT B'01",
-        "SELECT X'1f",
+        "SELECT U&'a'' :v",
+        "SELECT B'01 :v",
+        "SELECT X'1f :v",
         "SELECT \":v",
+        "SELECT \"a\"\" :v",
         "SELECT U&\":v",
+        "SELECT 'a'\n'b :v",
     ] {
-        assert!(
-            pg_psql::parse(source).is_err(),
-            "{source:?} must be refused, not reinterpreted",
+        assert_eq!(
+            render_unbound(source),
+            source,
+            "{source:?} holds no interpolation"
+        );
+        assert_eq!(
+            interpolation_count(source),
+            0,
+            "{source:?} holds no interpolation"
+        );
+    }
+}
+
+#[test]
+fn a_terminated_string_or_identifier_still_closes_before_an_interpolation() {
+    // The open form only wins at end of input: wherever the closing quote
+    // follows, the closed form is one character longer.
+    for source in [
+        "SELECT ':v' :v",
+        "SELECT 'a''b' :v",
+        "SELECT E'\\'' :v",
+        "SELECT E'\\\\' :v",
+        "SELECT U&'a' :v",
+        "SELECT B'01' :v",
+        "SELECT X'1f' :v",
+        "SELECT \":v\" :v",
+        "SELECT U&\"a\" :v",
+    ] {
+        assert_eq!(
+            interpolation_count(source),
+            1,
+            "{source:?} holds one interpolation after the closed region"
+        );
+    }
+}
+
+#[cfg(not(feature = "since-pg15"))]
+#[test]
+fn before_15_an_exponent_gives_back_the_e_that_opens_an_escape_string() {
+    // REL_14_24 psqlscan.l `realfail1` gives back the `e`, so `e'` opens an
+    // escape string, `\'` is an escaped quote, and the document ends inside
+    // the string. The psql oracle found that pg-psql substituted `:v` here
+    // (docs/psql-oracle.md, freshtonic/pg-sql#89).
+    for source in ["SELECT 1e'\\' :v", "SELECT $1e'\\' :v"] {
+        assert_eq!(
+            interpolation_count(source),
+            0,
+            "{source:?} holds no interpolation"
         );
     }
 }
