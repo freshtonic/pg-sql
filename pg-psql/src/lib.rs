@@ -49,9 +49,11 @@
 //! an unterminated dollar-quoted body or comment runs to end of input rather
 //! than refusing the document, and a colon inside it is still never
 //! substituted. The quoted string and quoted-identifier forms are plain
-//! `#[lex(pattern = ...)]` tokens with no closer to extend, so an
-//! unterminated one still fails to match and this crate still refuses the
-//! document rather than reinterpreting the region as ordinary text.
+//! `#[lex(pattern = ...)]` tokens, so each also has an open form,
+//! `SqlAtom::OpenQuoted`: the same pattern without the closing quote. It wins
+//! only at end of input, so an unterminated string or quoted identifier also
+//! runs to end of input as one token, and a colon inside it is never
+//! substituted (freshtonic/pg-sql#89).
 
 recursa::grammar! {
     module = crate,
