@@ -768,53 +768,130 @@ recursa::ast_node! {
 }
 
 recursa::ast_node! {
-    /// `PATH '‹xpath›'` clause on an XMLTABLE column.
+    /// gram.y `xmltable_column_option_el`: one option of an XMLTABLE column.
+    ///
+    /// The options come in any order (`xmltable_column_option_list`), and the
+    /// `xmltable_column_el` action reads them (REL_17_11 gram.y 14000-14090). An
+    /// `IDENT b_expr` option counts as the option its folded name names: `path`
+    /// and `default` count as the keyword arms of the same name, and before 15
+    /// `is_not_null` counts as the nullability. Every other name is an
+    /// unrecognized column option, and PATH, DEFAULT and the nullability may
+    /// each appear once. The action's messages name the column or the option;
+    /// a declared rule carries one static message, so these leave the name out.
+    ///
+    /// 15 renames the nullability to `__pg__is_not_null` and refuses that name
+    /// in the `IDENT b_expr` action itself (commit 2f48b4f075f; REL_15_19 gram.y
+    /// 13867 and 13877), so `is_not_null` is then an unrecognized option.
+    #[config_attr(
+        before = pg15,
+        classify(
+            Named.name,
+            fold = crate::ident::fold_name,
+            text("path", Path),
+            text("default", Default),
+            text("is_not_null", NotNull),
+        )
+    )]
+    #[config_attr(
+        since = pg15,
+        classify(
+            Named.name,
+            fold = crate::ident::fold_name,
+            text("path", Path),
+            text("default", Default),
+        )
+    )]
+    // Added in 15: commit 2f48b4f075f, REL_15_19 gram.y 13867-13871.
+    #[config_attr(
+        since = pg15,
+        reject(
+            one_of(Named, "__pg__is_not_null"),
+            code = "42601",
+            message = "option name cannot be used in XMLTABLE",
+            cite = "REL_17_11 gram.y 14098, xmltable_column_option_el",
+        )
+    )]
+    #[reject(
+        once(Default),
+        code = "42601",
+        message = "only one DEFAULT value is allowed",
+        cite = "REL_17_11 gram.y 14038, xmltable_column_el",
+    )]
+    #[reject(
+        once(Path),
+        code = "42601",
+        message = "only one PATH value per column is allowed",
+        cite = "REL_17_11 gram.y 14047, xmltable_column_el",
+    )]
+    #[reject(
+        once(NotNull, Null),
+        code = "42601",
+        message = "conflicting or redundant NULL / NOT NULL declarations",
+        cite = "REL_17_11 gram.y 14056, xmltable_column_el",
+    )]
+    // Removed in 15: `is_not_null` is no option name from 15 (commit
+    // 2f48b4f075f; REL_14_24 gram.y 12737, REL_15_19 gram.y 13877).
+    #[config_attr(
+        before = pg15,
+        reject(
+            not_in(Named, "path", "default", "is_not_null"),
+            code = "42601",
+            message = "unrecognized column option",
+            cite = "REL_14_24 gram.y 12696, xmltable_column_el",
+        )
+    )]
+    #[config_attr(
+        since = pg15,
+        reject(
+            not_in(Named, "path", "default"),
+            code = "42601",
+            message = "unrecognized column option",
+            cite = "REL_17_11 gram.y 14065, xmltable_column_el",
+        )
+    )]
     #[derive(Debug)]
-    pub struct XmlTableColumnPath {
-        /// Before 17, `path` is no keyword and the option is REL_16_15 gram.y
-        /// 13883 `xmltable_column_option_el: IDENT b_expr`. The action of
-        /// `xmltable_column_el` (13805-13858) then rejects every name other
-        /// than `path`; pg-sql accepts any `IDENT` here. Research, PostgreSQL
-        /// 17, "Keywords" and "Queries and expressions" (`XMLTABLE`).
-        #[config(before = pg17)]
-        pub option: crate::tokens::literal::IdentOnly,
-        /// gram.y `xmltable_column_option_el: PATH b_expr` (exclusions as in
-        /// `PositionInner`), so the path ends before a following `NOT NULL`.
-        #[config_attr(since = pg17, tok(PATH, this))]
-        pub xpath: boxed!(crate::ast::shared::expr::BExpr),
+    pub enum XmlTableColumnOption {
+        /// gram.y `xmltable_column_option_el: PATH b_expr`, an arm from 17,
+        /// because `path` is a keyword from 17 (REL_17_11 gram.y 14108).
+        /// Before 17 the same text is `IDENT b_expr` named `path`, which the
+        /// classification counts as this option, so 17 adds no shape a user
+        /// can write. The gate is a plain `cfg`, which removes the arm and
+        /// records no requirement: a widening (`docs/minimum-version.md`,
+        /// class 4). Research, PostgreSQL 17, "Keywords" and "Queries and
+        /// expressions" (`XMLTABLE`): "Users see no change". The path ends
+        /// before a following `NOT NULL` (exclusions as in `PositionInner`).
+        #[cfg(feature = "since-pg17")]
+        Path(#[tok(PATH, this)] boxed!(crate::ast::shared::expr::BExpr)),
+        /// gram.y `DEFAULT b_expr` (exclusions as in `PositionInner`), so the
+        /// default ends before a following `NOT NULL`.
+        Default(#[tok(DEFAULT, this)] boxed!(crate::ast::shared::expr::BExpr)),
+        /// gram.y `NOT NULL_P`.
+        #[tok(NOT, NULL)]
+        NotNull,
+        /// gram.y `NULL_P`.
+        #[tok(NULL)]
+        Null,
+        /// gram.y `IDENT b_expr`: an option named by an identifier.
+        Named(XmlTableNamedOption),
     }
 }
 
 recursa::ast_node! {
-    /// `DEFAULT ‹expr›` clause on an XMLTABLE column.
+    /// gram.y `xmltable_column_option_el: IDENT b_expr`.
     #[derive(Debug)]
-    pub struct XmlTableColumnDefault {
-        /// gram.y `xmltable_column_option_el: DEFAULT b_expr` (exclusions as in
-        /// `PositionInner`), so the default ends before a following `NOT NULL`.
-        #[tok(DEFAULT, this)]
+    pub struct XmlTableNamedOption {
+        pub name: crate::tokens::literal::IdentOnly,
         pub value: boxed!(crate::ast::shared::expr::BExpr),
     }
 }
 
 recursa::ast_node! {
-    /// `NOT NULL` / `NULL` nullability marker on an XMLTABLE column.
-    #[derive(Debug)]
-    pub enum XmlTableColumnNull {
-        #[tok(NOT, NULL)]
-        NotNull,
-        #[tok(NULL)]
-        Null,
-    }
-}
-
-recursa::ast_node! {
-    /// `‹type› [PATH '...'] [DEFAULT expr] [NOT NULL|NULL]` — the typed-column tail.
+    /// `‹type› [‹option›...]` — the typed-column tail: gram.y `ColId Typename`
+    /// and `ColId Typename xmltable_column_option_list`.
     #[derive(Debug)]
     pub struct XmlTableTypedColumn {
         pub ty: CastType,
-        pub path: Option<XmlTableColumnPath>,
-        pub default: Option<XmlTableColumnDefault>,
-        pub null: Option<XmlTableColumnNull>,
+        pub options: zero_or_many!(XmlTableColumnOption),
     }
 }
 

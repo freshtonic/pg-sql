@@ -1668,6 +1668,87 @@ mod tests {
     }
 
 
+    // gram.y `xmltable_column_option_list` takes the options in any order, and
+    // the `xmltable_column_el` action reads them (REL_17_11 gram.y 14000-14090):
+    // an `IDENT b_expr` option whose folded name is `path` or `default` counts as
+    // that option, every other name is an "unrecognized column option" (14065),
+    // and PATH, DEFAULT and the nullability may each appear once (14038, 14047,
+    // 14056). Before 17 `PATH` is an `IDENT` too, so every form below has one
+    // verdict at every version.
+    #[test]
+    fn xmltable_column_options_follow_xmltable_column_el() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int PATH 'a')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int path 'a' NOT NULL)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"path\" 'a')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int U&\"path\" 'a')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int U&\"p\\0061th\" 'a')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"path\" ('a' || 'b'))",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int DEFAULT 'x')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"default\" 'x')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int NOT NULL)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int NULL)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int PATH 'a' DEFAULT 'x' NOT NULL)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int NOT NULL PATH 'a')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int DEFAULT 'x' PATH 'a')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int NULL DEFAULT 'x' PATH 'a')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int DEFAULT 'x' NOT NULL PATH 'a')",
+            ],
+            &[
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int foo 'a')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"foo\" 'a')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"PATH\" 'a')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"DEFAULT\" 'x')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"__pg__is_not_null\" true)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int foo 'a' PATH 'b')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int PATH 'a' foo 'b')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int PATH 'a' PATH 'b')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int PATH 'a' \"path\" 'b')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"path\" 'a' \"path\" 'b')",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int DEFAULT 1 DEFAULT 2)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int DEFAULT 1 \"default\" 2)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int NOT NULL NOT NULL)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int NULL NULL)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int NOT NULL NULL)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int NULL NOT NULL)",
+            ],
+        );
+    }
+
+    // Before 15, gram.y names nullability `is_not_null`, so an `IDENT b_expr`
+    // option of that name counts as it (REL_14_24 gram.y 12729 and 12737). 15
+    // renames it `__pg__is_not_null` (commit 2f48b4f075f; REL_15_19 gram.y 13877),
+    // so the old name is then an unrecognized column option.
+    #[cfg(not(feature = "since-pg15"))]
+    #[test]
+    fn xmltable_is_not_null_names_the_nullability_before_15() {
+        crate::ast::test_support::check_statement_forms(
+            &[
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int is_not_null 1)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"is_not_null\" true)",
+            ],
+            &["SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int NOT NULL is_not_null 1)"],
+        );
+    }
+
+    // Added in 15: the nullability is `__pg__is_not_null`, and the old name
+    // `is_not_null` is an unrecognized column option (commit 2f48b4f075f;
+    // REL_15_19 gram.y 13877).
+    #[cfg(feature = "since-pg15")]
+    #[test]
+    fn xmltable_is_not_null_is_unrecognized_from_15() {
+        crate::ast::test_support::check_statement_forms(
+            &["SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int NOT NULL)"],
+            &[
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int is_not_null 1)",
+                "SELECT * FROM XMLTABLE('/r' PASSING x COLUMNS a int \"is_not_null\" true)",
+            ],
+        );
+    }
+
+
     // A subquery in `FROM` needs no alias from 16: research, PostgreSQL 16,
     // "Queries and expressions" (commit bcedd8f5f).
     #[cfg(feature = "since-pg16")]

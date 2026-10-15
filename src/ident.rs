@@ -112,6 +112,16 @@ pub fn fold_identifier_with_uescape<'a>(
     Ok(truncate(name))
 }
 
+/// Fold the source text of one identifier token for a declared
+/// classification, which compares the folded name with the names a `gram.y`
+/// action reads (`#[classify(...)]`, Recursa `docs/declared-rejections.md`).
+///
+/// Returns `None` when the scanner rejects the text, because such a token
+/// names nothing.
+pub fn fold_name(raw: &str) -> Option<Cow<'_, str>> {
+    fold_identifier(raw).ok().map(|folded| folded.name)
+}
+
 /// Fold a keyword that stands in an identifier position: its lowercase
 /// spelling, which is the text `ScanKeywordLookup` hands the grammar.
 ///
